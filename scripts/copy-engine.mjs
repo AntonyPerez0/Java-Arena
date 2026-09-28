@@ -13,8 +13,9 @@ const manifests = {};
 for (const part of parts) {
   const file = join(root, 'engine', 'dist', part, 'manifest.json');
   if (!existsSync(file)) {
-    console.warn(`copy-engine: ${file} is missing, so the site will have no Java engine`);
-    process.exit(0);
+    // Locally this can happen while the engine is being rebuilt; in CI it means engine/dist wasn't committed.
+    console.error(`copy-engine: ${file} is missing, so the site would have no Java engine`);
+    process.exit(process.env.CI ? 1 : 0);
   }
   manifests[part] = JSON.parse(readFileSync(file, 'utf8'));
 }

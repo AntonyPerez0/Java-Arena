@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
-// Short-lived worker that runs compiled classes on the JVM (Ristretto) once per input.
-// It starts the JVM's WebAssembly as soon as it is created ("init"), so the page can keep one
-// ready in advance; then it serves one "run" and is killed. The page also kills it if a case
-// runs too long (infinite loops).
+// Short-lived worker that runs compiled classes on the JVM (Ristretto), one test case after
+// another, each on a fresh JVM. It starts the JVM's WebAssembly as soon as it is created ("init"),
+// so the page can keep one ready in advance. Output is sent to the page as it is printed, so a
+// program that runs too long still shows what it printed before the page killed this worker.
 // @ts-ignore - plain JavaScript module without types
 import { createRunner as createRunnerJs } from "../../engine/dist/runner/runner-host.mjs";
 import { fetchCached, type Manifest } from "./manifest";
@@ -18,16 +18,19 @@ let runnerPromise: Promise<any> | null = null;
 self.onmessage = async (e: MessageEvent) => {
   const msg = e.data;
   if (msg.type === "init") {
-    const { base, manifest, modules } = msg as { base: string; manifest: Manifest; modules: Record<string, WebAssembly.Module> | null };
-    runnerPromise = createRunner({ fetchAsset: (name: string) => fetchCached(base, manifest, name, () => {}), modules: modules ?? undefined });
+    const { base, manifest, modules, jdkZip } = msg as { base: string; manifest: Manifest; modules: Record<string, WebAssembly.Module> | null; jdkZip: Uint8Array | null };
+    // The JDK image comes from the page when it has one (no Cache Storage round trip, and no
+    // download when the browser can't cache); the wasm modules come compiled.
+    const fetchAsset = (name: string) => (name === "jdk.zip" && jdkZip ? Promise.resolve(jdkZip) : fetchCached(base, manifest, name, () => {}));
+    runnerPromise = createRunner({ fetchAsset, modules: modules ?? undefined });
     runnerPromise.then(
       () => post({ type: "ready" }),
-      () => {},
+      (err) => post({ type: "fatal", message: String(err?.message ?? err) }),
     );
     return;
   }
   if (msg.type !== "run") return;
-  const { classes, mainClass, inputs } = msg as { classes: { path: string; bytes: Uint8Array }[]; mainClass: string; inputs: RunInput[] };
+  const { classes, mainClass, inputs, first } = msg as { classes: { path: string; bytes: Uint8Array }[]; mainClass: string; inputs: RunInput[]; first: number };
   let runner: any;
   try {
     if (!runnerPromise) throw new Error("the runner wasn't started");
@@ -36,12 +39,19 @@ self.onmessage = async (e: MessageEvent) => {
     post({ type: "fatal", message: String(err?.message ?? err) });
     return;
   }
-  for (let i = 0; i < inputs.length; i++) {
+  for (let i = first; i < inputs.length; i++) {
     post({ type: "start", index: i });
     const t = performance.now();
     let result: RunResult;
     try {
-      const r = await runner.run({ classes, mainClass, stdin: inputs[i].stdin ?? "", args: inputs[i].args ?? [], files: inputs[i].files ?? {} });
+      const r = await runner.run({
+        classes,
+        mainClass,
+        stdin: inputs[i].stdin ?? "",
+        args: inputs[i].args ?? [],
+        files: inputs[i].files ?? {},
+        onOutput: (stream: "stdout" | "stderr", text: string) => post({ type: "output", index: i, stream, text }),
+      });
       const files: Record<string, string> = {};
       for (const [name, bytes] of Object.entries(r.files ?? {})) files[name] = decoder.decode(bytes as Uint8Array);
       result = { stdout: r.stdout, stderr: r.stderr, exitCode: r.exitCode, timedOut: false, truncated: !!r.outputTruncated, ms: r.durationMs ?? performance.now() - t, files, internalError: r.error ? String(r.error) : undefined };

@@ -8,7 +8,7 @@ Java Arena's own code is MIT licensed (see [LICENSE](LICENSE) for its scope). Th
 |---|---|---|
 | OpenJDK javac, from [openjdk/jdk21u](https://github.com/openjdk/jdk21u) tag `jdk-21.0.10+7`, with Java Arena's patches | `javac.wasm` | GPL-2.0 with the Classpath Exception |
 | Code copied from OpenJDK 21's `java.base` (number parsing and printing, string helpers) | `javac.wasm` | GPL-2.0 with the Classpath Exception |
-| OpenJDK 21 `java.base` class library (Ubuntu build `openjdk-21-jdk-headless 21.0.10+7-1~24.04`) | `java-base-sdk.bin` (class files without method bodies), `jdk.zip` (the runtime image) | GPL-2.0 with the Classpath Exception |
+| OpenJDK 21 `java.base` class library (Eclipse Temurin 21.0.10+7 build) | `java-base-sdk.bin` (class files without method bodies), `jdk.zip` (the runtime image) | GPL-2.0 with the Classpath Exception |
 | [TeaVM](https://github.com/konsoletyper/teavm) 0.13.1 runtime and class library | `javac.wasm`, `javac.wasm-runtime.js` | Apache-2.0 (with its NOTICE: Alexey Andreev, the Apache Software Foundation, Joda.org) |
 | [teavm-javac](https://github.com/konsoletyper/teavm-javac) | `javac.wasm` | Apache-2.0 |
 | [jzlib](https://github.com/ymnk/jzlib) 1.1.3 (inside TeaVM's `java.util.zip`) | `javac.wasm` | BSD-style |
@@ -20,4 +20,4 @@ The source code of the GPL-licensed parts, and how to rebuild everything, is des
 
 ## Build and test tools
 
-Vite, TypeScript, Playwright and axe-core are used to build and test the site. They are not part of the published pages.
+Vite (MIT) bundles the site and may add small runtime helpers to the published scripts, such as its module preload helper. TypeScript, Playwright and axe-core are used to build and test the site and are not part of the published pages.

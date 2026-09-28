@@ -1,11 +1,13 @@
 /// <reference lib="webworker" />
 // Persistent worker that owns javac. Downloads the whole engine once (kept in Cache Storage),
-// starts javac, and compiles the runner's WebAssembly modules so every run worker starts fast.
+// starts javac, compiles the runner's WebAssembly modules, and hands those modules, the JDK image
+// and the manifest it used to the page, so every run worker starts fast without fetching.
 // @ts-ignore - plain JavaScript module without types
 import { createJavac } from "../../engine/dist/compiler/javac-host.mjs";
 // @ts-ignore - TeaVM's runtime loader, plain JavaScript
 import * as teavmRuntime from "../../engine/dist/compiler/javac.wasm-runtime.js";
 import { downloadSize, fetchCached, fetchManifest, saveManifest, type Manifest } from "./manifest";
+import { engineSupported } from "./support";
 import type { CompileResult, Diagnostic, SourceFile } from "./types";
 
 type Javac = {
@@ -17,40 +19,45 @@ type Javac = {
 let javac: Javac | null = null;
 let readyPromise: Promise<void> | null = null;
 let manifest: Manifest | null = null;
+let failed = false;
 const progress: Record<string, number> = {};
+const fromCache: Record<string, boolean> = {};
 
 function post(msg: unknown, transfer: Transferable[] = []) {
   (self as unknown as Worker).postMessage(msg, transfer);
 }
 
-function reportProgress(stage: "download" | "cache" | "start") {
-  if (!manifest) return;
+function reportProgress() {
+  if (!manifest || failed) return;
   const files = [...manifest.compiler, ...manifest.runner];
   const total = files.reduce((a, f) => a + downloadSize(manifest!, f), 0);
   const loaded = files.reduce((a, f) => a + Math.min(progress[f] || 0, downloadSize(manifest!, f)), 0);
+  const stage = files.every((f) => fromCache[f] !== false) ? "cache" : "download";
   post({ type: "progress", loaded, total, stage });
 }
 
 async function init(base: string) {
+  if (!engineSupported()) throw new Error("unsupported browser");
   const manifestUrl = new URL("manifest.json", base).href;
   manifest = await fetchManifest(manifestUrl);
   if (!manifest) throw new Error("couldn't download the Java engine (check your connection)");
-  reportProgress("download");
+  reportProgress();
   // Everything is fetched now, including the runner's files, so the engine also works offline later.
   const files = [...manifest.compiler, ...manifest.runner];
   const bytes = Object.fromEntries(
     await Promise.all(
       files.map(async (f) => [
         f,
-        await fetchCached(base, manifest!, f, (n) => {
+        await fetchCached(base, manifest!, f, (n, cached) => {
           progress[f] = n;
-          reportProgress("download");
+          fromCache[f] = cached;
+          reportProgress();
         }),
       ]),
     ),
   ) as Record<string, Uint8Array>;
   await saveManifest(manifestUrl, manifest);
-  reportProgress("start");
+  post({ type: "progress", loaded: 1, total: 1, stage: "start" });
   const wasmFiles = manifest.runner.filter((f) => f.endsWith(".wasm"));
   const [instance, modules] = await Promise.all([
     createJavac({ wasm: bytes["javac.wasm"], sdk: bytes["java-base-sdk.bin"], runtime: teavmRuntime }) as Promise<Javac>,
@@ -59,7 +66,8 @@ async function init(base: string) {
   javac = instance;
   // Warm up, so the learner's first compile is as fast as the later ones.
   javac.compile([{ path: "Main.java", text: 'public class Main { public static void main(String[] a) { System.out.println("ok"); } }' }]);
-  post({ type: "ready", runnerModules: Object.fromEntries(modules) });
+  const jdk = bytes["jdk.zip"];
+  post({ type: "ready", runnerModules: Object.fromEntries(modules), manifest, jdkZip: jdk }, [jdk.buffer]);
 }
 
 function toDiagnostic(d: any): Diagnostic {
@@ -70,7 +78,9 @@ self.onmessage = async (e: MessageEvent) => {
   const msg = e.data;
   if (msg.type === "init") {
     if (!readyPromise) {
+      failed = false;
       readyPromise = init(msg.base).catch((err) => {
+        failed = true;
         readyPromise = null;
         post({ type: "error", message: String(err?.message ?? err) });
         throw err;

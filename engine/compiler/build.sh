@@ -9,13 +9,13 @@
 #   --test   run engine/compiler/test/run-tests.mjs afterwards
 # Environment:
 #   ARENA_COMPILER_WORK  work directory (default /home/user/build/compiler)
-#   ARENA_JDK            reference JDK 21 home with jmods/ (default /usr/lib/jvm/java-21-openjdk-amd64)
+#   ARENA_JDK            reference JDK 21 home with jmods/ (default: Temurin 21.0.10+7 from scripts/get-jdk.sh)
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 DIST=$(cd "$HERE/.." && pwd)/dist/compiler
 WORK=${ARENA_COMPILER_WORK:-/home/user/build/compiler}
-JDK=${ARENA_JDK:-/usr/lib/jvm/java-21-openjdk-amd64}
+JDK=${ARENA_JDK:-$(bash "$(dirname "$0")/../../scripts/get-jdk.sh")}
 
 # Pinned sources. The site's source offer must list these.
 JDK21U_URL=https://github.com/openjdk/jdk21u
@@ -53,6 +53,10 @@ export GRADLE_USER_HOME="$WORK/gradle-home"
 
 log "Checking tools"
 JAVA_VERSION=$(sed -n 's/^JAVA_VERSION="\(.*\)"/\1/p' "$JDK/release")
+release_field() { sed -n "s/^$1=\"\(.*\)\"/\1/p" "$JDK/release"; }
+JDK_BUILD="$(release_field IMPLEMENTOR) $(release_field IMPLEMENTOR_VERSION) (java.runtime.version $(release_field JAVA_RUNTIME_VERSION))"
+JDK_SOURCE_REPO=$(release_field SOURCE_REPO | sed 's/\.git$//')
+JDK_SOURCE="${JDK_SOURCE_REPO:-https://github.com/openjdk/jdk21u} tag jdk-$(release_field SEMANTIC_VERSION)"
 echo "reference JDK: $JDK ($JAVA_VERSION)"
 if [ "$JAVA_VERSION" != "$EXPECTED_JDK_VERSION" ]; then
     echo "warning: expected JDK $EXPECTED_JDK_VERSION; the SDK archive and javac sources are pinned to it" >&2
@@ -201,16 +205,16 @@ javac.wasm, javac.wasm-runtime.js
   (TeaVM-LICENSE.txt, TeaVM-NOTICE.txt).
   teavm-javac, $TEAVM_JAVAC_URL commit $TEAVM_JAVAC_COMMIT: Apache-2.0 (same text).
   jzlib $JZLIB_TAG, $JZLIB_URL: BSD-style (jzlib-LICENSE.txt).
-  Java Arena's own code: Apache-2.0.
+  Java Arena's own wrapper code (engine/compiler/java): Apache-2.0. Its copies of
+  JDK code (engine/compiler/javac-src, including MultiplyHigh) keep OpenJDK's
+  GPL-2.0 with the Classpath Exception.
 
 java-base-sdk.bin
-  Class files of the java.base module of OpenJDK $JAVA_VERSION (Ubuntu package
-  $(dpkg-query -W -f='${Package} ${Version}' openjdk-21-jdk-headless 2>/dev/null || echo unknown)), with method
+  Class files of the java.base module of $JDK_BUILD, with method
   bodies removed: GPL-2.0 with the Classpath Exception (OpenJDK-LICENSE.txt).
 
-Corresponding source: the pinned repositories and tags above, the Ubuntu source
-package openjdk-21 of the same version, and engine/compiler/ (build.sh, patches/)
-in the Java Arena repository.
+Corresponding source: the pinned repositories and tags above (the JDK's source is
+$JDK_SOURCE), and engine/compiler/ (build.sh, patches/) in the Java Arena repository.
 TXT
 
 # --- 6. dist ----------------------------------------------------------------
@@ -221,10 +225,9 @@ cp "$WASM_DIR/compiler.wasm-runtime.js" "$DIST/javac.wasm-runtime.js"
 cp "$WORK/out/java-base-sdk.bin" "$DIST/java-base-sdk.bin"
 cp "$HERE/javac-host.mjs" "$DIST/javac-host.mjs"
 
-JDK_PKG=$(dpkg-query -W -f='${Package} ${Version}' "openjdk-21-jdk-headless" 2>/dev/null || echo "unknown")
-node - "$DIST" "$JDK_PKG" "$JAVA_VERSION" <<EOF
+node - "$DIST" "$JDK_BUILD" "$JAVA_VERSION" <<EOF
 const fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto = require('crypto');
-const [dir, jdkPkg, jdkVersion] = process.argv.slice(2);
+const [dir, jdkBuild, jdkVersion] = process.argv.slice(2);
 const names = ['javac.wasm', 'javac.wasm-runtime.js', 'java-base-sdk.bin', 'javac-host.mjs'];
 const files = names.map((name) => {
   const data = fs.readFileSync(path.join(dir, name));
@@ -243,7 +246,7 @@ const manifest = {
     'teavm-javac': { repo: '$TEAVM_JAVAC_URL', commit: '$TEAVM_JAVAC_COMMIT', license: 'Apache-2.0' },
     teavm: { artifacts: 'org.teavm:*:$TEAVM_TAG (Maven Central)', repo: '$TEAVM_URL', tag: '$TEAVM_TAG', commit: '$TEAVM_COMMIT', license: 'Apache-2.0' },
     jzlib: { artifacts: 'com.jcraft:jzlib:1.1.3 (Maven Central)', repo: '$JZLIB_URL', tag: '$JZLIB_TAG', license: 'BSD-3-Clause-style' },
-    'java.base classes': { from: 'java.base.jmod of the reference JDK', jdkVersion, ubuntuPackage: jdkPkg, license: 'GPL-2.0-only WITH Classpath-exception-2.0' },
+    'java.base classes': { from: 'java.base.jmod of the reference JDK', jdkVersion, jdkBuild, jdkSource: '$JDK_SOURCE', license: 'GPL-2.0-only WITH Classpath-exception-2.0' },
     patches: 'engine/compiler/patches/ and engine/compiler/build.sh in the Java Arena repository',
     licenses: 'licenses/',
   },

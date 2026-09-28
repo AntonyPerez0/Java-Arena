@@ -32,12 +32,19 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install OpenJDK 21 (the build-time reference; the engine's class library is the same Ubuntu build)
+      - name: Check that the built Java engine is committed
+        run: git ls-files --error-unmatch engine/dist/compiler/javac.wasm engine/dist/compiler/manifest.json engine/dist/runner/runner.core.wasm engine/dist/runner/jdk.zip engine/dist/runner/manifest.json
+
+      - name: Cache the reference JDK
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/java-arena
+          key: reference-jdk-${{ hashFiles('scripts/get-jdk.sh') }}
+
+      - name: Reference JDK (Temurin 21.0.10+7, the build the engine's class library comes from)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y openjdk-21-jdk-headless
-          echo "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64" >> "$GITHUB_ENV"
-          /usr/lib/jvm/java-21-openjdk-amd64/bin/java -version
+          echo "JAVA_HOME=$(bash scripts/get-jdk.sh)" >> "$GITHUB_ENV"
+          "$(bash scripts/get-jdk.sh)/bin/java" -version
 
       - name: Install dependencies (also copies the Java engine into public/engine)
         run: npm ci
@@ -92,13 +99,13 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload the site
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:

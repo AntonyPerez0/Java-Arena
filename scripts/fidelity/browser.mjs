@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { launchChromium } from '../browser.mjs';
 import { serve } from '../serve.mjs';
-import { loadSuite, REFERENCE_JVM_FLAGS, stderrKey } from './suite.mjs';
+import { loadSuite, REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from './suite.mjs';
 import { runOnJdk } from './jdk.mjs';
 
 const out = new URL('../../fidelity/out/', import.meta.url).pathname;
@@ -21,7 +21,7 @@ if (!existsSync(jdkFile)) writeFileSync(jdkFile, JSON.stringify(jdk, null, 1));
 
 const env = { ...process.env, LC_ALL: 'C.UTF-8' };
 delete env.JAVA_TOOL_OPTIONS;
-const bin = (tool) => (process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', tool) : tool);
+const bin = (tool) => join(referenceJavaHome(), 'bin', tool);
 
 const { server, url } = await serve();
 const browser = await launchChromium();

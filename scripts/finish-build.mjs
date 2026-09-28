@@ -40,3 +40,15 @@ writeFileSync(
 );
 writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}/sitemap.xml\n`);
 console.log(`finish-build: service worker ${version} with ${assets.length} files; sitemap with ${pages.length} pages`);
+
+// Lighthouse's script budget only sees the page's own scripts, so the workers get their own budget.
+const WORKER_BUDGET = { 'compile.worker': 100_000, 'run.worker': 600_000 };
+for (const f of files.filter((f) => /^assets\/(compile|run)\.worker-.*\.js$/.test(f))) {
+  const name = f.includes('compile.worker') ? 'compile.worker' : 'run.worker';
+  const size = statSync(join(dist, f)).size;
+  console.log(`finish-build: ${name} ${(size / 1000).toFixed(0)} KB (budget ${WORKER_BUDGET[name] / 1000} KB)`);
+  if (size > WORKER_BUDGET[name]) {
+    console.error(`finish-build: ${f} is over its budget`);
+    process.exit(1);
+  }
+}

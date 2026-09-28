@@ -19,6 +19,8 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.resolve", explain: () => "Java can't find this name. Check the spelling and capital letters." },
   { code: "compiler.err.prob.found.req", when: /possible lossy conversion/, explain: () => "This would squeeze a bigger or more precise number type into a smaller one and could lose information, for example a double into an int. Convert it on purpose with a cast such as (int), or use a variable of the bigger type." },
   { code: "compiler.err.prob.found.req", when: /cannot be converted to/, explain: () => "The value on the right has a different type than the variable or parameter expects. For example text in quotes is a String, not an int; Integer.valueOf(...) turns text into a number." },
+  { code: "compiler.err.prob.found.req", when: /unexpected return value/, explain: () => "This method is void, so it can't return a value. Change void to the value's type, or remove the value after return." },
+  { code: "compiler.err.prob.found.req", when: /missing return value/, explain: () => "This method must return a value: write return followed by the value." },
   { code: "compiler.err.prob.found.req", explain: () => "The types here don't match what Java expects." },
   { code: "compiler.err.missing.ret.stmt", explain: () => "This method promises to return a value, but some path through it reaches the end without a return statement. Make sure every possible path ends with return." },
   { code: "compiler.err.unreachable.stmt", explain: () => "This line can never run, because the code before it always leaves first (for example an endless loop, a return, or a break)." },
@@ -53,8 +55,6 @@ const RULES: Rule[] = [
   { code: "compiler.err.call.must.be.first.stmt.in.ctor", explain: () => "A call to super(...) or this(...) must be the first line of the constructor." },
   { code: "compiler.err.ref.ambiguous", explain: () => "Java found more than one thing with this name and can't tell which one you mean." },
   { code: "compiler.err.var.not.initialized.in.default.constructor", explain: () => "This final variable never gets a value. Give it one where it is declared or in every constructor." },
-  { code: "compiler.err.missing.ret.val", explain: () => "This method must return a value: write return followed by the value." },
-  { code: "compiler.err.cant.ret.val.from.meth.decl.void", explain: () => "This method is void, so it can't return a value. Change void to the value's type, or remove the value after return." },
 ];
 
 /** A plain-English note for one javac diagnostic, or null when there is no rule for it. */
@@ -92,27 +92,55 @@ const EXCEPTIONS: [RegExp, (message: string) => string][] = [
   [/FileNotFoundException$|NoSuchFileException$/, (m) => `The program tried to open a file that doesn't exist: ${m}.`],
   [/NegativeArraySizeException$/, () => "The program tried to create an array with a negative size."],
   [/ArrayStoreException$/, () => "The program put an object of the wrong type into an array."],
+  [/ExceptionInInitializerError$/, () => "Setting up a class failed: code in a static field or static block threw an exception."],
   [/IllegalArgumentException$|IllegalStateException$/, (m) => (m ? `The program stopped itself with this message: ${m}` : "A method rejected its arguments.")],
 ];
 
-/** Reads an uncaught exception from a Java program's stderr and explains it, or null if there is none. */
-export function explainCrash(stderr: string, userClasses: string[] = ["Main"]): Crash | null {
+const LAUNCHER: [RegExp, (m: RegExpExecArray) => Crash][] = [
+  [
+    /^Error: Main method not found in class ([\w.$]+)/,
+    (m) => ({ exception: "no main method", message: "", line: null, method: null, explanation: `Java starts a program at public static void main(String[] args), and class ${m[1]} doesn't have it. Check the spelling of main, and that it is public static void with a String[] parameter.` }),
+  ],
+  [
+    /^Error: Main method is not static in class ([\w.$]+)/,
+    (m) => ({ exception: "main is not static", message: "", line: null, method: null, explanation: `The main method of ${m[1]} must be static: public static void main(String[] args).` }),
+  ],
+  [
+    /^Error: Could not find or load main class ([\w.$]+)/,
+    (m) => ({ exception: "no main class", message: "", line: null, method: null, explanation: `There is no class called ${m[1]} to start. The class with main must be named ${m[1]} (and the file ${m[1].split(".").pop()}.java).` }),
+  ],
+];
+
+/**
+ * Reads an uncaught exception (or a launcher error, such as a missing main method) from a Java
+ * program's stderr and explains it, or null if there is none. `sourceFiles` are the learner's
+ * files ("Main.java"): the reported line is the first stack frame in one of them. When the
+ * exception has a cause ("Caused by:"), the innermost cause is explained.
+ */
+export function explainCrash(stderr: string, sourceFiles: string[] = ["Main.java"]): Crash | null {
   const lines = stderr.split("\n");
+  for (const [re, make] of LAUNCHER) {
+    const m = re.exec(lines[0] ?? "");
+    if (m) return make(m);
+  }
   const start = lines.findIndex((l) => l.startsWith('Exception in thread "main" '));
   if (start < 0) return null;
-  const head = lines[start].slice('Exception in thread "main" '.length);
+  // The innermost "Caused by:" is usually what went wrong; the outer exceptions wrap it.
+  let headIndex = start;
+  for (let i = start + 1; i < lines.length; i++) if (lines[i].startsWith("Caused by: ")) headIndex = i;
+  const head = headIndex === start ? lines[start].slice('Exception in thread "main" '.length) : lines[headIndex].slice("Caused by: ".length);
   const colon = head.indexOf(": ");
   const exception = colon < 0 ? head.trim() : head.slice(0, colon);
   const message = colon < 0 ? "" : head.slice(colon + 2);
+  const files = sourceFiles.map((f) => f.split("/").pop());
   let line: number | null = null;
   let method: string | null = null;
-  for (const l of lines.slice(start + 1)) {
-    const m = /^\s+at ([\w$.]+)\.([\w$<>]+)\((\w+)\.java:(\d+)\)/.exec(l);
-    if (!m) continue;
-    const cls = m[1].split("$")[0];
-    if (!userClasses.includes(cls) && !userClasses.includes(cls.split(".").pop()!)) continue;
-    line = Number(m[4]);
-    method = m[2];
+  for (const l of lines.slice(headIndex + 1)) {
+    if (l.startsWith("Caused by: ")) break;
+    const m = /^\s+at (?:[\w.$]+\/)?[\w.$]+\.([\w$<>]+)\(([\w$]+\.java):(\d+)\)/.exec(l);
+    if (!m || !files.includes(m[2])) continue;
+    line = Number(m[3]);
+    method = m[1].startsWith("lambda$") ? m[1].split("$")[1] : m[1];
     break;
   }
   const short = exception.split(".").pop()!;

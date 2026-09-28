@@ -20,16 +20,16 @@ The plan and the research behind it are in [`docs/research/`](docs/research/READ
 
 - **Compiler**: OpenJDK's javac 21 compiled to WebAssembly (Wasm GC) with [teavm-javac](https://github.com/konsoletyper/teavm-javac) and TeaVM. It compiles against the real Java 21 class library, so it accepts exactly the APIs a real JDK 21 has. See [`engine/compiler/`](engine/compiler/).
 - **Runner**: a fork of [Ristretto](https://github.com/theseus-rs/ristretto), a Java virtual machine written in Rust and compiled to WebAssembly, running the real OpenJDK 21 class library. See [`engine/runner/`](engine/runner/).
-- **In the page**: a persistent compile worker and a fresh run worker per run, killed when a test case exceeds the time limit. Engine files are downloaded once (asking first on mobile data), unpacked with `DecompressionStream`, and kept in Cache Storage, so the engine also works offline. See [`src/engine/`](src/engine/).
+- **In the page**: a persistent compile worker and a fresh run worker per run, killed when a test case exceeds the time limit. Engine files are downloaded once (asking first when the browser reports mobile data, and on phones and tablets whose browser can't tell), unpacked with `DecompressionStream`, and kept in Cache Storage, so the engine also works offline. See [`src/engine/`](src/engine/).
 - **Fidelity**: the site's expected outputs come from a real JDK 21 at build time, so the browser engine must behave identically. [`fidelity/`](fidelity/) holds 30 programs and 18 compile errors; CI runs them on the JDK and in the browser engine and fails on any difference, including cross-checks of each half (browser javac on HotSpot, and CLI javac on the browser runner).
 
-Measured in this batch (see `fidelity/out/report.md` from CI, and the READMEs in `engine/`): all 30 fidelity programs and all 18 compile errors identical to JDK 21; the engine download is about 15.2 MB compressed (asked first on mobile data, then cached); in headless Chromium on a 4-core machine a warm compile takes about 10 to 90 ms and Hello World runs in about 0.4 s from click to output. Phone numbers are not measured yet: the prototype page has a benchmark for that.
+Measured locally in this batch (CI produces the same report, `fidelity/out/report.md`, as a build artifact; see also the READMEs in `engine/`): all 30 fidelity programs and all 18 compile errors identical to JDK 21; the engine download is about 15.2 MB compressed (then cached); in headless Chromium on a 4-core machine a warm compile takes about 10 to 90 ms and Hello World runs in about 0.4 s from click to output. Phone numbers are not measured yet: the prototype page has a benchmark for that.
 
 Licenses and the source offer for the GPL parts are in [`engine/SOURCES.md`](engine/SOURCES.md) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Run locally
 
-Needs Node 22 and a JDK 21 (`javac` and `java` on the path, or `JAVA_HOME`).
+Needs Node 22. The reference JDK (Eclipse Temurin 21.0.10+7) is fetched by `scripts/get-jdk.sh` when a script needs it; set `JAVA_HOME` to use another JDK 21.
 
 ```bash
 npm install        # also copies the built engine into public/engine

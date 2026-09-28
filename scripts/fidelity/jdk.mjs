@@ -4,9 +4,9 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { loadSuite, REFERENCE_JVM_FLAGS } from './suite.mjs';
+import { loadSuite, REFERENCE_JVM_FLAGS, referenceJavaHome } from './suite.mjs';
 
-const bin = (tool) => (process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', tool) : tool);
+const bin = (tool) => join(referenceJavaHome(), 'bin', tool);
 const env = { ...process.env, JAVA_TOOL_OPTIONS: '', LC_ALL: 'C.UTF-8' };
 delete env.JAVA_TOOL_OPTIONS;
 

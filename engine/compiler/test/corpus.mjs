@@ -16,7 +16,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(HERE, '../../dist/compiler');
-const JDK = process.env.ARENA_JDK || '/usr/lib/jvm/java-21-openjdk-amd64';
+// The reference JDK: ARENA_JDK, or the pinned Temurin 21.0.10+7 from scripts/get-jdk.sh.
+const JDK = process.env.ARENA_JDK || (await import('node:child_process')).execFileSync('bash', [new URL('../../../scripts/get-jdk.sh', import.meta.url).pathname], { encoding: 'utf8' }).trim();
 const WORK = path.join(process.env.ARENA_COMPILER_WORK || '/home/user/build/compiler', 'corpus-run');
 const root = process.argv[2];
 if (!root) {

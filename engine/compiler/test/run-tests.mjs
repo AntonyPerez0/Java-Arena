@@ -10,7 +10,7 @@
 //    file/line/column/code must match `javac -XDrawDiagnostics`.
 // 3. Timings: module load, first compile, warm compiles.
 //
-// Environment: ARENA_JDK (default /usr/lib/jvm/java-21-openjdk-amd64),
+// Environment: ARENA_JDK (default: Temurin 21.0.10+7 from scripts/get-jdk.sh),
 // ARENA_COMPILER_WORK (scratch space, default /home/user/build/compiler).
 
 import { spawnSync } from 'node:child_process';
@@ -22,7 +22,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(HERE, '../../dist/compiler');
-const JDK = process.env.ARENA_JDK || '/usr/lib/jvm/java-21-openjdk-amd64';
+// The reference JDK: ARENA_JDK, or the pinned Temurin 21.0.10+7 from scripts/get-jdk.sh.
+const JDK = process.env.ARENA_JDK || (await import('node:child_process')).execFileSync('bash', [new URL('../../../scripts/get-jdk.sh', import.meta.url).pathname], { encoding: 'utf8' }).trim();
 const WORK = path.join(process.env.ARENA_COMPILER_WORK || '/home/user/build/compiler', 'test-run');
 
 const args = process.argv.slice(2);

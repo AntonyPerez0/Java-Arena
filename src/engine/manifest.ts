@@ -50,7 +50,7 @@ export function downloadSize(manifest: Manifest, file: string): number {
  * Loads one engine file: from Cache Storage when saved, otherwise downloaded (the gzip copy,
  * unpacked as it arrives) and saved. `onProgress` gets the downloaded byte count.
  */
-export async function fetchCached(base: string, manifest: Manifest, file: string, onProgress: (bytes: number) => void): Promise<Uint8Array> {
+export async function fetchCached(base: string, manifest: Manifest, file: string, onProgress: (bytes: number, fromCache: boolean) => void): Promise<Uint8Array> {
   const url = new URL(file, base).href;
   const cacheName = CACHE_PREFIX + manifest.version;
   let cache: Cache | null = null;
@@ -59,7 +59,7 @@ export async function fetchCached(base: string, manifest: Manifest, file: string
     const hit = await cache.match(url);
     if (hit) {
       const buf = new Uint8Array(await hit.arrayBuffer());
-      onProgress(downloadSize(manifest, file));
+      onProgress(downloadSize(manifest, file), true);
       return buf;
     }
   } catch {
@@ -74,7 +74,7 @@ export async function fetchCached(base: string, manifest: Manifest, file: string
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, ctl) {
         got += chunk.length;
-        onProgress(got);
+        onProgress(got, false);
         ctl.enqueue(chunk);
       },
     }),
@@ -85,7 +85,6 @@ export async function fetchCached(base: string, manifest: Manifest, file: string
   if (cache) {
     try {
       await cache.put(url, new Response(out, { headers: { "Content-Type": "application/octet-stream" } }));
-      for (const k of await caches.keys()) if (k.startsWith(CACHE_PREFIX) && k !== cacheName) await caches.delete(k);
     } catch {
       /* quota exceeded or private mode: still works, just downloads next time */
     }
@@ -93,11 +92,16 @@ export async function fetchCached(base: string, manifest: Manifest, file: string
   return out;
 }
 
-/** Saves the manifest beside the engine files so the next visit finds this version offline. */
+/**
+ * Saves the manifest beside the engine files, once all of them are saved, so the next visit finds
+ * this version offline. Only then are older versions deleted: an interrupted update keeps the old
+ * engine working offline.
+ */
 export async function saveManifest(manifestUrl: string, manifest: Manifest) {
   try {
     const cache = await caches.open(CACHE_PREFIX + manifest.version);
     await cache.put(manifestUrl, new Response(JSON.stringify(manifest), { headers: { "Content-Type": "application/json" } }));
+    for (const k of await caches.keys()) if (k.startsWith(CACHE_PREFIX) && k !== CACHE_PREFIX + manifest.version) await caches.delete(k);
   } catch {
     /* no Cache Storage: nothing was saved for offline use anyway */
   }

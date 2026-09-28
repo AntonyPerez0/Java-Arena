@@ -7,8 +7,9 @@ import {
   engineReady,
   ensureEngine,
   getEngineStatus,
+  engineSupported,
   mayAutoDownload,
-  onMobileData,
+  mobileData,
   runClasses,
   subscribeEngine,
   DEFAULT_TIME_LIMIT_MS,
@@ -104,20 +105,43 @@ const allowMobile = () => {
 };
 
 // ---- Engine card ----
+// Only the status line is a live region, and it changes only when the state changes; the download
+// amount and progress bar update quietly, so screen readers aren't flooded during a download.
+const UNSUPPORTED = `<p role="status" class="bad"><b>This browser can't run the Java engine.</b> It needs WebAssembly features (garbage collection and exception handling) that current versions of Chrome, Edge, Firefox and Safari have. Please update your browser.</p>`;
 let asked = false;
+let shown = "";
 async function renderEngine() {
   const el = $("engine");
   const s = getEngineStatus();
+  const key = s.state === "loading" ? `loading:${s.stage}` : s.state === "idle" ? `idle:${asked}` : s.state;
+  const mb = (n: number) => (n / 1e6).toFixed(1);
+  if (key === shown && s.state === "loading") {
+    const bar = el.querySelector("progress");
+    if (bar) {
+      bar.max = s.total;
+      bar.value = s.loaded;
+    }
+    const amount = el.querySelector(".amount");
+    if (amount && s.stage === "download") amount.textContent = `${mb(s.loaded)} of ${mb(s.total)} MB`;
+    return;
+  }
+  shown = key;
+  el.classList.remove("warn");
+  if (!engineSupported()) {
+    el.innerHTML = UNSUPPORTED;
+    return;
+  }
   if (s.state === "idle") {
     if (!asked) {
-      el.innerHTML = `<p>Checking the connection...</p>`;
+      el.innerHTML = `<p role="status">Checking the connection...</p>`;
       return;
     }
-    const mb = await downloadMegabytes();
+    const size = await downloadMegabytes();
+    const why = mobileData() === "yes" ? "<b>You're on mobile data.</b>" : "<b>This browser doesn't say whether you're on mobile data or Wi-Fi.</b>";
     el.classList.add("warn");
-    el.innerHTML = `<p><b>You're on mobile data.</b> Running Java needs the engine, a one-time download${mb ? ` of about ${mb} MB` : ""}. After that it's saved on this device and works offline.</p>
+    el.innerHTML = `<p role="status">${why} Running Java needs the engine, a one-time download${size ? ` of about ${size} MB` : ""}. After that it's saved on this device and works offline.</p>
       <div class="row"><button id="dl" class="primary">Download the engine</button></div>
-      <label class="inline"><input type="checkbox" id="always" ${allowMobile() ? "checked" : ""}> Always download on mobile data</label>`;
+      <label class="inline"><input type="checkbox" id="always" ${allowMobile() ? "checked" : ""}> Always download without asking</label>`;
     $("dl").onclick = () => startEngine();
     ($("always") as HTMLInputElement).onchange = (e) => {
       try {
@@ -126,17 +150,13 @@ async function renderEngine() {
         /* private mode */
       }
     };
-    return;
-  }
-  el.classList.remove("warn");
-  if (s.state === "loading") {
-    const mb = (n: number) => (n / 1e6).toFixed(1);
-    const what = s.stage === "start" ? "Starting the engine..." : s.stage === "cache" ? "Loading the saved engine..." : `Downloading the engine: ${mb(s.loaded)} of ${mb(s.total)} MB`;
-    el.innerHTML = `<p>${what}</p><progress max="${s.total}" value="${s.loaded}" aria-label="Engine download progress"></progress>`;
+  } else if (s.state === "loading") {
+    const what = s.stage === "start" ? "Starting the engine..." : s.stage === "cache" ? "Loading the engine saved on this device..." : "Downloading the engine...";
+    el.innerHTML = `<p role="status">${what}</p>${s.stage === "download" ? `<p class="small muted amount">${mb(s.loaded)} of ${mb(s.total)} MB</p>` : ""}<progress max="${s.total}" value="${s.loaded}" aria-label="Engine progress"></progress>`;
   } else if (s.state === "ready") {
-    el.innerHTML = `<p class="ok"><b>Ready.</b> The engine is saved on this device${navigator.onLine ? "" : " and running offline"}.</p>`;
+    el.innerHTML = `<p role="status" class="ok"><b>Ready.</b> The engine is saved on this device${navigator.onLine ? "" : " and running offline"}.</p>`;
   } else {
-    el.innerHTML = `<p class="bad"><b>The engine couldn't start.</b> ${esc(s.message)}</p><div class="row"><button id="retry">Try again</button></div>`;
+    el.innerHTML = `<p role="status" class="bad"><b>The engine couldn't start.</b> ${esc(s.message)}</p><div class="row"><button id="retry">Try again</button></div>`;
     $("retry").onclick = () => startEngine();
   }
 }
@@ -208,10 +228,12 @@ function renderResult(r: CompileRunResult, wallMs: number): string {
   if (run.internalError) return html + `<div class="card"><p class="bad"><b>The runner failed:</b> ${esc(run.internalError)}</p></div>`;
   html += `<p class="small muted">Compiled in ${Math.round(c.ms)} ms, ran in ${Math.round(run.ms)} ms (${Math.round(wallMs)} ms in all). Exit code ${run.exitCode ?? "none"}.</p>`;
   html += `<p><b>Output</b></p><pre>${esc(run.stdout) || '<span class="muted">(nothing printed)</span>'}</pre>`;
-  if (run.timedOut) html += `<div class="card warn"><p><b>Stopped after ${DEFAULT_TIME_LIMIT_MS / 1000} seconds.</b> The program was still running. Is there a loop whose condition never becomes false?</p></div>`;
+  if (run.timedOut) html += `<div class="card warn"><p><b>Stopped after ${DEFAULT_TIME_LIMIT_MS / 1000} seconds.</b> The program was still running${run.stdout ? " (the output above is what it printed until then)" : ""}. Is there a loop whose condition never becomes false?</p></div>`;
   if (run.truncated) html += `<p class="small">The output was cut off at 64 KB.</p>`;
   const crash = explainCrash(run.stderr);
-  if (crash) {
+  if (crash && run.stderr.startsWith("Error: ")) {
+    html += `<div class="card"><p class="bad"><b>The program didn't start.</b></p><p>${esc(crash.explanation)}</p><pre>${esc(run.stderr)}</pre></div>`;
+  } else if (crash) {
     html += `<div class="card"><p class="bad"><b>The program crashed${crash.line ? ` on line ${crash.line}` : ""}${crash.method ? ` (in ${esc(crash.method)})` : ""}</b> with ${esc(crash.exception)}.</p><p>${esc(crash.explanation)}</p><pre>${esc(run.stderr)}</pre></div>`;
   } else if (run.stderr) {
     html += `<p><b>Error output</b></p><pre>${esc(run.stderr)}</pre>`;
@@ -219,9 +241,25 @@ function renderResult(r: CompileRunResult, wallMs: number): string {
   return html;
 }
 
+/** True when the engine may not download yet: the learner hasn't answered the download question. */
+function waitingForConsent(out: HTMLElement): boolean {
+  if (!engineSupported()) {
+    out.innerHTML = `<div class="card">${UNSUPPORTED}</div>`;
+    return true;
+  }
+  if (getEngineStatus().state !== "idle" || !asked) return false;
+  out.innerHTML = `<div class="card warn"><p>Running Java needs the one-time engine download first. Use <b>Download the engine</b> above.</p></div>`;
+  document.getElementById("dl")?.focus();
+  return true;
+}
+
+// Buttons stay enabled while busy (a disabled button would drop keyboard focus); a second press waits.
+let running = false;
 $("run").onclick = async () => {
-  const button = $("run") as HTMLButtonElement;
-  button.disabled = true;
+  if (running || waitingForConsent($("result"))) return;
+  running = true;
+  const button = $("run");
+  button.setAttribute("aria-busy", "true");
   $("run-note").textContent = getEngineStatus().state === "ready" ? "Running..." : "Waiting for the engine...";
   const t = performance.now();
   try {
@@ -230,7 +268,8 @@ $("run").onclick = async () => {
   } catch (err) {
     $("result").innerHTML = `<div class="card"><p class="bad">${esc(String((err as Error)?.message ?? err))}</p></div>`;
   } finally {
-    button.disabled = false;
+    running = false;
+    button.removeAttribute("aria-busy");
     $("run-note").textContent = "";
   }
 };
@@ -289,10 +328,13 @@ const stats = (xs: number[]) => {
 };
 
 let report = "";
+let benchmarking = false;
 $("bench").onclick = async () => {
-  const button = $("bench") as HTMLButtonElement;
+  const button = $("bench");
   const out = $("bench-out");
-  button.disabled = true;
+  if (benchmarking || running || waitingForConsent(out)) return;
+  benchmarking = true;
+  button.setAttribute("aria-busy", "true");
   ($("copy") as HTMLButtonElement).hidden = true;
   const rows: [string, string][] = [];
   const show = (note: string) => {
@@ -359,7 +401,7 @@ $("bench").onclick = async () => {
       "Java Arena engine benchmark",
       new Date().toISOString(),
       navigator.userAgent,
-      `connection: ${nav.connection?.type ?? "?"} / ${nav.connection?.effectiveType ?? "?"}, mobile data: ${onMobileData()}`,
+      `connection: ${nav.connection?.type ?? "?"} / ${nav.connection?.effectiveType ?? "?"}, mobile data: ${mobileData()}`,
       ...rows.map(([a, b]) => `${a}: ${b}`),
     ].join("\n");
     show("Done. Tap Copy results and send them to the site's author.");
@@ -367,7 +409,8 @@ $("bench").onclick = async () => {
   } catch (err) {
     show(`The benchmark stopped: ${String((err as Error)?.message ?? err)}`);
   } finally {
-    button.disabled = false;
+    benchmarking = false;
+    button.removeAttribute("aria-busy");
   }
 };
 

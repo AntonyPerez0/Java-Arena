@@ -1,4 +1,5 @@
 // Loads the fidelity suite: fidelity/programs/* (programs to run) and fidelity/errors/* (programs that must not compile).
+import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
@@ -82,4 +83,11 @@ export function stderrKey(stderr) {
     }
   }
   return keep.join('\n');
+}
+
+// The reference JDK: JAVA_HOME when set, otherwise the pinned Temurin 21.0.10+7 (scripts/get-jdk.sh).
+let javaHome = null;
+export function referenceJavaHome() {
+  javaHome ??= process.env.JAVA_HOME || execFileSync('bash', [new URL('../get-jdk.sh', import.meta.url).pathname], { encoding: 'utf8' }).trim();
+  return javaHome;
 }

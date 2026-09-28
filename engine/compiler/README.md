@@ -3,7 +3,7 @@
 This folder builds the compiler half of Java Arena's in-browser Java engine:
 
 - **javac.wasm**: the real OpenJDK javac from `openjdk/jdk21u` tag `jdk-21.0.10+7`, compiled to a WebAssembly GC module by TeaVM 0.13.1 through teavm-javac. TeaVM only runs javac here. The learner's program is not translated by TeaVM: javac's `.class` files go to the runner (Ristretto).
-- **java-base-sdk.bin**: the platform classes javac compiles against. It is the whole `java.base` module of the reference JDK (OpenJDK 21.0.10, Ubuntu package `openjdk-21-jdk-headless 21.0.10+7-1~24.04`), with method bodies removed.
+- **java-base-sdk.bin**: the platform classes javac compiles against. It is the whole `java.base` module of the reference JDK (Eclipse Temurin 21.0.10+7, fetched and SHA-256 checked by `scripts/get-jdk.sh`), with method bodies removed.
 - **javac-host.mjs**: a plain ES module that loads both files and exposes `compile(files)`. It runs in a browser module Worker and in Node 22.
 
 `build.sh` writes the built files to `engine/dist/compiler/`, together with `manifest.json` (size, gzip -9 size and SHA-256 of each file, plus the pinned sources) and `licenses/`.
@@ -32,7 +32,7 @@ Each diagnostic has `kind` (`error`, `warning` or `note`), `code` (the javac key
 engine/compiler/build.sh            # add --clean to start from nothing, --test to run the tests
 ```
 
-Requirements: the reference JDK 21 at `/usr/lib/jvm/java-21-openjdk-amd64` (set `ARENA_JDK` to use another; it must have `jmods/`), git, curl, Node 22. The script uses JDK 21 for everything. It does not need JDK 25: switching from javac 25 to javac 21 also let the Gradle build target Java 21.
+Requirements: git, curl, Node 22, and the reference JDK, which `build.sh` fetches with `scripts/get-jdk.sh` (Eclipse Temurin 21.0.10+7; set `ARENA_JDK` to use another JDK 21 home with `jmods/`). The script uses JDK 21 for everything. It does not need JDK 25: switching from javac 25 to javac 21 also let the Gradle build target Java 21.
 
 The script clones and builds under `/home/user/build/compiler` (set `ARENA_COMPILER_WORK`), including Gradle's home. The steps are:
 
@@ -60,7 +60,7 @@ Network hosts used: github.com (git), services.gradle.org, repo1.maven.org / rep
 | teavm-javac | https://github.com/konsoletyper/teavm-javac | commit `2ddcf02e4983e5c74d45b945c2fd41a829358828` | Apache-2.0 (stated in its README; the repo has no LICENSE file) |
 | TeaVM | Maven Central `org.teavm:*:0.13.1`, https://github.com/konsoletyper/teavm | tag `0.13.1` = commit `b3a245b7d9034ff35cdfab2def057a3d4f256efb` | Apache-2.0 |
 | jzlib (inside TeaVM's java.util.zip) | Maven Central `com.jcraft:jzlib:1.1.3`, https://github.com/ymnk/jzlib | tag `1.1.3` | BSD-style |
-| java.base classes | the reference JDK's `jmods/java.base.jmod` | OpenJDK 21.0.10, Ubuntu `openjdk-21-jdk-headless 21.0.10+7-1~24.04` (source: Ubuntu source package `openjdk-21` of that version) | GPL-2.0 with Classpath Exception |
+| java.base classes | the reference JDK's `jmods/java.base.jmod` | Eclipse Temurin 21.0.10+7 (https://github.com/adoptium/temurin21-binaries release `jdk-21.0.10+7`; source https://github.com/adoptium/jdk21u tag `jdk-21.0.10+7`) | GPL-2.0 with Classpath Exception |
 | ASM (build tool only, not shipped) | Maven Central `org.ow2.asm:asm:9.8` | SHA-256 `876eab6a...22051` | BSD-3-Clause |
 | Gradle wrapper | teavm-javac's `gradle-wrapper.properties` | 9.1.0 | Apache-2.0 |
 
@@ -97,11 +97,11 @@ The TeaVM transformer patches that teavm-javac already had are kept. They disabl
 
 The output is the TeaVM `ArchiveReader` format (a gzip stream of `short nameLength, name, int length, data`), sorted by name.
 
-Sizes, measured with `SdkTool` on JDK 21.0.10 (29,196,238 bytes of class files in):
+Sizes, measured with `SdkTool` on JDK 21.0.10 (29,196,238 bytes of class files in), before the reference JDK moved from Ubuntu's build to Temurin's:
 
 | Variant | Entries | Payload | gzip |
 |---|---|---|---|
-| shipped (all members) | 7,549 | 8,631,975 | 1,647,395 |
+| shipped (all members, from Ubuntu's OpenJDK 21.0.10 build when measured; the Temurin build gives 1,647,239) | 7,549 | 8,631,975 | 1,647,395 |
 | `--drop-private` | 7,549 | 7,146,189 | 1,165,585 |
 | `--drop-local` (anonymous and local classes) | 6,632 | 7,984,735 | 1,567,887 |
 | both | 6,632 | 6,506,771 | 1,089,667 |
@@ -114,7 +114,7 @@ The two `--drop` flags exist only for this measurement.
 |---|---|---|
 | javac.wasm | 2,712,107 | 1,042,272 |
 | javac.wasm-runtime.js | 13,936 | 4,765 |
-| java-base-sdk.bin (already gzip) | 1,647,395 | 1,643,672 |
+| java-base-sdk.bin (already gzip) | 1,647,239 | 1,643,474 |
 | javac-host.mjs | 8,316 | 3,038 |
 | **download total** | | **about 2.69 MB** |
 

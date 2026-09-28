@@ -14,7 +14,7 @@ index 0cbbb46..827cb16 100644
          .get_mut(&fd)
          .await
 diff --git a/ristretto_intrinsics/src/java/io/fileoutputstream.rs b/ristretto_intrinsics/src/java/io/fileoutputstream.rs
-index cce6411..716bace 100644
+index cce6411..692bb03 100644
 --- a/ristretto_intrinsics/src/java/io/fileoutputstream.rs
 +++ b/ristretto_intrinsics/src/java/io/fileoutputstream.rs
 @@ -223,6 +223,17 @@ pub async fn write<T: Thread + 'static>(
@@ -26,7 +26,7 @@ index cce6411..716bace 100644
 +fn console_write_error(error: std::io::Error) -> ristretto_types::Error {
 +    use std::io::ErrorKind as Kind;
 +    if error.kind() == Kind::QuotaExceeded {
-+        ristretto_types::Error::Halt(1)
++        ristretto_types::halt::request(1)
 +    } else {
 +        IoException(error.to_string()).into()
 +    }
@@ -1796,17 +1796,38 @@ index 7d6ef87..6fd3633 100644
 +        assert_eq!(Some(0), return_slots("()V"));
      }
  }
+diff --git a/ristretto_intrinsics/src/java/lang/object.rs b/ristretto_intrinsics/src/java/lang/object.rs
+index 66f4079..063e814 100644
+--- a/ristretto_intrinsics/src/java/lang/object.rs
++++ b/ristretto_intrinsics/src/java/lang/object.rs
+@@ -1,4 +1,4 @@
+-use crate::java::lang::thread::{ThreadState, set_thread_status};
++use crate::java::lang::thread::{ThreadState, clear_interrupted_field, set_thread_status};
+ use ristretto_classfile::VersionSpecification::{Any, GreaterThan, LessThanOrEqual};
+ use ristretto_classfile::{JAVA_11, JAVA_17};
+ use ristretto_classloader::{ObjectArray, Reference, Value};
+@@ -242,7 +242,8 @@ pub async fn wait_0<T: Thread + 'static>(
+         if interrupted {
+             // Clear the interrupt flag (consumed by InterruptedException)
+             thread.is_interrupted(true);
+-            return Err(InterruptedException("Thread interrupted while waiting".into()).into());
++            clear_interrupted_field(&thread_object);
++            return Err(InterruptedException(String::new()).into());
+         }
+     }
+ 
 diff --git a/ristretto_intrinsics/src/java/lang/shutdown.rs b/ristretto_intrinsics/src/java/lang/shutdown.rs
-index b20df5b..673c26d 100644
+index b20df5b..89169e9 100644
 --- a/ristretto_intrinsics/src/java/lang/shutdown.rs
 +++ b/ristretto_intrinsics/src/java/lang/shutdown.rs
-@@ -19,6 +19,10 @@ pub fn halt_0<T: Thread + 'static>(
+@@ -19,6 +19,11 @@ pub fn halt_0<T: Thread + 'static>(
      mut parameters: Parameters,
  ) -> Result<Option<Value>> {
      let code = parameters.pop_int()?;
 +    // On WebAssembly, unwind to the embedder so it can report the status and reuse the instance.
++    // Recording it lets the embedder stop even when a thread other than main halts.
 +    #[cfg(target_family = "wasm")]
-+    return Err(ristretto_types::Error::Halt(code));
++    return Err(ristretto_types::halt::request(code));
 +    #[cfg(not(target_family = "wasm"))]
      std::process::exit(code);
  }
@@ -1846,6 +1867,212 @@ index fe2982a..259d457 100644
          Ok(())
      }
  
+diff --git a/ristretto_intrinsics/src/java/lang/system.rs b/ristretto_intrinsics/src/java/lang/system.rs
+index 342b28b..280daa3 100644
+--- a/ristretto_intrinsics/src/java/lang/system.rs
++++ b/ristretto_intrinsics/src/java/lang/system.rs
+@@ -339,11 +339,11 @@ pub fn nano_time<T: Thread + 'static>(
+     _thread: Arc<T>,
+     _parameters: Parameters,
+ ) -> Result<Option<Value>> {
+-    let now = SystemTime::now();
+-    let duration = now
+-        .duration_since(UNIX_EPOCH)
+-        .map_err(|error| InternalError(error.to_string()))?;
+-    let time = i64::try_from(duration.as_nanos())?;
++    // A monotonic clock, like HotSpot's. The wall clock can step, and in the browser it only
++    // has millisecond resolution. The origin is arbitrary, as Java allows.
++    static ORIGIN: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
++    let elapsed = ORIGIN.get_or_init(std::time::Instant::now).elapsed();
++    let time = i64::try_from(elapsed.as_nanos())?;
+     Ok(Some(Value::Long(time)))
+ }
+ 
+@@ -738,9 +738,11 @@ mod tests {
+     #[tokio::test]
+     async fn test_nano_time() -> Result<()> {
+         let (_vm, thread) = crate::test::thread().await?;
+-        let result = nano_time(thread, Parameters::default())?;
+-        let time = result.unwrap_or(Value::Long(0)).as_i64()?;
+-        assert!(time > 0);
++        let first = nano_time(thread.clone(), Parameters::default())?;
++        let first = first.unwrap_or(Value::Long(-1)).as_i64()?;
++        let second = nano_time(thread, Parameters::default())?;
++        let second = second.unwrap_or(Value::Long(-1)).as_i64()?;
++        assert!(first >= 0 && second >= first);
+         Ok(())
+     }
+ 
+diff --git a/ristretto_intrinsics/src/java/lang/thread.rs b/ristretto_intrinsics/src/java/lang/thread.rs
+index 84fa004..dfd8a68 100644
+--- a/ristretto_intrinsics/src/java/lang/thread.rs
++++ b/ristretto_intrinsics/src/java/lang/thread.rs
+@@ -53,6 +53,14 @@ pub fn set_thread_status(thread_object: &Value, status: ThreadState) -> Result<(
+     Ok(())
+ }
+ 
++/// Clear the `interrupted` field of a Java `Thread`. `HotSpot` clears it together with the VM's
++/// flag when it throws `InterruptedException` from `sleep` or `wait`.
++pub fn clear_interrupted_field(thread_object: &Value) {
++    if let Ok(mut thread_object) = thread_object.as_object_mut() {
++        let _ = thread_object.set_value("interrupted", Value::Int(0));
++    }
++}
++
+ /// Get the thread from the thread ID in the `eetop` field of the thread object.
+ /// Returns an error if the thread is not found (which can happen if the thread has terminated).
+ async fn get_thread<T: Thread + 'static>(
+@@ -430,7 +438,11 @@ pub fn set_scoped_value_cache<T: Thread + 'static>(
+ 
+ #[intrinsic_method("java/lang/Thread.sleep(J)V", LessThanOrEqual(JAVA_17))]
+ pub async fn sleep<T: Thread + 'static>(
+-    #[cfg_attr(target_family = "wasm", expect(unused_variables))] thread: Arc<T>,
++    #[cfg_attr(
++        all(target_family = "wasm", not(target_os = "wasi")),
++        expect(unused_variables)
++    )]
++    thread: Arc<T>,
+     mut parameters: Parameters,
+ ) -> Result<Option<Value>> {
+     let millis = parameters.pop_long()?;
+@@ -442,16 +454,18 @@ pub async fn sleep<T: Thread + 'static>(
+     let millis = u64::try_from(millis)?;
+     let duration = Duration::from_millis(millis);
+ 
+-    #[cfg(target_family = "wasm")]
++    #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
+     std::thread::sleep(duration);
+ 
+-    #[cfg(not(target_family = "wasm"))]
++    // On WASI, Java threads are tasks on one tokio runtime: a blocking sleep would stop them all.
++    #[cfg(any(not(target_family = "wasm"), target_os = "wasi"))]
+     {
+         let thread_object = thread.java_object().await;
+         let _ = set_thread_status(&thread_object, ThreadState::TIMED_WAITING);
+         let interrupted = thread.sleep(duration).await;
+         let _ = set_thread_status(&thread_object, ThreadState::RUNNABLE);
+         if interrupted {
++            clear_interrupted_field(&thread_object);
+             return Err(JavaError::InterruptedException("sleep interrupted".to_string()).into());
+         }
+     }
+@@ -459,17 +473,22 @@ pub async fn sleep<T: Thread + 'static>(
+     Ok(None)
+ }
+ 
++/// JDK 21's `Thread.sleep` converts the timeout to nanoseconds before calling `sleep0`.
+ #[intrinsic_method("java/lang/Thread.sleep0(J)V", Equal(JAVA_21))]
+ pub async fn sleep_0<T: Thread + 'static>(
+     thread: Arc<T>,
+     parameters: Parameters,
+ ) -> Result<Option<Value>> {
+-    sleep(thread, parameters).await
++    sleep_nanos_0(thread, parameters).await
+ }
+ 
+ #[intrinsic_method("java/lang/Thread.sleepNanos0(J)V", GreaterThanOrEqual(JAVA_25))]
+ pub async fn sleep_nanos_0<T: Thread + 'static>(
+-    #[cfg_attr(target_family = "wasm", expect(unused_variables))] thread: Arc<T>,
++    #[cfg_attr(
++        all(target_family = "wasm", not(target_os = "wasi")),
++        expect(unused_variables)
++    )]
++    thread: Arc<T>,
+     mut parameters: Parameters,
+ ) -> Result<Option<Value>> {
+     let nanos = parameters.pop_long()?;
+@@ -481,16 +500,18 @@ pub async fn sleep_nanos_0<T: Thread + 'static>(
+     let nanos = u64::try_from(nanos)?;
+     let duration = Duration::from_nanos(nanos);
+ 
+-    #[cfg(target_family = "wasm")]
++    #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
+     std::thread::sleep(duration);
+ 
+-    #[cfg(not(target_family = "wasm"))]
++    // On WASI, Java threads are tasks on one tokio runtime: a blocking sleep would stop them all.
++    #[cfg(any(not(target_family = "wasm"), target_os = "wasi"))]
+     {
+         let thread_object = thread.java_object().await;
+         let _ = set_thread_status(&thread_object, ThreadState::TIMED_WAITING);
+         let interrupted = thread.sleep(duration).await;
+         let _ = set_thread_status(&thread_object, ThreadState::RUNNABLE);
+         if interrupted {
++            clear_interrupted_field(&thread_object);
+             return Err(JavaError::InterruptedException("sleep interrupted".to_string()).into());
+         }
+     }
+@@ -509,7 +530,6 @@ pub async fn start_0<T: Thread + 'static>(
+     // First, get the VM to generate a unique internal thread ID
+     let vm = thread.vm()?;
+ 
+-    #[cfg_attr(target_family = "wasm", expect(unused_variables))]
+     let (thread_class, internal_thread_id, is_daemon) = {
+         let mut thread_object = thread_object.as_object_mut()?;
+         let thread_class = thread_object.class().clone();
+@@ -668,7 +688,10 @@ pub async fn start_0<T: Thread + 'static>(
+         });
+ 
+         // Register the thread handle without a JoinHandle for WASM
+-        let thread_handle = ThreadHandle::from(new_thread);
++        let thread_handle = ThreadHandle {
++            thread: new_thread,
++            daemon: is_daemon,
++        };
+         let thread_handles = vm.thread_handles();
+         thread_handles
+             .insert(internal_thread_id, thread_handle)
+@@ -680,9 +703,24 @@ pub async fn start_0<T: Thread + 'static>(
+         let spawn_vm = vm.clone();
+         let spawn_thread_id = internal_thread_id;
+         tokio::task::spawn_local(async move {
+-            let _ = spawn_thread
++            let result = spawn_thread
+                 .execute(&run.declaring_class, &run.method, &[thread_value])
+                 .await;
++            // As on native targets: the thread's handler prints `Exception in thread "..."`.
++            if let Err(ristretto_types::Error::Throwable(throwable)) = result {
++                let _ = spawn_thread
++                    .invoke(
++                        "java/lang/Thread",
++                        "dispatchUncaughtException(Ljava/lang/Throwable;)V",
++                        &[thread_object.clone(), throwable],
++                    )
++                    .await;
++            }
++            // After a halt (recorded in ristretto_types::halt) the embedder ends the run; this
++            // thread must not run any more Java code.
++            if ristretto_types::halt::requested().is_some() {
++                return;
++            }
+ 
+             if let Err(error) = set_thread_status(&thread_object, ThreadState::TERMINATED) {
+                 error!("Failed to set thread status to TERMINATED: {error}");
+@@ -713,7 +751,11 @@ pub async fn start_0<T: Thread + 'static>(
+             thread_handles.remove(&spawn_thread_id).await;
+         });
+ 
+-        let thread_handle = ThreadHandle::from(new_thread);
++        // The daemon flag lets the embedder wait for non-daemon threads after main returns.
++        let thread_handle = ThreadHandle {
++            thread: new_thread,
++            daemon: is_daemon,
++        };
+         let thread_handles = vm.thread_handles();
+         thread_handles
+             .insert(internal_thread_id, thread_handle)
+@@ -1013,9 +1055,9 @@ mod tests {
+     #[tokio::test]
+     async fn test_sleep_0() -> Result<()> {
+         let (_vm, thread) = crate::test::java21_thread().await?;
+-        let millis = Value::Long(250);
++        let nanos = Value::Long(250_000_000);
+         let start = std::time::Instant::now();
+-        let result = sleep_0(thread, Parameters::new(vec![millis])).await?;
++        let result = sleep_0(thread, Parameters::new(vec![nanos])).await?;
+         let elapsed = start.elapsed();
+         assert_eq!(result, None);
+         assert!(elapsed.as_millis() > 200);
 diff --git a/ristretto_intrinsics/src/java/lang/throwable.rs b/ristretto_intrinsics/src/java/lang/throwable.rs
 index a18a8af..faa8fcd 100644
 --- a/ristretto_intrinsics/src/java/lang/throwable.rs
@@ -2266,6 +2493,61 @@ index 40ced87..b9c06ab 100644
      /// Error that represents a JVM throwable object
      #[error("java.lang.Throwable: {0}")]
      Throwable(ristretto_classloader::Value),
+diff --git a/ristretto_types/src/halt.rs b/ristretto_types/src/halt.rs
+new file mode 100644
+index 0000000..c535b9f
+--- /dev/null
++++ b/ristretto_types/src/halt.rs
+@@ -0,0 +1,49 @@
++//! The exit status of the first halt on any Java thread.
++//!
++//! On WebAssembly `Runtime.halt` unwinds the calling Java thread instead of ending the process.
++//! When that thread is not the one the embedder waits on (a worker thread or a shutdown hook), the
++//! embedder learns about the halt here and ends the run with the recorded status, as the process
++//! would have ended on `HotSpot`.
++
++use crate::Error;
++use std::future::poll_fn;
++use std::sync::{Mutex, PoisonError};
++use std::task::{Poll, Waker};
++
++static STATE: Mutex<(Option<i32>, Option<Waker>)> = Mutex::new((None, None));
++
++/// Record a halt with `code` (the first one wins), wake the embedder, and return the error that
++/// unwinds the calling thread.
++pub fn request(code: i32) -> Error {
++    let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
++    let first = *state.0.get_or_insert(code);
++    if let Some(waker) = state.1.take() {
++        waker.wake();
++    }
++    Error::Halt(first)
++}
++
++/// The status of the halt recorded since the last [`reset`], if any.
++pub fn requested() -> Option<i32> {
++    STATE.lock().unwrap_or_else(PoisonError::into_inner).0
++}
++
++/// Forget any recorded halt; call before starting a new program.
++pub fn reset() {
++    *STATE.lock().unwrap_or_else(PoisonError::into_inner) = (None, None);
++}
++
++/// Wait until any thread halts and return its status.
++pub async fn wait() -> i32 {
++    poll_fn(|context| {
++        let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
++        match state.0 {
++            Some(code) => Poll::Ready(code),
++            None => {
++                state.1 = Some(context.waker().clone());
++                Poll::Pending
++            }
++        }
++    })
++    .await
++}
 diff --git a/ristretto_types/src/java_error.rs b/ristretto_types/src/java_error.rs
 index b3cebb8..7cd1b58 100644
 --- a/ristretto_types/src/java_error.rs
@@ -2294,10 +2576,10 @@ index b3cebb8..7cd1b58 100644
          assert_eq!(error.class_name(), "java.lang.ClassCastException");
          assert_eq!(
 diff --git a/ristretto_types/src/lib.rs b/ristretto_types/src/lib.rs
-index 7231ed8..db7470a 100644
+index 7231ed8..d7a3692 100644
 --- a/ristretto_types/src/lib.rs
 +++ b/ristretto_types/src/lib.rs
-@@ -51,6 +51,10 @@ pub use resource_manager::ResourceManager;
+@@ -51,6 +51,11 @@ pub use resource_manager::ResourceManager;
  pub use rust_value::RustValue;
  use std::pin::Pin;
  pub use thread::Thread;
@@ -2305,6 +2587,7 @@ index 7231ed8..db7470a 100644
 +/// Bytes left on standard input when the embedder supplies all input up front, or -1 when unknown.
 +/// `FileInputStream.available()` on file descriptor 0 reports it (0 when unknown).
 +pub static STDIN_AVAILABLE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(-1);
++pub mod halt;
  pub use vm::{FIRST_NIO_FD, VM};
  
  /// A boxed future type that is `Send` on non-wasm targets and not `Send` on wasm targets.
@@ -2341,8 +2624,108 @@ index 6e756b8..03ffce6 100644
              Instruction::Bastore => bastore(stack).map(InstructionResult::Sync),
              Instruction::Castore => castore(stack).map(InstructionResult::Sync),
              Instruction::Sastore => sastore(stack).map(InstructionResult::Sync),
+diff --git a/ristretto_vm/src/instruction/array.rs b/ristretto_vm/src/instruction/array.rs
+index c884182..ed8af40 100644
+--- a/ristretto_vm/src/instruction/array.rs
++++ b/ristretto_vm/src/instruction/array.rs
+@@ -1,5 +1,5 @@
+ use crate::Error::{InternalError, InvalidStackValue};
+-use crate::JavaError::{NegativeArraySizeException, NullPointerException};
++use crate::JavaError::{NegativeArraySizeException, NullPointerException, OutOfMemoryError};
+ use crate::Result;
+ use crate::frame::ExecutionResult::Continue;
+ use crate::frame::{ExecutionResult, Frame};
+@@ -9,6 +9,24 @@ use ristretto_classfile::BaseType;
+ use ristretto_classfile::attributes::ArrayType;
+ use ristretto_classloader::{Reference, Value};
+ 
++/// `HotSpot`'s largest array length on 64-bit platforms (`Integer.MAX_VALUE - 2`).
++const MAX_ARRAY_LENGTH: usize = 2_147_483_645;
++
++/// The most memory one array may take here (its elements as this VM stores them). Larger
++/// requests throw `OutOfMemoryError` instead of exhausting wasm32's 4 GiB address space.
++const MAX_ARRAY_BYTES: usize = 1 << 30;
++
++/// Throw `OutOfMemoryError` with `HotSpot`'s messages for an array that cannot be allocated.
++fn check_array_size(count: usize, element_bytes: usize) -> Result<()> {
++    if count > MAX_ARRAY_LENGTH {
++        return Err(OutOfMemoryError("Requested array size exceeds VM limit".to_string()).into());
++    }
++    match count.checked_mul(element_bytes) {
++        Some(bytes) if bytes <= MAX_ARRAY_BYTES => Ok(()),
++        _ => Err(OutOfMemoryError("Java heap space".to_string()).into()),
++    }
++}
++
+ /// See: <https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-6.html#jvms-6.5.newarray>
+ #[inline]
+ pub(crate) fn newarray(
+@@ -23,6 +41,14 @@ pub(crate) fn newarray(
+         return Err(NegativeArraySizeException(count.to_string()).into());
+     }
+     let count = usize::try_from(count)?;
++    let element_bytes = match array_type {
++        ArrayType::Boolean | ArrayType::Byte => 1,
++        ArrayType::Short => 2,
++        ArrayType::Char => size_of::<char>(),
++        ArrayType::Float | ArrayType::Int => 4,
++        ArrayType::Double | ArrayType::Long => 8,
++    };
++    check_array_size(count, element_bytes)?;
+     let collector = vm.garbage_collector();
+     let array = match array_type {
+         ArrayType::Boolean => Value::new_object(collector, Reference::from(vec![false; count])),
+@@ -61,6 +87,7 @@ pub(crate) async fn anewarray(
+         return Err(NegativeArraySizeException(count.to_string()).into());
+     }
+     let count = usize::try_from(count)?;
++    check_array_size(count, size_of::<Value>())?;
+     let vm = thread.vm()?;
+     let reference = Reference::try_from((class, vec![Value::Object(None); count]))?;
+     let array = Value::new_object(vm.garbage_collector(), reference);
+@@ -120,9 +147,39 @@ pub(crate) async fn multianewarray(
+     }
+     dimension_sizes.reverse();
+ 
++    // Check every level before allocating anything. HotSpot stops at the first empty level.
++    let base_component_type = class.array_base_element_type();
++    let rank = class.name().bytes().take_while(|byte| *byte == b'[').count();
++    let leaf_bytes = match base_component_type {
++        _ if dimension_sizes.len() < rank || base_component_type.len() != 1 => size_of::<Value>(),
++        "Z" | "B" => 1,
++        "S" => 2,
++        "C" => size_of::<char>(),
++        "F" | "I" => 4,
++        _ => 8,
++    };
++    let mut arrays: usize = 1;
++    let mut total_bytes: usize = 0;
++    for (depth, &count) in dimension_sizes.iter().enumerate() {
++        let element_bytes = if depth + 1 == dimension_sizes.len() {
++            leaf_bytes
++        } else {
++            size_of::<Value>()
++        };
++        check_array_size(count, element_bytes)?;
++        total_bytes = arrays
++            .checked_mul(count * element_bytes)
++            .and_then(|bytes| bytes.checked_add(total_bytes))
++            .filter(|bytes| *bytes <= MAX_ARRAY_BYTES)
++            .ok_or_else(|| OutOfMemoryError("Java heap space".to_string()))?;
++        arrays = arrays.saturating_mul(count);
++        if arrays == 0 {
++            break;
++        }
++    }
++
+     // Create the nested array structure
+     // For multidimensional arrays, we need the base element type (strip all '[' prefixes)
+-    let base_component_type = class.array_base_element_type();
+     let array =
+         create_multidimensional_array(&thread, base_component_type, &dimension_sizes, 0).await?;
+ 
 diff --git a/ristretto_vm/src/instruction/exception.rs b/ristretto_vm/src/instruction/exception.rs
-index 3f75b52..dd2d087 100644
+index 3f75b52..877b0ed 100644
 --- a/ristretto_vm/src/instruction/exception.rs
 +++ b/ristretto_vm/src/instruction/exception.rs
 @@ -14,7 +14,7 @@ use ristretto_classloader::Value;
@@ -2354,7 +2737,7 @@ index 3f75b52..dd2d087 100644
      }
      // Return the exception to the caller and let the frame error handler deal with it
      Err(Throwable(throwable))
-@@ -91,6 +91,17 @@ pub(crate) async fn convert_error_to_throwable(thread: &Thread, error: Error) ->
+@@ -91,6 +91,30 @@ pub(crate) async fn convert_error_to_throwable(thread: &Thread, error: Error) ->
              .await;
      }
  
@@ -2369,10 +2752,23 @@ index 3f75b52..dd2d087 100644
 +            .await;
 +    }
 +
++    // HotSpot throws InterruptedException from Object.wait without a message.
++    if let JavaError(crate::JavaError::InterruptedException(message)) = &error
++        && message.is_empty()
++    {
++        return thread
++            .object(
++                "java/lang/InterruptedException",
++                "Ljava/lang/String;",
++                &[Value::Object(None)],
++            )
++            .await;
++    }
++
      let (class_name, message) = match error {
          JavaError(java_error) => {
              let class_name = java_error.class_name().to_string();
-@@ -98,6 +109,7 @@ pub(crate) async fn convert_error_to_throwable(thread: &Thread, error: Error) ->
+@@ -98,6 +122,7 @@ pub(crate) async fn convert_error_to_throwable(thread: &Thread, error: Error) ->
              (class_name, message)
          }
          Throwable(throwable) => return Ok(throwable),
@@ -2657,20 +3053,37 @@ index 3f33c92..79daca2 100644
                  );
                  0
 diff --git a/ristretto_vm/src/lib.rs b/ristretto_vm/src/lib.rs
-index 9f9c6bf..0f77da0 100644
+index 9f9c6bf..edd4a5e 100644
 --- a/ristretto_vm/src/lib.rs
 +++ b/ristretto_vm/src/lib.rs
-@@ -104,6 +104,6 @@ pub use ristretto_classloader::{
+@@ -104,6 +104,7 @@ pub use ristretto_classloader::{
      Class, ClassLoader, ClassPath, ClassPathEntry, DEFAULT_JAVA_VERSION, Memory, Object, Reference,
      Value,
  };
 -pub use ristretto_types::{Error, JavaError, Parameters, Result, RustValue};
-+pub use ristretto_types::{Error, JavaError, Parameters, Result, RustValue, STDIN_AVAILABLE};
++pub use ristretto_gc::GarbageCollector;
++pub use ristretto_types::{Error, JavaError, Parameters, Result, RustValue, STDIN_AVAILABLE, halt};
  pub use thread::Thread;
 -pub use vm::VM;
 +pub use vm::{VM, with_local_set};
+diff --git a/ristretto_vm/src/thread.rs b/ristretto_vm/src/thread.rs
+index f545868..dc682d0 100644
+--- a/ristretto_vm/src/thread.rs
++++ b/ristretto_vm/src/thread.rs
+@@ -1097,6 +1097,11 @@ impl Thread {
+                                 class.complete_initialization()?;
+                             }
+                             Err(error) => {
++                                // A halt (System.exit in a static initializer) ends the program;
++                                // it must not become an ExceptionInInitializerError.
++                                if matches!(error, crate::Error::Halt(_)) {
++                                    return Err(error);
++                                }
+                                 // Step 8: <clinit> threw, mark as Erroneous
+                                 let error_msg = format!("{error:#}");
+                                 class.fail_initialization(error_msg.clone())?;
 diff --git a/ristretto_vm/src/vm.rs b/ristretto_vm/src/vm.rs
-index 60f9aea..ec2d5b6 100644
+index 60f9aea..1cef40d 100644
 --- a/ristretto_vm/src/vm.rs
 +++ b/ristretto_vm/src/vm.rs
 @@ -42,10 +42,37 @@ use tracing::{debug, warn};
@@ -2711,25 +3124,115 @@ index 60f9aea..ec2d5b6 100644
  #[cfg(not(target_os = "wasi"))]
  async fn run_local<F: Future>(future: F) -> F::Output {
      future.await
+@@ -891,6 +918,45 @@ impl VM {
+         .await
+     }
+ 
++    /// Load and link a class without initializing it, as `Class.forName(name, false, loader)`
++    /// does.
++    ///
++    /// # Errors
++    ///
++    /// if the class cannot be loaded or linked
++    pub async fn load_class(&self, class_name: &str) -> Result<Arc<Class>> {
++        run_local(async move {
++            let thread = self.primordial_thread().await?;
++            let class_name = ristretto_classfile::JavaStr::cow_from_str(class_name);
++            thread.load_and_link_class(&class_name).await
++        })
++        .await
++    }
++
++    /// Invoke `main(String[])` declared by `class_name` with `parameters` as its arguments. Unlike
++    /// [`VM::invoke_main`], the embedder chooses the class, for example a superclass of the main
++    /// class that declares an inherited `main`.
++    ///
++    /// # Errors
++    ///
++    /// if the method cannot be invoked
++    pub async fn invoke_main_of<S>(
++        &self,
++        class_name: &str,
++        parameters: &[S],
++    ) -> Result<Option<Value>>
++    where
++        S: AsRef<OsStr> + Debug,
++    {
++        run_local(async move {
++            let thread = self.primordial_thread().await?;
++            let arguments = ristretto_types::JavaObject::to_object(parameters, &*thread).await?;
++            self.invoke(class_name, "main([Ljava/lang/String;)V", &[arguments])
++                .await
++        })
++        .await
++    }
++
+     /// Invoke a method.  To invoke a method on an object reference, the object reference must be
+     /// the first parameter in the parameter vector.
+     ///
+@@ -1047,17 +1113,29 @@ impl VM {
+         Ok(())
+     }
+ 
+-    /// Wait for all non-daemon threads to complete (WASM version; no-op).
++    /// Wait for all non-daemon threads to complete (WASM version).
++    ///
++    /// Threads run as local tasks that remove their handle when they end, so this polls the
++    /// handles, letting those tasks run in between. Call it inside the `LocalSet` that runs them.
+     ///
+     /// # Errors
+     ///
+     /// This implementation never returns an error; the `Result` is kept for signature
+     /// consistency with the non-wasm implementation.
+     #[cfg(target_family = "wasm")]
+-    #[expect(clippy::unused_async, clippy::unused_async_trait_impl)]
+     pub async fn wait_for_non_daemon_threads(&self) -> Result<()> {
+-        // WASM uses spawn_local which doesn't support joining
+-        Ok(())
++        loop {
++            let running = self
++                .thread_handles
++                .read()
++                .await
++                .iter()
++                .any(|(id, handle)| *id != 1 && !handle.daemon);
++            if !running {
++                return Ok(());
++            }
++            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
++        }
+     }
+ }
+ 
 diff --git a/web/runner/src/arena.rs b/web/runner/src/arena.rs
 new file mode 100644
-index 0000000..df6e161
+index 0000000..23a7679
 --- /dev/null
 +++ b/web/runner/src/arena.rs
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,426 @@
 +//! Java Arena runner: execute precompiled class files with stdin and arguments supplied up front.
 +//!
 +//! Java stdout and stderr go to the component's WASI stdout and stderr as raw bytes, capped at
 +//! `outputLimit` bytes in total. The returned JSON reports the exit code and whether output was
 +//! truncated. Program files live in the host's in-memory file system under the working directory.
++//!
++//! The run follows the `java` launcher: the JDK's `LauncherHelper` reports a missing main class or
++//! method, the program ends when `Runtime.halt` runs on any thread, and after `main` returns the
++//! run waits for non-daemon threads before running shutdown hooks.
 +
-+use ristretto_vm::{ClassPath, ClassPathEntry, ConfigurationBuilder, Memory, STDIN_AVAILABLE, VM, Value};
++use ristretto_vm::{
++    Class, ClassPath, ClassPathEntry, ConfigurationBuilder, Memory, RustValue, STDIN_AVAILABLE, VM,
++    Value,
++};
 +use serde::Deserialize;
 +use serde_json::json;
 +use std::io::{self, Read, Write};
 +use std::path::PathBuf;
-+use std::sync::Arc;
 +use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
++use std::future::poll_fn;
++use std::sync::{Arc, Mutex as StdMutex, Once};
++use std::task::{Poll, Waker};
++use std::time::{Duration, Instant};
 +use tokio::sync::Mutex;
 +
 +const DEFAULT_OUTPUT_LIMIT: usize = 64 * 1024;
@@ -2752,6 +3255,32 @@ index 0000000..df6e161
 +    limit: usize,
 +    written: AtomicUsize,
 +    truncated: AtomicBool,
++    /// Set when a writer starts buffering output; [`drain_periodically`] waits for it.
++    waiting: AtomicBool,
++    waker: StdMutex<Option<Waker>>,
++}
++
++impl OutputBudget {
++    fn signal_waiting(&self) {
++        self.waiting.store(true, Ordering::Relaxed);
++        if let Some(waker) = self.waker.lock().ok().and_then(|mut waker| waker.take()) {
++            waker.wake();
++        }
++    }
++
++    async fn wait_for_output(&self) {
++        poll_fn(|context| {
++            if let Ok(mut waker) = self.waker.lock() {
++                *waker = Some(context.waker().clone());
++            }
++            if self.waiting.swap(false, Ordering::Relaxed) {
++                Poll::Ready(())
++            } else {
++                Poll::Pending
++            }
++        })
++        .await;
++    }
 +}
 +
 +/// Standard input supplied up front; EOF after the last byte. Publishes the remaining byte count
@@ -2781,18 +3310,22 @@ index 0000000..df6e161
 +}
 +
 +/// Writes Java output to the component's stdout or stderr. Output is buffered because every
-+/// host call is expensive in the browser; the buffer is flushed when it fills and after the run.
++/// host call is expensive in the browser. The buffer is drained when it fills, on a newline once
++/// `DRAIN_INTERVAL` has passed since the last drain, by [`drain_periodically`], after the run, and
++/// by the panic hook, so the host sees output while the program runs and keeps it after a trap.
 +struct CappedWriter {
 +    budget: Arc<OutputBudget>,
 +    stderr: bool,
 +    buffer: Vec<u8>,
++    last_drain: Instant,
 +}
 +
 +const FLUSH_THRESHOLD: usize = 16 * 1024;
++const DRAIN_INTERVAL: Duration = Duration::from_millis(50);
 +
 +impl CappedWriter {
 +    fn new(budget: Arc<OutputBudget>, stderr: bool) -> Self {
-+        Self { budget, stderr, buffer: Vec::new() }
++        Self { budget, stderr, buffer: Vec::new(), last_drain: Instant::now() }
 +    }
 +
 +    fn drain(&mut self) -> io::Result<()> {
@@ -2809,13 +3342,19 @@ index 0000000..df6e161
 +            sink.flush()?;
 +        }
 +        self.buffer.clear();
++        self.last_drain = Instant::now();
 +        Ok(())
 +    }
 +
 +    fn accept(&mut self, bytes: &[u8]) -> io::Result<()> {
++        let was_empty = self.buffer.is_empty();
 +        self.buffer.extend_from_slice(bytes);
-+        if self.buffer.len() >= FLUSH_THRESHOLD {
++        if self.buffer.len() >= FLUSH_THRESHOLD
++            || (bytes.contains(&b'\n') && self.last_drain.elapsed() >= DRAIN_INTERVAL)
++        {
 +            self.drain()?;
++        } else if was_empty && !self.buffer.is_empty() {
++            self.budget.signal_waiting();
 +        }
 +        Ok(())
 +    }
@@ -2823,6 +3362,10 @@ index 0000000..df6e161
 +
 +impl Write for CappedWriter {
 +    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
++        // The process has ended on HotSpot; threads still unwinding must not print.
++        if ristretto_vm::halt::requested().is_some() {
++            return Ok(bytes.len());
++        }
 +        let written = self.budget.written.load(Ordering::Relaxed);
 +        let room = self.budget.limit.saturating_sub(written);
 +        if bytes.len() <= room {
@@ -2853,6 +3396,48 @@ index 0000000..df6e161
 +}
 +
 +type Streams = (Arc<Mutex<CappedWriter>>, Arc<Mutex<CappedWriter>>);
++
++/// The current run's writers, for the panic hook.
++static STREAMS: StdMutex<Option<Streams>> = StdMutex::new(None);
++
++/// Drain whatever is buffered before a panic traps the instance, so the host keeps it.
++fn install_panic_hook() {
++    static INSTALL: Once = Once::new();
++    INSTALL.call_once(|| {
++        let default_hook = std::panic::take_hook();
++        std::panic::set_hook(Box::new(move |info| {
++            if let Ok(streams) = STREAMS.try_lock()
++                && let Some((stdout, stderr)) = streams.as_ref()
++            {
++                for stream in [stdout, stderr] {
++                    if let Ok(mut writer) = stream.try_lock() {
++                        let _ = writer.drain();
++                    }
++                }
++            }
++            default_hook(info);
++        }));
++    });
++}
++
++/// Drain output that has waited in a buffer for `DRAIN_INTERVAL`, for example the last lines
++/// before an endless loop. Java threads yield to the scheduler every few hundred instructions, so
++/// this runs while they work. The timer is armed only while output waits: an armed timer makes
++/// every yield read the clock, which slows computation by about a fifth.
++async fn drain_periodically(streams: &Streams, budget: &OutputBudget) {
++    loop {
++        budget.wait_for_output().await;
++        tokio::time::sleep(DRAIN_INTERVAL).await;
++        for stream in [&streams.0, &streams.1] {
++            match stream.try_lock() {
++                Ok(mut writer) => {
++                    let _ = writer.drain();
++                }
++                Err(_) => budget.signal_waiting(),
++            }
++        }
++    }
++}
 +
 +fn configuration(request: &ArenaRequest, streams: &Streams, memory: Memory) -> ConfigurationBuilder {
 +    let builder = ConfigurationBuilder::new()
@@ -2902,7 +3487,86 @@ index 0000000..df6e161
 +    }
 +}
 +
-+async fn run(request: &ArenaRequest, streams: &Streams) -> Result<i32, String> {
++/// What `HotSpot` does once `main` has ended: wait for non-daemon threads, then run the shutdown
++/// hooks. `code` is the status unless a hook halts.
++async fn finish(vm: &VM, code: i32) -> i32 {
++    let _ = vm.wait_for_non_daemon_threads().await;
++    shutdown(vm).await.unwrap_or(code)
++}
++
++/// An argument for `LauncherHelper.checkAndLoadMain`.
++#[derive(Debug)]
++enum LauncherArgument<'a> {
++    Int(i32),
++    Text(&'a str),
++}
++
++impl RustValue for LauncherArgument<'_> {
++    fn to_value(&self, collector: &Arc<ristretto_vm::GarbageCollector>) -> Value {
++        match self {
++            Self::Int(value) => Value::from(*value),
++            Self::Text(text) => text.to_value(collector),
++        }
++    }
++
++    fn as_rust_string(&self) -> Option<&str> {
++        match self {
++            Self::Int(_) => None,
++            Self::Text(text) => Some(text),
++        }
++    }
++}
++
++/// The class whose `main(String[])` the launcher runs for `class`: the first class up the
++/// superclass chain that declares one, as JNI's `GetStaticMethodID` finds it. With
++/// `launchable`, it must also be public and static, which `LauncherHelper` would accept.
++fn main_declarer(class: &Arc<Class>, launchable: bool) -> ristretto_vm::Result<Option<Arc<Class>>> {
++    let mut current = Some(class.clone());
++    while let Some(class) = current {
++        if let Some(method) = class.method("main", "([Ljava/lang/String;)V") {
++            let accepted = method.is_static() && (!launchable || method.is_public());
++            return Ok(accepted.then_some(class));
++        }
++        current = class.parent()?;
++    }
++    Ok(None)
++}
++
++/// Load the main class and run its `main`. When `java` would refuse to (no such class, or no
++/// `public static void main(String[])`), the JDK's own `LauncherHelper` prints the launcher's
++/// message to stderr and calls `System.exit(1)`, as it does under `HotSpot`. As there, the main
++/// class is checked before it is initialized.
++async fn launch(vm: &VM, request: &ArenaRequest) -> ristretto_vm::Result<Option<Value>> {
++    let main_class = &request.main_class;
++    let declarer = match vm.load_class(main_class).await {
++        Ok(class) => main_declarer(&class, true)?,
++        Err(error @ (ristretto_vm::Error::Throwable(_) | ristretto_vm::Error::Halt(_))) => {
++            return Err(error);
++        }
++        Err(_) => None,
++    };
++    let declarer = match declarer {
++        Some(class) => class,
++        None => {
++            // Arguments: printToStderr = true, mode LM_CLASS = 1 (a class name), the name.
++            vm.invoke(
++                "sun.launcher.LauncherHelper",
++                "checkAndLoadMain(ZILjava/lang/String;)Ljava/lang/Class;",
++                &[LauncherArgument::Int(1), LauncherArgument::Int(1), LauncherArgument::Text(main_class)],
++            )
++            .await?;
++            let class = vm.load_class(main_class).await?;
++            main_declarer(&class, false)?.ok_or_else(|| {
++                ristretto_vm::Error::InternalError(format!("No main method found for {main_class}"))
++            })?
++        }
++    };
++    // JNI's GetStaticMethodID, which the launcher uses, initializes the main class itself.
++    vm.class(main_class).await?;
++    vm.invoke_main_of(declarer.name(), &request.args).await
++}
++
++async fn run(request: &ArenaRequest, streams: &Streams, budget: &OutputBudget) -> Result<i32, String> {
 +    let memory = Memory::new("arena");
 +    for class in &request.classes {
 +        memory.add_class(class).await.map_err(|error| error.to_string())?;
@@ -2912,17 +3576,27 @@ index 0000000..df6e161
 +    std::env::set_current_dir(workspace()).map_err(|error| error.to_string())?;
 +    let config = configuration(request, streams, memory).build().map_err(|error| error.to_string())?;
 +    let vm = VM::new(config).await.map_err(|error| error.to_string())?;
-+    let exit_code = match vm.invoke_main(&request.args).await {
-+        Ok(_) => shutdown(&vm).await.unwrap_or(0),
-+        Err(ristretto_vm::Error::Halt(code)) => code,
-+        Err(ristretto_vm::Error::Throwable(throwable)) => match dispatch_uncaught(&vm, &throwable).await {
++    let program = async {
++        let exit_code = match launch(&vm, request).await {
++            Ok(_) => finish(&vm, 0).await,
 +            Err(ristretto_vm::Error::Halt(code)) => code,
++            Err(ristretto_vm::Error::Throwable(throwable)) => match dispatch_uncaught(&vm, &throwable).await {
++                Err(ristretto_vm::Error::Halt(code)) => code,
++                Err(error) => return Err(error.to_string()),
++                Ok(()) => finish(&vm, 1).await,
++            },
 +            Err(error) => return Err(error.to_string()),
-+            Ok(()) => shutdown(&vm).await.unwrap_or(1),
-+        },
-+        Err(error) => return Err(error.to_string()),
++        };
++        Ok(exit_code)
 +    };
-+    Ok(exit_code)
++    // A halt on another thread (System.exit in a worker or a shutdown hook) ends the run even
++    // while main waits for that thread; the Java threads are dropped with the LocalSet.
++    tokio::select! {
++        biased;
++        code = ristretto_vm::halt::wait() => Ok(code),
++        result = program => result,
++        () = drain_periodically(streams, budget) => Err("output drain stopped".to_string()),
++    }
 +}
 +
 +/// Decode one run request, execute it on a fresh VM, and return the JSON result.
@@ -2939,14 +3613,24 @@ index 0000000..df6e161
 +        Arc::new(Mutex::new(CappedWriter::new(budget.clone(), false))),
 +        Arc::new(Mutex::new(CappedWriter::new(budget.clone(), true))),
 +    );
-+    let result = ristretto_vm::with_local_set(run(&request, &streams)).await;
++    install_panic_hook();
++    ristretto_vm::halt::reset();
++    if let Ok(mut current) = STREAMS.lock() {
++        *current = Some(streams.clone());
++    }
++    let result = ristretto_vm::with_local_set(run(&request, &streams, &budget)).await;
 +    for stream in [&streams.0, &streams.1] {
 +        let _ = stream.lock().await.drain();
 +    }
++    if let Ok(mut current) = STREAMS.lock() {
++        *current = None;
++    }
++    ristretto_vm::halt::reset();
 +    let truncated = budget.truncated.load(Ordering::Relaxed);
 +    STDIN_AVAILABLE.store(-1, Ordering::Relaxed);
 +    match result {
-+        Ok(exit_code) => json!({"exitCode": exit_code, "outputTruncated": truncated}),
++        // The status a process reports, as the java launcher's exit(code) gives it to the shell.
++        Ok(exit_code) => json!({"exitCode": exit_code & 0xFF, "outputTruncated": truncated}),
 +        // The output cap stops the program through a halt; any other failure is a VM error.
 +        Err(message) => json!({"exitCode": 1, "outputTruncated": truncated, "error": message}),
 +    }

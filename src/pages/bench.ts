@@ -175,6 +175,12 @@ subscribeEngine(() => {
 });
 
 async function autoload() {
+  if (!engineSupported()) {
+    // Nothing to download or check: the page only explains why Java can't run here.
+    asked = true;
+    await renderEngine();
+    return;
+  }
   const ok = await mayAutoDownload(allowMobile());
   savedOnDevice = await engineCached();
   asked = true;

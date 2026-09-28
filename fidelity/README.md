@@ -2,7 +2,7 @@
 
 Java Arena computes every expected output with a real JDK 21 at build time, and grades learners' code with the in-browser engine. They must agree. This suite checks that they do.
 
-- `programs/NN-name/`: 30 small programs in the style of the course. Each has `Main.java`, and optionally `stdin.txt`, `files/` (put in the program's working folder) and `meta.json` (`args`, `nondeterministic`, `note`). Together they cover Scanner input, `HashMap` and `HashSet` order, double and float printing, `printf` rounding, seeded `Random`, `Math`, integer overflow, strings, streams, records and enums, comparators, interfaces, caught and uncaught exceptions (with causes and exit codes), files through `java.io` and `java.nio.file`, `java.time`, stack overflow, `System.exit`, and a CPU-heavy program.
+- `programs/NN-name/`: 35 small programs in the style of the course. Each has `Main.java`, and optionally `stdin.txt`, `files/` (put in the program's working folder) and `meta.json` (`args`, `nondeterministic`, `note`). Together they cover Scanner input, `HashMap` and `HashSet` order, double and float printing, `printf` rounding, seeded `Random`, `Math`, integer overflow, strings, streams, records and enums, comparators, interfaces, caught and uncaught exceptions (with causes and exit codes), files through `java.io` and `java.nio.file`, `java.time`, stack overflow, `System.exit` (also with -1 and inside a static initializer), `Thread.sleep`, a misspelled and an inherited `main`, and a CPU-heavy program.
 - `errors/NN-name/`: 18 programs that must not compile, the mistakes beginners make most.
 
 Run it:

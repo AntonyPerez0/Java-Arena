@@ -2,7 +2,8 @@
 # Builds the Java Arena runner into engine/dist/runner/:
 #   - Ristretto (a JVM in Rust) at a pinned commit, with patches/ristretto.patch, compiled to a
 #     wasm32-wasip2 component and turned into core modules plus runner.js by jco;
-#   - jdk.zip, a java.base-only JDK 21 image made with jlink from the reference JDK;
+#   - jdk.zip, a java.base-only JDK 21 image made with jlink from the reference JDK (Eclipse
+#     Temurin 21.0.10+7, set ARENA_JDK to its directory);
 #   - manifest.json (sizes, gzip sizes, SHA-256, pinned sources) and licenses/.
 # Usage: engine/runner/build.sh [--clean] [--test]
 set -euo pipefail
@@ -10,7 +11,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../.." && pwd)
 WORK=${ARENA_RUNNER_WORK:-/home/user/build/runner}
-JDK=${ARENA_JDK:-/usr/lib/jvm/java-21-openjdk-amd64}
+JDK=${ARENA_JDK:-/home/user/build/jdk/jdk-21.0.10+7}
 JOBS=${ARENA_JOBS:-2}
 DIST="$REPO/engine/dist/runner"
 RISTRETTO_REPO=https://github.com/theseus-rs/ristretto
@@ -27,6 +28,11 @@ for arg in "$@"; do
     *) echo "unknown option $arg" >&2; exit 2 ;;
   esac
 done
+jdk_release() { grep "^$1=" "$JDK/release" | cut -d'"' -f2; }
+if [ ! -f "$JDK/release" ] || [ ! -d "$JDK/jmods" ] || [ "$(jdk_release JAVA_VERSION | cut -d. -f1)" != 21 ]; then
+  echo "ARENA_JDK=$JDK is not a JDK 21 with jmods/" >&2
+  exit 1
+fi
 [ "$CLEAN" = 1 ] && rm -rf "$WORK/src" "$WORK/target" "$WORK/node" "$WORK/gen" "$WORK/jdk-image"
 mkdir -p "$WORK"
 unset JAVA_TOOL_OPTIONS _JAVA_OPTIONS JDK_JAVA_OPTIONS
@@ -77,13 +83,18 @@ cp "$WORK/src/LICENSE-APACHE" "$DIST/licenses/Ristretto-LICENSE-APACHE.txt"
 cp -rL "$WORK/jdk-image/legal/java.base" "$DIST/licenses/OpenJDK-java.base"
 (cd "$WORK/node" && node licenses.mjs "$WORK/src" "$DIST/licenses/THIRD_PARTY_LICENSES.txt")
 
-JDK_RELEASE=$(grep '^JAVA_VERSION=' "$WORK/jdk-image/release" | cut -d'"' -f2)
-UBUNTU_PACKAGE=$(dpkg-query -W -f='${Package} ${Version}' openjdk-21-jdk-headless 2>/dev/null || echo unknown)
-node - "$DIST" "$RISTRETTO_COMMIT" "$JDK_RELEASE" "$UBUNTU_PACKAGE" <<'NODE'
+node - "$DIST" "$RISTRETTO_COMMIT" "$JDK/release" <<'NODE'
 const { readFileSync, writeFileSync } = require('node:fs');
 const { createHash } = require('node:crypto');
 const { gzipSync } = require('node:zlib');
-const [dist, commit, jdk, ubuntu] = process.argv.slice(2);
+const [dist, commit, releaseFile] = process.argv.slice(2);
+// The JDK's own release file identifies the image: vendor, exact version and source revision.
+const keys = ['IMPLEMENTOR', 'IMPLEMENTOR_VERSION', 'JAVA_RUNTIME_VERSION', 'JAVA_VERSION', 'SOURCE_REPO', 'SOURCE'];
+const release = {};
+for (const line of readFileSync(releaseFile, 'utf8').split('\n')) {
+  const match = /^(\w+)="(.*)"$/.exec(line);
+  if (match && keys.includes(match[1])) release[match[1]] = match[2];
+}
 const names = ['runner.core.wasm', 'runner.core2.wasm', 'runner.core3.wasm', 'jdk.zip', 'runner.js', 'runner-host.mjs', 'wasi-host.mjs'];
 const files = names.map((name) => {
   const data = readFileSync(`${dist}/${name}`);
@@ -94,7 +105,12 @@ const manifest = {
   files,
   sources: {
     ristretto: { repo: 'https://github.com/theseus-rs/ristretto', commit, license: 'Apache-2.0 OR MIT', patches: 'engine/runner/patches/ristretto.patch in the Java Arena repository' },
-    'jdk image': { from: 'jlink --add-modules java.base of the reference JDK', jdkVersion: jdk, ubuntuPackage: ubuntu, license: 'GPL-2.0-only WITH Classpath-exception-2.0' },
+    'jdk image': {
+      from: 'jlink --add-modules java.base of the reference JDK',
+      release,
+      license: 'GPL-2.0-only WITH Classpath-exception-2.0',
+      notices: 'licenses/OpenJDK-java.base',
+    },
     'rust crates': 'licenses/THIRD_PARTY_LICENSES.txt',
   },
 };
@@ -104,6 +120,6 @@ NODE
 
 if [ "$TEST" = 1 ]; then
   echo "== tests"
-  node "$HERE/test/run-tests.mjs"
+  JAVA_HOME_21=${JAVA_HOME_21:-$JDK} node "$HERE/test/run-tests.mjs"
 fi
 echo "done: $DIST"

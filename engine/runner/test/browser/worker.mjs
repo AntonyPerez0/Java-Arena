@@ -13,6 +13,10 @@ self.onmessage = async ({ data }) => {
     } else if (type === 'run') {
       const request = data.request;
       request.classes = request.classes.map((c) => ({ path: c.path, bytes: Uint8Array.from(atob(c.base64), (ch) => ch.charCodeAt(0)) }));
+      if (data.stream) {
+        request.onOutput = (stream, text) => self.postMessage({ id, output: { stream, text } });
+        self.postMessage({ id, started: true });
+      }
       const result = await runner.run(request);
       const files = Object.fromEntries(Object.entries(result.files).map(([name, bytes]) => [name, Array.from(bytes)]));
       self.postMessage({ id, result: { ...result, files } });

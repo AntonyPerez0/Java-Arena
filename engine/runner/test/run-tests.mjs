@@ -2,13 +2,16 @@
 //
 //   node run-tests.mjs [--dist DIR] [--no-node] [--no-browser] [--only NAME,NAME] [--report FILE] [--timing]
 //
-// Each program is compiled with the local javac (--release 21). The reference runs on the local JDK
-// 21 with the site's reference flags. The runner runs in Node and in headless Chromium (Playwright).
+// Each program is compiled with javac --release 21 of the reference JDK ($JAVA_HOME_21, default
+// the pinned Temurin 21.0.10+7 in /home/user/build/jdk) and runs on its HotSpot with the site's
+// reference flags. The runner runs in Node and in headless Chromium (Playwright).
 // Compared: stdout byte for byte, stderr first line, stderr user stack frames (frames outside
 // java.base/), exit code and the files left in the working directory. Full stderr equality is
-// reported too, as information. --timing adds start-up and per-run measurements.
+// required for cases marked exactStderr and reported as a note for the others. Some cases have
+// special checks (see cases.mjs). --timing adds start-up and per-run measurements.
 
 import { spawnSync } from 'node:child_process';
+import { Worker } from 'node:worker_threads';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
@@ -31,15 +34,13 @@ const useNode = !argv.includes('--no-node');
 const useBrowser = !argv.includes('--no-browser');
 const timing = argv.includes('--timing');
 const OUTPUT_LIMIT = 64 * 1024;
-const JAVA_HOME = process.env.JAVA_HOME_21 ?? '/usr/lib/jvm/java-21-openjdk-amd64';
+const JAVA_HOME = process.env.JAVA_HOME_21 ?? '/home/user/build/jdk/jdk-21.0.10+7';
 const REFERENCE_FLAGS = [
   '-Duser.language=en', '-Duser.country=US', '-Duser.timezone=UTC', '-Dfile.encoding=UTF-8',
   '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', '-XX:+UnlockDiagnosticVMOptions', '-XX:-UseLibmIntrinsic',
 ];
 const javaEnv = { ...process.env };
 delete javaEnv.JAVA_TOOL_OPTIONS;
-// A UTF-8 locale, so HotSpot decodes non-ASCII command-line arguments like the browser does.
-javaEnv.LC_ALL = 'C.UTF-8';
 delete javaEnv._JAVA_OPTIONS;
 delete javaEnv.JDK_JAVA_OPTIONS;
 // A UTF-8 locale, so HotSpot decodes non-ASCII command-line arguments the way the browser runner does.
@@ -53,7 +54,8 @@ const asBytes = (value) => (typeof value === 'string' ? new TextEncoder().encode
 function compile(testCase) {
   const out = join(work, 'classes', testCase.name);
   mkdirSync(out, { recursive: true });
-  const result = spawnSync(join(JAVA_HOME, 'bin/javac'), ['--release', '21', '-encoding', 'UTF-8', '-d', out, join(here, 'programs', `${testCase.main}.java`)], { env: javaEnv, encoding: 'utf8' });
+  const source = join(here, 'programs', testCase.source ?? `${testCase.main}.java`);
+  const result = spawnSync(join(JAVA_HOME, 'bin/javac'), ['--release', '21', '-encoding', 'UTF-8', '-d', out, source], { env: javaEnv, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(`javac failed for ${testCase.name}:\n${result.stderr}`);
   const classes = [];
   const walk = (dir) => {
@@ -102,13 +104,25 @@ const request = (testCase, compiled) => ({
   outputLimit: OUTPUT_LIMIT,
 });
 
+/** HotSpot's output cut at the limit, without a character the cut split (as the runner keeps it). */
+function cutAtLimit(bytes) {
+  let end = Math.min(bytes.length, OUTPUT_LIMIT);
+  let lead = end - 1;
+  while (lead >= 0 && end - lead <= 3 && (bytes[lead] & 0xc0) === 0x80) lead--;
+  if (lead >= 0) {
+    const size = bytes[lead] >= 0xf0 ? 4 : bytes[lead] >= 0xe0 ? 3 : bytes[lead] >= 0xc0 ? 2 : 1;
+    if (size > end - lead) end = lead;
+  }
+  return bytes.subarray(0, end);
+}
+
 const userFrames = (stderr) => stderr.split('\n').filter((line) => line.startsWith('\tat ') && !line.startsWith('\tat java.base/'));
 const causes = (stderr) => stderr.split('\n').filter((line) => line.startsWith('Caused by: ') || /^\t\.\.\. \d+ more$/.test(line));
 
 function compare(testCase, reference, got) {
   const problems = [];
   const notes = [];
-  if (got.error) problems.push(`runner error: ${got.error}`);
+  if (got.error && testCase.check !== 'trap') problems.push(`runner error: ${got.error}`);
   if (testCase.check === 'runner-only') {
     if (!got.outputTruncated) problems.push('expected outputTruncated');
     if (got.exitCode !== null) problems.push(`exit code ${got.exitCode}, expected null`);
@@ -117,9 +131,18 @@ function compare(testCase, reference, got) {
     if (!/^(0123456789)+012345$/.test(got.stdout)) problems.push('stdout is not the expected digit pattern');
     return { problems, notes };
   }
+  if (testCase.check === 'trap') {
+    if (!got.error) problems.push(`expected a VM trap, got exit code ${got.exitCode}`);
+    if (!got.stdout.startsWith(testCase.expectOutput)) problems.push(`stdout before the trap: ${JSON.stringify(got.stdout.slice(0, 200))}`);
+    return { problems, notes };
+  }
+  if (testCase.check === 'streaming') {
+    if (got.received !== testCase.expectOutput) problems.push(`onOutput delivered ${JSON.stringify(got.received)} within ${testCase.withinMs} ms, expected ${JSON.stringify(testCase.expectOutput)}`);
+    return { problems, notes };
+  }
   if (testCase.check === 'truncated') {
-    const expected = utf8(reference.stdoutBytes.subarray(0, OUTPUT_LIMIT));
-    if (got.stdout !== expected) problems.push('stdout is not HotSpot stdout cut at 64 KB');
+    const expected = utf8(cutAtLimit(reference.stdoutBytes));
+    if (got.stdout !== expected) problems.push(`stdout is not HotSpot stdout cut at 64 KB:\n${firstDifference(expected, got.stdout)}`);
     if (!got.outputTruncated) problems.push('expected outputTruncated');
     if (got.exitCode !== null) problems.push(`exit code ${got.exitCode}, expected null`);
     return { problems, notes };
@@ -138,7 +161,11 @@ function compare(testCase, reference, got) {
   const gotFiles = Object.keys(got.files).sort();
   if (refFiles.join() !== gotFiles.join()) problems.push(`files differ: HotSpot ${JSON.stringify(refFiles)}, runner ${JSON.stringify(gotFiles)}`);
   else for (const name of refFiles) if (Buffer.compare(Buffer.from(reference.files[name]), Buffer.from(got.files[name])) !== 0) problems.push(`file ${name} content differs`);
-  if (reference.stderr !== got.stderr) notes.push(`full stderr differs (JDK frames):\n${firstDifference(reference.stderr, got.stderr)}`);
+  if (reference.stderr !== got.stderr) {
+    const message = `full stderr differs:\n${firstDifference(reference.stderr, got.stderr)}`;
+    if (testCase.exactStderr) problems.push(message);
+    else notes.push(message);
+  }
   return { problems, notes };
 }
 
@@ -198,9 +225,10 @@ async function main() {
   for (const testCase of selected) compiled.set(testCase.name, compile(testCase));
   const references = new Map();
   for (const testCase of selected) {
-    if (testCase.check !== 'runner-only') references.set(testCase.name, runHotSpot(testCase, compiled.get(testCase.name).dir));
+    if (!['runner-only', 'streaming', 'trap'].includes(testCase.check)) references.set(testCase.name, runHotSpot(testCase, compiled.get(testCase.name).dir));
   }
   const engines = {};
+  const timers = {};
   const timings = {};
 
   if (useNode) {
@@ -208,7 +236,15 @@ async function main() {
     const begin = performance.now();
     const runner = await createRunner();
     timings.node = { start: { ...runner.timings, totalMs: performance.now() - begin }, runs: {} };
-    engines.node = async (testCase) => runner.run(request(testCase, compiled.get(testCase.name)));
+    if (timing) {
+      // A runner of its own, so the timed runs do not follow the trap case in the same process state.
+      const timed = await createRunner();
+      timers.node = (testCase) => timed.run(request(testCase, compiled.get(testCase.name)));
+    }
+    engines.node = async (testCase) => {
+      const req = request(testCase, compiled.get(testCase.name));
+      return testCase.check === 'streaming' ? streamInNodeWorker(req, testCase.withinMs) : runner.run(req);
+    };
   }
 
   let browser;
@@ -228,11 +264,20 @@ async function main() {
     engines.browser = async (testCase) => {
       const req = request(testCase, compiled.get(testCase.name));
       req.classes = req.classes.map((c) => ({ path: c.path, base64: Buffer.from(c.bytes).toString('base64') }));
+      if (testCase.check === 'streaming') return page.evaluate(([dist, r, ms]) => window.streamCase(dist, r, ms), [distUrl, req, testCase.withinMs]);
       const result = await page.evaluate(([r]) => window.runCase('main', r), [req]);
       result.files = Object.fromEntries(Object.entries(result.files).map(([k, v]) => [k, new Uint8Array(v)]));
       return result;
     };
-    if (timing) timings.browser.workers = await measureWorkers(page, distUrl);
+    if (timing) {
+      timings.browser.workers = await measureWorkers(page, distUrl);
+      await page.evaluate(([dist]) => window.startWorker('timed', dist), [distUrl]);
+      timers.browser = async (testCase) => {
+        const req = request(testCase, compiled.get(testCase.name));
+        req.classes = req.classes.map((c) => ({ path: c.path, base64: Buffer.from(c.bytes).toString('base64') }));
+        return page.evaluate(([r]) => window.runCase('timed', r), [req]);
+      };
+    }
   }
 
   let failures = 0;
@@ -250,7 +295,7 @@ async function main() {
   }
 
   if (timing) {
-    for (const [engine, run] of Object.entries(engines)) {
+    for (const [engine, run] of Object.entries(timers)) {
       for (const name of ['hello', 'typical', 'loop-10m']) {
         const testCase = cases.find((c) => c.name === name);
         const samples = [];
@@ -268,6 +313,36 @@ async function main() {
   if (report) writeFileSync(report, JSON.stringify(summary, null, 2) + '\n');
   console.log(`${summary.passed} passed, ${failures} failed`);
   process.exitCode = failures ? 1 : 0;
+}
+
+/**
+ * Run a program that never ends in a worker thread and collect what onOutput delivers in the
+ * first `withinMs` milliseconds of the run (after start-up), then terminate the thread.
+ */
+async function streamInNodeWorker(req, withinMs) {
+  const worker = new Worker(new URL('./stream-worker.mjs', import.meta.url), { workerData: { dist, request: req } });
+  let received = '';
+  let started;
+  let timer;
+  try {
+    await new Promise((ok, fail) => {
+      worker.on('error', fail);
+      worker.on('exit', () => fail(new Error('the run ended; expected it to loop')));
+      worker.on('message', (message) => {
+        if (message.type === 'started') {
+          started = performance.now();
+          timer = setTimeout(ok, withinMs);
+        } else if (message.type === 'output' && message.stream === 'stdout') {
+          received += message.text;
+        }
+      });
+    });
+  } finally {
+    clearTimeout(timer);
+    worker.removeAllListeners('exit');
+    await worker.terminate();
+  }
+  return { received, durationMs: performance.now() - started };
 }
 
 /** Start-up measurements: a cold Worker, a Worker given compiled modules, and fresh-instance runs. */

@@ -29,6 +29,30 @@
     const result = await call(workers.get(key), { type: 'run', request });
     return result;
   };
+  // Run a program that never ends in its own Worker, collect what onOutput delivers in the first
+  // `withinMs` of the run, then terminate the Worker.
+  window.streamCase = async (dist, request, withinMs) => {
+    const worker = new Worker(new URL('./worker.mjs', location.href), { type: 'module' });
+    try {
+      await call(worker, { type: 'init', dist });
+      let received = '';
+      let started;
+      await new Promise((resolve) => {
+        worker.addEventListener('message', ({ data }) => {
+          if (data.started) {
+            started = performance.now();
+            setTimeout(resolve, withinMs);
+          } else if (data.output?.stream === 'stdout') {
+            received += data.output.text;
+          }
+        });
+        worker.postMessage({ id: nextId++, type: 'run', request, stream: true });
+      });
+      return { received, durationMs: performance.now() - started };
+    } finally {
+      worker.terminate();
+    }
+  };
   window.stopWorker = (key) => {
     const begin = performance.now();
     workers.get(key)?.terminate();

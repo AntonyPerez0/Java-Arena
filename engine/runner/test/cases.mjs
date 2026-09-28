@@ -1,6 +1,10 @@
 // Test cases: each program in programs/ is compiled with javac 21 and run on HotSpot and on the Wasm runner.
+// source: the file under programs/ (default `${main}.java`); main: the class to run.
 // check: 'exact' (stdout, stderr first line, user stack frames, exit code, files), 'truncated'
-// (runner must stop at the output limit with HotSpot's first 64 KB) or 'runner-only' (no HotSpot run).
+// (runner must stop at the output limit with HotSpot's first 64 KB), 'runner-only' (no HotSpot run)
+// 'streaming' (onOutput must deliver `expectOutput` within `withinMs` while the program loops) or
+// 'trap' (the WebAssembly instance traps; stdout must still start with `expectOutput`).
+// exactStderr: the whole of stderr must equal HotSpot's, not only its first line and user frames.
 export const cases = [
   { name: 'hello', main: 'Hello' },
   {
@@ -40,4 +44,34 @@ export const cases = [
   { name: 'loop-10m', main: 'Loop10M' },
   { name: 'output-limit', main: 'BigOutput', check: 'truncated' },
   { name: 'output-limit-endless', main: 'InfiniteOutput', check: 'runner-only' },
+  { name: 'output-limit-utf8', main: 'Utf8Cap', check: 'truncated' },
+  { name: 'streaming-output', main: 'OutputThenLoop', check: 'streaming', expectOutput: 'first line\nsecond line ä\n', withinMs: 1000 },
+  { name: 'sleep', main: 'SleepTimes' },
+  { name: 'exit-code-minus-1', main: 'ExitArg', args: ['-1'] },
+  { name: 'exit-code-256', main: 'ExitArg', args: ['256'] },
+  { name: 'exit-code-300', main: 'ExitArg', args: ['300'] },
+  { name: 'exit-in-main-static-init', main: 'ExitStaticMain', exactStderr: true },
+  { name: 'exit-in-helper-static-init', main: 'ExitStaticHelper', exactStderr: true },
+  { name: 'exit-in-static-init-caught', main: 'ExitStaticCaught', exactStderr: true },
+  { name: 'out-of-memory', main: 'OomArrays', exactStderr: true },
+  { name: 'out-of-memory-uncaught', main: 'OomUncaught', exactStderr: true },
+  { name: 'main-misspelled', source: 'launcher/misspelled/Main.java', main: 'Main', exactStderr: true },
+  { name: 'main-not-static', source: 'launcher/nonstatic/Main.java', main: 'Main', exactStderr: true },
+  { name: 'main-not-public', source: 'launcher/nonpublic/Main.java', main: 'Main', exactStderr: true },
+  { name: 'main-no-parameters', source: 'launcher/noparams/Main.java', main: 'Main', exactStderr: true },
+  { name: 'main-returns-int', source: 'launcher/intmain/Main.java', main: 'Main', exactStderr: true },
+  { name: 'main-not-found-static-init', source: 'launcher/staticblock/Main.java', main: 'Main', exactStderr: true },
+  { name: 'main-inherited', source: 'launcher/inherited/Main.java', main: 'Main', args: ['a', 'b'], exactStderr: true },
+  { name: 'main-class-missing', source: 'Hello.java', main: 'Nope', exactStderr: true },
+  { name: 'main-in-package', source: 'launcher/packaged/pkg/Main.java', main: 'pkg.Main', exactStderr: true },
+  { name: 'thread-sleep', main: 'ThreadSleep', exactStderr: true },
+  { name: 'thread-uncaught', main: 'ThreadUncaught', exactStderr: true },
+  { name: 'thread-not-joined', main: 'ThreadNoJoin', exactStderr: true },
+  { name: 'thread-after-main-throws', main: 'ThreadMainThrows', exactStderr: true },
+  { name: 'thread-system-exit', main: 'ThreadExit', exactStderr: true },
+  { name: 'shutdown-hook-halt', main: 'HookHalt', exactStderr: true },
+  { name: 'thread-interrupt', main: 'ThreadInterrupt', exactStderr: true },
+  // Last: it fills the 4 GiB WebAssembly memory, and the next run needs a new instance.
+  { name: 'heap-exhausted-trap', main: 'HeapExhaustion', check: 'trap', expectOutput: 'start\nblocks: 0\nblocks: 100\nblocks: 200\n' },
+  { name: 'after-trap', main: 'Hello' },
 ];

@@ -21,12 +21,22 @@
 //     files: { 'data.txt': string | Uint8Array, 'dir/x.txt': ... } created in the working
 //       directory (/workspace, which is also user.dir) before main starts
 //     outputLimit: bytes of stdout plus stderr before the program is stopped (default 65536)
-//     onOutput(stream, bytes): optional, called as output arrives ('stdout' or 'stderr', Uint8Array)
+//     onOutput(stream, text): optional, called while the program runs with 'stdout' or 'stderr'
+//       and the text of each chunk the host receives (UTF-8 decoded in streaming mode, so a
+//       character split between chunks arrives whole in the later call). The runner sends a
+//       chunk at 16 KB, at a newline 50 ms or more after the previous chunk, every 50 ms while
+//       output waits, and at the end. A Worker can post these to the page, so output printed
+//       before a timeout is not lost when the page terminates the Worker.
 //   -> { stdout, stderr, exitCode, outputTruncated, files, durationMs, error? }
-//     exitCode: 0 after a normal end, n after System.exit(n), 1 after an uncaught exception,
+//     stdout, stderr: the full text, including what onOutput already received
+//     exitCode: the process status HotSpot's java launcher reports: 0 after a normal end,
+//       n & 0xFF after System.exit(n) or Runtime.halt(n) on any thread (so -1 gives 255),
+//       1 after an uncaught exception in main or a launcher error (no main class or method),
 //       null when the output limit stopped the program (outputTruncated is then true)
+//     outputTruncated: the output limit was reached; the text is cut before any incomplete
+//       UTF-8 character at the limit
 //     files: every file left in the working directory, { name: Uint8Array }
-//     error: set only when the VM itself failed (not for Java exceptions)
+//     error: set only when the VM itself failed (not for Java exceptions or launcher errors)
 //
 // The site enforces time limits by terminating the Worker; nothing here can be interrupted.
 //
@@ -135,14 +145,15 @@ export async function createRunner({ fetchAsset = defaultFetchAsset, modules, fr
     state.root.entries.set('tmp', dirNode());
     const out = [];
     const err = [];
-    state.stdout = (bytes) => {
-      out.push(bytes.slice());
-      onOutput?.('stdout', bytes.slice());
+    const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
+    const receive = (stream, chunks) => (bytes) => {
+      chunks.push(bytes.slice());
+      if (!onOutput) return;
+      const text = decoders[stream].decode(bytes, { stream: true });
+      if (text) onOutput(stream, text);
     };
-    state.stderr = (bytes) => {
-      err.push(bytes.slice());
-      onOutput?.('stderr', bytes.slice());
-    };
+    state.stdout = receive('stdout', out);
+    state.stderr = receive('stderr', err);
     const request = JSON.stringify({
       mainClass,
       args: args.map(String),
@@ -159,20 +170,41 @@ export async function createRunner({ fetchAsset = defaultFetchAsset, modules, fr
       result = { exitCode: error?.exitError ? error.code : null, error: error?.message ?? String(error) };
     }
     if (freshInstance) component = undefined;
-    const decode = (chunks) => new TextDecoder().decode(concat(chunks));
+    state.stdout = state.stderr = () => {};
+    const truncated = !!result.outputTruncated;
+    if (onOutput && !truncated) {
+      for (const stream of ['stdout', 'stderr']) {
+        const rest = decoders[stream].decode();
+        if (rest) onOutput(stream, rest);
+      }
+    }
+    const decode = (chunks) => {
+      const bytes = concat(chunks);
+      return new TextDecoder().decode(truncated ? trimIncompleteUtf8(bytes) : bytes);
+    };
     const response = {
       stdout: decode(out),
       stderr: decode(err),
-      exitCode: result.outputTruncated ? null : result.exitCode ?? null,
-      outputTruncated: !!result.outputTruncated,
+      exitCode: truncated ? null : result.exitCode ?? null,
+      outputTruncated: truncated,
       files: filesFromTree(workspace),
       durationMs: performance.now() - begin,
     };
-    if (result.error && !result.outputTruncated) response.error = result.error;
+    if (result.error && !truncated) response.error = result.error;
     return response;
   }
 
   return { run, modules: compiled, timings };
+}
+
+/** Drop an incomplete UTF-8 sequence at the end, where the output limit cut a character. */
+function trimIncompleteUtf8(bytes) {
+  let lead = bytes.length - 1;
+  while (lead >= 0 && bytes.length - lead <= 3 && (bytes[lead] & 0xc0) === 0x80) lead--;
+  if (lead < 0) return bytes;
+  const byte = bytes[lead];
+  const size = byte >= 0xf0 ? 4 : byte >= 0xe0 ? 3 : byte >= 0xc0 ? 2 : 1;
+  return size > bytes.length - lead ? bytes.subarray(0, lead) : bytes;
 }
 
 function concat(chunks) {

@@ -9,7 +9,7 @@ import { downloadSize, fetchCached, fetchManifest, saveManifest, type Manifest }
 import type { CompileResult, Diagnostic, SourceFile } from "./types";
 
 type Javac = {
-  compile(files: SourceFile[]): { success: boolean; classes: { path: string; bytes: Uint8Array }[]; diagnostics: any[]; timeMs: number };
+  compile(files: SourceFile[]): { success: boolean; crashed?: boolean; classes: { path: string; bytes: Uint8Array }[]; diagnostics: any[]; timeMs: number };
   recover(): Promise<void>;
   broken: boolean;
 };
@@ -87,7 +87,13 @@ self.onmessage = async (e: MessageEvent) => {
       await readyPromise;
       if (javac!.broken) await javac!.recover();
       const r = javac!.compile(msg.files);
-      result = { ok: r.success, diagnostics: r.diagnostics.map(toDiagnostic), classes: r.classes, ms: r.timeMs };
+      if (r.crashed) {
+        // javac itself failed (for example extremely deep nesting overflowed its stack); the next
+        // compile gets a fresh compiler.
+        result = { ok: false, diagnostics: [], classes: [], ms: r.timeMs, internalError: r.diagnostics[0]?.message ?? "the compiler crashed" };
+      } else {
+        result = { ok: r.success, diagnostics: r.diagnostics.map(toDiagnostic), classes: r.classes, ms: r.timeMs };
+      }
     } catch (err: any) {
       result = { ok: false, diagnostics: [], classes: [], ms: performance.now() - t, internalError: String(err?.message ?? err) };
     }

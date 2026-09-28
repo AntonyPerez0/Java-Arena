@@ -58,7 +58,7 @@ async function runExample(page, name, stdin) {
   await page.selectOption('#example', { label: name });
   if (stdin !== undefined) await page.fill('#stdin', stdin);
   await page.click('#run');
-  await page.locator('#run:not([disabled])').waitFor({ timeout: 120_000 });
+  await page.locator('#run:not([aria-busy])').waitFor({ timeout: 120_000 });
   return page.locator('#result').innerText();
 }
 
@@ -118,6 +118,28 @@ await test('an endless loop is stopped, and the next run works', async () => {
   const again = await runExample(page, 'Hello World');
   expect(again.includes('Hello World!'), again);
 });
+async function runCode(page, source, stdin = '') {
+  await page.fill('#code', source);
+  await page.fill('#stdin', stdin);
+  await page.click('#run');
+  await page.locator('#run:not([aria-busy])').waitFor({ timeout: 120_000 });
+  await page.waitForFunction(() => document.querySelector('#result')?.textContent !== '', null, { timeout: 120_000 });
+  return page.locator('#result').innerText();
+}
+await test('a crash inside another class points at that class\'s line', async () => {
+  const out = await runCode(page, 'public class Main {\n    public static void main(String[] args) {\n        Counter c = new Counter();\n        System.out.println(c.get());\n    }\n}\n\nclass Counter {\n    int[] values = new int[2];\n\n    int get() {\n        return values[5];\n    }\n}\n');
+  expect(out.includes('crashed on line 12 (in get)'), out);
+});
+await test('a timed-out program keeps what it printed', async () => {
+  const out = await runCode(page, 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("before the loop");\n        int i = 0;\n        while (i < 3) {\n        }\n    }\n}\n');
+  expect(out.includes('Stopped after 10 seconds'), out);
+  expect(out.includes('before the loop'), out);
+});
+await test('a misspelled main is explained as the program not starting', async () => {
+  const out = await runCode(page, 'public class Main {\n    public static void mian(String[] args) {\n        System.out.println("hi");\n    }\n}\n');
+  expect(out.includes("The program didn't start"), out);
+  expect(out.includes('Main method not found in class Main'), out);
+});
 await test('keyboard: Tab indents in the editor, Escape then Tab leaves it', async () => {
   await page.selectOption('#example', { label: 'Hello World' });
   await page.focus('#code');
@@ -158,6 +180,57 @@ await test('mobile data: nothing downloads until the learner agrees', async () =
   await shot(page, 'bench-phone-mobile-data');
   await page.click('#dl');
   await waitReady(page);
+  await ctx.close();
+});
+
+await test('a phone whose browser cannot tell the connection type is asked first too', async () => {
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, 'connection', { value: undefined, configurable: true });
+  });
+  requests.length = 0;
+  await page.goto(BASE + 'bench/');
+  await page.getByText("This browser doesn't say whether you're on mobile data").waitFor();
+  await page.waitForTimeout(1000);
+  const engineRequests = requests.filter((p) => p.includes('/engine/') && !p.endsWith('manifest.json'));
+  expect(engineRequests.length === 0, `requested before agreeing: ${engineRequests.join(', ')}`);
+  // Run before answering: the page points to the question instead of downloading.
+  await page.click('#run');
+  const out = await page.locator('#result').innerText();
+  expect(out.includes('needs the one-time engine download first'), out);
+  expect((await page.evaluate(() => document.activeElement?.id)) === 'dl', 'focus moved to the download button');
+  expect(requests.filter((p) => p.includes('/engine/') && !p.endsWith('manifest.json')).length === 0, 'still nothing downloaded');
+  await axe(page, 'unknown connection prompt');
+  await ctx.close();
+});
+
+await test('a browser without the WebAssembly features gets a clear message and no download', async () => {
+  const { ctx, page } = await newPage();
+  await ctx.addInitScript(() => {
+    WebAssembly.validate = () => false;
+  });
+  requests.length = 0;
+  await page.goto(BASE + 'bench/');
+  await page.getByText("This browser can't run the Java engine").first().waitFor();
+  await page.click('#run');
+  expect((await page.locator('#result').innerText()).includes("can't run the Java engine"), 'Run explains it too');
+  await page.waitForTimeout(500);
+  expect(requests.filter((p) => p.includes('/engine/')).length === 0, 'no engine requests');
+  await axe(page, 'unsupported browser');
+  await ctx.close();
+});
+
+await test('after a failed download, Try again starts the engine', async () => {
+  const { ctx, page } = await newPage();
+  let block = true;
+  await page.route('**/engine/javac.wasm*', (route) => (block ? route.abort() : route.continue()));
+  await page.goto(BASE + 'bench/');
+  await page.getByText("The engine couldn't start").waitFor({ timeout: ENGINE_TIMEOUT });
+  block = false;
+  await page.click('#retry');
+  await waitReady(page);
+  const out = await runExample(page, 'Hello World');
+  expect(out.includes('Hello World!'), out);
   await ctx.close();
 });
 

@@ -1,0 +1,183 @@
+diff --git a/compiler/build.gradle b/compiler/build.gradle
+index 5598351..a0383f6 100644
+--- a/compiler/build.gradle
++++ b/compiler/build.gradle
+@@ -43,7 +43,9 @@ compileJava {
+ 
+ teavm {
+     all {
+-        mainClass = "org.teavm.javac.CompilerLib"
++        // Java Arena: export only javac (javaarena.javac.JavacExports); TeaVM's own
++        // compiler becomes unreachable and is left out of the module.
++        mainClass = "javaarena.javac.JavacExports"
+     }
+     wasmGC {
+         outOfProcess = true
+diff --git a/compiler/src/main/java/org/teavm/javac/Patches.java b/compiler/src/main/java/org/teavm/javac/Patches.java
+index a86cacf..77b7e3d 100644
+--- a/compiler/src/main/java/org/teavm/javac/Patches.java
++++ b/compiler/src/main/java/org/teavm/javac/Patches.java
+@@ -60,9 +60,9 @@ public class Patches implements TeaVMPlugin, ClassHolderTransformer {
+     }
+ 
+     private void transformAnnotationProxyMaker(ClassHolder cls, ClassHolderTransformerContext context) {
++        // javac 21 signature: private Annotation generateAnnotation()
+         var method = cls.getMethod(new MethodDescriptor("generateAnnotation",
+-                ValueType.object("com.sun.tools.javac.code.Attribute$Compound"),
+-                ValueType.object("java.lang.Class"), ValueType.object("java.lang.annotation.Annotation")));
++                ValueType.object("java.lang.annotation.Annotation")));
+         var pe = ProgramEmitter.create(method, context.getHierarchy());
+         pe.constantNull(Annotation.class).returnValue();
+     }
+diff --git a/gradle.properties b/gradle.properties
+index bb8dd6e..c625129 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -14,4 +14,5 @@
+ #  limitations under the License.
+ #
+ 
+-jdk.revision=6c48f4ed707bf0b15f9b6098de30db8aae6fa40f
+\ No newline at end of file
++# Directories are passed by engine/compiler/build.sh:
++#   -Pjdk.sourceDir=<openjdk/jdk21u checkout>  -Parena.extraSourceDir=<generated sources>
+\ No newline at end of file
+diff --git a/javac/build.gradle b/javac/build.gradle
+index 3cbe476..50430bf 100644
+--- a/javac/build.gradle
++++ b/javac/build.gradle
+@@ -1,31 +1,18 @@
+ plugins {
+-    alias libs.plugins.download
+     id "java"
+ }
+ 
+-def revision = providers.gradleProperty("jdk.revision").get()
+-
+-def downloadJDK = tasks.register("downloadJDK", Download) {
+-    src "https://github.com/openjdk/jdk25u/archive/${revision}.zip"
+-    dest layout.buildDirectory.file("jdk-${revision}.zip")
+-    overwrite false
+-}
+-
+-def unpackJDK = tasks.register("unpackJDK", Sync) {
+-    dependsOn downloadJDK
+-    from downloadJDK.map { it.outputs.files.collect { zipTree(it) } }
+-    into layout.buildDirectory.dir("jdk")
+-    exclude "**/module-info.java"
+-}
+-
+-def baseJDKDir = layout.buildDirectory.dir("jdk/jdk25u-${revision}").get()
++// OpenJDK sources come from a local checkout (engine/compiler/build.sh clones
++// openjdk/jdk21u at a pinned tag), instead of the GitHub archive download.
++def baseJDKDir = layout.projectDirectory.dir(providers.gradleProperty("jdk.sourceDir").get())
++def extraSrcDir = layout.projectDirectory.dir(providers.gradleProperty("arena.extraSourceDir").get())
+ 
+ def compileTools = tasks.register("compileTools", JavaCompile) {
+-    dependsOn unpackJDK
+     source fileTree(baseJDKDir.dir("make/langtools/tools")) {
+         exclude("anttasks")
+         exclude("genstubs")
+         exclude("crules")
++        exclude("javacserver")
+     }
+     destinationDirectory.set(layout.buildDirectory.dir("buildTools"))
+     classpath = files()
+@@ -37,7 +24,6 @@ def generatedSrcDir = layout.buildDirectory.dir("generated/java").get()
+ def generateCompilerProperties = tasks.register("generateCompilerProperties", JavaExec) {
+     classpath compileTools
+     classpath baseJDKDir.dir("make/langtools/tools")
+-    dependsOn unpackJDK
+     def files = [
+             "jdk.compiler/share/classes/com/sun/tools/javac/resources/compiler.properties",
+             "jdk.compiler/share/classes/com/sun/tools/javac/resources/launcher.properties"
+@@ -69,7 +55,6 @@ def generateCompilerProperties = tasks.register("generateCompilerProperties", Ja
+ def compileCompilerProperties = tasks.register("compileCompilerProperties", JavaExec) {
+     classpath compileTools
+     classpath baseJDKDir.dir("make/langtools/tools")
+-    dependsOn unpackJDK
+     def files = [
+             "com/sun/tools/javac/resources/compiler.properties",
+             "com/sun/tools/javac/resources/launcher.properties",
+@@ -94,7 +79,7 @@ def compileCompilerProperties = tasks.register("compileCompilerProperties", Java
+     mainClass = "compileproperties.CompileProperties"
+ }
+ 
+-compileJava.dependsOn(unpackJDK, compileTools, generateCompilerProperties, compileCompilerProperties)
++compileJava.dependsOn(compileTools, generateCompilerProperties, compileCompilerProperties)
+ 
+ sourceSets.main {
+     java {
+@@ -102,11 +87,17 @@ sourceSets.main {
+         srcDir generatedSrcDir.dir("jdk.compiler/share/classes")
+         srcDir baseSrcDir.dir("java.compiler/share/classes")
+         srcDir baseSrcDir.dir("jdk.internal.opt/share/classes")
+-        exclude "module-info.java"
++        srcDir extraSrcDir
++        exclude "**/module-info.java"
+     }
+ }
+ 
++java {
++    modularity.inferModulePath = false
++}
++
+ compileJava {
++    exclude "**/module-info.java"
+     options.compilerArgs.addAll(
+             "--limit-modules", "java.base",
+             "--add-exports", "java.base/jdk.internal.javac=ALL-UNNAMED",
+diff --git a/settings.gradle b/settings.gradle
+index ffbfff4..51e2b37 100644
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -16,31 +16,14 @@
+ 
+ pluginManagement {
+      repositories {
+-         maven { url = uri("https://teavm.org/maven/repository") }
+          mavenCentral()
+-         mavenLocal()
+          gradlePluginPortal()
+      }
+ }
+ 
+ dependencyResolutionManagement {
+     repositories {
+-        maven { url = uri("https://teavm.org/maven/repository") }
+         mavenCentral()
+-        mavenLocal()
+-        ivy {
+-            name = "Node.js"
+-            setUrl("https://nodejs.org/dist/")
+-            patternLayout {
+-                artifact("v[revision]/[artifact](-v[revision]-[classifier]).[ext]")
+-            }
+-            metadataSources {
+-                artifact()
+-            }
+-            content {
+-                includeModule("org.nodejs", "node")
+-            }
+-        }
+     }
+ }
+ 
+@@ -59,12 +42,11 @@ gradle.afterProject {
+             toolVersion = extensions.getByType(VersionCatalogsExtension).named("libs")
+                     .findVersion("checkstyle").get().requiredVersion
+         }
+-        java.sourceCompatibility = JavaVersion.VERSION_25
+-        java.targetCompatibility = JavaVersion.VERSION_25
++        java.sourceCompatibility = JavaVersion.VERSION_21
++        java.targetCompatibility = JavaVersion.VERSION_21
+     }
+ }
+ 
+ include "javac"
+ include "compiler"
+-include "protocol"
+-include "ui"
+\ No newline at end of file
++include "protocol"
+\ No newline at end of file

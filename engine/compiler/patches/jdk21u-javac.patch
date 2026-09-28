@@ -1,0 +1,117 @@
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Type.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Type.java
+index 203e9f9c..29ca379b 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Type.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Type.java
+@@ -807,7 +807,8 @@ public abstract class Type extends AnnoConstruct implements TypeMirror, PoolCons
+                 return String.valueOf((char) ((Integer) cv).intValue());
+             }
+             else {
+-                return cv.toString();
++                // Java Arena: JDK Float/Double.toString on TeaVM (constant folding of "x" + 1e23)
++                return javaarena.jdkmath.JdkNumbers.valueToString(cv);
+             }
+         }
+ 
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/comp/ConstFold.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/comp/ConstFold.java
+index d46694b6..ad8262c9 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/comp/ConstFold.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/comp/ConstFold.java
+@@ -145,6 +145,23 @@ strictfp class ConstFold {
+             } else {
+                 Object l = left.constValue();
+                 Object r = right.constValue();
++                // Java Arena: compiled to WebAssembly by TeaVM, an integer division by zero
++                // traps instead of throwing ArithmeticException, and MIN_VALUE / -1 traps
++                // instead of overflowing, so handle both before dividing.
++                switch (opcode) {
++                case idiv: case imod:
++                    if (intValue(r) == 0)
++                        throw new ArithmeticException("/ by zero");
++                    if (intValue(r) == -1)
++                        return syms.intType.constType(opcode == idiv ? -intValue(l) : 0);
++                    break;
++                case ldiv: case lmod:
++                    if (longValue(r) == 0)
++                        throw new ArithmeticException("/ by zero");
++                    if (longValue(r) == -1)
++                        return syms.longType.constType(Long.valueOf(opcode == ldiv ? -longValue(l) : 0L));
++                    break;
++                }
+                 switch (opcode) {
+                 case iadd:
+                     return syms.intType.constType(intValue(l) + intValue(r));
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavacParser.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavacParser.java
+index e7b646cc..327843b1 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavacParser.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavacParser.java
+@@ -789,7 +789,7 @@ public class JavacParser implements Parser {
+                     token.stringVal();
+             Float n;
+             try {
+-                n = Float.valueOf(proper);
++                n = Float.valueOf(javaarena.jdkmath.JdkNumbers.parseFloat(proper)); // Java Arena: JDK parsing on TeaVM
+             } catch (NumberFormatException ex) {
+                 // error already reported in scanner
+                 n = Float.NaN;
+@@ -808,7 +808,7 @@ public class JavacParser implements Parser {
+                     token.stringVal();
+             Double n;
+             try {
+-                n = Double.valueOf(proper);
++                n = Double.valueOf(javaarena.jdkmath.JdkNumbers.parseDouble(proper)); // Java Arena: JDK parsing on TeaVM
+             } catch (NumberFormatException ex) {
+                 // error already reported in scanner
+                 n = Double.NaN;
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/tree/Pretty.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/tree/Pretty.java
+index 7398b5ea..7095abd4 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/tree/Pretty.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/tree/Pretty.java
+@@ -1448,11 +1448,11 @@ public class Pretty extends JCTree.Visitor {
+                     print('L');
+                     break;
+                 case FLOAT:
+-                    print(tree.value);
++                    print(javaarena.jdkmath.JdkNumbers.valueToString(tree.value)); // Java Arena
+                     print('F');
+                     break;
+                 case DOUBLE:
+-                    print(tree.value.toString());
++                    print(javaarena.jdkmath.JdkNumbers.valueToString(tree.value)); // Java Arena
+                     break;
+                 case CHAR:
+                     print('\'');
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/util/AbstractDiagnosticFormatter.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/util/AbstractDiagnosticFormatter.java
+index fc33c895..efe9b725 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/util/AbstractDiagnosticFormatter.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/util/AbstractDiagnosticFormatter.java
+@@ -228,7 +228,7 @@ public abstract class AbstractDiagnosticFormatter implements DiagnosticFormatter
+                                                   StringUtils.toLowerCase(tag.name()));
+         }
+         else {
+-            return String.valueOf(arg);
++            return javaarena.jdkmath.JdkNumbers.valueToString(arg); // Java Arena: JDK number text
+         }
+     }
+     //where
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/util/Constants.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/util/Constants.java
+index 3e2fc7ca..5b1c81a4 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/util/Constants.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/util/Constants.java
+@@ -115,7 +115,7 @@ public class Constants {
+         else if (Float.isInfinite(f))
+             return (f < 0) ? "-1.0f/0.0f" : "1.0f/0.0f";
+         else
+-            return f + "f";
++            return javaarena.jdkmath.JdkNumbers.toString(f) + "f"; // Java Arena
+     }
+ 
+     private static String formatDouble(double d) {
+@@ -124,7 +124,7 @@ public class Constants {
+         else if (Double.isInfinite(d))
+             return (d < 0) ? "-1.0/0.0" : "1.0/0.0";
+         else
+-            return d + "";
++            return javaarena.jdkmath.JdkNumbers.toString(d); // Java Arena
+     }
+ 
+     private static String formatChar(char c) {

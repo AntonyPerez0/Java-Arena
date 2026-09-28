@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package javaarena.jdkmath;
+package javaarena.jdk;
 
 /**
  * Math.multiplyHigh(long, long) (Java 9+), which TeaVM 0.13.1's class library

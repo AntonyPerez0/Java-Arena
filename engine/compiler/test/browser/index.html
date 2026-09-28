@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>javac.wasm worker test</title>
+</head>
+<body>
+<p id="status">loading</p>
+<script type="module">
+  // Runs the compiler in a module Worker, as the site will. The Playwright script
+  // (run.mjs) calls window.runJavac(files) and reads window.javacReady.
+  const worker = new Worker('./worker.mjs', { type: 'module' });
+  let nextId = 1;
+  const pending = new Map();
+  window.javacReady = new Promise((resolve, reject) => {
+    worker.addEventListener('message', (e) => {
+      const m = e.data;
+      if (m.type === 'ready') resolve(m);
+      else if (m.type === 'error' && !m.id) reject(new Error(m.message));
+      else if (pending.has(m.id)) {
+        pending.get(m.id)(m);
+        pending.delete(m.id);
+      }
+    });
+  });
+  window.runJavac = (files) => new Promise((resolve) => {
+    const id = nextId++;
+    pending.set(id, resolve);
+    worker.postMessage({ type: 'compile', id, files });
+  });
+  window.javacReady.then(() => { document.getElementById('status').textContent = 'ready'; });
+</script>
+</body>
+</html>

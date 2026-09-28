@@ -1,7 +1,7 @@
 // Copies the built engine (engine/dist) into public/engine with gzip copies and one manifest.
 // The workers fetch the .gz copies and unpack them with DecompressionStream as they arrive.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
@@ -43,6 +43,11 @@ for (const part of parts) {
   }
 }
 manifest.version = hash.digest('hex').slice(0, 12);
+// The license texts are published with the files they cover.
+for (const part of parts) {
+  const licenses = join(root, 'engine', 'dist', part, 'licenses');
+  if (existsSync(licenses)) cpSync(licenses, join(out, 'licenses', part), { recursive: true, dereference: true });
+}
 writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 1));
 const total = Object.keys(manifest.files).reduce((a, f) => a + (manifest.gzip[f] ?? manifest.files[f]), 0);
 console.log(`copy-engine: ${Object.keys(manifest.files).length} files, ${(total / 1e6).toFixed(1)} MB to download, version ${manifest.version}`);

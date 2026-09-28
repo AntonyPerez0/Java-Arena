@@ -13,7 +13,7 @@
 //       modules). Default false: one instance serves many runs, each on a fresh JVM.
 //   runner.modules      compiled WebAssembly.Module objects (structured-cloneable to other Workers)
 //   runner.timings      { compileMs, instantiateMs, mountMs, readyMs } for the start-up
-//   await runner.run({ classes, mainClass, stdin, args, files, outputLimit })
+//   await runner.run({ classes, mainClass, stdin, args, files, outputLimit, onOutput })
 //     classes: [{ path: 'Main.class', bytes: Uint8Array }]  (all classes of the program)
 //     mainClass: binary name, for example 'Main' or 'pkg.Main'
 //     stdin: string or Uint8Array, read until EOF (default empty)
@@ -21,6 +21,7 @@
 //     files: { 'data.txt': string | Uint8Array, 'dir/x.txt': ... } created in the working
 //       directory (/workspace, which is also user.dir) before main starts
 //     outputLimit: bytes of stdout plus stderr before the program is stopped (default 65536)
+//     onOutput(stream, bytes): optional, called as output arrives ('stdout' or 'stderr', Uint8Array)
 //   -> { stdout, stderr, exitCode, outputTruncated, files, durationMs, error? }
 //     exitCode: 0 after a normal end, n after System.exit(n), 1 after an uncaught exception,
 //       null when the output limit stopped the program (outputTruncated is then true)
@@ -112,7 +113,8 @@ export async function createRunner({ fetchAsset = defaultFetchAsset, modules, fr
   const jdk = treeFromFiles(await jdkPromise, true);
   timings.mountMs = performance.now() - mountStarted;
 
-  const state = { root: dirNode(), cwd: '/workspace', stdout: () => {}, stderr: () => {} };
+  const state = { root: dirNode(true), cwd: '/workspace', stdout: () => {}, stderr: () => {} };
+  state.root.entries.set('jdk', jdk);
   const imports = createWasiImports(state);
   let component;
   const instantiateComponent = async () => {
@@ -123,19 +125,24 @@ export async function createRunner({ fetchAsset = defaultFetchAsset, modules, fr
   await instantiateComponent();
   timings.readyMs = performance.now() - started;
 
-  async function run({ classes = [], mainClass, stdin = '', args = [], files = {}, outputLimit = DEFAULT_OUTPUT_LIMIT } = {}) {
+  async function run({ classes = [], mainClass, stdin = '', args = [], files = {}, outputLimit = DEFAULT_OUTPUT_LIMIT, onOutput } = {}) {
     if (!mainClass) throw new TypeError('mainClass is required');
     if (!component) await instantiateComponent();
     const begin = performance.now();
     const workspace = treeFromFiles(Object.fromEntries(Object.entries(files).map(([name, value]) => [name, asBytes(value)])));
-    state.root = dirNode(true);
-    state.root.entries.set('jdk', jdk);
+    // The component keeps its preopened root descriptor between runs, so swap the children.
     state.root.entries.set('workspace', workspace);
     state.root.entries.set('tmp', dirNode());
     const out = [];
     const err = [];
-    state.stdout = (bytes) => out.push(bytes.slice());
-    state.stderr = (bytes) => err.push(bytes.slice());
+    state.stdout = (bytes) => {
+      out.push(bytes.slice());
+      onOutput?.('stdout', bytes.slice());
+    };
+    state.stderr = (bytes) => {
+      err.push(bytes.slice());
+      onOutput?.('stderr', bytes.slice());
+    };
     const request = JSON.stringify({
       mainClass,
       args: args.map(String),

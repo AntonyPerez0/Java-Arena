@@ -117,22 +117,27 @@ public final class ArenaJavac {
         StringWriter text = new StringWriter();
         PrintWriter writer = new PrintWriter(text);
         Context context = new Context();
-        context.put(Log.outKey, writer);
-        context.put(Log.errKey, writer);
+        Log log = new RecordingLog(context, writer, text);
         context.put(JavaFileManager.class,
                 new ArenaFileManager(platformByPackage, platformByPath, sources, outputs));
         // No annotation processor search (the Wasm build removes it anyway).
         Options.instance(context).put(Option.PROC, "none");
-        Log log = Log.instance(context);
-        new Recorder(log, writer, text, JavacMessages.instance(context).getCurrentLocale());
         JavaCompiler compiler = JavaCompiler.instance(context);
         List<JavaFileObject> files = new ArrayList<>(sources.values());
         try {
             compiler.compile(com.sun.tools.javac.util.List.from(files), com.sun.tools.javac.util.List.nil(),
                     null, com.sun.tools.javac.util.List.nil());
-        } catch (RuntimeException | StackOverflowError e) {
-            // javac's own Main prints a crash report here; a crash is reported as a failed compile.
-            writer.println("An exception has occurred in the compiler. " + e);
+        } catch (RuntimeException | Error e) {
+            // An internal javac failure (javac's Main would print a crash report).
+            writer.flush();
+            Diag d = new Diag();
+            d.kind = "error";
+            d.code = "arena.compiler.exception";
+            d.line = d.column = d.position = d.startPosition = d.endPosition = Diagnostic.NOPOS;
+            d.message = "An exception has occurred in the compiler: " + e;
+            d.formatted = d.message;
+            diagnostics.add(d);
+            writer.println(d.message);
             writer.flush();
             errorCount = Math.max(1, log.nerrors);
             warningCount = log.nwarnings;
@@ -179,34 +184,29 @@ public final class ArenaJavac {
     }
 
     /**
-     * Sits in front of javac's default handler: whatever the default handler
-     * prints for a diagnostic becomes that diagnostic's "formatted" text, and
-     * diagnostics it drops (duplicates, over the error limit) are not recorded.
+     * javac's Log, recording each diagnostic when it is printed: that is after
+     * javac's filtering (duplicates, error limit) and after it rewrites some
+     * method-resolution errors into the shorter "compact" form, so the recorded
+     * code and position are those of the printed text.
      */
-    private final class Recorder extends Log.DiagnosticHandler {
-        private final Log log;
+    private final class RecordingLog extends Log {
         private final PrintWriter writer;
         private final StringWriter text;
         private final Locale locale;
 
-        Recorder(Log log, PrintWriter writer, StringWriter text, Locale locale) {
-            this.log = log;
-            this.locale = locale;
+        RecordingLog(Context context, PrintWriter writer, StringWriter text) {
+            super(context, writer);
             this.writer = writer;
             this.text = text;
-            install(log);
+            this.locale = JavacMessages.instance(context).getCurrentLocale();
         }
 
         @Override
-        public void report(JCDiagnostic diag) {
+        protected void writeDiagnostic(JCDiagnostic diag) {
             writer.flush();
             int before = text.getBuffer().length();
-            prev.report(diag);
+            super.writeDiagnostic(diag);
             writer.flush();
-            StringBuffer buffer = text.getBuffer();
-            if (buffer.length() == before) {
-                return;
-            }
             Diag d = new Diag();
             d.kind = switch (diag.getKind()) {
                 case ERROR -> "error";
@@ -221,8 +221,8 @@ public final class ArenaJavac {
             d.position = diag.getPosition();
             d.startPosition = diag.getStartPosition();
             d.endPosition = diag.getEndPosition();
-            d.message = log.getDiagnosticFormatter().formatMessage(diag, locale);
-            String printed = buffer.substring(before);
+            d.message = getDiagnosticFormatter().formatMessage(diag, locale);
+            String printed = text.getBuffer().substring(before);
             d.formatted = printed.endsWith("\n") ? printed.substring(0, printed.length() - 1) : printed;
             diagnostics.add(d);
         }

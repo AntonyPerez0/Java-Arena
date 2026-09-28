@@ -11,7 +11,8 @@ public class Main {
                 new Person("Sanna", "Turku", 52), new Person("Jussi", "Helsinki", 23));
         System.out.println(people.stream().filter(p -> p.age() > 25).map(Person::name).collect(Collectors.toList()));
         System.out.println(people.stream().mapToInt(Person::age).average().getAsDouble());
-        System.out.println(people.stream().collect(Collectors.groupingBy(Person::city, TreeMap::new, Collectors.counting())));
+        TreeMap<String, Long> perCity = people.stream().collect(Collectors.groupingBy(Person::city, TreeMap::new, Collectors.counting()));
+        System.out.println(perCity);
         System.out.println(people.stream().collect(Collectors.groupingBy(Person::city)).keySet());
         System.out.println(people.stream().collect(Collectors.partitioningBy(p -> p.age() >= 30, Collectors.mapping(Person::name, Collectors.joining(", ")))));
         System.out.println(IntStream.rangeClosed(1, 10).filter(i -> i % 2 == 1).boxed().collect(Collectors.toList()));

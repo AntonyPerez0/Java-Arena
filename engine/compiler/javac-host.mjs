@@ -38,9 +38,13 @@
 //   }
 //
 //   javac.compile() is synchronous and can be called many times; each call is a
-//   fresh javac run (like one "javac -d out <files>" command). It never throws for
-//   bad Java code. If the compiler itself crashes (a Wasm trap), compile() throws
-//   and the next compile() call recreates the compiler instance first.
+//   fresh javac run (like one "javac -d out <files>" command). It does not throw
+//   for bad Java code. If the compiler itself crashes (a Wasm trap, or a stack
+//   overflow on extremely deeply nested code), it returns { success: false,
+//   crashed: true, ... } with one diagnostic of code 'arena.compiler.crash', and
+//   javac.broken becomes true: call `await javac.recover()` (a fresh instance,
+//   about as long as the first load) before compiling again; compile() throws
+//   while broken.
 //
 //   javac.loadTimings: { runtimeMs, instantiateMs, sdkMs } measured by createJavac.
 
@@ -67,6 +71,13 @@ async function toBytes(src) {
   throw new TypeError('javac: expected bytes, a Response or a URL');
 }
 
+async function gunzip(bytes) {
+  const gz = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+  if (!gz || typeof DecompressionStream === 'undefined') return bytes; // javac.wasm can gunzip too
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
 export async function createJavac(options = {}) {
   const t0 = performance.now();
   let runtime = options.runtime;
@@ -76,32 +87,39 @@ export async function createJavac(options = {}) {
       : await import(new URL('./javac.wasm-runtime.js', import.meta.url).href);
   }
   const t1 = performance.now();
-  // TeaVM's loader compiles bytes itself; a URL string would be fetched by it too,
-  // but reading bytes here lets us re-instantiate after a crash without refetching.
-  const [wasmBytes, sdkBytes] = await Promise.all([toBytes(options.wasm), toBytes(options.sdk)]);
-  const sdk = new Int8Array(sdkBytes.buffer, sdkBytes.byteOffset, sdkBytes.byteLength);
+  // Bytes are kept so that recover() can re-instantiate without fetching again.
+  // The SDK archive is gunzipped here with the platform's DecompressionStream when
+  // available (faster than in Wasm, and it overlaps with compiling the module).
+  const wasmBytesPromise = toBytes(options.wasm);
+  const sdkPromise = toBytes(options.sdk).then(gunzip);
 
   let exports = null;
   let instantiateMs = 0;
   let sdkMs = 0;
+  let sdk = null;
   async function start() {
     const a = performance.now();
-    const instance = await runtime.load(wasmBytes, {
-      stackDeobfuscator: { enabled: false },
-      installImports(imports) {
-        // javac prints nothing to System.out/err in normal operation; keep any
-        // unexpected output visible for debugging.
-        let out = '';
-        let err = '';
-        imports.teavmConsole.putcharStdout = (c) => {
-          if (c === 10) { console.log(out); out = ''; } else out += String.fromCharCode(c);
-        };
-        imports.teavmConsole.putcharStderr = (c) => {
-          if (c === 10) { console.error(err); err = ''; } else err += String.fromCharCode(c);
-        };
-      },
-    });
+    const wasmBytes = await wasmBytesPromise;
+    const [instance, sdkBytes] = await Promise.all([
+      runtime.load(wasmBytes, {
+        stackDeobfuscator: { enabled: false },
+        installImports(imports) {
+          // javac prints nothing to System.out/err in normal operation; keep any
+          // unexpected output visible for debugging.
+          let out = '';
+          let err = '';
+          imports.teavmConsole.putcharStdout = (c) => {
+            if (c === 10) { console.log(out); out = ''; } else out += String.fromCharCode(c);
+          };
+          imports.teavmConsole.putcharStderr = (c) => {
+            if (c === 10) { console.error(err); err = ''; } else err += String.fromCharCode(c);
+          };
+        },
+      }),
+      sdkPromise,
+    ]);
     const b = performance.now();
+    sdk = new Int8Array(sdkBytes.buffer, sdkBytes.byteOffset, sdkBytes.byteLength);
     instance.exports.loadPlatform(sdk);
     const c = performance.now();
     instantiateMs = b - a;
@@ -112,6 +130,8 @@ export async function createJavac(options = {}) {
   let broken = false;
 
   const javac = {
+    // instantiateMs: fetching and compiling javac.wasm (and gunzipping the SDK, in parallel);
+    // sdkMs: handing the platform classes to javac.
     loadTimings: { runtimeMs: t1 - t0, instantiateMs, sdkMs },
 
     compile(files) {
@@ -125,8 +145,23 @@ export async function createJavac(options = {}) {
         for (const f of files) exports.addSource(String(f.path), String(f.text));
         json = exports.compile();
       } catch (e) {
+        // A Wasm trap or a JS error such as RangeError (stack overflow on extremely
+        // deeply nested code). The instance may be inconsistent now.
         broken = true;
-        throw e;
+        const message = `javac.wasm crashed: ${e && e.name}: ${e && e.message}`;
+        return {
+          success: false,
+          crashed: true,
+          classes: [],
+          diagnostics: [{
+            kind: 'error', code: 'arena.compiler.crash', file: null, line: -1, column: -1,
+            position: -1, startPosition: -1, endPosition: -1, message, formatted: message,
+          }],
+          output: message + '\n',
+          errors: 1,
+          warnings: 0,
+          timeMs: performance.now() - s,
+        };
       }
       const r = JSON.parse(json);
       const classes = r.classes.map((path) => {

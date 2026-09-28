@@ -1,0 +1,43 @@
+// Test cases: each program in programs/ is compiled with javac 21 and run on HotSpot and on the Wasm runner.
+// check: 'exact' (stdout, stderr first line, user stack frames, exit code, files), 'truncated'
+// (runner must stop at the output limit with HotSpot's first 64 KB) or 'runner-only' (no HotSpot run).
+export const cases = [
+  { name: 'hello', main: 'Hello' },
+  {
+    name: 'scanner-mixed',
+    main: 'ScanMix',
+    stdin: '3 4\nMatti Meikäläinen\n2.5 12345678901 true\n1 2 3 x rest of line\nsecond line\nlast line without newline',
+  },
+  { name: 'scanner-eof', main: 'ScanEof', stdin: '5\n' },
+  { name: 'scanner-nextline-eof', main: 'ScanLineEof', stdin: 'only one line\n' },
+  { name: 'scanner-mismatch', main: 'ScanMismatch', stdin: 'abc\n' },
+  { name: 'hashing', main: 'Hashing' },
+  { name: 'doubles', main: 'Doubles' },
+  { name: 'formats', main: 'Formats' },
+  { name: 'randoms', main: 'Randoms' },
+  { name: 'streams', main: 'Streams' },
+  { name: 'dates', main: 'Dates' },
+  { name: 'args', main: 'Args', args: ['12', '30', 'with space', 'äö', ''] },
+  { name: 'caught-exceptions', main: 'Caught' },
+  { name: 'npe-messages', main: 'NpeMessages' },
+  { name: 'uncaught-aioobe', main: 'UncaughtAioobe' },
+  { name: 'uncaught-npe', main: 'UncaughtNpe' },
+  { name: 'uncaught-cause', main: 'UncaughtCause' },
+  { name: 'uncaught-lambda', main: 'UncaughtLambda' },
+  { name: 'uncaught-stream', main: 'UncaughtStream' },
+  { name: 'uncaught-cce', main: 'UncaughtCce' },
+  { name: 'uncaught-custom', main: 'UncaughtCustom' },
+  { name: 'uncaught-stack-overflow', main: 'UncaughtSoe' },
+  { name: 'system-exit', main: 'ExitCode' },
+  { name: 'shutdown-hook', main: 'ExitHook' },
+  { name: 'multi-class', main: 'MultiClass' },
+  {
+    name: 'files',
+    main: 'FilesIo',
+    files: { 'data.txt': 'first line\nsecond line\nkolmas rivi äö\n', 'numbers.txt': '1 2 3\n4 5\n' },
+  },
+  { name: 'typical', main: 'Typical', stdin: '5\n12\n7\n7\n33\n-1\n' },
+  { name: 'loop-10m', main: 'Loop10M' },
+  { name: 'output-limit', main: 'BigOutput', check: 'truncated' },
+  { name: 'output-limit-endless', main: 'InfiniteOutput', check: 'runner-only' },
+];

@@ -1,0 +1,2991 @@
+diff --git a/ristretto_intrinsics/src/java/io/fileinputstream.rs b/ristretto_intrinsics/src/java/io/fileinputstream.rs
+index 0cbbb46..827cb16 100644
+--- a/ristretto_intrinsics/src/java/io/fileinputstream.rs
++++ b/ristretto_intrinsics/src/java/io/fileinputstream.rs
+@@ -69,6 +69,10 @@ pub async fn available_0<T: Thread + 'static>(
+     let vm = thread.vm()?;
+     let file_handles = vm.file_handles();
+     let fd = file_descriptor_from_java_object(&vm, &file_descriptor)?;
++    if fd == 0 {
++        let available = ristretto_types::STDIN_AVAILABLE.load(std::sync::atomic::Ordering::Relaxed);
++        return Ok(Some(Value::Int(i32::try_from(available.max(0)).unwrap_or(i32::MAX))));
++    }
+     let mut file_handle = file_handles
+         .get_mut(&fd)
+         .await
+diff --git a/ristretto_intrinsics/src/java/io/fileoutputstream.rs b/ristretto_intrinsics/src/java/io/fileoutputstream.rs
+index cce6411..716bace 100644
+--- a/ristretto_intrinsics/src/java/io/fileoutputstream.rs
++++ b/ristretto_intrinsics/src/java/io/fileoutputstream.rs
+@@ -223,6 +223,17 @@ pub async fn write<T: Thread + 'static>(
+     write_bytes(thread, parameters).await
+ }
+ 
++/// An embedder's console writer reports `QuotaExceeded` when its output limit is reached; that
++/// stops the program instead of becoming an `IOException` that `PrintStream` would swallow.
++fn console_write_error(error: std::io::Error) -> ristretto_types::Error {
++    use std::io::ErrorKind as Kind;
++    if error.kind() == Kind::QuotaExceeded {
++        ristretto_types::Error::Halt(1)
++    } else {
++        IoException(error.to_string()).into()
++    }
++}
++
+ #[intrinsic_method("java/io/FileOutputStream.writeBytes([BIIZ)V", Any)]
+ pub async fn write_bytes<T: Thread + 'static>(
+     thread: Arc<T>,
+@@ -253,17 +264,13 @@ pub async fn write_bytes<T: Thread + 'static>(
+             let stdout_lock = vm.stdout();
+             let data = bounds::range(&bytes, offset..end, "FileOutputStream.stdout")?.to_vec();
+             let mut stdout = stdout_lock.lock().await;
+-            stdout
+-                .write_all(&data)
+-                .map_err(|error| IoException(error.to_string()))?;
++            stdout.write_all(&data).map_err(console_write_error)?;
+         }
+         2 => {
+             let stderr_lock = vm.stderr();
+             let data = bounds::range(&bytes, offset..end, "FileOutputStream.stderr")?.to_vec();
+             let mut stderr = stderr_lock.lock().await;
+-            stderr
+-                .write_all(&data)
+-                .map_err(|error| IoException(error.to_string()))?;
++            stderr.write_all(&data).map_err(console_write_error)?;
+         }
+         _ => {
+             let file_handles = vm.file_handles();
+diff --git a/ristretto_intrinsics/src/java/lang/nullpointerexception.rs b/ristretto_intrinsics/src/java/lang/nullpointerexception.rs
+index 7d6ef87..6fd3633 100644
+--- a/ristretto_intrinsics/src/java/lang/nullpointerexception.rs
++++ b/ristretto_intrinsics/src/java/lang/nullpointerexception.rs
+@@ -1,9 +1,8 @@
+ use ristretto_classfile::Constant;
+-use ristretto_classfile::FieldType;
+ use ristretto_classfile::JAVA_17;
+ use ristretto_classfile::JavaStr;
+ use ristretto_classfile::VersionSpecification::GreaterThanOrEqual;
+-use ristretto_classfile::attributes::Instruction;
++use ristretto_classfile::attributes::{Attribute, Instruction};
+ use ristretto_classloader::Value;
+ use ristretto_macros::intrinsic_method;
+ use ristretto_types::JavaObject;
+@@ -11,21 +10,6 @@ use ristretto_types::Thread;
+ use ristretto_types::{Parameters, Result};
+ use std::sync::Arc;
+ 
+-/// Convert a `FieldType` to a human-readable type name.
+-fn field_type_to_name(field_type: &FieldType) -> String {
+-    match field_type {
+-        FieldType::Base(base_type) => base_type.class_name().to_string(),
+-        FieldType::Object(class_name) => {
+-            // Get just the simple class name (after the last '/')
+-            let name = class_name.to_rust_string();
+-            name.rsplit('/').next().unwrap_or(&name).to_string()
+-        }
+-        FieldType::Array(component) => {
+-            format!("{} array", field_type_to_name(component))
+-        }
+-    }
+-}
+-
+ #[intrinsic_method(
+     "java/lang/NullPointerException.getExtendedNPEMessage()Ljava/lang/String;",
+     GreaterThanOrEqual(JAVA_17)
+@@ -119,9 +103,7 @@ pub async fn get_extended_npe_message<T: Thread + 'static>(
+         return Ok(Some(Value::Object(None)));
+     };
+ 
+-    // Analyze
+-    let analyzer = NpeAnalyzer::new(thread.clone(), class.clone(), method.clone());
+-    let message = analyzer.analyze(bci);
++    let message = NpeAnalyzer::new(&class, &method).message(bci);
+ 
+     if let Some(msg) = message {
+         let msg_obj = msg.to_object(&thread).await?;
+@@ -132,708 +114,558 @@ pub async fn get_extended_npe_message<T: Thread + 'static>(
+ }
+ 
+ // --- Analysis Logic ---
+-
+-struct NpeAnalyzer<T: Send + Sync> {
+-    #[expect(dead_code)]
+-    thread: Arc<T>,
+-    class: Arc<ristretto_classloader::Class>,
+-    method: Arc<ristretto_classloader::Method>,
+-}
+-
+-#[derive(Debug, Clone)]
++//
++// Helpful NullPointerException messages (JEP 358), written from the JEP's description and
++// from HotSpot's observable output: the failed action ("Cannot invoke ...") followed, when the
++// null value can be traced, by its source ("because "<local1>.next" is null"). The operand stack
++// is simulated along every control-flow path; a value whose source differs between paths that
++// merge is not described, as in HotSpot.
++
++/// Where a value on the simulated operand stack came from.
++#[derive(Debug, Clone, PartialEq)]
+ enum Source {
+-    /// Local variable index
+-    Local(usize),
+-    /// Explicit "this" reference
+-    This,
+-    /// Field access, with optional receiver source
+-    Field(String, Option<Box<Source>>),
+-    /// Method return value (class name, method name)
+-    MethodReturn(String, String),
+-    /// Array element access with optional array source
+-    ArrayAccess(Option<Box<Source>>),
+-    /// Constant value (e.g., null literal)
+-    Constant,
+-    /// Unknown source
++    /// `aconst_null`
++    Null,
++    /// A local variable slot, loaded at the given instruction index.
++    Local(u16, usize),
++    /// A static field (class internal name, field name).
++    StaticField(String, String),
++    /// An instance field of a receiver.
++    Field(Box<Source>, String),
++    /// An array element (array, index).
++    Element(Box<Source>, Box<Source>),
++    /// An `int` constant, which can describe an array index.
++    Int(i32),
++    /// The return value of a method (class internal name, name, descriptor).
++    Invoke(String, String, String),
++    /// A value that cannot be described.
+     Unknown,
+ }
+ 
+-impl<T: Send + Sync> NpeAnalyzer<T> {
+-    fn new(
+-        thread: Arc<T>,
+-        class: Arc<ristretto_classloader::Class>,
+-        method: Arc<ristretto_classloader::Method>,
+-    ) -> Self {
+-        Self {
+-            thread,
+-            class,
+-            method,
+-        }
+-    }
+-
+-    fn stack_from_top(stack: &[Source], depth: usize) -> Option<&Source> {
+-        let offset = depth.checked_add(1)?;
+-        let index = stack.len().checked_sub(offset)?;
+-        stack.get(index)
+-    }
+-
+-    #[expect(clippy::too_many_lines)]
+-    #[expect(clippy::match_same_arms)]
+-    fn analyze(&self, target_bci: usize) -> Option<String> {
+-        let code = self.method.code();
+-        let mut stack: Vec<Source> = Vec::new();
+-        let mut pc = 0;
+-        let is_instance_method = !self.method.is_static();
+-
+-        while pc < target_bci {
+-            let Some(instruction) = code.get(pc) else {
+-                break;
+-            };
+-
+-            match instruction {
+-                Instruction::Aconst_null
+-                | Instruction::Iconst_m1
+-                | Instruction::Iconst_0
+-                | Instruction::Iconst_1
+-                | Instruction::Iconst_2
+-                | Instruction::Iconst_3
+-                | Instruction::Iconst_4
+-                | Instruction::Iconst_5
+-                | Instruction::Lconst_0
+-                | Instruction::Lconst_1
+-                | Instruction::Fconst_0
+-                | Instruction::Fconst_1
+-                | Instruction::Fconst_2
+-                | Instruction::Dconst_0
+-                | Instruction::Dconst_1
+-                | Instruction::Bipush(_)
+-                | Instruction::Sipush(_)
+-                | Instruction::Ldc(_)
+-                | Instruction::Ldc_w(_)
+-                | Instruction::Ldc2_w(_) => {
+-                    stack.push(Source::Constant);
+-                }
+-
+-                Instruction::Aload(idx) => {
+-                    let idx = *idx as usize;
+-                    if is_instance_method && idx == 0 {
+-                        stack.push(Source::This);
+-                    } else {
+-                        stack.push(Source::Local(idx));
+-                    }
+-                }
+-                Instruction::Aload_0 => {
+-                    if is_instance_method {
+-                        stack.push(Source::This);
+-                    } else {
+-                        stack.push(Source::Local(0));
+-                    }
+-                }
+-                Instruction::Aload_1 => stack.push(Source::Local(1)),
+-                Instruction::Aload_2 => stack.push(Source::Local(2)),
+-                Instruction::Aload_3 => stack.push(Source::Local(3)),
+-
+-                Instruction::Iload(_)
+-                | Instruction::Fload(_)
+-                | Instruction::Iload_0
+-                | Instruction::Iload_1
+-                | Instruction::Iload_2
+-                | Instruction::Iload_3
+-                | Instruction::Fload_0
+-                | Instruction::Fload_1
+-                | Instruction::Fload_2
+-                | Instruction::Fload_3 => {
+-                    stack.push(Source::Unknown);
+-                }
+-                Instruction::Lload(_)
+-                | Instruction::Dload(_)
+-                | Instruction::Lload_0
+-                | Instruction::Lload_1
+-                | Instruction::Lload_2
+-                | Instruction::Lload_3
+-                | Instruction::Dload_0
+-                | Instruction::Dload_1
+-                | Instruction::Dload_2
+-                | Instruction::Dload_3 => {
+-                    stack.push(Source::Unknown);
+-                    stack.push(Source::Unknown);
+-                }
+-
+-                Instruction::Getfield(idx) => {
+-                    let receiver = stack.pop();
+-                    let (_class_name, field_name, descriptor) = self.resolve_field(*idx);
+-                    let source = Source::Field(field_name.clone(), receiver.map(Box::new));
+-                    if descriptor == "D" || descriptor == "J" {
+-                        stack.push(source.clone());
+-                        stack.push(Source::Unknown);
+-                    } else {
+-                        stack.push(source);
+-                    }
+-                }
+-                Instruction::Getstatic(idx) => {
+-                    let (_, field_name, descriptor) = self.resolve_field(*idx);
+-                    if descriptor == "D" || descriptor == "J" {
+-                        stack.push(Source::Field(field_name.clone(), None));
+-                        stack.push(Source::Unknown);
+-                    } else {
+-                        stack.push(Source::Field(field_name, None));
+-                    }
+-                }
+-
+-                Instruction::Invokevirtual(idx)
+-                | Instruction::Invokeinterface(idx, _)
+-                | Instruction::Invokespecial(idx)
+-                | Instruction::Invokestatic(idx) => {
+-                    let (class_name, method_name, descriptor) = self.resolve_method_ref(*idx);
+-                    let args_count = self.count_slots(&descriptor);
+-                    for _ in 0..args_count {
+-                        stack.pop();
+-                    }
+-                    if !matches!(instruction, Instruction::Invokestatic(_)) {
+-                        stack.pop(); // objectref
+-                    }
+-
+-                    let return_type = descriptor.split(')').nth(1).unwrap_or("V");
+-                    if return_type != "V" {
+-                        stack.push(Source::MethodReturn(
+-                            class_name.clone(),
+-                            method_name.clone(),
+-                        ));
+-                        if return_type == "D" || return_type == "J" {
+-                            stack.push(Source::Unknown);
+-                        }
+-                    }
+-                }
+-
+-                Instruction::Aaload => {
+-                    stack.pop(); // index
+-                    let array_source = stack.pop();
+-                    stack.push(Source::ArrayAccess(array_source.map(Box::new)));
+-                }
++/// The deepest expression printed, such as `a.b.c.d.e`; deeper sources are not described.
++const MAX_DETAIL: usize = 5;
+ 
+-                Instruction::Iaload
+-                | Instruction::Laload
+-                | Instruction::Faload
+-                | Instruction::Daload
+-                | Instruction::Baload
+-                | Instruction::Caload
+-                | Instruction::Saload => {
+-                    stack.pop(); // index
+-                    stack.pop(); // arrayref
+-                    stack.push(Source::Unknown);
+-                }
+-
+-                Instruction::Astore(_)
+-                | Instruction::Astore_0
+-                | Instruction::Astore_1
+-                | Instruction::Astore_2
+-                | Instruction::Astore_3 => {
+-                    stack.pop();
+-                }
+-
+-                Instruction::Istore(_)
+-                | Instruction::Fstore(_)
+-                | Instruction::Istore_0
+-                | Instruction::Istore_1
+-                | Instruction::Istore_2
+-                | Instruction::Istore_3
+-                | Instruction::Fstore_0
+-                | Instruction::Fstore_1
+-                | Instruction::Fstore_2
+-                | Instruction::Fstore_3 => {
+-                    stack.pop();
+-                }
+-
+-                Instruction::Lstore(_)
+-                | Instruction::Dstore(_)
+-                | Instruction::Lstore_0
+-                | Instruction::Lstore_1
+-                | Instruction::Lstore_2
+-                | Instruction::Lstore_3
+-                | Instruction::Dstore_0
+-                | Instruction::Dstore_1
+-                | Instruction::Dstore_2
+-                | Instruction::Dstore_3 => {
+-                    stack.pop();
+-                    stack.pop();
+-                }
+-
+-                Instruction::Pop => {
+-                    stack.pop();
+-                }
+-                Instruction::Pop2 => {
+-                    stack.pop();
+-                    stack.pop();
+-                }
+-                Instruction::Dup => {
+-                    if let Some(last) = stack.last() {
+-                        stack.push(last.clone());
+-                    }
+-                }
+-                Instruction::Dup_x1 if stack.len() >= 2 => {
+-                    let v1 = stack.pop()?;
+-                    let v2 = stack.pop()?;
+-                    stack.push(v1.clone());
+-                    stack.push(v2);
+-                    stack.push(v1);
+-                }
+-                Instruction::Dup_x2 if stack.len() >= 3 => {
+-                    let v1 = stack.pop()?;
+-                    let v2 = stack.pop()?;
+-                    let v3 = stack.pop()?;
+-                    stack.push(v1.clone());
+-                    stack.push(v3);
+-                    stack.push(v2);
+-                    stack.push(v1);
+-                }
+-                Instruction::Dup2 if stack.len() >= 2 => {
+-                    let values = stack
+-                        .get(stack.len().saturating_sub(2)..)
+-                        .unwrap_or_default()
+-                        .to_vec();
+-                    stack.extend(values);
+-                }
+-                Instruction::Swap if stack.len() >= 2 => {
+-                    let len = stack.len();
+-                    stack.swap(len - 1, len - 2);
+-                }
+-
+-                // Arithmetic operations that consume and produce values
+-                Instruction::Iadd
+-                | Instruction::Isub
+-                | Instruction::Imul
+-                | Instruction::Idiv
+-                | Instruction::Irem
+-                | Instruction::Iand
+-                | Instruction::Ior
+-                | Instruction::Ixor
+-                | Instruction::Ishl
+-                | Instruction::Ishr
+-                | Instruction::Iushr
+-                | Instruction::Fadd
+-                | Instruction::Fsub
+-                | Instruction::Fmul
+-                | Instruction::Fdiv
+-                | Instruction::Frem
+-                | Instruction::Fcmpl
+-                | Instruction::Fcmpg => {
+-                    stack.pop();
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                }
+-
+-                Instruction::Ladd
+-                | Instruction::Lsub
+-                | Instruction::Lmul
+-                | Instruction::Ldiv
+-                | Instruction::Lrem
+-                | Instruction::Land
+-                | Instruction::Lor
+-                | Instruction::Lxor
+-                | Instruction::Dadd
+-                | Instruction::Dsub
+-                | Instruction::Dmul
+-                | Instruction::Ddiv
+-                | Instruction::Drem
+-                | Instruction::Lcmp
+-                | Instruction::Dcmpl
+-                | Instruction::Dcmpg => {
+-                    stack.pop();
+-                    stack.pop();
+-                    stack.pop();
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                }
+-
+-                Instruction::Lshl | Instruction::Lshr | Instruction::Lushr => {
+-                    stack.pop(); // shift amount (int, 1 slot)
+-                    stack.pop();
+-                    stack.pop(); // long (2 slots)
+-                    stack.push(Source::Unknown);
+-                    stack.push(Source::Unknown);
+-                }
+-
+-                Instruction::Ineg | Instruction::Fneg => {
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                }
+-
+-                Instruction::Lneg | Instruction::Dneg => {
+-                    stack.pop();
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                    stack.push(Source::Unknown);
+-                }
+-
+-                // Type conversions
+-                Instruction::I2l | Instruction::I2d | Instruction::F2l | Instruction::F2d => {
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                    stack.push(Source::Unknown);
+-                }
+-
+-                Instruction::L2i | Instruction::L2f | Instruction::D2i | Instruction::D2f => {
+-                    stack.pop();
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                }
++struct NpeAnalyzer<'a> {
++    class: &'a ristretto_classloader::Class,
++    method: &'a ristretto_classloader::Method,
++}
+ 
+-                Instruction::I2f
+-                | Instruction::I2b
+-                | Instruction::I2c
+-                | Instruction::I2s
+-                | Instruction::F2i => {
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                }
++/// External class name as `HotSpot` prints it in these messages: `java.lang.Object` and
++/// `java.lang.String` are shortened, other names are fully qualified.
++fn external_class_name(internal: &str) -> String {
++    match internal {
++        "java/lang/Object" => "Object".to_string(),
++        "java/lang/String" => "String".to_string(),
++        name => name.replace('/', "."),
++    }
++}
+ 
+-                Instruction::L2d | Instruction::D2l => {
+-                    stack.pop();
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                    stack.push(Source::Unknown);
+-                }
++/// Parse one field descriptor starting at `bytes[0]`; returns its printed name and length.
++fn parse_type(descriptor: &str) -> Option<(String, usize)> {
++    let first = descriptor.chars().next()?;
++    let name = match first {
++        'Z' => "boolean",
++        'B' => "byte",
++        'C' => "char",
++        'S' => "short",
++        'I' => "int",
++        'J' => "long",
++        'F' => "float",
++        'D' => "double",
++        'V' => "void",
++        'L' => {
++            let end = descriptor.find(';')?;
++            return Some((external_class_name(descriptor.get(1..end)?), end + 1));
++        }
++        '[' => {
++            let (component, length) = parse_type(descriptor.get(1..)?)?;
++            return Some((format!("{component}[]"), length + 1));
++        }
++        _ => return None,
++    };
++    Some((name.to_string(), 1))
++}
+ 
+-                Instruction::New(_) => {
+-                    stack.push(Source::Unknown);
+-                }
++/// Parameter type names and the return type character of a method descriptor.
++fn parse_method_descriptor(descriptor: &str) -> Option<(Vec<String>, char)> {
++    let mut rest = descriptor.strip_prefix('(')?;
++    let mut parameters = Vec::new();
++    while !rest.starts_with(')') {
++        let (name, length) = parse_type(rest)?;
++        parameters.push(name);
++        rest = rest.get(length..)?;
++    }
++    Some((parameters, rest.get(1..)?.chars().next()?))
++}
+ 
+-                Instruction::Newarray(_) | Instruction::Anewarray(_) => {
+-                    stack.pop(); // count
+-                    stack.push(Source::Unknown);
+-                }
++/// Operand stack slots used by the parameters of a method descriptor.
++fn parameter_slots(descriptor: &str) -> Option<usize> {
++    let (parameters, _) = parse_method_descriptor(descriptor)?;
++    Some(parameters.iter().map(|name| if name == "long" || name == "double" { 2 } else { 1 }).sum())
++}
+ 
+-                Instruction::Checkcast(_) => {
+-                    // Doesn't change the stack, just checks type
+-                }
++fn return_slots(descriptor: &str) -> Option<usize> {
++    match parse_method_descriptor(descriptor)?.1 {
++        'V' => Some(0),
++        'J' | 'D' => Some(2),
++        _ => Some(1),
++    }
++}
+ 
+-                Instruction::Instanceof(_) => {
+-                    stack.pop();
+-                    stack.push(Source::Unknown);
+-                }
++fn method_text(class: &str, name: &str, descriptor: &str) -> String {
++    let parameters = parse_method_descriptor(descriptor).map(|(p, _)| p.join(", ")).unwrap_or_default();
++    format!("{}.{name}({parameters})", external_class_name(class))
++}
+ 
+-                Instruction::Return
+-                | Instruction::Ireturn
+-                | Instruction::Lreturn
+-                | Instruction::Freturn
+-                | Instruction::Dreturn
+-                | Instruction::Areturn => {
+-                    // Method returns, stack state doesn't matter for our analysis
+-                }
++impl<'a> NpeAnalyzer<'a> {
++    fn new(class: &'a ristretto_classloader::Class, method: &'a ristretto_classloader::Method) -> Self {
++        Self { class, method }
++    }
+ 
+-                _ => {}
++    fn member_ref(&self, index: u16) -> Option<(String, String, String)> {
++        let constant_pool = self.class.constant_pool();
++        let (class_index, name_and_type_index) = match constant_pool.get(index)? {
++            Constant::FieldRef { class_index, name_and_type_index }
++            | Constant::MethodRef { class_index, name_and_type_index }
++            | Constant::InterfaceMethodRef { class_index, name_and_type_index } => {
++                (*class_index, *name_and_type_index)
+             }
++            _ => return None,
++        };
++        let Constant::NameAndType { name_index, descriptor_index } = constant_pool.get(name_and_type_index)?
++        else {
++            return None;
++        };
++        let Constant::Class(class_name_index) = constant_pool.get(class_index)? else {
++            return None;
++        };
++        let text = |index: u16| constant_pool.try_get_utf8(index).ok().map(JavaStr::to_rust_string);
++        Some((text(*class_name_index)?, text(*name_index)?, text(*descriptor_index)?))
++    }
+ 
+-            pc += 1;
+-        }
++    fn name_and_descriptor(&self, index: u16) -> Option<(String, String)> {
++        let constant_pool = self.class.constant_pool();
++        let Constant::InvokeDynamic { name_and_type_index, .. } = constant_pool.get(index)? else {
++            return None;
++        };
++        let Constant::NameAndType { name_index, descriptor_index } = constant_pool.get(*name_and_type_index)?
++        else {
++            return None;
++        };
++        let text = |index: u16| constant_pool.try_get_utf8(index).ok().map(JavaStr::to_rust_string);
++        Some((text(*name_index)?, text(*descriptor_index)?))
++    }
+ 
+-        let instruction = code.get(target_bci)?;
++    fn field_slots(descriptor: &str) -> usize {
++        if descriptor == "J" || descriptor == "D" { 2 } else { 1 }
++    }
+ 
++    /// Apply one instruction to `stack`; returns the successor instruction indexes, or `None`
++    /// when the bytecode cannot be followed.
++    #[expect(clippy::too_many_lines)]
++    fn step(&self, pc: usize, instruction: &Instruction, stack: &mut Vec<Source>) -> Option<Vec<usize>> {
++        use Instruction as I;
++        let pop = |stack: &mut Vec<Source>, count: usize| -> Option<()> {
++            let length = stack.len().checked_sub(count)?;
++            stack.truncate(length);
++            Some(())
++        };
++        let push_unknown = |stack: &mut Vec<Source>, count: usize| {
++            stack.extend(std::iter::repeat_n(Source::Unknown, count));
++        };
++        let local = |slot: u16| Source::Local(slot, pc);
++        let next = vec![pc + 1];
+         match instruction {
+-            Instruction::Getfield(idx) => {
+-                if let Some(source) = stack.last() {
+-                    let (_, field_name, _) = self.resolve_field(*idx);
+-                    let reason = self.describe_source(source);
+-                    return Some(format!(
+-                        "Cannot read field \"{field_name}\" because {reason} is null"
+-                    ));
+-                }
++            I::Nop | I::Iinc(..) | I::Iinc_w(..) | I::Wide | I::Breakpoint | I::Impdep1 | I::Impdep2 => {}
++            I::Aconst_null => stack.push(Source::Null),
++            I::Iconst_m1 => stack.push(Source::Int(-1)),
++            I::Iconst_0 => stack.push(Source::Int(0)),
++            I::Iconst_1 => stack.push(Source::Int(1)),
++            I::Iconst_2 => stack.push(Source::Int(2)),
++            I::Iconst_3 => stack.push(Source::Int(3)),
++            I::Iconst_4 => stack.push(Source::Int(4)),
++            I::Iconst_5 => stack.push(Source::Int(5)),
++            I::Bipush(value) => stack.push(Source::Int(i32::from(*value))),
++            I::Sipush(value) => stack.push(Source::Int(i32::from(*value))),
++            I::Ldc(index) => self.push_constant(u16::from(*index), stack),
++            I::Ldc_w(index) => self.push_constant(*index, stack),
++            I::Fconst_0 | I::Fconst_1 | I::Fconst_2 => push_unknown(stack, 1),
++            I::Lconst_0 | I::Lconst_1 | I::Dconst_0 | I::Dconst_1 | I::Ldc2_w(_) => push_unknown(stack, 2),
++            I::Iload(slot) | I::Aload(slot) => stack.push(local(u16::from(*slot))),
++            I::Iload_w(slot) | I::Aload_w(slot) => stack.push(local(*slot)),
++            I::Iload_0 | I::Aload_0 => stack.push(local(0)),
++            I::Iload_1 | I::Aload_1 => stack.push(local(1)),
++            I::Iload_2 | I::Aload_2 => stack.push(local(2)),
++            I::Iload_3 | I::Aload_3 => stack.push(local(3)),
++            I::Fload(_) | I::Fload_w(_) | I::Fload_0 | I::Fload_1 | I::Fload_2 | I::Fload_3 => push_unknown(stack, 1),
++            I::Lload(_) | I::Lload_w(_) | I::Dload(_) | I::Dload_w(_) | I::Lload_0 | I::Lload_1 | I::Lload_2
++            | I::Lload_3 | I::Dload_0 | I::Dload_1 | I::Dload_2 | I::Dload_3 => push_unknown(stack, 2),
++            I::Aaload => {
++                let index = stack.pop()?;
++                let array = stack.pop()?;
++                stack.push(Source::Element(Box::new(array), Box::new(index)));
+             }
+-            Instruction::Putfield(idx) => {
+-                let (_, _, descriptor) = self.resolve_field(*idx);
+-                let offset = if descriptor == "D" || descriptor == "J" {
+-                    2
+-                } else {
+-                    1
+-                };
+-                if stack.len() > offset {
+-                    let source = Self::stack_from_top(&stack, offset)?;
+-                    let (_, field_name, _) = self.resolve_field(*idx);
+-                    let reason = self.describe_source(source);
+-                    return Some(format!(
+-                        "Cannot assign field \"{field_name}\" because {reason} is null"
+-                    ));
+-                }
++            I::Iaload | I::Faload | I::Baload | I::Caload | I::Saload => {
++                pop(stack, 2)?;
++                push_unknown(stack, 1);
+             }
+-            Instruction::Invokevirtual(idx) | Instruction::Invokeinterface(idx, _) => {
+-                let (class_name, method_name, descriptor) = self.resolve_method_ref(*idx);
+-                let args_count = self.count_slots(&descriptor);
+-                if stack.len() > args_count {
+-                    let source = Self::stack_from_top(&stack, args_count)?;
+-                    let reason = self.describe_source(source);
+-                    // Use simple class name for the message
+-                    let simple_class = class_name.rsplit('/').next().unwrap_or(&class_name);
+-                    return Some(format!(
+-                        "Cannot invoke \"{simple_class}.{method_name}()\" because {reason} is null"
+-                    ));
+-                }
++            I::Laload | I::Daload => {
++                pop(stack, 2)?;
++                push_unknown(stack, 2);
+             }
+-            Instruction::Arraylength => {
+-                if let Some(source) = stack.last() {
+-                    let reason = self.describe_source(source);
+-                    return Some(format!(
+-                        "Cannot read the array length because {reason} is null"
+-                    ));
+-                }
++            I::Istore(_) | I::Fstore(_) | I::Astore(_) | I::Istore_w(_) | I::Fstore_w(_) | I::Astore_w(_)
++            | I::Istore_0 | I::Istore_1 | I::Istore_2 | I::Istore_3 | I::Fstore_0 | I::Fstore_1 | I::Fstore_2
++            | I::Fstore_3 | I::Astore_0 | I::Astore_1 | I::Astore_2 | I::Astore_3 | I::Pop | I::Monitorenter
++            | I::Monitorexit => pop(stack, 1)?,
++            I::Lstore(_) | I::Dstore(_) | I::Lstore_w(_) | I::Dstore_w(_) | I::Lstore_0 | I::Lstore_1
++            | I::Lstore_2 | I::Lstore_3 | I::Dstore_0 | I::Dstore_1 | I::Dstore_2 | I::Dstore_3 | I::Pop2 => {
++                pop(stack, 2)?;
+             }
+-            Instruction::Iaload if stack.len() > 1 => {
+-                let source = Self::stack_from_top(&stack, 1)?;
+-                let reason = self.describe_source(source);
+-                return Some(format!(
+-                    "Cannot load from int array because {reason} is null"
+-                ));
++            I::Iastore | I::Fastore | I::Aastore | I::Bastore | I::Castore | I::Sastore => pop(stack, 3)?,
++            I::Lastore | I::Dastore => pop(stack, 4)?,
++            I::Dup => stack.push(stack.last()?.clone()),
++            I::Dup_x1 => {
++                let top = stack.last()?.clone();
++                stack.insert(stack.len().checked_sub(2)?, top);
+             }
+-            Instruction::Laload if stack.len() > 1 => {
+-                let source = Self::stack_from_top(&stack, 1)?;
+-                let reason = self.describe_source(source);
+-                return Some(format!(
+-                    "Cannot load from long array because {reason} is null"
+-                ));
++            I::Dup_x2 => {
++                let top = stack.last()?.clone();
++                stack.insert(stack.len().checked_sub(3)?, top);
+             }
+-            Instruction::Faload if stack.len() > 1 => {
+-                let source = Self::stack_from_top(&stack, 1)?;
+-                let reason = self.describe_source(source);
+-                return Some(format!(
+-                    "Cannot load from float array because {reason} is null"
+-                ));
++            I::Dup2 => {
++                let length = stack.len();
++                let pair = stack.get(length.checked_sub(2)?..)?.to_vec();
++                stack.extend(pair);
+             }
+-            Instruction::Daload if stack.len() > 1 => {
+-                let source = Self::stack_from_top(&stack, 1)?;
+-                let reason = self.describe_source(source);
+-                return Some(format!(
+-                    "Cannot load from double array because {reason} is null"
+-                ));
++            I::Dup2_x1 => {
++                let length = stack.len();
++                let pair = stack.get(length.checked_sub(2)?..)?.to_vec();
++                let at = length.checked_sub(3)?;
++                stack.splice(at..at, pair);
+             }
+-            Instruction::Aaload if stack.len() > 1 => {
+-                let source = Self::stack_from_top(&stack, 1)?;
+-                let reason = self.describe_source(source);
+-                return Some(format!(
+-                    "Cannot load from object array because {reason} is null"
+-                ));
++            I::Dup2_x2 => {
++                let length = stack.len();
++                let pair = stack.get(length.checked_sub(2)?..)?.to_vec();
++                let at = length.checked_sub(4)?;
++                stack.splice(at..at, pair);
+             }
+-            Instruction::Baload if stack.len() > 1 => {
+-                let source = Self::stack_from_top(&stack, 1)?;
+-                let reason = self.describe_source(source);
+-                return Some(format!(
+-                    "Cannot load from byte/boolean array because {reason} is null"
+-                ));
++            I::Swap => {
++                let length = stack.len();
++                stack.swap(length.checked_sub(1)?, length.checked_sub(2)?);
+             }
+-            Instruction::Caload if stack.len() > 1 => {
+-                let source = Self::stack_from_top(&stack, 1)?;
+-                let reason = self.describe_source(source);
+-                return Some(format!(
+-                    "Cannot load from char array because {reason} is null"
+-                ));
++            I::Iadd | I::Isub | I::Imul | I::Idiv | I::Irem | I::Ishl | I::Ishr | I::Iushr | I::Iand | I::Ior
++            | I::Ixor | I::Fadd | I::Fsub | I::Fmul | I::Fdiv | I::Frem | I::Fcmpl | I::Fcmpg => {
++                pop(stack, 2)?;
++                push_unknown(stack, 1);
+             }
+-            Instruction::Saload if stack.len() > 1 => {
+-                let source = Self::stack_from_top(&stack, 1)?;
+-                let reason = self.describe_source(source);
+-                return Some(format!(
+-                    "Cannot load from short array because {reason} is null"
+-                ));
++            I::Ladd | I::Lsub | I::Lmul | I::Ldiv | I::Lrem | I::Land | I::Lor | I::Lxor | I::Dadd | I::Dsub
++            | I::Dmul | I::Ddiv | I::Drem => {
++                pop(stack, 4)?;
++                push_unknown(stack, 2);
+             }
+-            Instruction::Athrow => {
+-                if let Some(source) = stack.last() {
+-                    let reason = self.describe_source(source);
+-                    return Some(format!("Cannot throw exception because {reason} is null"));
+-                }
++            I::Lshl | I::Lshr | I::Lushr => {
++                pop(stack, 3)?;
++                push_unknown(stack, 2);
++            }
++            I::Lcmp | I::Dcmpl | I::Dcmpg => {
++                pop(stack, 4)?;
++                push_unknown(stack, 1);
++            }
++            I::Ineg | I::Fneg | I::I2f | I::F2i | I::I2b | I::I2c | I::I2s | I::Arraylength | I::Instanceof(_)
++            | I::Newarray(_) | I::Anewarray(_) => {
++                pop(stack, 1)?;
++                push_unknown(stack, 1);
++            }
++            I::Lneg | I::Dneg | I::L2d | I::D2l => {
++                pop(stack, 2)?;
++                push_unknown(stack, 2);
++            }
++            I::I2l | I::I2d | I::F2l | I::F2d => {
++                pop(stack, 1)?;
++                push_unknown(stack, 2);
++            }
++            I::L2i | I::L2f | I::D2i | I::D2f => {
++                pop(stack, 2)?;
++                push_unknown(stack, 1);
++            }
++            I::Ifeq(target) | I::Ifne(target) | I::Iflt(target) | I::Ifge(target) | I::Ifgt(target)
++            | I::Ifle(target) | I::Ifnull(target) | I::Ifnonnull(target) => {
++                pop(stack, 1)?;
++                return Some(vec![pc + 1, usize::from(*target)]);
++            }
++            I::If_icmpeq(target) | I::If_icmpne(target) | I::If_icmplt(target) | I::If_icmpge(target)
++            | I::If_icmpgt(target) | I::If_icmple(target) | I::If_acmpeq(target) | I::If_acmpne(target) => {
++                pop(stack, 2)?;
++                return Some(vec![pc + 1, usize::from(*target)]);
++            }
++            I::Goto(target) => return Some(vec![usize::from(*target)]),
++            I::Goto_w(target) => return Some(vec![usize::try_from(*target).ok()?]),
++            I::Tableswitch(table) => {
++                pop(stack, 1)?;
++                let relative = std::iter::once(table.default).chain(table.offsets.iter().copied());
++                return relative.map(|offset| usize::try_from(i64::try_from(pc).ok()? + i64::from(offset)).ok()).collect();
++            }
++            I::Lookupswitch(table) => {
++                pop(stack, 1)?;
++                let relative = std::iter::once(table.default).chain(table.pairs.values().copied());
++                return relative.map(|offset| usize::try_from(i64::try_from(pc).ok()? + i64::from(offset)).ok()).collect();
++            }
++            I::Ireturn | I::Lreturn | I::Freturn | I::Dreturn | I::Areturn | I::Return | I::Athrow | I::Ret(_)
++            | I::Ret_w(_) | I::Jsr(_) | I::Jsr_w(_) => return Some(Vec::new()),
++            I::Getstatic(index) => {
++                let (class, name, descriptor) = self.member_ref(*index)?;
++                stack.push(Source::StaticField(class, name));
++                push_unknown(stack, Self::field_slots(&descriptor) - 1);
+             }
+-            Instruction::Monitorenter | Instruction::Monitorexit => {
+-                if let Some(source) = stack.last() {
+-                    let reason = self.describe_source(source);
+-                    let op = if matches!(instruction, Instruction::Monitorenter) {
+-                        "enter"
+-                    } else {
+-                        "exit"
+-                    };
+-                    return Some(format!(
+-                        "Cannot {op} synchronized block because {reason} is null"
+-                    ));
++            I::Putstatic(index) => {
++                let (_, _, descriptor) = self.member_ref(*index)?;
++                pop(stack, Self::field_slots(&descriptor))?;
++            }
++            I::Getfield(index) => {
++                let (_, name, descriptor) = self.member_ref(*index)?;
++                let receiver = stack.pop()?;
++                stack.push(Source::Field(Box::new(receiver), name));
++                push_unknown(stack, Self::field_slots(&descriptor) - 1);
++            }
++            I::Putfield(index) => {
++                let (_, _, descriptor) = self.member_ref(*index)?;
++                pop(stack, Self::field_slots(&descriptor) + 1)?;
++            }
++            I::Invokevirtual(index) | I::Invokespecial(index) | I::Invokestatic(index)
++            | I::Invokeinterface(index, _) => {
++                let (class, name, descriptor) = self.member_ref(*index)?;
++                let receiver = usize::from(!matches!(instruction, I::Invokestatic(_)));
++                pop(stack, parameter_slots(&descriptor)? + receiver)?;
++                match return_slots(&descriptor)? {
++                    0 => {}
++                    1 => stack.push(Source::Invoke(class, name, descriptor)),
++                    _ => push_unknown(stack, 2),
+                 }
+             }
+-            _ => {}
++            I::Invokedynamic(index) => {
++                let (_, descriptor) = self.name_and_descriptor(*index)?;
++                pop(stack, parameter_slots(&descriptor)?)?;
++                push_unknown(stack, return_slots(&descriptor)?);
++            }
++            I::New(_) => push_unknown(stack, 1),
++            I::Multianewarray(_, dimensions) => {
++                pop(stack, usize::from(*dimensions))?;
++                push_unknown(stack, 1);
++            }
++            I::Checkcast(_) => {}
+         }
++        Some(next)
++    }
+ 
+-        None
++    fn push_constant(&self, index: u16, stack: &mut Vec<Source>) {
++        match self.class.constant_pool().get(index) {
++            Some(Constant::Integer(value)) => stack.push(Source::Int(*value)),
++            _ => stack.push(Source::Unknown),
++        }
+     }
+ 
+-    fn describe_source(&self, source: &Source) -> String {
+-        match source {
+-            Source::Local(idx) => {
+-                if let Some(name) = self.get_local_name(*idx) {
+-                    format!("\"{name}\"")
+-                } else {
+-                    format!("\"<local{idx}>\"")
+-                }
++    /// The operand stack just before `target`, merged over every path that reaches it.
++    fn stack_at(&self, target: usize) -> Option<Vec<Source>> {
++        let code = self.method.code();
++        let mut states: Vec<Option<Vec<Source>>> = vec![None; code.len()];
++        let mut work = vec![0];
++        *states.get_mut(0)? = Some(Vec::new());
++        for entry in self.method.exception_table() {
++            let handler = usize::from(entry.handler_pc);
++            if let Some(state) = states.get_mut(handler) {
++                *state = Some(vec![Source::Unknown]);
++                work.push(handler);
+             }
+-            Source::This => "\"this\"".to_string(),
+-            Source::Field(name, receiver) => {
+-                if let Some(recv) = receiver {
+-                    match recv.as_ref() {
+-                        Source::Local(idx) => {
+-                            if let Some(local_name) = self.get_local_name(*idx) {
+-                                format!("\"{local_name}.{name}\"")
+-                            } else {
+-                                format!("\"<local{idx}>.{name}\"")
++        }
++        let mut budget = 200_000_usize;
++        while let Some(pc) = work.pop() {
++            budget = budget.checked_sub(1)?;
++            let mut stack = states.get(pc)?.clone()?;
++            let successors = self.step(pc, code.get(pc)?, &mut stack)?;
++            for successor in successors {
++                let slot = states.get_mut(successor)?;
++                match slot {
++                    None => {
++                        *slot = Some(stack.clone());
++                        work.push(successor);
++                    }
++                    Some(existing) => {
++                        if existing.len() != stack.len() {
++                            return None;
++                        }
++                        let mut changed = false;
++                        for (old, new) in existing.iter_mut().zip(&stack) {
++                            if *old != *new && *old != Source::Unknown {
++                                *old = Source::Unknown;
++                                changed = true;
+                             }
+                         }
+-                        Source::This => format!("\"this.{name}\""),
+-                        _ => format!("\"{name}\""),
++                        if changed {
++                            work.push(successor);
++                        }
+                     }
+-                } else {
+-                    format!("\"{name}\"")
+                 }
+             }
+-            Source::MethodReturn(class_name, method_name) => {
+-                // Use simple class name (just the part after the last /)
+-                let simple_class = class_name.rsplit('/').next().unwrap_or(class_name);
+-                format!("the return value of \"{simple_class}.{method_name}()\"")
++        }
++        states.get(target)?.clone()
++    }
++
++    /// Byte offset of each instruction, needed to match `LocalVariableTable` ranges.
++    fn byte_offsets(&self) -> Vec<usize> {
++        let mut offsets = Vec::with_capacity(self.method.code().len());
++        let mut offset = 0_usize;
++        for instruction in self.method.code() {
++            offsets.push(offset);
++            let mut sizing = instruction.clone();
++            match &mut sizing {
++                Instruction::Ifeq(target) | Instruction::Ifne(target) | Instruction::Iflt(target)
++                | Instruction::Ifge(target) | Instruction::Ifgt(target) | Instruction::Ifle(target)
++                | Instruction::If_icmpeq(target) | Instruction::If_icmpne(target)
++                | Instruction::If_icmplt(target) | Instruction::If_icmpge(target)
++                | Instruction::If_icmpgt(target) | Instruction::If_icmple(target)
++                | Instruction::If_acmpeq(target) | Instruction::If_acmpne(target) | Instruction::Goto(target)
++                | Instruction::Jsr(target) | Instruction::Ifnull(target) | Instruction::Ifnonnull(target) => {
++                    *target = 0;
++                }
++                Instruction::Goto_w(target) | Instruction::Jsr_w(target) => *target = 0,
++                _ => {}
++            }
++            let mut cursor = std::io::Cursor::new(Vec::new());
++            cursor.set_position(offset as u64);
++            if sizing.to_bytes(&mut cursor).is_err() {
++                return Vec::new();
+             }
+-            Source::ArrayAccess(_) => "an array element".to_string(),
+-            Source::Constant => "\"null\"".to_string(),
+-            Source::Unknown => "\"<unknown>\"".to_string(),
++            offset = usize::try_from(cursor.position()).unwrap_or(offset + 1);
+         }
++        offsets
+     }
+ 
+-    /// Get the local variable name for a given index.
+-    ///
+-    /// According to the JVM specification, when a local variable is a method parameter
+-    /// and no debug information is available, it should be named `<parameterN>` where N
+-    /// is the 1-based parameter index.
+-    fn get_local_name(&self, index: usize) -> Option<String> {
+-        // For instance methods, local 0 is 'this', so parameters start at index 1.
+-        // For static methods, parameters start at index 0.
+-        let param_start_index = usize::from(!self.method.is_static());
+-        let local_offset = index.checked_sub(param_start_index)?;
+-
+-        let mut current_slot = 0;
+-        for (param_number, param_type) in self.method.parameters().iter().enumerate() {
+-            let slot_count = match param_type {
+-                FieldType::Base(
+-                    ristretto_classfile::BaseType::Long | ristretto_classfile::BaseType::Double,
+-                ) => 2,
+-                _ => 1,
++    fn local_variable_name(&self, slot: u16, pc: usize) -> Option<String> {
++        let offsets = self.byte_offsets();
++        let byte_offset = *offsets.get(pc)?;
++        for attribute in self.method.attributes() {
++            let Attribute::Code { attributes, .. } = attribute else {
++                continue;
+             };
+-
+-            if local_offset < current_slot + slot_count {
+-                return Some(format!("<parameter{}>", param_number + 1));
++            for attribute in attributes {
++                let Attribute::LocalVariableTable { variables, .. } = attribute else {
++                    continue;
++                };
++                for variable in variables {
++                    let start = usize::from(variable.start_pc);
++                    let end = start + usize::from(variable.length);
++                    if variable.index == slot && start <= byte_offset && byte_offset < end {
++                        let name = self.class.constant_pool().try_get_utf8(variable.name_index).ok()?;
++                        return Some(name.to_rust_string());
++                    }
++                }
+             }
+-            current_slot += slot_count;
+         }
+         None
+     }
+ 
+-    fn resolve_field(&self, index: u16) -> (String, String, String) {
+-        let constant_pool = self.class.constant_pool();
+-        let (class_index, name_and_type_index) = match constant_pool.get(index) {
+-            Some(Constant::FieldRef {
+-                class_index,
+-                name_and_type_index,
+-            }) => (*class_index, *name_and_type_index),
+-            _ => return ("?".to_string(), "?".to_string(), "?".to_string()),
+-        };
+-
+-        let (name_index, descriptor_index) = match constant_pool.get(name_and_type_index) {
+-            Some(Constant::NameAndType {
+-                name_index,
+-                descriptor_index,
+-            }) => (*name_index, *descriptor_index),
+-            _ => return ("?".to_string(), "?".to_string(), "?".to_string()),
+-        };
+-
+-        let field_name = constant_pool
+-            .try_get_utf8(name_index)
+-            .map_or_else(|_| "?".to_string(), JavaStr::to_rust_string);
+-        let descriptor = constant_pool
+-            .try_get_utf8(descriptor_index)
+-            .map_or_else(|_| "?".to_string(), JavaStr::to_rust_string);
+-
+-        let class_name_index = match constant_pool.get(class_index) {
+-            Some(Constant::Class(name_index)) => *name_index,
+-            _ => 0,
+-        };
+-        let class_name = constant_pool
+-            .try_get_utf8(class_name_index)
+-            .map_or_else(|_| "?".to_string(), JavaStr::to_rust_string);
+-
+-        (class_name, field_name, descriptor)
++    fn describe_local(&self, slot: u16, pc: usize) -> String {
++        let is_static = self.method.is_static();
++        if !is_static && slot == 0 {
++            return "this".to_string();
++        }
++        if let Some(name) = self.local_variable_name(slot, pc) {
++            return name;
++        }
++        let mut next_slot = usize::from(!is_static);
++        for (number, parameter) in self.method.parameters().iter().enumerate() {
++            if usize::from(slot) == next_slot {
++                return format!("<parameter{}>", number + 1);
++            }
++            next_slot += match parameter {
++                ristretto_classfile::FieldType::Base(
++                    ristretto_classfile::BaseType::Long | ristretto_classfile::BaseType::Double,
++                ) => 2,
++                _ => 1,
++            };
++        }
++        format!("<local{slot}>")
+     }
+ 
+-    #[expect(clippy::match_same_arms)]
+-    fn resolve_method_ref(&self, index: u16) -> (String, String, String) {
+-        let constant_pool = self.class.constant_pool();
+-        let (class_index, name_and_type_index) = match constant_pool.get(index) {
+-            Some(Constant::MethodRef {
+-                class_index,
+-                name_and_type_index,
+-            }) => (*class_index, *name_and_type_index),
+-            Some(Constant::InterfaceMethodRef {
+-                class_index,
+-                name_and_type_index,
+-            }) => (*class_index, *name_and_type_index),
+-            _ => return ("?".to_string(), "?".to_string(), "?".to_string()),
+-        };
+-
+-        let (name_index, descriptor_index) = match constant_pool.get(name_and_type_index) {
+-            Some(Constant::NameAndType {
+-                name_index,
+-                descriptor_index,
+-            }) => (*name_index, *descriptor_index),
+-            _ => return ("?".to_string(), "?".to_string(), "?".to_string()),
+-        };
+-
+-        let method_name = constant_pool
+-            .try_get_utf8(name_index)
+-            .map_or_else(|_| "?".to_string(), JavaStr::to_rust_string);
+-        let descriptor = constant_pool
+-            .try_get_utf8(descriptor_index)
+-            .map_or_else(|_| "?".to_string(), JavaStr::to_rust_string);
+-
+-        let class_name_index = match constant_pool.get(class_index) {
+-            Some(Constant::Class(name_index)) => *name_index,
+-            _ => 0,
+-        };
+-        let class_name = constant_pool
+-            .try_get_utf8(class_name_index)
+-            .map_or_else(|_| "?".to_string(), JavaStr::to_rust_string);
+-
+-        (class_name, method_name, descriptor)
++    /// Text of an expression, as printed between quotes; `None` if it cannot be described.
++    fn describe(&self, source: &Source, depth: usize) -> Option<String> {
++        if depth > MAX_DETAIL {
++            return None;
++        }
++        match source {
++            Source::Null => Some("null".to_string()),
++            Source::Local(slot, pc) => Some(self.describe_local(*slot, *pc)),
++            Source::StaticField(class, name) => Some(format!("{}.{name}", external_class_name(class))),
++            Source::Field(receiver, name) => {
++                Some(format!("{}.{name}", self.describe(receiver, depth + 1)?))
++            }
++            Source::Element(array, index) => {
++                let index = match index.as_ref() {
++                    Source::Int(value) => value.to_string(),
++                    Source::Local(slot, pc) => self.describe_local(*slot, *pc),
++                    _ => "...".to_string(),
++                };
++                Some(format!("{}[{index}]", self.describe(array, depth + 1)?))
++            }
++            Source::Invoke(class, name, descriptor) => Some(method_text(class, name, descriptor)),
++            Source::Int(_) | Source::Unknown => None,
++        }
+     }
+ 
+-    #[expect(clippy::unused_self)]
+-    fn count_slots(&self, descriptor: &str) -> usize {
+-        let mut slot_count = 0;
+-        let mut chars = descriptor.chars();
+-        if chars.next() != Some('(') {
+-            return 0;
++    /// The ` because ...` part for the null value `source`, or an empty string.
++    fn because(&self, source: &Source) -> String {
++        if let Source::Invoke(class, name, descriptor) = source {
++            return format!(" because the return value of \"{}\" is null", method_text(class, name, descriptor));
+         }
+-        let mut array_depth = 0;
+-
+-        while let Some(c) = chars.next() {
+-            match c {
+-                ')' => break,
+-                '[' => {
+-                    array_depth += 1;
+-                    continue;
+-                }
+-                'L' => {
+-                    for n in chars.by_ref() {
+-                        if n == ';' {
+-                            break;
+-                        }
+-                    }
+-                    slot_count += 1;
+-                }
+-                'D' | 'J' if array_depth == 0 => {
+-                    slot_count += 2;
+-                }
+-                _ => {
+-                    slot_count += 1;
+-                }
++        self.describe(source, 0).map_or_else(String::new, |text| format!(" because \"{text}\" is null"))
++    }
++
++    fn message(&self, bci: usize) -> Option<String> {
++        use Instruction as I;
++        let instruction = self.method.code().get(bci)?;
++        let stack = self.stack_at(bci)?;
++        let from_top = |depth: usize| stack.get(stack.len().checked_sub(depth + 1)?);
++        let (action, null_value) = match instruction {
++            I::Iaload => ("Cannot load from int array".to_string(), from_top(1)?),
++            I::Laload => ("Cannot load from long array".to_string(), from_top(1)?),
++            I::Faload => ("Cannot load from float array".to_string(), from_top(1)?),
++            I::Daload => ("Cannot load from double array".to_string(), from_top(1)?),
++            I::Aaload => ("Cannot load from object array".to_string(), from_top(1)?),
++            I::Baload => ("Cannot load from byte/boolean array".to_string(), from_top(1)?),
++            I::Caload => ("Cannot load from char array".to_string(), from_top(1)?),
++            I::Saload => ("Cannot load from short array".to_string(), from_top(1)?),
++            I::Iastore => ("Cannot store to int array".to_string(), from_top(2)?),
++            I::Lastore => ("Cannot store to long array".to_string(), from_top(3)?),
++            I::Fastore => ("Cannot store to float array".to_string(), from_top(2)?),
++            I::Dastore => ("Cannot store to double array".to_string(), from_top(3)?),
++            I::Aastore => ("Cannot store to object array".to_string(), from_top(2)?),
++            I::Bastore => ("Cannot store to byte/boolean array".to_string(), from_top(2)?),
++            I::Castore => ("Cannot store to char array".to_string(), from_top(2)?),
++            I::Sastore => ("Cannot store to short array".to_string(), from_top(2)?),
++            I::Arraylength => ("Cannot read the array length".to_string(), from_top(0)?),
++            I::Athrow => ("Cannot throw exception".to_string(), from_top(0)?),
++            I::Monitorenter => ("Cannot enter synchronized block".to_string(), from_top(0)?),
++            I::Monitorexit => ("Cannot exit synchronized block".to_string(), from_top(0)?),
++            I::Getfield(index) => {
++                let (_, name, _) = self.member_ref(*index)?;
++                (format!("Cannot read field \"{name}\""), from_top(0)?)
+             }
+-            array_depth = 0;
+-        }
+-        slot_count
++            I::Putfield(index) => {
++                let (_, name, descriptor) = self.member_ref(*index)?;
++                (format!("Cannot assign field \"{name}\""), from_top(Self::field_slots(&descriptor))?)
++            }
++            I::Invokevirtual(index) | I::Invokespecial(index) | I::Invokeinterface(index, _) => {
++                let (class, name, descriptor) = self.member_ref(*index)?;
++                // An explicit `new NullPointerException()` is not a failed action.
++                if name == "<init>" {
++                    return None;
++                }
++                let receiver = from_top(parameter_slots(&descriptor)?)?;
++                (format!("Cannot invoke \"{}\"", method_text(&class, &name, &descriptor)), receiver)
++            }
++            _ => return None,
++        };
++        Some(format!("{action}{}", self.because(null_value)))
+     }
+ }
+ 
+@@ -841,474 +673,28 @@ impl<T: Send + Sync> NpeAnalyzer<T> {
+ mod tests {
+     use super::*;
+ 
+-    #[tokio::test]
+-    async fn test_describe_source_local_without_name() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::Local(5);
+-        assert_eq!(analyzer.describe_source(&source), "\"<local5>\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_this() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::This;
+-        assert_eq!(analyzer.describe_source(&source), "\"this\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_field_no_receiver() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::Field("myField".to_string(), None);
+-        assert_eq!(analyzer.describe_source(&source), "\"myField\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_field_with_local_receiver() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::Field("myField".to_string(), Some(Box::new(Source::Local(2))));
+-        assert_eq!(analyzer.describe_source(&source), "\"<local2>.myField\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_field_with_this_receiver() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::Field("myField".to_string(), Some(Box::new(Source::This)));
+-        assert_eq!(analyzer.describe_source(&source), "\"this.myField\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_field_with_unknown_receiver() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::Field("myField".to_string(), Some(Box::new(Source::Unknown)));
+-        assert_eq!(analyzer.describe_source(&source), "\"myField\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_method_return() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::MethodReturn("java/lang/String".to_string(), "getValue".to_string());
+-        assert_eq!(
+-            analyzer.describe_source(&source),
+-            "the return value of \"String.getValue()\""
+-        );
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_method_return_simple_class() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::MethodReturn("MyClass".to_string(), "doSomething".to_string());
+-        assert_eq!(
+-            analyzer.describe_source(&source),
+-            "the return value of \"MyClass.doSomething()\""
+-        );
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_array_access() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::ArrayAccess(None);
+-        assert_eq!(analyzer.describe_source(&source), "an array element");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_constant() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::Constant;
+-        assert_eq!(analyzer.describe_source(&source), "\"null\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_unknown() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let source = Source::Unknown;
+-        assert_eq!(analyzer.describe_source(&source), "\"<unknown>\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_no_params() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        assert_eq!(analyzer.count_slots("()V"), 0);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_single_int() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        assert_eq!(analyzer.count_slots("(I)V"), 1);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_single_long() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        assert_eq!(analyzer.count_slots("(J)V"), 2);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_single_double() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        assert_eq!(analyzer.count_slots("(D)V"), 2);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_object_param() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        assert_eq!(analyzer.count_slots("(Ljava/lang/String;)V"), 1);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_array_param() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        assert_eq!(analyzer.count_slots("([I)V"), 1);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_array_of_long() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        // An array of long takes 1 slot (the array reference)
+-        assert_eq!(analyzer.count_slots("([J)V"), 1);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_multiple_params() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        // int, long, Object = 1 + 2 + 1 = 4
+-        assert_eq!(analyzer.count_slots("(IJLjava/lang/Object;)V"), 4);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_complex() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        // byte, char, double, float, int, long, short, boolean, Object
+-        // 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 1 = 11
+-        assert_eq!(analyzer.count_slots("(BCDFIJSZLjava/lang/Object;)V"), 11);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_invalid_descriptor() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        // Invalid descriptor without opening paren
+-        assert_eq!(analyzer.count_slots("V"), 0);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_count_slots_2d_array() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        // 2D array of int takes 1 slot
+-        assert_eq!(analyzer.count_slots("([[I)V"), 1);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_get_extended_npe_message_empty_params() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let result = get_extended_npe_message(thread, Parameters::default()).await;
+-        assert!(result.is_ok());
+-        let value = result.unwrap();
+-        assert!(matches!(value, Some(Value::Object(None))));
+-    }
+-
+-    #[tokio::test]
+-    async fn test_get_extended_npe_message_non_object() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let mut params = Parameters::default();
+-        params.push(Value::Int(42));
+-        let result = get_extended_npe_message(thread, params).await;
+-        assert!(result.is_ok());
+-        let value = result.unwrap();
+-        assert!(matches!(value, Some(Value::Object(None))));
+-    }
+-
+-    #[tokio::test]
+-    async fn test_get_extended_npe_message_null_object() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let mut params = Parameters::default();
+-        params.push(Value::Object(None));
+-        let result = get_extended_npe_message(thread, params).await;
+-        assert!(result.is_ok());
+-        let value = result.unwrap();
+-        assert!(matches!(value, Some(Value::Object(None))));
+-    }
+-
+-    #[test]
+-    fn test_source_clone_local() {
+-        let source = Source::Local(5);
+-        let cloned = source.clone();
+-        assert!(matches!(cloned, Source::Local(5)));
+-    }
+-
+-    #[test]
+-    fn test_source_clone_this() {
+-        let source = Source::This;
+-        let cloned = source.clone();
+-        assert!(matches!(cloned, Source::This));
+-    }
+-
+-    #[test]
+-    fn test_source_clone_field() {
+-        let source = Source::Field("test".to_string(), Some(Box::new(Source::This)));
+-        let cloned = source.clone();
+-        if let Source::Field(name, receiver) = cloned {
+-            assert_eq!(name, "test");
+-            assert!(receiver.is_some());
+-        } else {
+-            panic!("Expected Source::Field");
+-        }
+-    }
+-
+-    #[test]
+-    fn test_source_clone_method_return() {
+-        let source = Source::MethodReturn("Class".to_string(), "method".to_string());
+-        let cloned = source.clone();
+-        if let Source::MethodReturn(class_name, method_name) = cloned {
+-            assert_eq!(class_name, "Class");
+-            assert_eq!(method_name, "method");
+-        } else {
+-            panic!("Expected Source::MethodReturn");
+-        }
+-    }
+-
+-    #[test]
+-    fn test_source_clone_array_access() {
+-        let source = Source::ArrayAccess(Some(Box::new(Source::Local(1))));
+-        let cloned = source.clone();
+-        assert!(matches!(cloned, Source::ArrayAccess(Some(_))));
+-    }
+-
+     #[test]
+-    fn test_source_clone_constant() {
+-        let source = Source::Constant;
+-        let cloned = source.clone();
+-        assert!(matches!(cloned, Source::Constant));
++    fn test_external_class_name() {
++        assert_eq!("Object", external_class_name("java/lang/Object"));
++        assert_eq!("String", external_class_name("java/lang/String"));
++        assert_eq!("java.lang.Integer", external_class_name("java/lang/Integer"));
++        assert_eq!("Main$Node", external_class_name("Main$Node"));
+     }
+ 
+     #[test]
+-    fn test_source_clone_unknown() {
+-        let source = Source::Unknown;
+-        let cloned = source.clone();
+-        assert!(matches!(cloned, Source::Unknown));
+-    }
+-
+-    #[test]
+-    fn test_source_debug_local() {
+-        let source = Source::Local(3);
+-        let debug_str = format!("{source:?}");
+-        assert!(debug_str.contains("Local"));
+-        assert!(debug_str.contains('3'));
+-    }
+-
+-    #[test]
+-    fn test_source_debug_this() {
+-        let source = Source::This;
+-        let debug_str = format!("{source:?}");
+-        assert_eq!(debug_str, "This");
+-    }
+-
+-    #[test]
+-    fn test_source_debug_field() {
+-        let source = Source::Field("fieldName".to_string(), None);
+-        let debug_str = format!("{source:?}");
+-        assert!(debug_str.contains("Field"));
+-        assert!(debug_str.contains("fieldName"));
+-    }
+-
+-    #[test]
+-    fn test_source_debug_method_return() {
+-        let source = Source::MethodReturn("ClassName".to_string(), "methodName".to_string());
+-        let debug_str = format!("{source:?}");
+-        assert!(debug_str.contains("MethodReturn"));
+-        assert!(debug_str.contains("ClassName"));
+-        assert!(debug_str.contains("methodName"));
+-    }
+-
+-    #[test]
+-    fn test_source_debug_array_access() {
+-        let source = Source::ArrayAccess(None);
+-        let debug_str = format!("{source:?}");
+-        assert!(debug_str.contains("ArrayAccess"));
+-    }
+-
+-    #[test]
+-    fn test_source_debug_constant() {
+-        let source = Source::Constant;
+-        let debug_str = format!("{source:?}");
+-        assert_eq!(debug_str, "Constant");
++    fn test_method_text() {
++        assert_eq!("java.util.List.add(Object)", method_text("java/util/List", "add", "(Ljava/lang/Object;)Z"));
++        assert_eq!(
++            "String.toUpperCase(java.util.Locale)",
++            method_text("java/lang/String", "toUpperCase", "(Ljava/util/Locale;)Ljava/lang/String;")
++        );
++        assert_eq!("A.m(int, long[], String[][])", method_text("A", "m", "(I[J[[Ljava/lang/String;)V"));
+     }
+ 
+     #[test]
+-    fn test_source_debug_unknown() {
+-        let source = Source::Unknown;
+-        let debug_str = format!("{source:?}");
+-        assert_eq!(debug_str, "Unknown");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_get_local_name_returns_none() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        assert!(analyzer.get_local_name(0).is_none());
+-        assert!(analyzer.get_local_name(1).is_none());
+-        assert!(analyzer.get_local_name(100).is_none());
+-    }
+-
+-    #[tokio::test]
+-    async fn test_npe_analyzer_new() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-
+-        // Just verify it can be created without panicking
+-        let _analyzer = NpeAnalyzer::new(thread, class, method);
+-    }
+-
+-    #[tokio::test]
+-    async fn test_analyze_returns_none_for_invalid_bci() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        // Very large BCI that doesn't exist
+-        let result = analyzer.analyze(999_999);
+-        assert!(result.is_none());
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_field_with_field_receiver() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        // Field accessed through another field
+-        let inner_field = Source::Field("inner".to_string(), None);
+-        let source = Source::Field("outer".to_string(), Some(Box::new(inner_field)));
+-        // Since inner is not Local or This, it just returns the field name
+-        assert_eq!(analyzer.describe_source(&source), "\"outer\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_field_with_method_return_receiver() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let method_return = Source::MethodReturn("Class".to_string(), "getObj".to_string());
+-        let source = Source::Field("field".to_string(), Some(Box::new(method_return)));
+-        // Since receiver is not Local, it just returns the field name
+-        assert_eq!(analyzer.describe_source(&source), "\"field\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_field_with_array_access_receiver() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let array_access = Source::ArrayAccess(None);
+-        let source = Source::Field("field".to_string(), Some(Box::new(array_access)));
+-        assert_eq!(analyzer.describe_source(&source), "\"field\"");
+-    }
+-
+-    #[tokio::test]
+-    async fn test_describe_source_field_with_constant_receiver() {
+-        let (_vm, thread) = crate::test::thread().await.expect("thread");
+-        let class = thread.class("java/lang/Object").await.expect("class");
+-        let method = class.method("<init>", "()V").expect("method");
+-        let analyzer = NpeAnalyzer::new(thread, class, method);
+-
+-        let constant = Source::Constant;
+-        let source = Source::Field("field".to_string(), Some(Box::new(constant)));
+-        assert_eq!(analyzer.describe_source(&source), "\"field\"");
++    fn test_slots() {
++        assert_eq!(Some(4), parameter_slots("(IJLjava/lang/String;)V"));
++        assert_eq!(Some(2), return_slots("()D"));
++        assert_eq!(Some(0), return_slots("()V"));
+     }
+ }
+diff --git a/ristretto_intrinsics/src/java/lang/shutdown.rs b/ristretto_intrinsics/src/java/lang/shutdown.rs
+index b20df5b..673c26d 100644
+--- a/ristretto_intrinsics/src/java/lang/shutdown.rs
++++ b/ristretto_intrinsics/src/java/lang/shutdown.rs
+@@ -19,6 +19,10 @@ pub fn halt_0<T: Thread + 'static>(
+     mut parameters: Parameters,
+ ) -> Result<Option<Value>> {
+     let code = parameters.pop_int()?;
++    // On WebAssembly, unwind to the embedder so it can report the status and reuse the instance.
++    #[cfg(target_family = "wasm")]
++    return Err(ristretto_types::Error::Halt(code));
++    #[cfg(not(target_family = "wasm"))]
+     std::process::exit(code);
+ }
+ 
+diff --git a/ristretto_intrinsics/src/java/lang/stacktraceelement.rs b/ristretto_intrinsics/src/java/lang/stacktraceelement.rs
+index fe2982a..259d457 100644
+--- a/ristretto_intrinsics/src/java/lang/stacktraceelement.rs
++++ b/ristretto_intrinsics/src/java/lang/stacktraceelement.rs
+@@ -419,6 +419,10 @@ async fn fill_stack_trace_element<T: Thread + 'static>(
+ 
+     let module_name = class.module_name()?;
+     let module_version = match module_name.as_deref() {
++        // HotSpot omits the version of JDK modules ("java.base/...", not "java.base@21/...").
++        // StackTraceElement decides that from java.base's recorded module hashes, which this VM
++        // does not provide, so leave the version out here for the JDK's own modules.
++        Some(module_name) if is_jdk_module(module_name) => None,
+         Some(module_name) => module_version(thread, module_name)?,
+         None => None,
+     };
+@@ -443,6 +447,10 @@ async fn fill_stack_trace_element<T: Thread + 'static>(
+     Ok(())
+ }
+ 
++fn is_jdk_module(module_name: &str) -> bool {
++    module_name.starts_with("java.") || module_name.starts_with("jdk.")
++}
++
+ fn class_loader_name(class_mirror: &Value) -> Result<Option<String>> {
+     let class = class_mirror.as_object_ref()?;
+     let class_loader = class.value("classLoader")?;
+@@ -678,7 +686,7 @@ mod tests {
+         assert!(!element.value("declaringClassObject")?.is_null());
+         assert!(element.value("classLoaderName")?.is_null());
+         assert_eq!("java.base", element.value("moduleName")?.as_string()?);
+-        assert!(!element.value("moduleVersion")?.is_null());
++        assert!(element.value("moduleVersion")?.is_null());
+         Ok(())
+     }
+ 
+diff --git a/ristretto_intrinsics/src/java/lang/throwable.rs b/ristretto_intrinsics/src/java/lang/throwable.rs
+index a18a8af..faa8fcd 100644
+--- a/ristretto_intrinsics/src/java/lang/throwable.rs
++++ b/ristretto_intrinsics/src/java/lang/throwable.rs
+@@ -8,6 +8,27 @@ use ristretto_types::{Frame, Thread};
+ use ristretto_types::{Parameters, Result};
+ use std::sync::Arc;
+ 
++/// `HotSpot`'s default `-XX:MaxJavaStackTraceDepth`.
++const MAX_JAVA_STACK_TRACE_DEPTH: usize = 1024;
++
++/// True for frames `HotSpot` hides: methods of hidden classes and methods annotated
++/// `@jdk.internal.vm.annotation.Hidden`.
++fn is_hidden_frame(class: &ristretto_classloader::Class, method: &ristretto_classloader::Method) -> bool {
++    use ristretto_classfile::attributes::Attribute;
++    if class.is_hidden() {
++        return true;
++    }
++    let constant_pool = class.constant_pool();
++    method.attributes().iter().any(|attribute| match attribute {
++        Attribute::RuntimeVisibleAnnotations { annotations, .. } => annotations.iter().any(|annotation| {
++            constant_pool
++                .try_get_utf8(annotation.type_index)
++                .is_ok_and(|name| name.to_rust_string() == "Ljdk/internal/vm/annotation/Hidden;")
++        }),
++        _ => false,
++    })
++}
++
+ #[intrinsic_method("java/lang/Throwable.fillInStackTrace(I)Ljava/lang/Throwable;", Any)]
+ pub async fn fill_in_stack_trace<T: Thread + 'static>(
+     thread: Arc<T>,
+@@ -85,6 +106,14 @@ pub async fn fill_in_stack_trace<T: Thread + 'static>(
+             }
+             skipping = false;
+         }
++        // HotSpot (without -XX:+ShowHiddenFrames) leaves out hidden frames, such as lambda proxy
++        // classes and methods annotated @Hidden, and keeps at most MaxJavaStackTraceDepth frames.
++        if is_hidden_frame(class, method) {
++            continue;
++        }
++        if backtrace_elements.len() >= MAX_JAVA_STACK_TRACE_DEPTH {
++            break;
++        }
+ 
+         let method_name = method_name_str.to_object(&thread).await?;
+         let method_descriptor = method.descriptor().to_object(&thread).await?;
+diff --git a/ristretto_intrinsics/src/sun/nio/ch/unixfiledispatcherimpl.rs b/ristretto_intrinsics/src/sun/nio/ch/unixfiledispatcherimpl.rs
+index fd660e0..41b0e59 100644
+--- a/ristretto_intrinsics/src/sun/nio/ch/unixfiledispatcherimpl.rs
++++ b/ristretto_intrinsics/src/sun/nio/ch/unixfiledispatcherimpl.rs
+@@ -20,7 +20,16 @@ fn io_status(operation: &str, error: &std::io::Error) -> Result<i64> {
+     match error.kind() {
+         std::io::ErrorKind::WouldBlock => Ok(-2),
+         std::io::ErrorKind::Interrupted => Ok(-3),
+-        _ => Err(JavaError::IoException(format!("{operation}: {error}")).into()),
++        // HotSpot's natives throw IOException with just the strerror text, like "Is a directory".
++        _ => {
++            let _ = operation;
++            let message = error.to_string();
++            let message = match message.rfind(" (os error ") {
++                Some(end) if message.ends_with(')') => message[..end].to_string(),
++                _ => message,
++            };
++            Err(JavaError::IoException(message).into())
++        }
+     }
+ }
+ 
+diff --git a/ristretto_intrinsics/src/sun/nio/fs.rs b/ristretto_intrinsics/src/sun/nio/fs.rs
+index e0c4674..5ea9665 100644
+--- a/ristretto_intrinsics/src/sun/nio/fs.rs
++++ b/ristretto_intrinsics/src/sun/nio/fs.rs
+@@ -22,9 +22,11 @@ pub mod registryfiletypedetector;
+ pub mod unixcopyfile;
+ #[cfg(target_os = "wasi")]
+ pub mod unixfileattributes;
+-#[cfg(target_family = "unix")]
++#[cfg(any(target_family = "unix", target_os = "wasi"))]
+ pub mod unixfilesystem;
+ pub mod unixnativedispatcher;
++#[cfg(target_os = "wasi")]
++pub mod wasilinuxnativedispatcher;
+ #[cfg(target_os = "macos")]
+ pub mod utifiletypedetector;
+ #[cfg(target_os = "windows")]
+diff --git a/ristretto_intrinsics/src/sun/nio/fs/unixfilesystem.rs b/ristretto_intrinsics/src/sun/nio/fs/unixfilesystem.rs
+index e581363..f4404bb 100644
+--- a/ristretto_intrinsics/src/sun/nio/fs/unixfilesystem.rs
++++ b/ristretto_intrinsics/src/sun/nio/fs/unixfilesystem.rs
+@@ -42,7 +42,7 @@ pub async fn buffered_copy_0<T: Thread + 'static>(
+             .try_read_bytes(address, buf_size)
+             .is_none()
+     {
+-        return Err(throw_unix_exception(&thread, libc::EFAULT).await);
++        return Err(throw_unix_exception(&thread, 14 /* EFAULT */).await);
+     }
+     let file_handles = vm.file_handles();
+     let mut buf = vec![0u8; buf_size];
+@@ -50,10 +50,10 @@ pub async fn buffered_copy_0<T: Thread + 'static>(
+     loop {
+         if cancel != 0 {
+             let Some(cancelled) = vm.native_memory().read_i32(cancel) else {
+-                return Err(throw_unix_exception(&thread, libc::EFAULT).await);
++                return Err(throw_unix_exception(&thread, 14 /* EFAULT */).await);
+             };
+             if cancelled != 0 {
+-                return Err(throw_unix_exception(&thread, libc::ECANCELED).await);
++                return Err(throw_unix_exception(&thread, 125 /* ECANCELED */).await);
+             }
+         }
+         let n = match managed_files::read(file_handles, i64::from(src), &mut buf).await {
+diff --git a/ristretto_intrinsics/src/sun/nio/fs/unixnativedispatcher.rs b/ristretto_intrinsics/src/sun/nio/fs/unixnativedispatcher.rs
+index 2b6b294..c4f306e 100644
+--- a/ristretto_intrinsics/src/sun/nio/fs/unixnativedispatcher.rs
++++ b/ristretto_intrinsics/src/sun/nio/fs/unixnativedispatcher.rs
+@@ -529,13 +529,45 @@ fn wasm_linux_errno(error: &std::io::Error) -> i32 {
+         ErrorKind::NotFound => 2,          // ENOENT
+         ErrorKind::PermissionDenied => 13, // EACCES
+         ErrorKind::AlreadyExists => 17,    // EEXIST
+-        _ => error.raw_os_error().unwrap_or(2),
++        ErrorKind::NotADirectory => 20,    // ENOTDIR
++        ErrorKind::IsADirectory => 21,     // EISDIR
++        ErrorKind::ReadOnlyFilesystem => 30, // EROFS
++        ErrorKind::DirectoryNotEmpty => 39, // ENOTEMPTY
++        ErrorKind::CrossesDevices => 18,   // EXDEV
++        // Remaining WASI errno values (wasi-libc numbering) to Linux ones.
++        _ => match error.raw_os_error() {
++            Some(55) => 39, // ENOTEMPTY
++            Some(31) => 21, // EISDIR
++            Some(54) => 20, // ENOTDIR
++            Some(20) => 17, // EEXIST
++            Some(44) => 2,  // ENOENT
++            Some(2) => 13,  // EACCES
++            Some(63) => 1,  // EPERM
++            Some(8) => 9,   // EBADF
++            Some(28) => 22, // EINVAL
++            Some(75) => 18, // EXDEV
++            Some(69) => 30, // EROFS
++            Some(37) => 36, // ENAMETOOLONG
++            Some(32) => 40, // ELOOP
++            Some(51) => 28, // ENOSPC
++            Some(other) => other,
++            None => 2,
++        },
+     }
+ }
+ 
+ #[cfg(any(target_family = "unix", target_family = "wasm"))]
+ use super::common::throw_unix_exception;
+ 
++/// Linux errno for an error from a portable `std::fs` call.
++#[cfg(any(target_family = "unix", target_os = "wasi"))]
++fn fs_errno(error: &std::io::Error) -> i32 {
++    #[cfg(target_os = "wasi")]
++    return wasm_linux_errno(error);
++    #[cfg(not(target_os = "wasi"))]
++    error.raw_os_error().unwrap_or(5)
++}
++
+ /// Convert a path string to a `CString` for libc calls
+ #[cfg(target_family = "unix")]
+ fn to_cstring(path: &[u8]) -> Result<CString> {
+@@ -606,11 +638,10 @@ pub async fn access_0_0<T: Thread + 'static>(
+     thread: Arc<T>,
+     parameters: Parameters,
+ ) -> Result<Option<Value>> {
+-    let result = access_0_1(thread.clone(), parameters)?;
+-    if result == Some(Value::Int(0)) {
+-        Ok(None)
+-    } else {
+-        Err(throw_unix_exception(&thread, 13 /* EACCES */).await)
++    match access_0_1(thread.clone(), parameters)? {
++        Some(Value::Int(0)) => Ok(None),
++        Some(Value::Int(errno)) => Err(throw_unix_exception(&thread, errno).await),
++        _ => Err(throw_unix_exception(&thread, 13 /* EACCES */).await),
+     }
+ }
+ 
+@@ -648,10 +679,12 @@ pub fn access_0_1<T: Thread + 'static>(
+         }
+         Ok(true)
+     })();
+-    Ok(Some(Value::Int(if accessible.unwrap_or(false) {
+-        0
+-    } else {
+-        -1
++    // JDK 21 returns the errno (0 when accessible); UnixException maps ENOENT to
++    // NoSuchFileException, which Files.exists and Files.createDirectories rely on.
++    Ok(Some(Value::Int(match accessible {
++        Ok(true) => 0,
++        Ok(false) => 13, // EACCES
++        Err(error) => wasm_linux_errno(&error),
+     })))
+ }
+ 
+@@ -729,7 +762,7 @@ pub async fn close<T: Thread + 'static>(
+     close_0(thread, parameters).await
+ }
+ 
+-#[cfg(target_family = "unix")]
++#[cfg(any(target_family = "unix", target_os = "wasi"))]
+ #[intrinsic_method(
+     "sun/nio/fs/UnixNativeDispatcher.close0(I)V",
+     GreaterThanOrEqual(JAVA_11)
+@@ -741,7 +774,7 @@ pub async fn close_0<T: Thread + 'static>(
+     let fd = parameters.pop_int()?;
+     let vm = thread.vm()?;
+     if !managed_files::close(vm.file_handles(), i64::from(fd)).await {
+-        return Err(throw_unix_exception(&thread, libc::EBADF).await);
++        return Err(throw_unix_exception(&thread, 9 /* EBADF */).await);
+     }
+     Ok(None)
+ }
+@@ -1940,8 +1973,7 @@ pub async fn link_0<T: Thread + 'static>(
+ 
+     if let Err(e) = std::fs::hard_link(path_from_bytes(&existing_path), path_from_bytes(&new_path))
+     {
+-        let errno = e.raw_os_error().unwrap_or(5);
+-        return Err(throw_unix_exception(&thread, errno).await);
++        return Err(throw_unix_exception(&thread, fs_errno(&e)).await);
+     }
+     Ok(None)
+ }
+@@ -2561,7 +2593,7 @@ pub async fn realpath_0<T: Thread + 'static>(
+     )))
+ }
+ 
+-#[cfg(target_family = "unix")]
++#[cfg(any(target_family = "unix", target_os = "wasi"))]
+ #[intrinsic_method("sun/nio/fs/UnixNativeDispatcher.rename0(JJ)V", Any)]
+ pub async fn rename_0<T: Thread + 'static>(
+     thread: Arc<T>,
+@@ -2574,8 +2606,7 @@ pub async fn rename_0<T: Thread + 'static>(
+     let to_path = read_native_path(&*vm, to_address)?;
+ 
+     if let Err(e) = std::fs::rename(path_from_bytes(&from_path), path_from_bytes(&to_path)) {
+-        let errno = e.raw_os_error().unwrap_or(5);
+-        return Err(throw_unix_exception(&thread, errno).await);
++        return Err(throw_unix_exception(&thread, fs_errno(&e)).await);
+     }
+     Ok(None)
+ }
+@@ -2645,7 +2676,7 @@ pub async fn rewind<T: Thread + 'static>(
+     }
+ }
+ 
+-#[cfg(target_family = "unix")]
++#[cfg(any(target_family = "unix", target_os = "wasi"))]
+ #[intrinsic_method("sun/nio/fs/UnixNativeDispatcher.rmdir0(J)V", Any)]
+ pub async fn rmdir_0<T: Thread + 'static>(
+     thread: Arc<T>,
+@@ -2656,8 +2687,7 @@ pub async fn rmdir_0<T: Thread + 'static>(
+     let path_str = read_native_path(&*vm, path_address)?;
+ 
+     if let Err(e) = std::fs::remove_dir(path_from_bytes(&path_str)) {
+-        let errno = e.raw_os_error().unwrap_or(5);
+-        return Err(throw_unix_exception(&thread, errno).await);
++        return Err(throw_unix_exception(&thread, fs_errno(&e)).await);
+     }
+     Ok(None)
+ }
+@@ -2902,7 +2932,7 @@ pub async fn symlink_0<T: Thread + 'static>(
+     }
+ }
+ 
+-#[cfg(target_family = "unix")]
++#[cfg(any(target_family = "unix", target_os = "wasi"))]
+ #[intrinsic_method("sun/nio/fs/UnixNativeDispatcher.unlink0(J)V", Any)]
+ pub async fn unlink_0<T: Thread + 'static>(
+     thread: Arc<T>,
+@@ -2913,8 +2943,7 @@ pub async fn unlink_0<T: Thread + 'static>(
+     let path_str = read_native_path(&*vm, path_address)?;
+ 
+     if let Err(e) = std::fs::remove_file(path_from_bytes(&path_str)) {
+-        let errno = e.raw_os_error().unwrap_or(5);
+-        return Err(throw_unix_exception(&thread, errno).await);
++        return Err(throw_unix_exception(&thread, fs_errno(&e)).await);
+     }
+     Ok(None)
+ }
+diff --git a/ristretto_intrinsics/src/sun/nio/fs/wasilinuxnativedispatcher.rs b/ristretto_intrinsics/src/sun/nio/fs/wasilinuxnativedispatcher.rs
+new file mode 100644
+index 0000000..673a206
+--- /dev/null
++++ b/ristretto_intrinsics/src/sun/nio/fs/wasilinuxnativedispatcher.rs
+@@ -0,0 +1,62 @@
++//! `LinuxNativeDispatcher` for WASI. The browser runner reports `os.name` as Linux, so the JDK
++//! uses `LinuxFileSystem`, whose `Files.copy` calls these natives. There is no kernel copy, so
++//! `directCopy0` answers `IOStatus.UNSUPPORTED` and the JDK falls back to `bufferedCopy0`.
++use ristretto_classfile::JAVA_21;
++use ristretto_classfile::VersionSpecification::{Any, GreaterThanOrEqual};
++use ristretto_classloader::Value;
++use ristretto_macros::intrinsic_method;
++use ristretto_types::Thread;
++use ristretto_types::{Parameters, Result};
++use std::sync::Arc;
++
++/// `IOStatus.UNSUPPORTED`
++const IO_STATUS_UNSUPPORTED: i32 = -4;
++
++#[intrinsic_method("sun/nio/fs/LinuxNativeDispatcher.init()V", Any)]
++pub fn init<T: Thread + 'static>(_thread: Arc<T>, _parameters: Parameters) -> Result<Option<Value>> {
++    Ok(None)
++}
++
++#[intrinsic_method(
++    "sun/nio/fs/LinuxNativeDispatcher.posix_fadvise(IJJI)I",
++    GreaterThanOrEqual(JAVA_21)
++)]
++pub fn posix_fadvise<T: Thread + 'static>(
++    _thread: Arc<T>,
++    _parameters: Parameters,
++) -> Result<Option<Value>> {
++    Ok(Some(Value::Int(0)))
++}
++
++#[intrinsic_method(
++    "sun/nio/fs/LinuxNativeDispatcher.directCopy0(IIJ)I",
++    GreaterThanOrEqual(JAVA_21)
++)]
++pub fn direct_copy_0<T: Thread + 'static>(
++    _thread: Arc<T>,
++    _parameters: Parameters,
++) -> Result<Option<Value>> {
++    Ok(Some(Value::Int(IO_STATUS_UNSUPPORTED)))
++}
++
++/// `statvfs` for the in-memory file system: 4 KiB blocks, 1 GiB total, all of it free.
++/// `Files.copy` asks for the block size to size its buffer.
++#[intrinsic_method(
++    "sun/nio/fs/UnixNativeDispatcher.statvfs0(JLsun/nio/fs/UnixFileStoreAttributes;)V",
++    Any
++)]
++pub fn statvfs_0<T: Thread + 'static>(
++    _thread: Arc<T>,
++    mut parameters: Parameters,
++) -> Result<Option<Value>> {
++    const BLOCK_SIZE: i64 = 4096;
++    const BLOCKS: i64 = (1 << 30) / BLOCK_SIZE;
++    let attributes = parameters.pop()?;
++    let _path_address = parameters.pop_long()?;
++    let mut attributes = attributes.as_object_mut()?;
++    attributes.set_value("f_frsize", Value::Long(BLOCK_SIZE))?;
++    attributes.set_value("f_blocks", Value::Long(BLOCKS))?;
++    attributes.set_value("f_bfree", Value::Long(BLOCKS))?;
++    attributes.set_value("f_bavail", Value::Long(BLOCKS))?;
++    Ok(None)
++}
+diff --git a/ristretto_jimage/src/byte_source.rs b/ristretto_jimage/src/byte_source.rs
+index 70ef5e3..af6ec1a 100644
+--- a/ristretto_jimage/src/byte_source.rs
++++ b/ristretto_jimage/src/byte_source.rs
+@@ -26,20 +26,30 @@ impl ByteSource {
+     ///
+     /// Returns an error if the file cannot be opened or memory-mapped.
+     pub fn from(path: impl AsRef<Path>) -> Result<Self> {
+-        let file = File::open(path)?;
++        // WASI has no mmap, and a seek, read and stat per lookup costs a host call each; reading
++        // the whole image once made JDK startup several times faster in the browser runner.
++        #[cfg(target_os = "wasi")]
++        {
++            Ok(ByteSource::Bytes(std::fs::read(path)?))
++        }
+ 
+-        #[cfg(not(target_family = "wasm"))]
++        #[cfg(not(target_os = "wasi"))]
+         {
+-            // Safety: This is safe because:
+-            // 1. The file is opened in read-only mode.
+-            // 2. The contents of the file are not modified through the memory map.
+-            #[expect(unsafe_code)]
+-            if let Ok(mmap) = unsafe { memmap2::Mmap::map(&file) } {
+-                return Ok(ByteSource::MemoryMap(mmap));
++            let file = File::open(path)?;
++
++            #[cfg(not(target_family = "wasm"))]
++            {
++                // Safety: This is safe because:
++                // 1. The file is opened in read-only mode.
++                // 2. The contents of the file are not modified through the memory map.
++                #[expect(unsafe_code)]
++                if let Ok(mmap) = unsafe { memmap2::Mmap::map(&file) } {
++                    return Ok(ByteSource::MemoryMap(mmap));
++                }
+             }
+-        }
+ 
+-        Ok(ByteSource::File(Mutex::new(file)))
++            Ok(ByteSource::File(Mutex::new(file)))
++        }
+     }
+ 
+     /// Reads a range of bytes from the underlying byte source.
+@@ -199,7 +209,9 @@ mod tests {
+ 
+         let byte_source = ByteSource::from(temp_file.path())?;
+ 
+-        #[cfg(target_family = "wasm")]
++        #[cfg(target_os = "wasi")]
++        assert!(matches!(byte_source, ByteSource::Bytes(_)));
++        #[cfg(all(target_family = "wasm", not(target_os = "wasi")))]
+         assert!(matches!(byte_source, ByteSource::File(_)));
+         #[cfg(not(target_family = "wasm"))]
+         assert!(matches!(byte_source, ByteSource::MemoryMap(_)));
+diff --git a/ristretto_types/src/error.rs b/ristretto_types/src/error.rs
+index 40ced87..b9c06ab 100644
+--- a/ristretto_types/src/error.rs
++++ b/ristretto_types/src/error.rs
+@@ -77,6 +77,10 @@ pub enum Error {
+     /// Poisoned lock
+     #[error("Poisoned lock: {0}")]
+     PoisonedLock(String),
++    /// The program must stop now with this exit status (`Runtime.halt`, or a host output limit).
++    /// Java code cannot catch it.
++    #[error("VM halted with status {0}")]
++    Halt(i32),
+     /// Error that represents a JVM throwable object
+     #[error("java.lang.Throwable: {0}")]
+     Throwable(ristretto_classloader::Value),
+diff --git a/ristretto_types/src/java_error.rs b/ristretto_types/src/java_error.rs
+index b3cebb8..7cd1b58 100644
+--- a/ristretto_types/src/java_error.rs
++++ b/ristretto_types/src/java_error.rs
+@@ -47,10 +47,13 @@ pub enum JavaError {
+     ///
+     /// # References
+     /// - [ClassCastException](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/ClassCastException.html)
+-    #[error("class {source_class_name} cannot be cast to class {target_class_name}")]
++    #[error("class {source_class_name} cannot be cast to class {target_class_name}{detail}")]
+     ClassCastException {
+         source_class_name: String,
+         target_class_name: String,
++        /// `HotSpot`'s module and loader suffix, such as
++        /// ` (java.lang.String and java.lang.Integer are in module java.base of loader 'bootstrap')`.
++        detail: String,
+     },
+     /// `ClassCircularityError`
+     ///
+@@ -393,6 +396,7 @@ mod tests {
+         let error = JavaError::ClassCastException {
+             source_class_name: "java.lang.String".to_string(),
+             target_class_name: "java.lang.Integer".to_string(),
++            detail: String::new(),
+         };
+         assert_eq!(error.class_name(), "java.lang.ClassCastException");
+         assert_eq!(
+diff --git a/ristretto_types/src/lib.rs b/ristretto_types/src/lib.rs
+index 7231ed8..db7470a 100644
+--- a/ristretto_types/src/lib.rs
++++ b/ristretto_types/src/lib.rs
+@@ -51,6 +51,10 @@ pub use resource_manager::ResourceManager;
+ pub use rust_value::RustValue;
+ use std::pin::Pin;
+ pub use thread::Thread;
++
++/// Bytes left on standard input when the embedder supplies all input up front, or -1 when unknown.
++/// `FileInputStream.available()` on file descriptor 0 reports it (0 when unknown).
++pub static STDIN_AVAILABLE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(-1);
+ pub use vm::{FIRST_NIO_FD, VM};
+ 
+ /// A boxed future type that is `Send` on non-wasm targets and not `Send` on wasm targets.
+diff --git a/ristretto_vm/src/frame.rs b/ristretto_vm/src/frame.rs
+index 6e756b8..03ffce6 100644
+--- a/ristretto_vm/src/frame.rs
++++ b/ristretto_vm/src/frame.rs
+@@ -22,7 +22,7 @@ use crate::instruction::{
+     lreturn, lshl, lshr, lstore, lstore_0, lstore_1, lstore_2, lstore_3, lstore_w, lsub, lushr,
+     lxor, monitorenter, monitorexit, multianewarray, new, newarray, nop, pop, pop2,
+     process_throwable, putfield, putstatic, ret, ret_w, r#return, saload, sastore, sipush, swap,
+-    tableswitch, wide,
++    tableswitch, try_aastore, wide,
+ };
+ use crate::method_ref_cache::MethodRefEntry;
+ use crate::reference_cache::ClassReferences;
+@@ -661,6 +661,7 @@ impl Frame {
+             Instruction::New(index) => new(self, stack, *index).await,
+             Instruction::Anewarray(index) => anewarray(self, stack, *index).await,
+             Instruction::Athrow => athrow(stack).await,
++            Instruction::Aastore => aastore(self, stack).await,
+             Instruction::Checkcast(index) => checkcast(self, stack, *index).await,
+             Instruction::Instanceof(index) => instanceof(self, stack, *index).await,
+             Instruction::Monitorenter => monitorenter(self, stack).await,
+@@ -805,7 +806,10 @@ impl Frame {
+             Instruction::Lastore => lastore(stack).map(InstructionResult::Sync),
+             Instruction::Fastore => fastore(stack).map(InstructionResult::Sync),
+             Instruction::Dastore => dastore(stack).map(InstructionResult::Sync),
+-            Instruction::Aastore => aastore(stack).map(InstructionResult::Sync),
++            Instruction::Aastore => match try_aastore(stack)? {
++                Some(result) => Ok(InstructionResult::Sync(result)),
++                None => Ok(InstructionResult::Async(instruction.clone())),
++            },
+             Instruction::Bastore => bastore(stack).map(InstructionResult::Sync),
+             Instruction::Castore => castore(stack).map(InstructionResult::Sync),
+             Instruction::Sastore => sastore(stack).map(InstructionResult::Sync),
+diff --git a/ristretto_vm/src/instruction/exception.rs b/ristretto_vm/src/instruction/exception.rs
+index 3f75b52..dd2d087 100644
+--- a/ristretto_vm/src/instruction/exception.rs
++++ b/ristretto_vm/src/instruction/exception.rs
+@@ -14,7 +14,7 @@ use ristretto_classloader::Value;
+ pub(crate) async fn athrow(stack: &mut OperandStack) -> Result<ExecutionResult> {
+     let throwable = stack.pop()?;
+     if throwable.is_null() {
+-        return Err(NullPointerException(Some("Cannot throw null".to_string())).into());
++        return Err(NullPointerException(None).into());
+     }
+     // Return the exception to the caller and let the frame error handler deal with it
+     Err(Throwable(throwable))
+@@ -91,6 +91,17 @@ pub(crate) async fn convert_error_to_throwable(thread: &Thread, error: Error) ->
+             .await;
+     }
+ 
++    // HotSpot's StackOverflowError has no message; the text here is only a VM diagnostic.
++    if let JavaError(crate::JavaError::StackOverflowError(_)) = error {
++        return thread
++            .object(
++                "java/lang/StackOverflowError",
++                "Ljava/lang/String;",
++                &[Value::Object(None)],
++            )
++            .await;
++    }
++
+     let (class_name, message) = match error {
+         JavaError(java_error) => {
+             let class_name = java_error.class_name().to_string();
+@@ -98,6 +109,7 @@ pub(crate) async fn convert_error_to_throwable(thread: &Thread, error: Error) ->
+             (class_name, message)
+         }
+         Throwable(throwable) => return Ok(throwable),
++        Error::Halt(_) => return Err(error),
+         _ => {
+             let msg = format!("{error}");
+             ("java.lang.InternalError".to_string(), msg)
+diff --git a/ristretto_vm/src/instruction/monitor.rs b/ristretto_vm/src/instruction/monitor.rs
+index e864983..e988a90 100644
+--- a/ristretto_vm/src/instruction/monitor.rs
++++ b/ristretto_vm/src/instruction/monitor.rs
+@@ -16,10 +16,8 @@ pub(crate) async fn monitorenter(
+ ) -> Result<ExecutionResult> {
+     let object = stack.pop_object()?;
+     let Some(reference) = object else {
+-        return Err(crate::JavaError::NullPointerException(Some(
+-            "monitorenter called on null".into(),
+-        ))
+-        .into());
++        // No fixed message, so NullPointerException computes the helpful one.
++        return Err(crate::JavaError::NullPointerException(None).into());
+     };
+ 
+     let monitor_id = get_monitor_id(&reference.read());
+@@ -46,10 +44,8 @@ pub(crate) async fn monitorexit(
+ ) -> Result<ExecutionResult> {
+     let object = stack.pop_object()?;
+     let Some(reference) = object else {
+-        return Err(crate::JavaError::NullPointerException(Some(
+-            "monitorexit called on null".into(),
+-        ))
+-        .into());
++        // No fixed message, so NullPointerException computes the helpful one.
++        return Err(crate::JavaError::NullPointerException(None).into());
+     };
+ 
+     let monitor_id = get_monitor_id(&reference.read());
+diff --git a/ristretto_vm/src/instruction/object.rs b/ristretto_vm/src/instruction/object.rs
+index bcaec6f..c95b088 100644
+--- a/ristretto_vm/src/instruction/object.rs
++++ b/ristretto_vm/src/instruction/object.rs
+@@ -224,11 +224,95 @@ pub(crate) fn aaload(stack: &mut OperandStack) -> Result<ExecutionResult> {
+     Ok(Continue)
+ }
+ 
++/// Class name of a heap reference in internal form (`java/lang/String`, `[I`).
++fn reference_class_name(reference: &Gc<RwLock<Reference>>) -> Result<String> {
++    Ok(reference.read().class_name()?)
++}
++
++/// True when storing `value` into `array` needs no class loading to prove it is allowed: a null,
++/// an `Object[]` target, or a value whose class is exactly the component type.
++fn aastore_trivially_allowed(stack: &OperandStack) -> Result<bool> {
++    let Value::Object(Some(value)) = stack.peek_at(0)? else {
++        return Ok(true);
++    };
++    let Value::Object(Some(array)) = stack.peek_at(2)? else {
++        return Ok(true);
++    };
++    let array_class = {
++        let guard = array.read();
++        match &*guard {
++            Reference::Array(object_array) => object_array.class.name().to_string(),
++            _ => return Ok(true),
++        }
++    };
++    if array_class == "[Ljava/lang/Object;" {
++        return Ok(true);
++    }
++    let value_class = reference_class_name(value)?;
++    let component = array_class.strip_prefix('[').unwrap_or(&array_class);
++    let component = component
++        .strip_prefix('L')
++        .and_then(|name| name.strip_suffix(';'))
++        .unwrap_or(component);
++    Ok(component == value_class)
++}
++
++/// Fast path for `aastore`; returns `None` when an assignability check must load classes.
++///
+ /// # References
+ ///
+ /// - [JVMS §6.5.aastore](https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-6.html#jvms-6.5.aastore)
+ #[inline]
+-pub(crate) fn aastore(stack: &mut OperandStack) -> Result<ExecutionResult> {
++pub(crate) fn try_aastore(stack: &mut OperandStack) -> Result<Option<ExecutionResult>> {
++    if aastore_trivially_allowed(stack)? {
++        aastore_unchecked(stack).map(Some)
++    } else {
++        Ok(None)
++    }
++}
++
++/// `aastore` with the component type check; throws `ArrayStoreException` like `HotSpot`, whose
++/// message is the external name of the stored value's class.
++///
++/// # References
++///
++/// - [JVMS §6.5.aastore](https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-6.html#jvms-6.5.aastore)
++pub(crate) async fn aastore(frame: &Frame, stack: &mut OperandStack) -> Result<ExecutionResult> {
++    if aastore_trivially_allowed(stack)? {
++        return aastore_unchecked(stack);
++    }
++    let (Value::Object(Some(value)), Value::Int(index), Value::Object(Some(array))) =
++        (stack.peek_at(0)?.clone(), stack.peek_at(1)?.clone(), stack.peek_at(2)?.clone())
++    else {
++        return aastore_unchecked(stack);
++    };
++    let (array_class, length) = {
++        let guard = array.read();
++        match &*guard {
++            Reference::Array(object_array) => {
++                (object_array.class.clone(), object_array.elements.len())
++            }
++            _ => return aastore_unchecked(stack),
++        }
++    };
++    // HotSpot checks the index before the element type.
++    if usize::try_from(index).map_or(true, |index| index >= length) {
++        return aastore_unchecked(stack);
++    }
++    let thread = frame.thread()?;
++    let Some(component_name) = array_class.component_type() else {
++        return aastore_unchecked(stack);
++    };
++    let component = thread.class(component_name).await?;
++    let value_class_name = reference_class_name(&value)?;
++    let value_class = thread.class(&value_class_name).await?;
++    if !component.is_assignable_from(&thread, &value_class).await? {
++        return Err(crate::JavaError::ArrayStoreException(value_class_name.replace('/', ".")).into());
++    }
++    aastore_unchecked(stack)
++}
++
++fn aastore_unchecked(stack: &mut OperandStack) -> Result<ExecutionResult> {
+     let value = stack.pop_object()?;
+     let index = stack.pop_int()?;
+     let Some(reference) = stack.pop_object()? else {
+@@ -249,8 +333,6 @@ pub(crate) fn aastore(stack: &mut OperandStack) -> Result<ExecutionResult> {
+         index: original_index,
+         length,
+     })?;
+-    // TODO: validate object type is compatible with array type
+-    // See: https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-6.html#jvms-6.5.aastore
+     if let Some(element) = array.get_mut(index) {
+         *element = Value::Object(value);
+     } else {
+@@ -321,6 +403,50 @@ pub(crate) async fn new(
+     Ok(Continue)
+ }
+ 
++/// Module and loader of a class as `HotSpot` names them (`Klass::class_in_module_of_loader`):
++/// the element type decides for arrays, and primitive arrays belong to `java.base`.
++async fn module_and_loader(thread: &Thread, class_name: &str) -> Result<(String, String)> {
++    let element = class_name.trim_start_matches('[');
++    let element = if element.len() == class_name.len() {
++        element
++    } else if let Some(name) = element.strip_prefix('L').and_then(|name| name.strip_suffix(';')) {
++        name
++    } else {
++        return Ok(("module java.base".to_string(), "'bootstrap'".to_string()));
++    };
++    let class = thread.class(element).await?;
++    let module = match class.module_name()? {
++        Some(module) => format!("module {module}"),
++        None => "unnamed module".to_string(),
++    };
++    let loader = match class.class_loader()? {
++        Some(loader) if loader.name() != "bootstrap" => format!("'{}'", loader.name()),
++        _ => "'bootstrap'".to_string(),
++    };
++    Ok((module, loader))
++}
++
++/// The parenthesized suffix `HotSpot` appends to `ClassCastException` messages
++/// (`SharedRuntime::generate_class_cast_message`). Class names are in internal form.
++async fn class_cast_detail(thread: &Thread, source: &str, target: &str) -> Result<String> {
++    let (source_module, source_loader) = module_and_loader(thread, source).await?;
++    let (target_module, target_loader) = module_and_loader(thread, target).await?;
++    let source = source.replace('/', ".");
++    let target = target.replace('/', ".");
++    // Each loader has its own unnamed module, so unnamed modules match only with the same loader.
++    let same_module = source_module == target_module
++        && (source_module != "unnamed module" || source_loader == target_loader);
++    if same_module {
++        Ok(format!(
++            " ({source} and {target} are in {source_module} of loader {source_loader})"
++        ))
++    } else {
++        Ok(format!(
++            " ({source} is in {source_module} of loader {source_loader}; {target} is in {target_module} of loader {target_loader})"
++        ))
++    }
++}
++
+ /// # References
+ ///
+ /// - [JVMS §6.5.checkcast](https://docs.oracle.com/javase/specs/jvms/se25/html/jvms-6.html#jvms-6.5.checkcast)
+@@ -343,12 +469,13 @@ pub(crate) async fn checkcast(
+     let thread = frame.thread()?;
+     let class = thread.load_and_link_class(class_name).await?;
+     if !is_instance_of(&thread, &object, &class).await? {
+-        let object = object.read();
+-        let source_class_name = object.class_name()?.replace('/', ".");
+-        let target_class_name = class_name.to_rust_string().replace('/', ".");
++        let source = reference_class_name(&object)?;
++        let target = class_name.to_rust_string();
++        let detail = class_cast_detail(&thread, &source, &target).await?;
+         return Err(ClassCastException {
+-            source_class_name,
+-            target_class_name,
++            source_class_name: source.replace('/', "."),
++            target_class_name: target.replace('/', "."),
++            detail,
+         }
+         .into());
+     }
+@@ -671,7 +798,7 @@ mod tests {
+         stack.push(array)?;
+         stack.push_int(0)?;
+         stack.push(object)?;
+-        let result = aastore(stack)?;
++        let result = aastore_unchecked(stack)?;
+         assert_eq!(Continue, result);
+         Ok(())
+     }
+@@ -685,7 +812,7 @@ mod tests {
+         stack.push(object.clone())?;
+         stack.push_int(0)?;
+         stack.push(object)?;
+-        let result = aastore(stack);
++        let result = aastore_unchecked(stack);
+         assert!(matches!(
+             result,
+             Err(InvalidStackValue {
+@@ -710,7 +837,7 @@ mod tests {
+         stack.push(array)?;
+         stack.push_int(-1)?;
+         stack.push(object)?;
+-        let result = aastore(stack);
++        let result = aastore_unchecked(stack);
+         assert!(matches!(
+             result,
+             Err(JavaError(ArrayIndexOutOfBoundsException { index, length }))
+@@ -733,7 +860,7 @@ mod tests {
+         stack.push(array)?;
+         stack.push_int(2)?;
+         stack.push(object)?;
+-        let result = aastore(stack);
++        let result = aastore_unchecked(stack);
+         assert!(matches!(
+             result,
+             Err(JavaError(ArrayIndexOutOfBoundsException { index, length }))
+@@ -750,7 +877,7 @@ mod tests {
+         stack.push_object(None)?;
+         stack.push_int(0)?;
+         stack.push(object)?;
+-        let result = aastore(stack);
++        let result = aastore_unchecked(stack);
+         assert!(matches!(result, Err(JavaError(NullPointerException(None)))));
+         Ok(())
+     }
+@@ -853,7 +980,7 @@ mod tests {
+         let result = checkcast(&frame, stack, class_index).await;
+         assert!(matches!(
+             result,
+-            Err(JavaError(ClassCastException { source_class_name, target_class_name}))
++            Err(JavaError(ClassCastException { source_class_name, target_class_name, .. }))
+             if source_class_name == "java.lang.Object" && target_class_name == "java.lang.String"
+         ));
+         Ok(())
+diff --git a/ristretto_vm/src/jit_runtime_helpers.rs b/ristretto_vm/src/jit_runtime_helpers.rs
+index 3f33c92..79daca2 100644
+--- a/ristretto_vm/src/jit_runtime_helpers.rs
++++ b/ristretto_vm/src/jit_runtime_helpers.rs
+@@ -2519,6 +2519,7 @@ extern "C" fn jit_checkcast(
+                     JavaError(ClassCastException {
+                         source_class_name: source,
+                         target_class_name: target,
++                        detail: String::new(),
+                     }),
+                 );
+                 0
+diff --git a/ristretto_vm/src/lib.rs b/ristretto_vm/src/lib.rs
+index 9f9c6bf..0f77da0 100644
+--- a/ristretto_vm/src/lib.rs
++++ b/ristretto_vm/src/lib.rs
+@@ -104,6 +104,6 @@ pub use ristretto_classloader::{
+     Class, ClassLoader, ClassPath, ClassPathEntry, DEFAULT_JAVA_VERSION, Memory, Object, Reference,
+     Value,
+ };
+-pub use ristretto_types::{Error, JavaError, Parameters, Result, RustValue};
++pub use ristretto_types::{Error, JavaError, Parameters, Result, RustValue, STDIN_AVAILABLE};
+ pub use thread::Thread;
+-pub use vm::VM;
++pub use vm::{VM, with_local_set};
+diff --git a/ristretto_vm/src/vm.rs b/ristretto_vm/src/vm.rs
+index 60f9aea..ec2d5b6 100644
+--- a/ristretto_vm/src/vm.rs
++++ b/ristretto_vm/src/vm.rs
+@@ -42,10 +42,37 @@ use tracing::{debug, warn};
+ /// paths (notably `Thread.start_0`) dispatch via `tokio::task::spawn_local`,
+ /// which requires an active `LocalSet`. On non-wasi targets this is a
+ /// transparent passthrough.
++///
++/// Nested calls reuse the outermost `LocalSet`. A `LocalSet` drops its tasks when it ends, so a
++/// new one per call would kill Java threads that JDK startup begins (Reference Handler,
++/// Common-Cleaner) in the middle of a class initializer, and a later use of that class would then
++/// wait forever. Embedders wrap a whole run in [`with_local_set`] to keep those threads alive.
+ #[cfg(target_os = "wasi")]
+ async fn run_local<F: Future>(future: F) -> F::Output {
++    struct Active;
++    impl Drop for Active {
++        fn drop(&mut self) {
++            LOCAL_SET_ACTIVE.with(|active| active.set(false));
++        }
++    }
++    if LOCAL_SET_ACTIVE.with(std::cell::Cell::get) {
++        return future.await;
++    }
++    LOCAL_SET_ACTIVE.with(|active| active.set(true));
++    let _active = Active;
+     tokio::task::LocalSet::new().run_until(future).await
+ }
++
++#[cfg(target_os = "wasi")]
++thread_local! {
++    static LOCAL_SET_ACTIVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
++}
++
++/// Run `future`, including every VM call inside it, on one shared `LocalSet` on `wasi`, so Java
++/// threads started by one call stay alive for the next. A passthrough elsewhere.
++pub async fn with_local_set<F: Future>(future: F) -> F::Output {
++    run_local(future).await
++}
+ #[cfg(not(target_os = "wasi"))]
+ async fn run_local<F: Future>(future: F) -> F::Output {
+     future.await
+diff --git a/web/runner/src/arena.rs b/web/runner/src/arena.rs
+new file mode 100644
+index 0000000..df6e161
+--- /dev/null
++++ b/web/runner/src/arena.rs
+@@ -0,0 +1,235 @@
++//! Java Arena runner: execute precompiled class files with stdin and arguments supplied up front.
++//!
++//! Java stdout and stderr go to the component's WASI stdout and stderr as raw bytes, capped at
++//! `outputLimit` bytes in total. The returned JSON reports the exit code and whether output was
++//! truncated. Program files live in the host's in-memory file system under the working directory.
++
++use ristretto_vm::{ClassPath, ClassPathEntry, ConfigurationBuilder, Memory, STDIN_AVAILABLE, VM, Value};
++use serde::Deserialize;
++use serde_json::json;
++use std::io::{self, Read, Write};
++use std::path::PathBuf;
++use std::sync::Arc;
++use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
++use tokio::sync::Mutex;
++
++const DEFAULT_OUTPUT_LIMIT: usize = 64 * 1024;
++
++#[derive(Debug, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++struct ArenaRequest {
++    main_class: String,
++    #[serde(default)]
++    args: Vec<String>,
++    classes: Vec<Vec<u8>>,
++    #[serde(default)]
++    stdin: Vec<u8>,
++    #[serde(default)]
++    output_limit: Option<usize>,
++}
++
++#[derive(Debug, Default)]
++struct OutputBudget {
++    limit: usize,
++    written: AtomicUsize,
++    truncated: AtomicBool,
++}
++
++/// Standard input supplied up front; EOF after the last byte. Publishes the remaining byte count
++/// so `System.in.available()` answers like `HotSpot` does for redirected input.
++struct Stdin {
++    bytes: Vec<u8>,
++    position: usize,
++}
++
++impl Stdin {
++    fn new(bytes: Vec<u8>) -> Self {
++        STDIN_AVAILABLE.store(i64::try_from(bytes.len()).unwrap_or(i64::MAX), Ordering::Relaxed);
++        Self { bytes, position: 0 }
++    }
++}
++
++impl Read for Stdin {
++    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
++        let rest = self.bytes.get(self.position..).unwrap_or_default();
++        let count = rest.len().min(buffer.len());
++        buffer[..count].copy_from_slice(&rest[..count]);
++        self.position += count;
++        let left = self.bytes.len() - self.position;
++        STDIN_AVAILABLE.store(i64::try_from(left).unwrap_or(i64::MAX), Ordering::Relaxed);
++        Ok(count)
++    }
++}
++
++/// Writes Java output to the component's stdout or stderr. Output is buffered because every
++/// host call is expensive in the browser; the buffer is flushed when it fills and after the run.
++struct CappedWriter {
++    budget: Arc<OutputBudget>,
++    stderr: bool,
++    buffer: Vec<u8>,
++}
++
++const FLUSH_THRESHOLD: usize = 16 * 1024;
++
++impl CappedWriter {
++    fn new(budget: Arc<OutputBudget>, stderr: bool) -> Self {
++        Self { budget, stderr, buffer: Vec::new() }
++    }
++
++    fn drain(&mut self) -> io::Result<()> {
++        if self.buffer.is_empty() {
++            return Ok(());
++        }
++        if self.stderr {
++            let mut sink = io::stderr().lock();
++            sink.write_all(&self.buffer)?;
++            sink.flush()?;
++        } else {
++            let mut sink = io::stdout().lock();
++            sink.write_all(&self.buffer)?;
++            sink.flush()?;
++        }
++        self.buffer.clear();
++        Ok(())
++    }
++
++    fn accept(&mut self, bytes: &[u8]) -> io::Result<()> {
++        self.buffer.extend_from_slice(bytes);
++        if self.buffer.len() >= FLUSH_THRESHOLD {
++            self.drain()?;
++        }
++        Ok(())
++    }
++}
++
++impl Write for CappedWriter {
++    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
++        let written = self.budget.written.load(Ordering::Relaxed);
++        let room = self.budget.limit.saturating_sub(written);
++        if bytes.len() <= room {
++            self.accept(bytes)?;
++            self.budget.written.store(written + bytes.len(), Ordering::Relaxed);
++            return Ok(bytes.len());
++        }
++        // Keep everything up to the cap, then stop the program (the VM maps QuotaExceeded to a halt).
++        self.accept(&bytes[..room])?;
++        self.drain()?;
++        self.budget.written.store(self.budget.limit, Ordering::Relaxed);
++        self.budget.truncated.store(true, Ordering::Relaxed);
++        Err(io::Error::new(io::ErrorKind::QuotaExceeded, "output limit exceeded"))
++    }
++
++    fn flush(&mut self) -> io::Result<()> {
++        Ok(())
++    }
++}
++
++fn java_home() -> PathBuf {
++    std::env::var_os("RISTRETTO_PLAYGROUND_JAVA_HOME").map_or_else(|| PathBuf::from("/jdk"), PathBuf::from)
++}
++
++fn workspace() -> PathBuf {
++    std::env::var_os("RISTRETTO_PLAYGROUND_WORKSPACE")
++        .map_or_else(|| PathBuf::from("/workspace"), PathBuf::from)
++}
++
++type Streams = (Arc<Mutex<CappedWriter>>, Arc<Mutex<CappedWriter>>);
++
++fn configuration(request: &ArenaRequest, streams: &Streams, memory: Memory) -> ConfigurationBuilder {
++    let builder = ConfigurationBuilder::new()
++        .java_home(java_home())
++        .interpreted(true)
++        .main_class(&request.main_class)
++        .class_path(ClassPath::new(vec![ClassPathEntry::Memory(memory)]))
++        .stdin(Arc::new(Mutex::new(Stdin::new(request.stdin.clone()))))
++        .stdout(streams.0.clone())
++        .stderr(streams.1.clone())
++        .add_system_property("user.dir", workspace().to_string_lossy())
++        .add_system_property("java.io.tmpdir", "/tmp")
++        .add_system_property("user.home", workspace().to_string_lossy())
++        .add_system_property("user.language", "en")
++        .add_system_property("user.country", "US")
++        .add_system_property("user.timezone", "UTC")
++        .add_system_property("file.encoding", "UTF-8")
++        .add_system_property("stdout.encoding", "UTF-8")
++        .add_system_property("stderr.encoding", "UTF-8")
++        .add_system_property("sun.jnu.encoding", "UTF-8")
++        .add_system_property("java.util.concurrent.ForkJoinPool.common.parallelism", "0");
++    #[cfg(target_family = "wasm")]
++    let builder = builder.add_system_property("os.name", "Linux");
++    builder
++}
++
++/// Ask the JDK to report an uncaught exception the way `HotSpot` does: the thread's handler,
++/// which prints `Exception in thread "main" ` followed by the stack trace.
++async fn dispatch_uncaught(vm: &VM, throwable: &Value) -> ristretto_vm::Result<()> {
++    let thread = vm
++        .invoke("java.lang.Thread", "currentThread()Ljava/lang/Thread;", &[] as &[Value])
++        .await?
++        .ok_or_else(|| ristretto_vm::Error::InternalError("no current thread".to_string()))?;
++    vm.invoke(
++        "java.lang.Thread",
++        "dispatchUncaughtException(Ljava/lang/Throwable;)V",
++        &[thread, throwable.clone()],
++    )
++    .await?;
++    Ok(())
++}
++
++async fn shutdown(vm: &VM) -> Option<i32> {
++    match vm.invoke("java.lang.Shutdown", "shutdown()V", &[] as &[Value]).await {
++        Err(ristretto_vm::Error::Halt(code)) => Some(code),
++        _ => None,
++    }
++}
++
++async fn run(request: &ArenaRequest, streams: &Streams) -> Result<i32, String> {
++    let memory = Memory::new("arena");
++    for class in &request.classes {
++        memory.add_class(class).await.map_err(|error| error.to_string())?;
++    }
++    // Relative paths in java.nio.file resolve against the process directory, as with HotSpot,
++    // where it equals user.dir.
++    std::env::set_current_dir(workspace()).map_err(|error| error.to_string())?;
++    let config = configuration(request, streams, memory).build().map_err(|error| error.to_string())?;
++    let vm = VM::new(config).await.map_err(|error| error.to_string())?;
++    let exit_code = match vm.invoke_main(&request.args).await {
++        Ok(_) => shutdown(&vm).await.unwrap_or(0),
++        Err(ristretto_vm::Error::Halt(code)) => code,
++        Err(ristretto_vm::Error::Throwable(throwable)) => match dispatch_uncaught(&vm, &throwable).await {
++            Err(ristretto_vm::Error::Halt(code)) => code,
++            Err(error) => return Err(error.to_string()),
++            Ok(()) => shutdown(&vm).await.unwrap_or(1),
++        },
++        Err(error) => return Err(error.to_string()),
++    };
++    Ok(exit_code)
++}
++
++/// Decode one run request, execute it on a fresh VM, and return the JSON result.
++pub async fn handle(request: &[u8]) -> String {
++    let request = match serde_json::from_slice::<ArenaRequest>(request) {
++        Ok(request) => request,
++        Err(error) => return json!({"error": format!("bad request: {error}")}).to_string(),
++    };
++    let budget = Arc::new(OutputBudget {
++        limit: request.output_limit.unwrap_or(DEFAULT_OUTPUT_LIMIT),
++        ..OutputBudget::default()
++    });
++    let streams: Streams = (
++        Arc::new(Mutex::new(CappedWriter::new(budget.clone(), false))),
++        Arc::new(Mutex::new(CappedWriter::new(budget.clone(), true))),
++    );
++    let result = ristretto_vm::with_local_set(run(&request, &streams)).await;
++    for stream in [&streams.0, &streams.1] {
++        let _ = stream.lock().await.drain();
++    }
++    let truncated = budget.truncated.load(Ordering::Relaxed);
++    STDIN_AVAILABLE.store(-1, Ordering::Relaxed);
++    match result {
++        Ok(exit_code) => json!({"exitCode": exit_code, "outputTruncated": truncated}),
++        // The output cap stops the program through a halt; any other failure is a VM error.
++        Err(message) => json!({"exitCode": 1, "outputTruncated": truncated, "error": message}),
++    }
++    .to_string()
++}
+diff --git a/web/runner/src/lib.rs b/web/runner/src/lib.rs
+index a727f4b..73b6499 100644
+--- a/web/runner/src/lib.rs
++++ b/web/runner/src/lib.rs
+@@ -3,6 +3,8 @@
+ //! The component receives JSON requests and reads a Java runtime mounted at /jdk.
+ //! stdout carries JSON events; Java output is encoded as bytes so split UTF-8 writes survive.
+ 
++pub mod arena;
++
+ use ristretto_vm::{ClassPath, ClassPathEntry, Compiler, ConfigurationBuilder, Memory, VM};
+ use serde::Deserialize;
+ use serde_json::json;
+@@ -490,6 +492,12 @@ mod component {
+                 }
+             });
+         }
++        fn run_classes(request: String) -> String {
++            RUNTIME.with(|runtime| match runtime {
++                Ok(runtime) => runtime.block_on(super::arena::handle(request.as_bytes())),
++                Err(error) => serde_json::json!({"error": error.to_string()}).to_string(),
++            })
++        }
+     }
+     export!(Engine);
+ }
+diff --git a/web/runner/wit/playground.wit b/web/runner/wit/playground.wit
+index 42c4064..33f729c 100644
+--- a/web/runner/wit/playground.wit
++++ b/web/runner/wit/playground.wit
+@@ -2,4 +2,6 @@ package ristretto:playground;
+ 
+ world playground {
+     export execute: func(request: string);
++    /// Java Arena: run precompiled classes; returns a JSON result.
++    export run-classes: func(request: string) -> string;
+ }

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-package javaarena.jdkmath;
+package javaarena.jdk;
 
 /**
  * The number parsing and printing of OpenJDK 21's java.lang.Float and Double,

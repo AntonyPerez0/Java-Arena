@@ -71,10 +71,16 @@ def expr():
     a, b = operand(), operand()
     if r < 0.45:
         op = rnd.choice(["+", "-", "*", "/", "%"])
+        while op in "/%" and b.rstrip("L") == "0":
+            # an integer division by zero is not a constant; it would throw at run time
+            b = operand()
         return "(%s %s %s)" % (a, op, b)
     if r < 0.7:
         cast = rnd.choice(["int", "long", "float", "double", "short", "byte", "char"])
-        inner = a if rnd.random() < 0.6 else "(%s %s %s)" % (a, rnd.choice(["*", "/", "+"]), b)
+        op = rnd.choice(["*", "/", "+"])
+        while op == "/" and b.rstrip("L") == "0":
+            b = operand()
+        inner = a if rnd.random() < 0.6 else "(%s %s %s)" % (a, op, b)
         e = "(%s) %s" % (cast, inner)
         return "(int) " + e if cast == "char" else e
     if r < 0.85:

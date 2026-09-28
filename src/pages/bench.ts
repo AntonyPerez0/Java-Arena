@@ -56,9 +56,11 @@ public class Main {
     code: `public class Main {
     public static void main(String[] args) {
         int i = 0;
+        int sum = 0;
         while (i < 10) {
-            System.out.println("i is " + i);
+            sum += i;
         }
+        System.out.println("Sum: " + sum);
     }
 }
 `,
@@ -116,7 +118,7 @@ async function renderEngine() {
     el.innerHTML = `<p><b>You're on mobile data.</b> Running Java needs the engine, a one-time download${mb ? ` of about ${mb} MB` : ""}. After that it's saved on this device and works offline.</p>
       <div class="row"><button id="dl" class="primary">Download the engine</button></div>
       <label class="inline"><input type="checkbox" id="always" ${allowMobile() ? "checked" : ""}> Always download on mobile data</label>`;
-    $("dl").onclick = () => ensureEngine();
+    $("dl").onclick = () => startEngine();
     ($("always") as HTMLInputElement).onchange = (e) => {
       try {
         localStorage.setItem(MOBILE_KEY, (e.target as HTMLInputElement).checked ? "1" : "0");
@@ -135,15 +137,28 @@ async function renderEngine() {
     el.innerHTML = `<p class="ok"><b>Ready.</b> The engine is saved on this device${navigator.onLine ? "" : " and running offline"}.</p>`;
   } else {
     el.innerHTML = `<p class="bad"><b>The engine couldn't start.</b> ${esc(s.message)}</p><div class="row"><button id="retry">Try again</button></div>`;
-    $("retry").onclick = () => ensureEngine();
+    $("retry").onclick = () => startEngine();
   }
 }
 subscribeEngine(() => void renderEngine());
 
+// How long the engine took to become ready on this visit, and whether it came from this device.
+let startedAt = 0;
+let engineStartMs: number | null = null;
+let savedOnDevice: boolean | null = null;
+function startEngine() {
+  if (!startedAt) startedAt = performance.now();
+  ensureEngine();
+}
+subscribeEngine(() => {
+  if (engineStartMs === null && startedAt && getEngineStatus().state === "ready") engineStartMs = performance.now() - startedAt;
+});
+
 async function autoload() {
   const ok = await mayAutoDownload(allowMobile());
+  savedOnDevice = await engineCached();
   asked = true;
-  if (ok) ensureEngine();
+  if (ok) startEngine();
   await renderEngine();
 }
 
@@ -284,12 +299,11 @@ $("bench").onclick = async () => {
     out.innerHTML = `<p>${esc(note)}</p>${rows.length ? `<div class="table-wrap"><table><thead><tr><th scope="col">Measure</th><th scope="col">Result</th></tr></thead><tbody>${rows.map(([a, b]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td></tr>`).join("")}</tbody></table></div>` : ""}`;
   };
   try {
-    const cachedBefore = await engineCached();
-    const wasReady = getEngineStatus().state === "ready";
+    let t = 0;
     show("Starting the engine...");
-    let t = performance.now();
+    startEngine();
     await engineReady();
-    rows.push(["Engine start", wasReady ? "already started" : `${Math.round(performance.now() - t)} ms (${cachedBefore ? "from this device" : "downloaded"})`]);
+    rows.push(["Engine start (this visit)", `${Math.round(engineStartMs ?? 0)} ms, ${savedOnDevice ? "from this device" : "downloaded first"}`]);
 
     show("Compiling Hello World 5 times...");
     const compileMs: number[] = [];

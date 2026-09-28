@@ -156,7 +156,9 @@ async function loadPlaywright() {
   const candidates = ['playwright', '/opt/node22/lib/node_modules/playwright'];
   for (const candidate of candidates) {
     try {
-      return await import(pathToFileURL(require.resolve(candidate)).href);
+      const mod = await import(pathToFileURL(require.resolve(candidate)).href);
+      // Playwright's main entry is CommonJS, so its exports may sit under `default`.
+      return mod.chromium ? mod : mod.default;
     } catch {}
   }
   throw new Error('Playwright not found');

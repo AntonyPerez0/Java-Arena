@@ -1,0 +1,47 @@
+// Copies the built engine (engine/dist) into public/engine with gzip copies and one manifest.
+// The workers fetch the .gz copies and unpack them with DecompressionStream as they arrive.
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
+
+const root = new URL('..', import.meta.url).pathname;
+const out = join(root, 'public', 'engine');
+const parts = ['compiler', 'runner'];
+
+const manifests = {};
+for (const part of parts) {
+  const file = join(root, 'engine', 'dist', part, 'manifest.json');
+  if (!existsSync(file)) {
+    console.warn(`copy-engine: ${file} is missing, so the site will have no Java engine`);
+    process.exit(0);
+  }
+  manifests[part] = JSON.parse(readFileSync(file, 'utf8'));
+}
+
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
+const manifest = { version: '', files: {}, gzip: {}, compiler: [], runner: [] };
+const hash = createHash('sha256');
+for (const part of parts) {
+  for (const entry of manifests[part].files) {
+    const name = entry.name ?? entry.file;
+    if (!name || !entry.asset) continue;
+    const data = readFileSync(join(root, 'engine', 'dist', part, name));
+    const sha = createHash('sha256').update(data).digest('hex');
+    if (entry.sha256 && entry.sha256 !== sha) throw new Error(`copy-engine: ${part}/${name} does not match its SHA-256 in the manifest`);
+    hash.update(`${part}/${name}:${sha}\n`);
+    writeFileSync(join(out, name), data);
+    manifest.files[name] = data.length;
+    const gz = gzipSync(data, { level: 9 });
+    if (gz.length < data.length * 0.95) {
+      writeFileSync(join(out, name + '.gz'), gz);
+      manifest.gzip[name] = gz.length;
+    }
+    manifest[part].push(name);
+  }
+}
+manifest.version = hash.digest('hex').slice(0, 12);
+writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 1));
+const total = Object.keys(manifest.files).reduce((a, f) => a + (manifest.gzip[f] ?? manifest.files[f]), 0);
+console.log(`copy-engine: ${Object.keys(manifest.files).length} files, ${(total / 1e6).toFixed(1)} MB to download, version ${manifest.version}`);

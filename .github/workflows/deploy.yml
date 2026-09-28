@@ -1,0 +1,110 @@
+name: Build, verify and deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The site's own domain (also set under Settings > Pages > Custom domain).
+  # Empty: publish at https://<owner>.github.io/<repo>/
+  CUSTOM_DOMAIN: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install OpenJDK 21 (the build-time reference; the engine's class library is the same Ubuntu build)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-21-jdk-headless
+          echo "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64" >> "$GITHUB_ENV"
+          /usr/lib/jvm/java-21-openjdk-amd64/bin/java -version
+
+      - name: Install dependencies (also copies the Java engine into public/engine)
+        run: npm ci
+
+      - name: Work out the site address
+        run: |
+          if [ -n "$CUSTOM_DOMAIN" ]; then
+            echo "BASE_PATH=/" >> "$GITHUB_ENV"
+            echo "SITE_URL=https://$CUSTOM_DOMAIN" >> "$GITHUB_ENV"
+          else
+            owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+            echo "BASE_PATH=/${{ github.event.repository.name }}/" >> "$GITHUB_ENV"
+            echo "SITE_URL=https://$owner.github.io/${{ github.event.repository.name }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run the fidelity suite on the real JDK
+        run: npm run fidelity:jdk
+
+      - name: Type-check and build the site
+        run: npm run build
+
+      - name: Install Chromium for the browser tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the fidelity suite in the browser engine and compare with the JDK
+        run: npm run fidelity:browser
+
+      - name: Browser tests (engine, accessibility with axe, phone widths, offline, mobile data)
+        run: npm run test:e2e -- --shots screenshots
+
+      - name: Keep the screenshots and the fidelity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-and-reports
+          path: |
+            screenshots
+            fidelity/out
+          if-no-files-found: ignore
+
+      # Scores key pages as a phone would, and fails the PR below the thresholds in lighthouserc.cjs.
+      - name: Lighthouse (performance, accessibility, SEO, best practices)
+        if: github.event_name == 'pull_request'
+        run: npx --yes @lhci/cli@0.15.1 autorun --config=./lighthouserc.cjs
+
+      - name: Keep the Lighthouse reports
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: lhci
+          if-no-files-found: ignore
+
+      - name: Upload the site
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4

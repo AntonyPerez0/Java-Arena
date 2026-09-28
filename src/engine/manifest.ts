@@ -18,11 +18,14 @@ export const CACHE_PREFIX = "java-arena-engine-";
  * engine, so an engine that's already saved also starts offline.
  */
 export async function fetchManifest(url: string): Promise<Manifest | null> {
-  try {
-    const res = await fetch(url, { cache: "no-cache" });
-    if (res.ok) return (await res.json()) as Manifest;
-  } catch {
-    /* offline: use the saved copy */
+  // Known to be offline: don't make a request that can only fail.
+  if (navigator.onLine !== false) {
+    try {
+      const res = await fetch(url, { cache: "no-cache" });
+      if (res.ok) return (await res.json()) as Manifest;
+    } catch {
+      /* offline: use the saved copy */
+    }
   }
   try {
     for (const k of await caches.keys()) {

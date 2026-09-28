@@ -23,6 +23,8 @@ The plan and the research behind it are in [`docs/research/`](docs/research/READ
 - **In the page**: a persistent compile worker and a fresh run worker per run, killed when a test case exceeds the time limit. Engine files are downloaded once (asking first on mobile data), unpacked with `DecompressionStream`, and kept in Cache Storage, so the engine also works offline. See [`src/engine/`](src/engine/).
 - **Fidelity**: the site's expected outputs come from a real JDK 21 at build time, so the browser engine must behave identically. [`fidelity/`](fidelity/) holds 30 programs and 18 compile errors; CI runs them on the JDK and in the browser engine and fails on any difference, including cross-checks of each half (browser javac on HotSpot, and CLI javac on the browser runner).
 
+Measured in this batch (see `fidelity/out/report.md` from CI, and the READMEs in `engine/`): all 30 fidelity programs and all 18 compile errors identical to JDK 21; the engine download is about 15.2 MB compressed (asked first on mobile data, then cached); in headless Chromium on a 4-core machine a warm compile takes about 10 to 90 ms and Hello World runs in about 0.4 s from click to output. Phone numbers are not measured yet: the prototype page has a benchmark for that.
+
 Licenses and the source offer for the GPL parts are in [`engine/SOURCES.md`](engine/SOURCES.md) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Run locally

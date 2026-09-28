@@ -77,7 +77,7 @@ cp "$WORK/src/LICENSE-APACHE" "$DIST/licenses/Ristretto-LICENSE-APACHE.txt"
 cp -rL "$WORK/jdk-image/legal/java.base" "$DIST/licenses/OpenJDK-java.base"
 (cd "$WORK/node" && node licenses.mjs "$WORK/src" "$DIST/licenses/THIRD_PARTY_LICENSES.txt")
 
-JDK_RELEASE=$(grep '^JAVA_RUNTIME_VERSION=' "$WORK/jdk-image/release" | cut -d'"' -f2)
+JDK_RELEASE=$(grep '^JAVA_VERSION=' "$WORK/jdk-image/release" | cut -d'"' -f2)
 UBUNTU_PACKAGE=$(dpkg-query -W -f='${Package} ${Version}' openjdk-21-jdk-headless 2>/dev/null || echo unknown)
 node - "$DIST" "$RISTRETTO_COMMIT" "$JDK_RELEASE" "$UBUNTU_PACKAGE" <<'NODE'
 const { readFileSync, writeFileSync } = require('node:fs');

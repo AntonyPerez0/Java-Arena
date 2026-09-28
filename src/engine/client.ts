@@ -18,6 +18,25 @@ let nextId = 1;
 const pending = new Map<number, (m: CompileResult) => void>();
 /** Compiled runner modules handed over by the compile worker, so run workers start faster. */
 let runnerModules: Record<string, WebAssembly.Module> | null = null;
+let runnerManifest: Manifest | null = null;
+/** A run worker started in advance, so a Run click doesn't wait for the JVM's WebAssembly to start. */
+let spare: Worker | null = null;
+
+function startRunWorker(): Worker {
+  const w = new Worker(new URL("./run.worker.ts", import.meta.url), { type: "module" });
+  w.postMessage({ type: "init", base: engineBase(), manifest: runnerManifest, modules: runnerModules });
+  return w;
+}
+
+function takeRunWorker(): Worker {
+  const w = spare ?? startRunWorker();
+  spare = null;
+  return w;
+}
+
+function prepareSpare() {
+  if (!spare && status.state === "ready" && runnerManifest) spare = startRunWorker();
+}
 
 function setStatus(s: EngineStatus) {
   status = s;
@@ -90,6 +109,10 @@ export function ensureEngine() {
       else if (m.type === "ready") {
         runnerModules = m.runnerModules ?? null;
         setStatus({ state: "ready" });
+        loadManifest().then((manifest) => {
+          runnerManifest = manifest;
+          prepareSpare();
+        });
       } else if (m.type === "error") setStatus({ state: "error", message: m.message });
       else if (m.type === "compiled") {
         const cb = pending.get(m.id);
@@ -137,11 +160,11 @@ const failed = (message: string): RunResult => ({ stdout: "", stderr: "", exitCo
 /** Run compiled classes once per input in a fresh worker, killing any case that exceeds timeLimitMs. */
 export async function runClasses(classes: ClassFile[], mainClass: string, inputs: RunInput[], timeLimitMs = DEFAULT_TIME_LIMIT_MS): Promise<RunResult[]> {
   await engineReady();
-  const manifest = await loadManifest();
+  runnerManifest ??= await loadManifest();
   const cases = inputs.length ? inputs : [{}];
   return new Promise((resolve) => {
     const results: RunResult[] = [];
-    const runner = new Worker(new URL("./run.worker.ts", import.meta.url), { type: "module" });
+    const runner = takeRunWorker();
     let timer: ReturnType<typeof setTimeout> | null = null;
     let current = -1;
     let started = 0;
@@ -151,6 +174,7 @@ export async function runClasses(classes: ClassFile[], mainClass: string, inputs
       if (timer) clearTimeout(timer);
       runner.terminate();
       for (let i = 0; i < cases.length; i++) results[i] ??= failed("not run, because an earlier case stopped the runner");
+      prepareSpare();
       resolve(results);
     };
     const arm = (ms: number, onTimeout: () => void) => {
@@ -184,7 +208,7 @@ export async function runClasses(classes: ClassFile[], mainClass: string, inputs
       results[0] = failed("the Java runner took too long to start");
       finish();
     });
-    runner.postMessage({ type: "run", base: engineBase(), manifest, modules: runnerModules, classes, mainClass, inputs: cases });
+    runner.postMessage({ type: "run", classes, mainClass, inputs: cases });
   });
 }
 

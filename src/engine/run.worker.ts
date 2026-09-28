@@ -1,26 +1,37 @@
 /// <reference lib="webworker" />
 // Short-lived worker that runs compiled classes on the JVM (Ristretto) once per input.
-// The page kills it if a case runs too long (infinite loops).
+// It starts the JVM's WebAssembly as soon as it is created ("init"), so the page can keep one
+// ready in advance; then it serves one "run" and is killed. The page also kills it if a case
+// runs too long (infinite loops).
 // @ts-ignore - plain JavaScript module without types
-import { createRunner } from "../../engine/dist/runner/runner-host.mjs";
+import { createRunner as createRunnerJs } from "../../engine/dist/runner/runner-host.mjs";
 import { fetchCached, type Manifest } from "./manifest";
 import type { RunInput, RunResult } from "./types";
 
+// runner-host.mjs is plain JavaScript; its options are documented at the top of the file.
+const createRunner = createRunnerJs as (options: { fetchAsset: (name: string) => Promise<Uint8Array>; modules?: Record<string, WebAssembly.Module> }) => Promise<any>;
 const decoder = new TextDecoder();
 const post = (msg: unknown) => (self as unknown as Worker).postMessage(msg);
 
+let runnerPromise: Promise<any> | null = null;
+
 self.onmessage = async (e: MessageEvent) => {
-  const { base, manifest, modules, classes, mainClass, inputs } = e.data as {
-    base: string;
-    manifest: Manifest;
-    modules: Record<string, WebAssembly.Module> | null;
-    classes: { path: string; bytes: Uint8Array }[];
-    mainClass: string;
-    inputs: RunInput[];
-  };
+  const msg = e.data;
+  if (msg.type === "init") {
+    const { base, manifest, modules } = msg as { base: string; manifest: Manifest; modules: Record<string, WebAssembly.Module> | null };
+    runnerPromise = createRunner({ fetchAsset: (name: string) => fetchCached(base, manifest, name, () => {}), modules: modules ?? undefined });
+    runnerPromise.then(
+      () => post({ type: "ready" }),
+      () => {},
+    );
+    return;
+  }
+  if (msg.type !== "run") return;
+  const { classes, mainClass, inputs } = msg as { classes: { path: string; bytes: Uint8Array }[]; mainClass: string; inputs: RunInput[] };
   let runner: any;
   try {
-    runner = await createRunner({ fetchAsset: (name: string) => fetchCached(base, manifest, name, () => {}), modules: modules ?? undefined });
+    if (!runnerPromise) throw new Error("the runner wasn't started");
+    runner = await runnerPromise;
   } catch (err: any) {
     post({ type: "fatal", message: String(err?.message ?? err) });
     return;

@@ -83,6 +83,33 @@ Network hosts used: github.com (git), index.crates.io and static.crates.io, stat
 
 Options: `--no-node`, `--no-browser`, `--only a,b`, `--timing` (start-up and per-run times), `--dist DIR`.
 
+Results on the final build (`build.sh` from the pinned commit and the patch; its `runner.core.wasm` and `jdk.zip` were byte-identical to the build the tests were developed on): **60 of 60 checks passed** (30 cases, each in Node 22 and in headless Chromium 141).
+
+Timings from `--timing` on this machine (4 CPUs), in milliseconds:
+
+| | Node 22 | Chromium 141, module Worker |
+|---|---|---|
+| Start a runner (compile the modules, mount the JDK image, instantiate) | 385 | 230 to 285 |
+| Start another Worker with the compiled modules passed in | | 214 to 249 |
+| Hello World, per run | 59 to 71 | 49 to 56 |
+| A typical course program (Scanner, list, loop), per run | 388 to 456 | 337 to 354 |
+| 10 million loop steps | 1,915 to 2,246 | 1,173 to 1,277 |
+| `terminate()` of a Worker | | 0.1 |
+
+Phones were not measured here; the site's prototype page has a benchmark for that.
+
+## Sizes (dist, gzip -9 measured by `build.sh`)
+
+| File | Bytes | gzip -9 |
+|---|---|---|
+| runner.core.wasm | 7,761,789 | 1,932,971 |
+| runner.core2.wasm, runner.core3.wasm | 1,089 and 495 | 529 and 323 |
+| jdk.zip (already compressed) | 10,570,098 | 10,541,012 |
+| runner.js (bundled into the site's run worker) | 830,749 | 60,381 |
+| runner-host.mjs, wasi-host.mjs (bundled) | 8,981 and 15,030 | 3,335 and 4,334 |
+
+A clean `build.sh` run took 2 minutes 21 seconds here with the Cargo dependencies already compiled; a first build also compiles every dependency.
+
 ## Known gaps
 
 - **Speed.** The runner interprets bytecode, so tight loops are far slower than HotSpot (see the timings). Course programs are small; the site's run limit is generous for this reason.

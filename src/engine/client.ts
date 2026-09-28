@@ -137,6 +137,7 @@ const failed = (message: string): RunResult => ({ stdout: "", stderr: "", exitCo
 /** Run compiled classes once per input in a fresh worker, killing any case that exceeds timeLimitMs. */
 export async function runClasses(classes: ClassFile[], mainClass: string, inputs: RunInput[], timeLimitMs = DEFAULT_TIME_LIMIT_MS): Promise<RunResult[]> {
   await engineReady();
+  const manifest = await loadManifest();
   const cases = inputs.length ? inputs : [{}];
   return new Promise((resolve) => {
     const results: RunResult[] = [];
@@ -183,7 +184,7 @@ export async function runClasses(classes: ClassFile[], mainClass: string, inputs
       results[0] = failed("the Java runner took too long to start");
       finish();
     });
-    runner.postMessage({ type: "run", base: engineBase(), modules: runnerModules, classes, mainClass, inputs: cases });
+    runner.postMessage({ type: "run", base: engineBase(), manifest, modules: runnerModules, classes, mainClass, inputs: cases });
   });
 }
 

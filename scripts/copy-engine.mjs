@@ -26,7 +26,8 @@ const hash = createHash('sha256');
 for (const part of parts) {
   for (const entry of manifests[part].files) {
     const name = entry.name ?? entry.file;
-    if (!name || !entry.asset) continue;
+    // JavaScript glue is bundled by Vite into the workers; only the binary files are fetched.
+    if (!name || /\.(m?js|ts|md)$/.test(name)) continue;
     const data = readFileSync(join(root, 'engine', 'dist', part, name));
     const sha = createHash('sha256').update(data).digest('hex');
     if (entry.sha256 && entry.sha256 !== sha) throw new Error(`copy-engine: ${part}/${name} does not match its SHA-256 in the manifest`);

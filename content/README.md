@@ -103,6 +103,7 @@ Every Java block in lesson text says what it is:
 - ` ```java run ` a complete program; it's compiled and run. An ` ```input ` block right after it is what it reads, and an ` ```output ` block after that must be exactly what it prints.
 - ` ```java main ` statements that are run inside a main method (imports such as `java.util.Scanner` are added when used); same checks.
 - ` ```java error ` code that must not compile. A ` ```javac ` block after it must be exactly what javac prints.
+- ` ```java run crash ` a complete program that must stop with an uncaught exception (to show a crash on purpose). Its ` ```input ` and ` ```output ` blocks are optional; a ` ```crash ` block after them must be exactly what Java prints: the `Exception in thread "main" ...` line and the program's own `at Main...` lines (lines inside Java's own classes are left out, since they differ between JVMs).
 - ` ```java fragment ` a piece of code that can't run on its own; shown only.
 
 ## Drills (Deathmatch, daily challenge, interview prep)
@@ -152,4 +153,4 @@ drills:
 
 Predict and fill drills may give the program input with `stdin`. `placement.yaml` holds the placement quiz: `questions:`, each a drill with a `module:`, one per module in course order.
 
-To check one drill file while writing it, without changing any generated file: `node scripts/build-content.mjs --dry --drill-file loops.yaml`.
+To check one drill file while writing it, without changing any generated file: `node scripts/build-content.mjs --dry --drill-file loops.yaml`. To check one module and its drills: `node scripts/build-content.mjs --dry --module-file 13-lists.yaml`.

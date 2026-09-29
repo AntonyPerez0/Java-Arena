@@ -1,0 +1,209 @@
+topic: debugging
+drills:
+  - type: choice
+    after: reading-a-crash
+    prompt: Which exception stops this program?
+    pre: |
+      public static int perBox(int items, int boxes) {
+          return items / boxes;
+      }
+    body: |
+      System.out.println(perBox(10, 2));
+      System.out.println(perBox(10, 0));
+    choices:
+      - "`ArithmeticException`"
+      - "`NullPointerException`"
+      - "`IndexOutOfBoundsException`"
+      - "None: it prints `5` and then `0`"
+    answer: 1
+    why: "The first call prints 5. The second divides a whole number by zero, which Java can't do: an `ArithmeticException` with the message `/ by zero` stops the program inside `perBox`."
+
+  - type: choice
+    after: reading-a-crash
+    prompt: "The first `at` line of a crash message is `at Main.share(Main.java:12)`. What is the 12?"
+    choices:
+      - "The line where the crash happened"
+      - "How many times `share` was called"
+      - "The value that caused the crash"
+      - "The number of the exception"
+    answer: 1
+    why: "Each `at` line names a method and the line it was on, as `(File.java:line)`. The first `at` line is where the crash happened."
+
+  - type: choice
+    after: reading-a-crash
+    prompt: "A crash lists `at Main.check(Main.java:20)` and, below it, `at Main.main(Main.java:5)`. What does that tell you?"
+    choices:
+      - "`check` crashed on line 20, and it had been called from line 5 of `main`"
+      - "`main` crashed on line 5, and then `check` crashed on line 20"
+      - "`check` was called on line 20 of `main`"
+      - "The program crashed twice"
+    answer: 1
+    why: "The list is the call stack at the moment of the crash, the innermost method first: the crash is in `check` on line 20, and `check` was running because line 5 of `main` called it."
+
+  - type: predict
+    after: names-and-comments
+    body: |
+      int score = 10;
+      // score = score * 2;
+      score = score + 5; // bonus
+      /* score = 0; */
+      System.out.println(score);
+    why: "Java skips comments: the doubling after `//` and the `score = 0;` between `/*` and `*/` never run. Only `score + 5` does, so it prints 15."
+
+  - type: predict
+    after: names-and-comments
+    body: |
+      System.out.println("Go // now");
+      System.out.println("Stop"); // later
+    why: "Inside quotes, `//` is just two characters of the text, not a comment. After the second statement it starts a real comment, which prints nothing."
+
+  - type: compiles
+    after: names-and-comments
+    body: |
+      /* This comment never ends
+      System.out.println("Hi");
+    why: "A comment that starts with `/*` runs until `*/`. Without one, it swallows the rest of the file, closing braces included, and javac reports an unclosed comment."
+
+  - type: compiles
+    after: names-and-comments
+    body: |
+      int 2ndPlace = 2;
+      System.out.println(2ndPlace);
+    why: "A variable name can contain digits, but it can't start with one. `secondPlace` or `place2` would work."
+
+  - type: fill
+    after: print-debugging
+    prompt: This loop should add up 1 to 5. Fill the blank so it does.
+    body: |
+      int sum = 0;
+      for (int i = 1; i [[<=]] 5; i++) {
+          sum += i;
+      }
+      System.out.println("Sum: " + sum);
+    why: "With `i < 5` the loop stops after 4 and prints 10. `i <= 5` also adds the 5, which makes 15."
+
+  - type: predict
+    after: print-debugging
+    body: |
+      int n = 10;
+      while (n > 1) {
+          n = n / 2;
+          System.out.println("debug: " + n);
+      }
+    why: "10 / 2 is 5, 5 / 2 is 2 (whole numbers), 2 / 2 is 1. Then `n > 1` is false and the loop ends, so the debug print ran three times."
+
+  - type: bug
+    after: print-debugging
+    prompt: This should count the multiples of 3 from 0 to 9, which are 0, 3, 6 and 9. Which line is wrong?
+    body: |
+      int count = 0;
+      for (int i = 0; i < 10; i++) {
+          if (i % 3 == 0) {
+              count = 1; // BUG
+          }
+      }
+      System.out.println(count);
+    fix: count++;
+    why: "`count = 1` sets the count to 1 each time instead of adding one, so it prints 1. `count++` adds one per multiple and prints 4."
+
+  - type: bug
+    after: print-debugging
+    prompt: The average of 1, 2, 3 and 4 is 2.5, and `sum` should stay an int. Which line is wrong?
+    body: |
+      int sum = 0;
+      for (int i = 1; i <= 4; i++) {
+          sum += i;
+      }
+      double average = sum / 4; // BUG
+      System.out.println(average);
+    fix: double average = sum / 4.0;
+    why: "`sum / 4` divides two `int` values, so 10 / 4 is 2 before it's stored as 2.0. With `4.0` the division keeps its decimals: 2.5."
+
+  - type: predict
+    after: testing-with-inputs
+    body: |
+      int largest = 0;
+      for (int n = -3; n <= -1; n++) {
+          if (n > largest) {
+              largest = n;
+          }
+      }
+      System.out.println(largest);
+    why: "The loop sees -3, -2 and -1, and none of them is bigger than the starting 0, so `largest` stays 0: a value that never appeared. Starting from the first value avoids this."
+
+  - type: choice
+    after: testing-with-inputs
+    prompt: "A pool is free for children under 7, checked with `age < 7`. Which pair of ages tests the edge of that rule best?"
+    choices:
+      - "`6` and `7`"
+      - "`3` and `30`"
+      - "`1` and `100`"
+      - "`0` and `-1`"
+    answer: 1
+    why: "Bugs at a limit hide right next to it: 6 must be free and 7 must not. A mistake such as `age <= 7` passes for 3 and 30 but fails for 7."
+
+  - type: bug
+    after: testing-with-inputs
+    prompt: At 18 you count as an adult. Which line is wrong?
+    body: |
+      int age = 18;
+      if (age > 18) { // BUG
+          System.out.println("Adult");
+      } else {
+          System.out.println("Minor");
+      }
+    fix: if (age >= 18) {
+    why: "`age > 18` is false for exactly 18, so an 18-year-old is called a minor. `>=` includes the limit itself."
+
+  - type: boss
+    after: testing-with-inputs
+    prompt: |
+      The method `countDigits(int number)` should return how many digits a number of 0 or more has. It works for the example below, but not for every number the check tries. Test it at the edges, find the input it gets wrong and fix it. The check runs `System.out.println(countDigits(4096));` and expects:
+
+      ```
+      4
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(countDigits(4096));
+          }
+
+          public static int countDigits(int number) {
+              int digits = 0;
+              while (number > 0) {
+                  number = number / 10;
+                  digits++;
+              }
+              return digits;
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(countDigits(4096));
+          }
+
+          public static int countDigits(int number) {
+              if (number == 0) {
+                  return 1;
+              }
+              int digits = 0;
+              while (number > 0) {
+                  number = number / 10;
+                  digits++;
+              }
+              return digits;
+          }
+      }
+    hints:
+      - "Try the edge: what does the loop do when `number` is 0 to begin with?"
+      - "For 0 the loop never runs and the method returns 0, but 0 has one digit. Handle it before the loop."
+    tests:
+      - call: System.out.println(countDigits(4096));
+      - call: System.out.println(countDigits(0));
+        hidden: true
+      - call: System.out.println(countDigits(7));
+        hidden: true
+      - call: System.out.println(countDigits(10));
+        hidden: true

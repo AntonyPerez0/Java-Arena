@@ -1,0 +1,337 @@
+topic: list-methods
+drills:
+  - type: predict
+    after: for-each
+    body: |
+      ArrayList<String> letters = new ArrayList<>();
+      letters.add("s");
+      letters.add("t");
+      letters.add("o");
+      letters.add("p");
+      String word = "";
+      for (String letter : letters) {
+          word = letter + word;
+      }
+      System.out.println(word);
+    why: "The loop goes through the list in order, but each round puts the new letter in front of the word so far: `s`, `ts`, `ots`, `pots`. It's `letter + word` that turns the order around."
+
+  - type: predict
+    after: totals-flags-and-text
+    body: |
+      ArrayList<Integer> readings = new ArrayList<>();
+      readings.add(3);
+      readings.add(-2);
+      readings.add(5);
+      boolean allAboveZero = true;
+      for (int reading : readings) {
+          if (reading <= 0) {
+              allAboveZero = false;
+          } else {
+              allAboveZero = true;
+          }
+      }
+      System.out.println(allAboveZero);
+    why: "The `else` sets the flag back to `true` for every value above 0, so only the last value decides. The -2 makes it `false`, but the 5 after it turns it `true` again. A flag like this needs the `if` without the `else`."
+
+  - type: predict
+    after: contains-and-index-of
+    body: |
+      ArrayList<String> colors = new ArrayList<>();
+      colors.add("red");
+      colors.add("blue");
+      colors.add("red");
+      System.out.println(colors.indexOf("red"));
+      System.out.println(colors.indexOf("Blue"));
+      System.out.println(colors.contains("blue"));
+    why: "`indexOf` gives the first index where the value is, so `red` is at 0 even though it's in the list twice. The comparison is exact: `Blue` with a capital B isn't in the list, so that gives -1. `blue` is there, so `contains` is `true`."
+
+  - type: predict
+    after: removing-values
+    body: |
+      ArrayList<Integer> numbers = new ArrayList<>();
+      numbers.add(2);
+      numbers.add(0);
+      numbers.add(5);
+      numbers.add(1);
+      numbers.remove(2);
+      numbers.remove(Integer.valueOf(2));
+      System.out.println(numbers);
+    why: "`numbers.remove(2)` gets an `int`, so it removes index 2, the 5: the list is then `[2, 0, 1]`. `numbers.remove(Integer.valueOf(2))` looks for the value 2 and removes it, which leaves `[0, 1]`."
+
+  - type: predict
+    after: same-list-two-names
+    pre: |
+      public static void pack(ArrayList<String> bag, int count) {
+          bag.add("map");
+          count++;
+      }
+    body: |
+      ArrayList<String> items = new ArrayList<>();
+      items.add("tent");
+      int count = 1;
+      pack(items, count);
+      System.out.println(items);
+      System.out.println(count);
+    why: "The method gets a copy of the `int`, so its `count++` changes only its own copy, and `main`'s `count` is still 1. For the list it gets a copy of the reference, which leads to `main`'s own list, so `map` is added to that list."
+
+  - type: fill
+    after: for-each
+    prompt: Fill the blank with the type of the loop variable, so the program prints the output shown.
+    body: |
+      ArrayList<Integer> prices = new ArrayList<>();
+      prices.add(3);
+      prices.add(4);
+      int total = 0;
+      for ([[int‖Integer]] price : prices) {
+          total += price;
+      }
+      System.out.println(total);
+    why: "The loop variable has the type of the list's values. For an `ArrayList<Integer>`, `int` works (each `Integer` comes out as a plain `int`), and so does `Integer`."
+
+  - type: fill
+    after: same-list-two-names
+    prompt: "`saved` should keep the names as they were before the removal. Fill the blank with an expression."
+    body: |
+      ArrayList<String> names = new ArrayList<>();
+      names.add("Ida");
+      names.add("Jon");
+      ArrayList<String> saved = [[new ArrayList<>(names)‖new ArrayList<String>(names)]];
+      names.remove(0);
+      System.out.println(saved);
+    why: "`new ArrayList<>(names)` makes a separate list with the same values. With `saved = names`, both names would lead to the same list, and `saved` would print `[Jon]`."
+
+  - type: bug
+    after: contains-and-index-of
+    prompt: "The program should print `Found at 0`, because `Ada` is the first name. Which line is wrong?"
+    body: |
+      ArrayList<String> names = new ArrayList<>();
+      names.add("Ada");
+      names.add("Bo");
+      int index = names.indexOf("Ada");
+      if (index > 0) { // BUG
+          System.out.println("Found at " + index);
+      } else {
+          System.out.println("Not found");
+      }
+    fix: if (index >= 0) {
+    why: "0 is a real index: the first one. `indexOf` says \"not found\" with -1, so the check must be `index >= 0` (or `index != -1`). With `index > 0`, a value at the very front counts as missing."
+
+  - type: bug
+    after: removing-values
+    prompt: "The program should remove the value 4 from the list. `leaving` holds that value and should stay the `int` 4. Which line is wrong?"
+    body: |
+      ArrayList<Integer> spots = new ArrayList<>();
+      spots.add(10);
+      spots.add(4);
+      spots.add(7);
+      int leaving = 4;
+      spots.remove(leaving); // BUG
+      System.out.println(spots);
+    fix: spots.remove(Integer.valueOf(leaving));
+    why: "Given an `int`, `remove` removes an index, and there's no index 4 in a list of three values, so the program crashes. `Integer.valueOf(leaving)` makes it look for the value 4 instead."
+
+  - type: compiles
+    after: for-each
+    body: |
+      ArrayList<Integer> numbers = new ArrayList<>();
+      numbers.add(3);
+      for (int number : numbers) {
+          number = number * 2;
+      }
+      System.out.println(numbers);
+    why: "Yes. The loop variable holds a copy of each value, and a variable can be changed. The list itself isn't, though: the program prints `[3]`, because changing the copy doesn't change the value in the list."
+
+  - type: compiles
+    after: lists-as-parameters
+    pre: |
+      public static int countEven(ArrayList<Integer> numbers) {
+          int count = 0;
+          for (int number : numbers) {
+              if (number % 2 == 0) {
+                  count++;
+              }
+          }
+          return count;
+      }
+    body: |
+      ArrayList<String> codes = new ArrayList<>();
+      codes.add("42");
+      System.out.println(countEven(codes));
+    why: "No. The parameter is an `ArrayList<Integer>`, and a list of Strings doesn't fit it, even when the Strings look like numbers. javac says the String list can't be converted."
+
+  - type: choice
+    after: removing-values
+    prompt: What does this print?
+    body: |
+      ArrayList<String> queue = new ArrayList<>();
+      queue.add("A");
+      queue.add("B");
+      queue.add("C");
+      queue.add("D");
+      queue.remove(0);
+      queue.remove(1);
+      System.out.println(queue);
+    choices:
+      - "`[C, D]`"
+      - "`[B, D]`"
+      - "`[B, C]`"
+    answer: 2
+    verify: output
+    why: "After `remove(0)` the list is `[B, C, D]`: every value moved down one place, so `C` is now at index 1. `remove(1)` then removes `C`."
+
+  - type: choice
+    after: list-toolbox
+    prompt: "Which line puts `Zoe` at the front of the list `names`, keeping every name already in it?"
+    choices:
+      - '`names.set(0, "Zoe");`'
+      - '`names.add(0, "Zoe");`'
+      - '`names.add("Zoe");`'
+    answer: 2
+    why: "`add(index, value)` puts the value at the index, and the values from there on move up one place. `set(0, ...)` would replace the first name, and `add(\"Zoe\")` adds to the end."
+
+  - type: boss
+    after: lists-as-parameters
+    prompt: |
+      Write a method `countAtLeast(ArrayList<Integer> scores, int passMark)` that returns how many scores in the list are at least `passMark`. The check builds a list of 45, 70, 50 and 38, and runs `System.out.println(countAtLeast(scores, 50));`:
+
+      ```
+      2
+      ```
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> scores = new ArrayList<>();
+              scores.add(45);
+              scores.add(70);
+              scores.add(50);
+              scores.add(38);
+              System.out.println(countAtLeast(scores, 50));
+          }
+
+          // Write the countAtLeast method here.
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> scores = new ArrayList<>();
+              scores.add(45);
+              scores.add(70);
+              scores.add(50);
+              scores.add(38);
+              System.out.println(countAtLeast(scores, 50));
+          }
+
+          public static int countAtLeast(ArrayList<Integer> scores, int passMark) {
+              int count = 0;
+              for (int score : scores) {
+                  if (score >= passMark) {
+                      count++;
+                  }
+              }
+              return count;
+          }
+      }
+    hints:
+      - "The method starts `public static int countAtLeast(ArrayList<Integer> scores, int passMark) {`."
+      - "A counter, a for-each loop with `if (score >= passMark)`, and `return count;` after the loop."
+    tests:
+      - call: |
+          ArrayList<Integer> scores = new ArrayList<>();
+          scores.add(45);
+          scores.add(70);
+          scores.add(50);
+          scores.add(38);
+          System.out.println(countAtLeast(scores, 50));
+      - call: |
+          ArrayList<Integer> scores = new ArrayList<>();
+          System.out.println(countAtLeast(scores, 10));
+        hidden: true
+      - call: |
+          ArrayList<Integer> scores = new ArrayList<>();
+          scores.add(9);
+          scores.add(10);
+          scores.add(11);
+          System.out.println(countAtLeast(scores, 10));
+          System.out.println(countAtLeast(scores, 12));
+        hidden: true
+
+  - type: boss
+    after: list-toolbox
+    prompt: |
+      Write a method `removeEvery(ArrayList<String> list, String value)` that removes every copy of `value` from the list, not just the first one. It returns nothing: it changes the caller's list. The check builds a list of `red`, `sale`, `red`, `new` and `red`, calls `removeEvery(tags, "red");` and prints the list:
+
+      ```
+      [sale, new]
+      ```
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> tags = new ArrayList<>();
+              tags.add("red");
+              tags.add("sale");
+              tags.add("red");
+              tags.add("new");
+              tags.add("red");
+              removeEvery(tags, "red");
+              System.out.println(tags);
+          }
+
+          // Write the removeEvery method here.
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> tags = new ArrayList<>();
+              tags.add("red");
+              tags.add("sale");
+              tags.add("red");
+              tags.add("new");
+              tags.add("red");
+              removeEvery(tags, "red");
+              System.out.println(tags);
+          }
+
+          public static void removeEvery(ArrayList<String> list, String value) {
+              while (list.contains(value)) {
+                  list.remove(value);
+              }
+          }
+      }
+    hints:
+      - "`list.remove(value)` removes only the first copy. Keep removing as long as the list still contains the value."
+      - "`while (list.contains(value)) { list.remove(value); }` (an index loop that goes backwards works too)."
+    tests:
+      - call: |
+          ArrayList<String> tags = new ArrayList<>();
+          tags.add("red");
+          tags.add("sale");
+          tags.add("red");
+          tags.add("new");
+          tags.add("red");
+          removeEvery(tags, "red");
+          System.out.println(tags);
+      - call: |
+          ArrayList<String> tags = new ArrayList<>();
+          tags.add("x");
+          tags.add("x");
+          tags.add("y");
+          removeEvery(tags, "x");
+          System.out.println(tags);
+          removeEvery(tags, "z");
+          System.out.println(tags);
+        hidden: true
+      - call: |
+          ArrayList<String> tags = new ArrayList<>();
+          tags.add("old");
+          tags.add("old");
+          removeEvery(tags, "old");
+          System.out.println(tags);
+        hidden: true

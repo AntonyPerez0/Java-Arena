@@ -362,6 +362,19 @@ const lessonSession = await newPage();
     out = await check(page);
     expect(out.includes("It didn't compile") && out.includes('a method that is void'), out);
   });
+  await test('a crash is explained in plain words, with its line; lessons can show a crash on purpose', async () => {
+    await page.goto(BASE + 'learn/debugging/reading-a-crash/');
+    await lessonReady(page);
+    expect((await page.locator('figure.io-crash').count()) >= 2, 'the crash examples have their own labelled blocks');
+    // The starter code crashes when the first input is 0.
+    const out = await check(page);
+    expect(out.includes('ArithmeticException (line 16)') && out.includes('divided a whole number by zero'), out);
+    // A list index crash says which index was asked for, of how many values.
+    await page.goto(BASE + 'learn/lists/index-out-of-bounds/');
+    await lessonReady(page);
+    const list = await check(page);
+    expect(list.includes('IndexOutOfBoundsException (line 11)') && list.includes('asked for index 3 of a list with 3 values'), list);
+  });
   await test('the indentation check accepts switch, multi-line headers, lambdas and other brace styles', async () => {
     const ok = {
       'classic switch': 'class A {\n    void f(int x) {\n        switch (x) {\n            case 1:\n                g();\n                break;\n            case 2: {\n                h();\n                break;\n            }\n            default:\n                k();\n        }\n    }\n}',

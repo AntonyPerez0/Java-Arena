@@ -1,0 +1,1883 @@
+id: list-methods
+summary: More ways to work with lists. The for-each loop, totals, true-or-false flags and joined text, searching with contains and indexOf, removing values (and the Integer trap), lists as method parameters, why two variables can share one list, and a summary of the list methods.
+steps:
+  - id: list-methods-for-each
+    slug: for-each
+    title: The for-each loop
+    text: |
+      The last module went through lists with an index: `for (int i = 0; i < list.size(); i++)` and `list.get(i)`. When you just want every value, from the first to the last, Java has a shorter loop, the **for-each** loop:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> planets = new ArrayList<>();
+              planets.add("Mercury");
+              planets.add("Venus");
+              planets.add("Earth");
+
+              for (String planet : planets) {
+                  System.out.println(planet + " orbits the Sun");
+              }
+          }
+      }
+      ```
+
+      ```output
+      Mercury orbits the Sun
+      Venus orbits the Sun
+      Earth orbits the Sun
+      ```
+
+      Read `for (String planet : planets)` as "for each String `planet` in `planets`".
+
+      - The loop runs once for each value in the list. In each round, `planet` holds the next value: first `"Mercury"`, then `"Venus"`, then `"Earth"`.
+      - The type before the name is the type of the list's values. For an `ArrayList<Integer>`, write `for (int number : numbers)`: each `Integer` comes out as a plain `int`.
+      - You pick the name. The singular of the list's name, like `planet` for `planets`, reads well.
+
+      The same loop with an index needs a counter, a condition, `size()` and `get`:
+
+      ```java fragment
+      for (int i = 0; i < planets.size(); i++) {
+          String planet = planets.get(i);
+          System.out.println(planet + " orbits the Sun");
+      }
+      ```
+
+      ### When the index loop is still the right tool
+
+      A for-each loop gives you the values, but not their places in the list. Use a loop with an index when:
+
+      - you need the index itself, for example to print `1. Mercury`, or to compare a value with the one next to it;
+      - you go through the list in another order, such as backwards from the last value;
+      - you remove values from the list while going through it (step 4 shows why).
+
+      For everything else, such as printing, adding up or counting, the for-each loop is shorter, and there's no index to get wrong.
+
+      A quick way to see a whole list at once: `System.out.println(planets)` prints `[Mercury, Venus, Earth]`, the values in square brackets. It's handy for checking your work.
+
+      **Your turn:** fill in the blanks, so the for-each loop prints every task on the list. The program prints:
+
+      ```
+      - water the plants
+      - call the dentist
+      - buy stamps
+      ```
+    fill: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> tasks = new ArrayList<>();
+              tasks.add("water the plants");
+              tasks.add("call the dentist");
+              tasks.add("buy stamps");
+
+              for ([[String task]] : [[tasks]]) {
+                  System.out.println("- " + task);
+              }
+          }
+      }
+    hints:
+      - "The first blank is the loop variable: its type and its name. The print line calls it `task`."
+      - "`for (String task : tasks)`: the list goes after the colon."
+    more:
+      - task: |
+          Read the ingredients of a recipe until the line `end`, adding each one to the list `ingredients`. Then use a for-each loop to print `You need: ` and each ingredient, in order, and finally `Happy cooking!`. For the input `flour`, `butter`, `two eggs` and `end` the program prints:
+
+          ```
+          You need: flour
+          You need: butter
+          You need: two eggs
+          Happy cooking!
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> ingredients = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> ingredients = new ArrayList<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      ingredients.add(line);
+                  }
+
+                  for (String ingredient : ingredients) {
+                      System.out.println("You need: " + ingredient);
+                  }
+                  System.out.println("Happy cooking!");
+              }
+          }
+        hints:
+          - "First a `while (true)` loop that reads a line, stops with `break` at `end`, and otherwise adds the line to `ingredients`."
+          - "After it: `for (String ingredient : ingredients) { ... }`, and `Happy cooking!` after that loop."
+        require:
+          - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
+            message: "Print the ingredients with a for-each loop: `for (String ingredient : ingredients)`."
+        tests:
+          - stdin: |
+              flour
+              butter
+              two eggs
+              end
+          - stdin: end
+            hidden: true
+          - stdin: |
+              rice
+              end
+            hidden: true
+      - task: |
+          Things come out of a moving box in the opposite order to how they went in. Read items until the line `close`. Print `Packed: ` and each item in order with a for-each loop. Then print `Unpacked: ` and each item from the last to the first, with an index loop that counts down. For the input `books`, `lamp`, `mugs` the program prints:
+
+          ```
+          Packed: books
+          Packed: lamp
+          Packed: mugs
+          Unpacked: mugs
+          Unpacked: lamp
+          Unpacked: books
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> box = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> box = new ArrayList<>();
+                  while (true) {
+                      String item = scanner.nextLine();
+                      if (item.equals("close")) {
+                          break;
+                      }
+                      box.add(item);
+                  }
+
+                  for (String item : box) {
+                      System.out.println("Packed: " + item);
+                  }
+                  for (int i = box.size() - 1; i >= 0; i--) {
+                      System.out.println("Unpacked: " + box.get(i));
+                  }
+              }
+          }
+        hints:
+          - "The for-each loop does the packing. A for-each loop can only go forwards, so unpacking needs an index."
+          - "The last index is `box.size() - 1`: `for (int i = box.size() - 1; i >= 0; i--)`, with `box.get(i)` inside."
+        require:
+          - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
+            message: "Print the packed items with a for-each loop."
+          - pattern: \.get\s*\(
+            message: "Unpack with an index loop that counts down and uses `get`."
+        tests:
+          - stdin: |
+              books
+              lamp
+              mugs
+              close
+          - stdin: |
+              radio
+              close
+            hidden: true
+          - stdin: |
+              plant
+              shoes
+              clock
+              kettle
+              close
+            hidden: true
+
+  - id: list-methods-sum-average
+    slug: totals-flags-and-text
+    title: Totals, flags and joined text
+    text: |
+      In the last module you added up a list with an index loop. With a for-each loop it's shorter, because there's no index to keep track of:
+
+      ```java main
+      ArrayList<Integer> pages = new ArrayList<>();
+      pages.add(12);
+      pages.add(30);
+      pages.add(18);
+
+      int total = 0;
+      for (int count : pages) {
+          total += count;
+      }
+      System.out.println("Pages read: " + total);
+      System.out.println("Per day: " + (double) total / pages.size());
+      ```
+
+      ```output
+      Pages read: 60
+      Per day: 20.0
+      ```
+
+      Averages and counts work just as before; only the loop is new. This step adds two more things a loop over a list often has to work out: a yes-or-no answer about all the values, and one line of text made from them.
+
+      ### Does every value pass? A flag
+
+      Some questions are about the whole list: is every value valid? Is any value negative? A `boolean` variable answers them. It's called a **flag**: it starts with the answer that holds until some value proves otherwise, and the loop changes it when a value does.
+
+      ```java main
+      ArrayList<Integer> ages = new ArrayList<>();
+      ages.add(19);
+      ages.add(23);
+      ages.add(17);
+      ages.add(30);
+
+      boolean allAdults = true;
+      for (int age : ages) {
+          if (age < 18) {
+              allAdults = false;
+          }
+      }
+
+      if (allAdults) {
+          System.out.println("Everyone is 18 or over");
+      } else {
+          System.out.println("Someone is under 18");
+      }
+      ```
+
+      ```output
+      Someone is under 18
+      ```
+
+      One age under 18 is enough to make the flag `false`, and nothing sets it back to `true`. That's why the `if` in the loop has no `else`: with `else { allAdults = true; }`, only the last age would decide, and here the 30 would hide the 17.
+
+      For "is there any ...?", turn it around: start the flag at `false`, and set it to `true` when a value matches.
+
+      ### Joining values into one line
+
+      Text can be built in a loop, as in module 11: start from `""` and add each value with `+=`. To put a separator between the values, but not in front of the first one, check whether the text is still empty:
+
+      ```java main
+      ArrayList<String> stops = new ArrayList<>();
+      stops.add("Home");
+      stops.add("Park");
+      stops.add("School");
+
+      String route = "";
+      for (String stop : stops) {
+          if (!route.equals("")) {
+              route += " > ";
+          }
+          route += stop;
+      }
+      System.out.println(route);
+      ```
+
+      ```output
+      Home > Park > School
+      ```
+
+      In the first round `route` is still empty, so no separator goes in. From then on, each stop gets one in front of it.
+
+      **Your turn:** a delivery van takes parcels of at most 25 kg each, and at most 100 kg in all. The program reads parcel weights until `0`, into the list `parcels`. Add one for-each loop that adds up the weights and keeps a flag that says whether every parcel is 25 kg or less. Print the total, and then `Ready to go` when both rules hold, or `Repack the van` when either one is broken. For the input 20, 18, 25 and 9 the program prints:
+
+      ```
+      Total: 72 kg
+      Ready to go
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<Integer> parcels = new ArrayList<>();
+              while (true) {
+                  int weight = Integer.valueOf(scanner.nextLine());
+                  if (weight == 0) {
+                      break;
+                  }
+                  parcels.add(weight);
+              }
+
+              // Add up the weights and check every parcel here.
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<Integer> parcels = new ArrayList<>();
+              while (true) {
+                  int weight = Integer.valueOf(scanner.nextLine());
+                  if (weight == 0) {
+                      break;
+                  }
+                  parcels.add(weight);
+              }
+
+              int total = 0;
+              boolean allLight = true;
+              for (int weight : parcels) {
+                  total += weight;
+                  if (weight > 25) {
+                      allLight = false;
+                  }
+              }
+              System.out.println("Total: " + total + " kg");
+              if (allLight && total <= 100) {
+                  System.out.println("Ready to go");
+              } else {
+                  System.out.println("Repack the van");
+              }
+          }
+      }
+    hints:
+      - "Before the loop: `int total = 0;` and `boolean allLight = true;`. Inside it, add the weight, and set the flag to `false` when the weight is over 25."
+      - "After the loop, both rules at once: `if (allLight && total <= 100)`."
+    require:
+      - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
+        message: "Go through the parcels with a for-each loop."
+      - pattern: \bboolean\b
+        message: "Keep the answer to \"is every parcel light enough?\" in a `boolean` flag."
+    tests:
+      - stdin: |
+          20
+          18
+          25
+          9
+          0
+      - stdin: |
+          30
+          5
+          0
+        hidden: true
+      - stdin: |
+          25
+          25
+          25
+          25
+          1
+          0
+        hidden: true
+      - stdin: |
+          10
+          0
+        hidden: true
+    more:
+      - task: |
+          Read whole numbers until `0`, and print them as one addition with its result: the numbers with ` + ` between them, then ` = ` and the sum. Build the line with a for-each loop. There's always at least one number. For the input 4, 7 and 2 the program prints:
+
+          ```
+          4 + 7 + 2 = 13
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> numbers = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> numbers = new ArrayList<>();
+                  while (true) {
+                      int number = Integer.valueOf(scanner.nextLine());
+                      if (number == 0) {
+                          break;
+                      }
+                      numbers.add(number);
+                  }
+
+                  String line = "";
+                  int sum = 0;
+                  for (int number : numbers) {
+                      if (!line.equals("")) {
+                          line += " + ";
+                      }
+                      line += number;
+                      sum += number;
+                  }
+                  System.out.println(line + " = " + sum);
+              }
+          }
+        hints:
+          - "Two things to keep while going through the list: the text so far (starting at `\"\"`) and the sum (starting at 0)."
+          - "As with the route in the lesson: add `\" + \"` only when the text isn't empty any more, then add the number."
+        require:
+          - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
+            message: "Build the line with a for-each loop."
+        tests:
+          - stdin: |
+              4
+              7
+              2
+              0
+          - stdin: |
+              5
+              0
+            hidden: true
+          - stdin: |
+              10
+              -3
+              8
+              1
+              0
+            hidden: true
+      - task: |
+          Read the names of your dinner guests until the line `end` (there's at least one). Print them on one line the way you'd write them in a sentence: a comma between the names, but `and` before the last one. For the input `Ada`, `Ben`, `Cleo` and `Dev` the program prints:
+
+          ```
+          Guests: Ada, Ben, Cleo and Dev
+          ```
+
+          Two guests are `Ada and Ben`, and a single guest is just the name.
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> guests = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> guests = new ArrayList<>();
+                  while (true) {
+                      String name = scanner.nextLine();
+                      if (name.equals("end")) {
+                          break;
+                      }
+                      guests.add(name);
+                  }
+
+                  String line = "";
+                  for (int i = 0; i < guests.size(); i++) {
+                      if (i == guests.size() - 1 && i > 0) {
+                          line += " and ";
+                      } else if (i > 0) {
+                          line += ", ";
+                      }
+                      line += guests.get(i);
+                  }
+                  System.out.println("Guests: " + line);
+              }
+          }
+        hints:
+          - "What goes in front of a name depends on where it is: nothing for the first, ` and ` for the last, `, ` for the others. That's a job for an index loop."
+          - "The last index is `guests.size() - 1`. Check for it first, and only when `i > 0`, so a single guest gets nothing in front."
+        tests:
+          - stdin: |
+              Ada
+              Ben
+              Cleo
+              Dev
+              end
+          - stdin: |
+              Mo
+              end
+            hidden: true
+          - stdin: |
+              Ada
+              Ben
+              end
+            hidden: true
+          - stdin: |
+              Kai
+              Lin
+              Uma
+              end
+            hidden: true
+
+  - id: list-methods-contains
+    slug: contains-and-index-of
+    title: contains and indexOf
+    text: |
+      The last module searched a list with a loop. Two list methods do that searching for you:
+
+      - `list.contains(value)` is `true` when the value is in the list, and `false` when it isn't.
+      - `list.indexOf(value)` gives the index of the value, or `-1` when it isn't in the list. If the value is there more than once, you get the first index.
+
+      ```java main
+      ArrayList<String> colors = new ArrayList<>();
+      colors.add("red");
+      colors.add("green");
+      colors.add("blue");
+      colors.add("green");
+
+      System.out.println(colors.contains("blue"));
+      System.out.println(colors.contains("pink"));
+      System.out.println(colors.indexOf("green"));
+      System.out.println(colors.indexOf("pink"));
+      ```
+
+      ```output
+      true
+      false
+      1
+      -1
+      ```
+
+      Both compare with `equals`, the way you compare Strings yourself, so they also find text the user typed in. The comparison is exact: `"Green"` with a capital G is not in this list.
+
+      They work on number lists too: `numbers.contains(7)` and `numbers.indexOf(7)` look for the value 7.
+
+      ### Searching in an if
+
+      `contains` gives a `boolean`, so the call can be the condition of an `if`. With `indexOf`, check for -1 before you use the index:
+
+      ```java main
+      ArrayList<String> queue = new ArrayList<>();
+      queue.add("Ines");
+      queue.add("Tomas");
+      queue.add("Yuki");
+
+      if (queue.contains("Tomas")) {
+          System.out.println("Tomas is in the queue");
+      }
+
+      String name = "Yuki";
+      int index = queue.indexOf(name);
+      if (index == -1) {
+          System.out.println(name + " is not in the queue");
+      } else {
+          System.out.println(name + " has " + index + " people ahead");
+      }
+      ```
+
+      ```output
+      Tomas is in the queue
+      Yuki has 2 people ahead
+      ```
+
+      Yuki is at index 2, and the index is exactly the number of people before her.
+
+      **Your turn:** the program reads a seat and says whether it's taken. Fill in the blank with the right list method. For the input `B4` it prints:
+
+      ```
+      Seat B4 is taken
+      ```
+    fill: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> taken = new ArrayList<>();
+              taken.add("A1");
+              taken.add("A2");
+              taken.add("B4");
+
+              String seat = scanner.nextLine();
+              if (taken.[[contains]](seat)) {
+                  System.out.println("Seat " + seat + " is taken");
+              } else {
+                  System.out.println("Seat " + seat + " is free");
+              }
+          }
+      }
+    hints:
+      - "The method that answers `true` or `false` to \"is this value in the list?\""
+      - "`taken.contains(seat)`"
+    tests:
+      - stdin: B4
+      - stdin: C1
+        hidden: true
+      - stdin: A1
+        hidden: true
+    more:
+      - task: |
+          The list `finishers` holds the runners of a race in the order they finished. Read a name and print the place that runner finished in (the winner is place 1), or say they're not in the results. Use `indexOf`, without a loop. For the input `Kim` the program prints:
+
+          ```
+          Kim finished in place 3
+          ```
+
+          and for the input `Otto` it prints `Otto is not in the results`.
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> finishers = new ArrayList<>();
+                  finishers.add("Mona");
+                  finishers.add("Raj");
+                  finishers.add("Kim");
+                  finishers.add("Lea");
+
+                  String name = scanner.nextLine();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> finishers = new ArrayList<>();
+                  finishers.add("Mona");
+                  finishers.add("Raj");
+                  finishers.add("Kim");
+                  finishers.add("Lea");
+
+                  String name = scanner.nextLine();
+                  int index = finishers.indexOf(name);
+                  if (index == -1) {
+                      System.out.println(name + " is not in the results");
+                  } else {
+                      System.out.println(name + " finished in place " + (index + 1));
+                  }
+              }
+          }
+        hints:
+          - "`int index = finishers.indexOf(name);` and then an `if` on `index == -1`."
+          - "Indexes start at 0 and places at 1, so the place is `index + 1`. Put it in parentheses in the print line."
+        require:
+          - pattern: \.indexOf\s*\(
+            message: "Find the runner with `indexOf`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Let `indexOf` do the searching, without a loop."
+        tests:
+          - stdin: Kim
+          - stdin: Otto
+            hidden: true
+          - stdin: Mona
+            hidden: true
+          - stdin: Lea
+            hidden: true
+      - task: |
+          Some visitors sign a guest book more than once. Read names until the line `done`, and keep each name only the first time it appears: add a name to the list only if the list doesn't contain it yet. Then print the names in the order they first signed, and how many different guests there were. For the input `Ada`, `Ben`, `Ada`, `Cleo`, `Ben` the program prints:
+
+          ```
+          Ada
+          Ben
+          Cleo
+          3 different guests
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> guests = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> guests = new ArrayList<>();
+                  while (true) {
+                      String name = scanner.nextLine();
+                      if (name.equals("done")) {
+                          break;
+                      }
+                      if (!guests.contains(name)) {
+                          guests.add(name);
+                      }
+                  }
+
+                  for (String guest : guests) {
+                      System.out.println(guest);
+                  }
+                  System.out.println(guests.size() + " different guests");
+              }
+          }
+        hints:
+          - "In the reading loop: `if (!guests.contains(name)) { guests.add(name); }`. The `!` turns \"contains\" into \"doesn't contain\"."
+          - "The number of different guests is the size of the list."
+        require:
+          - pattern: \.contains\s*\(
+            message: "Check for a name already in the list with `contains`."
+        tests:
+          - stdin: |
+              Ada
+              Ben
+              Ada
+              Cleo
+              Ben
+              done
+          - stdin: |
+              Zed
+              Zed
+              Amy
+              Zed
+              done
+            hidden: true
+          - stdin: |
+              Ola
+              Per
+              Kai
+              Per
+              Ivy
+              done
+            hidden: true
+
+  - id: list-methods-remove
+    slug: removing-values
+    title: Removing values
+    text: |
+      `remove` takes a value out of a list. It comes in two kinds:
+
+      - `list.remove(index)` removes the value at that index.
+      - `list.remove(value)` removes the first copy of that value. If the value isn't in the list, nothing happens.
+
+      When a value is removed, the list gets one shorter, and every value after it moves down one place: its index goes down by 1.
+
+      ```java main
+      ArrayList<String> queue = new ArrayList<>();
+      queue.add("Ana");
+      queue.add("Ben");
+      queue.add("Cai");
+      queue.add("Dee");
+
+      queue.remove(0);
+      System.out.println(queue);
+      System.out.println("First now: " + queue.get(0));
+
+      queue.remove("Dee");
+      System.out.println(queue);
+      System.out.println("Size: " + queue.size());
+      ```
+
+      ```output
+      [Ben, Cai, Dee]
+      First now: Ben
+      [Ben, Cai]
+      Size: 2
+      ```
+
+      ### The trap in number lists
+
+      In a list of numbers, `numbers.remove(3)` could mean "remove index 3" or "remove the value 3". Java always picks the index: an `int` in the parentheses is an index. To remove a value, give `remove` an `Integer`, with `Integer.valueOf`:
+
+      ```java main
+      ArrayList<Integer> numbers = new ArrayList<>();
+      numbers.add(8);
+      numbers.add(3);
+      numbers.add(5);
+      numbers.add(9);
+
+      numbers.remove(3);
+      System.out.println(numbers);
+
+      numbers.remove(Integer.valueOf(3));
+      System.out.println(numbers);
+      ```
+
+      ```output
+      [8, 3, 5]
+      [8, 5]
+      ```
+
+      `numbers.remove(3)` removed the value at index 3, the 9. `Integer.valueOf(3)` is the number 3 as an `Integer`, the type of the list's values, so the second call looks for the value 3. (You've used `Integer.valueOf` on typed text; given an `int`, it works too.) `contains` and `indexOf` have no index kind, so `numbers.contains(3)` always looks for the value.
+
+      ### Don't remove inside a for-each
+
+      A for-each loop doesn't allow its list to grow or shrink while it runs. When it moves on to the next value, it notices that the size changed and stops the program:
+
+      ```java run crash
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> readings = new ArrayList<>();
+              readings.add(12);
+              readings.add(-1);
+              readings.add(15);
+              readings.add(9);
+
+              for (int reading : readings) {
+                  if (reading < 0) {
+                      readings.remove(Integer.valueOf(reading));
+                  }
+              }
+              System.out.println(readings);
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.util.ConcurrentModificationException
+      	at Main.main(Main.java:11)
+      ```
+
+      Line 11 is the for-each line: "concurrent modification" means the list was changed while the loop was going through it. (Adding to the list inside the loop does the same. A removal in the second-to-last round goes unnoticed: the loop just ends early and never looks at the last value, which is no better.)
+
+      To remove values while going through a list, use an index loop that goes **backwards**:
+
+      ```java main
+      ArrayList<Integer> readings = new ArrayList<>();
+      readings.add(12);
+      readings.add(-1);
+      readings.add(-4);
+      readings.add(9);
+
+      for (int i = readings.size() - 1; i >= 0; i--) {
+          if (readings.get(i) < 0) {
+              readings.remove(i);
+          }
+      }
+      System.out.println(readings);
+      ```
+
+      ```output
+      [12, 9]
+      ```
+
+      Going from the end, a removal only moves values you've already checked. Going forwards with `i++`, the value after a removed one would move into its place, and the loop would step right past it: here the -4 would be skipped.
+
+      **Your turn:** the program reads prices until `0`, and should remove every price above 50 from the list. It crashes, because it removes inside a for-each loop. Rewrite the removing loop as an index loop that goes backwards. For the input 20, 75, 35, 60, 90 and 10 it prints:
+
+      ```
+      Within budget: [20, 35, 10]
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<Integer> prices = new ArrayList<>();
+              while (true) {
+                  int price = Integer.valueOf(scanner.nextLine());
+                  if (price == 0) {
+                      break;
+                  }
+                  prices.add(price);
+              }
+
+              for (int price : prices) {
+                  if (price > 50) {
+                      prices.remove(Integer.valueOf(price));
+                  }
+              }
+              System.out.println("Within budget: " + prices);
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<Integer> prices = new ArrayList<>();
+              while (true) {
+                  int price = Integer.valueOf(scanner.nextLine());
+                  if (price == 0) {
+                      break;
+                  }
+                  prices.add(price);
+              }
+
+              for (int i = prices.size() - 1; i >= 0; i--) {
+                  if (prices.get(i) > 50) {
+                      prices.remove(i);
+                  }
+              }
+              System.out.println("Within budget: " + prices);
+          }
+      }
+    hints:
+      - "Start at the last index and count down: `for (int i = prices.size() - 1; i >= 0; i--)`."
+      - "Inside, check `prices.get(i) > 50` and remove with `prices.remove(i);`. Here `i` is an index, which is just what you want."
+    forbid:
+      - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
+        message: "Don't remove inside a for-each loop over the same list: use an index loop that goes backwards."
+    tests:
+      - stdin: |
+          20
+          75
+          35
+          60
+          90
+          10
+          0
+      - stdin: |
+          80
+          99
+          0
+        hidden: true
+      - stdin: |
+          51
+          50
+          52
+          0
+        hidden: true
+      - stdin: |
+          12
+          5
+          0
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Check each `remove`: is it given an index or a value?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> numbers = new ArrayList<>();
+                  numbers.add(4);
+                  numbers.add(2);
+                  numbers.add(0);
+                  numbers.add(1);
+
+                  numbers.remove(1);
+                  System.out.println(numbers);
+                  numbers.remove(Integer.valueOf(1));
+                  System.out.println(numbers);
+                  numbers.remove(0);
+                  System.out.println(numbers);
+              }
+          }
+        hints:
+          - "`numbers.remove(1)` gets an `int`, so it removes index 1: the 2."
+          - "`Integer.valueOf(1)` removes the value 1. Then `remove(0)` is an index again, so it removes the first value, 4."
+      - task: |
+          The list `taken` holds the numbers of the taken spots in a parking garage. Read the spot numbers of cars that leave until `0`, and remove each one from the list by its value. Then print what's still taken. For the input `3` and `25` the program prints:
+
+          ```
+          Still taken: [12, 7, 1]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> taken = new ArrayList<>();
+                  taken.add(12);
+                  taken.add(3);
+                  taken.add(7);
+                  taken.add(25);
+                  taken.add(1);
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> taken = new ArrayList<>();
+                  taken.add(12);
+                  taken.add(3);
+                  taken.add(7);
+                  taken.add(25);
+                  taken.add(1);
+
+                  while (true) {
+                      int spot = Integer.valueOf(scanner.nextLine());
+                      if (spot == 0) {
+                          break;
+                      }
+                      taken.remove(Integer.valueOf(spot));
+                  }
+                  System.out.println("Still taken: " + taken);
+              }
+          }
+        hints:
+          - "A reading loop that stops at 0, and removes each spot it reads."
+          - "`taken.remove(spot)` with an `int` would remove an index. Remove the value: `taken.remove(Integer.valueOf(spot));`"
+        require:
+          - pattern: \.remove\s*\(
+            message: "Take each spot out of the list with `remove`."
+        tests:
+          - stdin: |
+              3
+              25
+              0
+          - stdin: |
+              1
+              0
+            hidden: true
+          - stdin: |
+              12
+              7
+              3
+              0
+            hidden: true
+          - stdin: "0"
+            hidden: true
+
+  - id: list-methods-parameters
+    slug: lists-as-parameters
+    title: Lists as parameters
+    text: |
+      A list can be a method's parameter, like any other value. The parameter's type is the list's whole type, such as `ArrayList<String>`:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> guests = new ArrayList<>();
+              guests.add("Mira");
+              guests.add("Oskar");
+              printInvitations(guests);
+
+              ArrayList<Integer> scores = new ArrayList<>();
+              scores.add(34);
+              scores.add(52);
+              scores.add(41);
+              System.out.println("Best score: " + highest(scores));
+          }
+
+          public static void printInvitations(ArrayList<String> names) {
+              for (String name : names) {
+                  System.out.println("Dear " + name + ", you're invited!");
+              }
+          }
+
+          public static int highest(ArrayList<Integer> numbers) {
+              int best = numbers.get(0);
+              for (int number : numbers) {
+                  if (number > best) {
+                      best = number;
+                  }
+              }
+              return best;
+          }
+      }
+      ```
+
+      ```output
+      Dear Mira, you're invited!
+      Dear Oskar, you're invited!
+      Best score: 52
+      ```
+
+      - The one `import java.util.ArrayList;` at the top of the file covers every method in it.
+      - The call gives the list by its name: `printInvitations(guests)`. As with any parameter, the names in the call and in the method don't have to match.
+      - A method can return something worked out from the list: a sum, a count, the largest value. (`highest` expects at least one value: on an empty list, `numbers.get(0)` crashes.)
+
+      A method can also build a new list and return it. Its return type is then the list's type:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> scores = new ArrayList<>();
+              scores.add(7);
+              scores.add(12);
+              scores.add(9);
+              System.out.println(withBonus(scores, 5));
+              System.out.println(scores);
+          }
+
+          public static ArrayList<Integer> withBonus(ArrayList<Integer> scores, int bonus) {
+              ArrayList<Integer> result = new ArrayList<>();
+              for (int score : scores) {
+                  result.add(score + bonus);
+              }
+              return result;
+          }
+      }
+      ```
+
+      ```output
+      [12, 17, 14]
+      [7, 12, 9]
+      ```
+
+      The original list is left as it was: the method only read it, and put the new values in a list of its own.
+
+      ### Challenges that pass a list
+
+      The checks in this step build a list, fill it, and call your method with it, just as `main` does above.
+
+      **Your turn:** write a method `groupPrice(ArrayList<Integer> ages)` that returns what a group pays for museum tickets: 12 for each person aged 12 or over, 5 for each child from 3 to 11, and nothing for a child under 3. The check builds a list of the ages 34, 8, 2 and 40, and prints what `groupPrice` returns:
+
+      ```
+      29
+      ```
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> ages = new ArrayList<>();
+              ages.add(34);
+              ages.add(8);
+              ages.add(2);
+              ages.add(40);
+              System.out.println(groupPrice(ages));
+          }
+
+          // Write the groupPrice method here.
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> ages = new ArrayList<>();
+              ages.add(34);
+              ages.add(8);
+              ages.add(2);
+              ages.add(40);
+              System.out.println(groupPrice(ages));
+          }
+
+          public static int groupPrice(ArrayList<Integer> ages) {
+              int price = 0;
+              for (int age : ages) {
+                  if (age >= 12) {
+                      price += 12;
+                  } else if (age >= 3) {
+                      price += 5;
+                  }
+              }
+              return price;
+          }
+      }
+    hints:
+      - "The method starts `public static int groupPrice(ArrayList<Integer> ages) {`."
+      - "Start a total at 0. In a for-each loop over the ages, add 12 when `age >= 12`, else 5 when `age >= 3`, and nothing otherwise. Return the total after the loop."
+    tests:
+      - call: |
+          ArrayList<Integer> ages = new ArrayList<>();
+          ages.add(34);
+          ages.add(8);
+          ages.add(2);
+          ages.add(40);
+          System.out.println(groupPrice(ages));
+      - call: |
+          ArrayList<Integer> ages = new ArrayList<>();
+          System.out.println(groupPrice(ages));
+        hidden: true
+      - call: |
+          ArrayList<Integer> ages = new ArrayList<>();
+          ages.add(3);
+          ages.add(11);
+          ages.add(12);
+          ages.add(2);
+          System.out.println(groupPrice(ages));
+        hidden: true
+      - call: |
+          ArrayList<Integer> ages = new ArrayList<>();
+          ages.add(70);
+          System.out.println(groupPrice(ages));
+        hidden: true
+    more:
+      - task: |
+          Write a method `printNumbered(ArrayList<String> items)` that prints the items one per line, each with its number in front: `1. ` for the first, `2. ` for the second, and so on. The check builds a list of `oats`, `pears` and `honey`, and calls `printNumbered(items);`:
+
+          ```
+          1. oats
+          2. pears
+          3. honey
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> items = new ArrayList<>();
+                  items.add("oats");
+                  items.add("pears");
+                  items.add("honey");
+                  printNumbered(items);
+              }
+
+              // Write the printNumbered method here.
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> items = new ArrayList<>();
+                  items.add("oats");
+                  items.add("pears");
+                  items.add("honey");
+                  printNumbered(items);
+              }
+
+              public static void printNumbered(ArrayList<String> items) {
+                  for (int i = 0; i < items.size(); i++) {
+                      System.out.println((i + 1) + ". " + items.get(i));
+                  }
+              }
+          }
+        hints:
+          - "The method is `void`: `public static void printNumbered(ArrayList<String> items) {`."
+          - "The number is the index plus one, so an index loop fits: `(i + 1) + \". \" + items.get(i)`."
+        tests:
+          - call: |
+              ArrayList<String> items = new ArrayList<>();
+              items.add("oats");
+              items.add("pears");
+              items.add("honey");
+              printNumbered(items);
+          - call: |
+              ArrayList<String> items = new ArrayList<>();
+              items.add("rice");
+              printNumbered(items);
+            hidden: true
+          - call: |
+              ArrayList<String> items = new ArrayList<>();
+              items.add("salt");
+              items.add("tea");
+              items.add("jam");
+              items.add("figs");
+              printNumbered(items);
+            hidden: true
+      - task: |
+          Write a method `onlyEven(ArrayList<Integer> numbers)` that returns a new list with just the even values of `numbers`, in the same order. The original list stays as it was. The check builds a list of 4, 7, 12 and 9, and prints what `onlyEven` returns:
+
+          ```
+          [4, 12]
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> numbers = new ArrayList<>();
+                  numbers.add(4);
+                  numbers.add(7);
+                  numbers.add(12);
+                  numbers.add(9);
+                  System.out.println(onlyEven(numbers));
+              }
+
+              // Write the onlyEven method here.
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> numbers = new ArrayList<>();
+                  numbers.add(4);
+                  numbers.add(7);
+                  numbers.add(12);
+                  numbers.add(9);
+                  System.out.println(onlyEven(numbers));
+              }
+
+              public static ArrayList<Integer> onlyEven(ArrayList<Integer> numbers) {
+                  ArrayList<Integer> evens = new ArrayList<>();
+                  for (int number : numbers) {
+                      if (number % 2 == 0) {
+                          evens.add(number);
+                      }
+                  }
+                  return evens;
+              }
+          }
+        hints:
+          - "The return type is a list: `public static ArrayList<Integer> onlyEven(ArrayList<Integer> numbers) {`."
+          - "Make a new empty list, add each number where `number % 2 == 0`, and return the new list."
+        tests:
+          - call: |
+              ArrayList<Integer> numbers = new ArrayList<>();
+              numbers.add(4);
+              numbers.add(7);
+              numbers.add(12);
+              numbers.add(9);
+              System.out.println(onlyEven(numbers));
+          - call: |
+              ArrayList<Integer> numbers = new ArrayList<>();
+              numbers.add(-2);
+              numbers.add(-3);
+              numbers.add(0);
+              numbers.add(8);
+              System.out.println(onlyEven(numbers));
+              System.out.println(numbers);
+            hidden: true
+          - call: |
+              ArrayList<Integer> numbers = new ArrayList<>();
+              numbers.add(1);
+              numbers.add(3);
+              System.out.println(onlyEven(numbers));
+              System.out.println(numbers);
+            hidden: true
+
+  - id: list-methods-references
+    slug: same-list-two-names
+    title: One list, two names
+    text: |
+      Module 10 showed that a method gets a copy of an `int` argument, so changing the parameter doesn't change the caller's variable. Lists behave differently, and here's why.
+
+      A list variable doesn't hold the list's values. It holds a **reference**: a note of where the list is in the computer's memory. `new ArrayList<>()` makes the list, and the variable remembers where it is. Copying the variable copies the note, not the list:
+
+      ```java main
+      ArrayList<String> mine = new ArrayList<>();
+      mine.add("tea");
+      ArrayList<String> yours = mine;
+      yours.add("coffee");
+      System.out.println(mine);
+      System.out.println(yours);
+      ```
+
+      ```output
+      [tea, coffee]
+      [tea, coffee]
+      ```
+
+      There's only one list here, with two names. Adding through `yours` changes the list `mine` refers to, because it's the same list.
+
+      ### A method can change the caller's list
+
+      A list parameter works the same way. The method gets a copy of the reference, and it leads to the caller's own list. Whatever the method does to that list, the caller sees:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> prices = new ArrayList<>();
+              prices.add(10);
+              prices.add(25);
+              raiseAll(prices, 2);
+              System.out.println(prices);
+          }
+
+          public static void raiseAll(ArrayList<Integer> list, int amount) {
+              for (int i = 0; i < list.size(); i++) {
+                  list.set(i, list.get(i) + amount);
+              }
+          }
+      }
+      ```
+
+      ```output
+      [12, 27]
+      ```
+
+      `list.set(index, value)` puts a new value at an index, in place of the old one. `raiseAll` returns nothing, and still `main`'s list changed. That's handy when changing the list is the method's job. When it isn't, it's a nasty surprise, so a method that only needs to read a list (like `groupPrice` in the last step) should leave it alone.
+
+      ### A real copy
+
+      For a second, separate list, make a new list from the old one: `new ArrayList<>(original)` creates a new list with the same values in the same order.
+
+      ```java main
+      ArrayList<String> original = new ArrayList<>();
+      original.add("tea");
+      ArrayList<String> copy = new ArrayList<>(original);
+      copy.add("coffee");
+      System.out.println(original);
+      System.out.println(copy);
+      ```
+
+      ```output
+      [tea]
+      [tea, coffee]
+      ```
+
+      Now there are two lists, and changing one leaves the other as it was.
+
+      **Your turn:** what does this program print? Count how many lists there really are.
+    predict: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> plan = new ArrayList<>();
+              plan.add("swim");
+              plan.add("run");
+              ArrayList<String> other = plan;
+              ArrayList<String> backup = new ArrayList<>(plan);
+              other.add("bike");
+              backup.remove(0);
+              System.out.println(plan);
+              System.out.println(other);
+              System.out.println(backup);
+          }
+      }
+    hints:
+      - "`other = plan` gives the one list a second name. `new ArrayList<>(plan)` makes a separate list with `swim` and `run`."
+      - "Adding `bike` through `other` changes `plan` too. Removing index 0 from `backup` changes only the copy."
+    more:
+      - task: |
+          Write a method `capAt(ArrayList<Integer> levels, int max)` that changes the list itself: every value above `max` becomes `max`. It returns nothing. The check builds a list of 40, 120, 75 and 101, calls `capAt(levels, 100);`, and then prints the list:
+
+          ```
+          [40, 100, 75, 100]
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> levels = new ArrayList<>();
+                  levels.add(40);
+                  levels.add(120);
+                  levels.add(75);
+                  levels.add(101);
+                  capAt(levels, 100);
+                  System.out.println(levels);
+              }
+
+              // Write the capAt method here.
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> levels = new ArrayList<>();
+                  levels.add(40);
+                  levels.add(120);
+                  levels.add(75);
+                  levels.add(101);
+                  capAt(levels, 100);
+                  System.out.println(levels);
+              }
+
+              public static void capAt(ArrayList<Integer> levels, int max) {
+                  for (int i = 0; i < levels.size(); i++) {
+                      if (levels.get(i) > max) {
+                          levels.set(i, max);
+                      }
+                  }
+              }
+          }
+        hints:
+          - "The method is `void`: it changes the caller's list, so there's nothing to return."
+          - "An index loop, and inside it `if (levels.get(i) > max) { levels.set(i, max); }`."
+        require:
+          - pattern: \.set\s*\(
+            message: "Replace a value in the list with `set(index, value)`."
+        tests:
+          - call: |
+              ArrayList<Integer> levels = new ArrayList<>();
+              levels.add(40);
+              levels.add(120);
+              levels.add(75);
+              levels.add(101);
+              capAt(levels, 100);
+              System.out.println(levels);
+          - call: |
+              ArrayList<Integer> levels = new ArrayList<>();
+              levels.add(5);
+              capAt(levels, 10);
+              System.out.println(levels);
+            hidden: true
+          - call: |
+              ArrayList<Integer> levels = new ArrayList<>();
+              levels.add(3);
+              levels.add(0);
+              levels.add(8);
+              levels.add(-2);
+              capAt(levels, 0);
+              System.out.println(levels);
+            hidden: true
+      - task: |
+          The program reads scores until the line `end`, keeps the list as it was in `before`, and then doubles every score. But `Before:` shows the doubled scores too. Fix the line that makes `before`, so it holds a real copy. For the input 3, 5 and 8 the program prints:
+
+          ```
+          Before: [3, 5, 8]
+          After: [6, 10, 16]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> scores = new ArrayList<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      scores.add(Integer.valueOf(line));
+                  }
+
+                  ArrayList<Integer> before = scores;
+                  for (int i = 0; i < scores.size(); i++) {
+                      scores.set(i, scores.get(i) * 2);
+                  }
+                  System.out.println("Before: " + before);
+                  System.out.println("After: " + scores);
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> scores = new ArrayList<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      scores.add(Integer.valueOf(line));
+                  }
+
+                  ArrayList<Integer> before = new ArrayList<>(scores);
+                  for (int i = 0; i < scores.size(); i++) {
+                      scores.set(i, scores.get(i) * 2);
+                  }
+                  System.out.println("Before: " + before);
+                  System.out.println("After: " + scores);
+              }
+          }
+        hints:
+          - "`before = scores` gives the same list a second name, so doubling the scores shows up through both names."
+          - "Make a new list with the same values: `ArrayList<Integer> before = new ArrayList<>(scores);`"
+        require:
+          - pattern: new\s+ArrayList\s*<[^>]*>\s*\(\s*scores\s*\)
+            message: "Make `before` a copy of the list: `new ArrayList<>(scores)`."
+        tests:
+          - stdin: |
+              3
+              5
+              8
+              end
+          - stdin: |
+              10
+              end
+            hidden: true
+          - stdin: |
+              -4
+              0
+              7
+              1
+              end
+            hidden: true
+
+  - id: list-methods-summary
+    slug: list-toolbox
+    title: The list toolbox
+    text: |
+      Here are the list methods from this module and the last one. Three of them are new: `add(index, value)`, `isEmpty()` and `clear()`.
+
+      | Method | What it does |
+      |---|---|
+      | `add(value)` | Adds the value to the end of the list. |
+      | `add(index, value)` | Puts the value at the index. The values from there on move up one place. |
+      | `get(index)` | Gives the value at the index. |
+      | `set(index, value)` | Replaces the value at the index. |
+      | `size()` | Gives the number of values. |
+      | `remove(index)` | Removes the value at the index. Later values move down one place. |
+      | `remove(value)` | Removes the first copy of the value, if there is one. For numbers: `remove(Integer.valueOf(n))`. |
+      | `contains(value)` | `true` when the value is in the list. |
+      | `indexOf(value)` | The index of the first copy of the value, or -1. |
+      | `isEmpty()` | `true` when the list has no values. |
+      | `clear()` | Removes every value. |
+
+      The methods that take an index crash with an `IndexOutOfBoundsException` when there's no such index. `add(index, value)` also accepts `size()` as the index, which adds to the end.
+
+      The three new ones at work:
+
+      ```java main
+      ArrayList<String> line = new ArrayList<>();
+      System.out.println(line.isEmpty());
+      line.add("Bea");
+      line.add("Carl");
+      line.add(0, "Abe");
+      line.add(2, "Bill");
+      System.out.println(line);
+      line.clear();
+      System.out.println(line.isEmpty());
+      System.out.println(line.size());
+      ```
+
+      ```output
+      true
+      [Abe, Bea, Bill, Carl]
+      true
+      0
+      ```
+
+      `isEmpty()` says the same as `size() == 0`, but reads more like what you mean.
+
+      ### A program driven by commands
+
+      Many programs are a loop that reads a command, does what it says, and goes round again until the user quits. A list makes a good memory for such a program: the last challenge of this module is a shopping list you run by typing commands.
+
+      That's the end of the MOOC's section on lists. Next come arrays: another way to keep many values, with a size that's fixed when the array is made.
+
+      **Your turn:** fill in the blanks, so an urgent case goes to the front of the waiting list, and the program then empties the list and checks that it's empty. The program prints:
+
+      ```
+      [Urgent case, Lotta, Sven]
+      Nobody is waiting
+      ```
+    fill: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> waiting = new ArrayList<>();
+              waiting.add("Lotta");
+              waiting.add("Sven");
+              waiting.add([[0]], "Urgent case");
+              System.out.println(waiting);
+
+              waiting.[[clear]]();
+              if (waiting.[[isEmpty]]()) {
+                  System.out.println("Nobody is waiting");
+              }
+          }
+      }
+    hints:
+      - "The front of the list is index 0, and `add(index, value)` takes the index first."
+      - "`clear()` removes every value, and `isEmpty()` tells whether any are left."
+    more:
+      - task: |
+          A phone keeps a list of recently used apps, the most recent first. Write a method `markUsed(ArrayList<String> recent, String app)` that moves `app` to the front of the list: if it's already in the list, it's taken out of its old place first, so it's never in the list twice. The check builds a list of `maps`, `mail` and `camera`, calls `markUsed` with `camera` and then with `notes`, and prints the list after each call:
+
+          ```
+          [camera, maps, mail]
+          [notes, camera, maps, mail]
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> recent = new ArrayList<>();
+                  recent.add("maps");
+                  recent.add("mail");
+                  recent.add("camera");
+                  markUsed(recent, "camera");
+                  System.out.println(recent);
+              }
+
+              // Write the markUsed method here.
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> recent = new ArrayList<>();
+                  recent.add("maps");
+                  recent.add("mail");
+                  recent.add("camera");
+                  markUsed(recent, "camera");
+                  System.out.println(recent);
+              }
+
+              public static void markUsed(ArrayList<String> recent, String app) {
+                  if (recent.contains(app)) {
+                      recent.remove(app);
+                  }
+                  recent.add(0, app);
+              }
+          }
+        hints:
+          - "`recent.remove(app)` takes out the first copy of the app, and does nothing if it isn't there."
+          - "Then `recent.add(0, app);` puts it at the front. The method is `void`: it changes the caller's list."
+        require:
+          - pattern: \.add\s*\(\s*0\s*,
+            message: "Put the app at the front with `add(0, app)`."
+        tests:
+          - call: |
+              ArrayList<String> recent = new ArrayList<>();
+              recent.add("maps");
+              recent.add("mail");
+              recent.add("camera");
+              markUsed(recent, "camera");
+              System.out.println(recent);
+              markUsed(recent, "notes");
+              System.out.println(recent);
+          - call: |
+              ArrayList<String> recent = new ArrayList<>();
+              markUsed(recent, "clock");
+              markUsed(recent, "clock");
+              System.out.println(recent);
+            hidden: true
+          - call: |
+              ArrayList<String> recent = new ArrayList<>();
+              recent.add("chat");
+              recent.add("music");
+              recent.add("photos");
+              markUsed(recent, "music");
+              System.out.println(recent);
+              markUsed(recent, "chat");
+              System.out.println(recent);
+            hidden: true
+      - task: |
+          Write a shopping list program that reads commands until `quit`. The commands `add` and `remove` are followed by a line with an item.
+
+          - `add`: add the item and print `Added ` and the item. If it's already on the list, print `bread is already on the list` (with the item's name) instead.
+          - `remove`: remove the item and print `Removed ` and the item. If it isn't on the list, print `cheese is not on the list` (with the item's name) instead.
+          - `show`: print each item as `- ` and the item, with a for-each loop, or `The list is empty` when there's nothing on it.
+          - `quit`: print `Bye!` and stop.
+
+          For the input shown, the program prints:
+
+          ```
+          Added bread
+          Added apples
+          bread is already on the list
+          cheese is not on the list
+          Removed bread
+          - apples
+          Bye!
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> items = new ArrayList<>();
+                  while (true) {
+                      String command = scanner.nextLine();
+                      if (command.equals("quit")) {
+                          System.out.println("Bye!");
+                          break;
+                      }
+                      // Handle add, remove and show here.
+                  }
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> items = new ArrayList<>();
+                  while (true) {
+                      String command = scanner.nextLine();
+                      if (command.equals("quit")) {
+                          System.out.println("Bye!");
+                          break;
+                      }
+                      if (command.equals("add")) {
+                          String item = scanner.nextLine();
+                          if (items.contains(item)) {
+                              System.out.println(item + " is already on the list");
+                          } else {
+                              items.add(item);
+                              System.out.println("Added " + item);
+                          }
+                      } else if (command.equals("remove")) {
+                          String item = scanner.nextLine();
+                          if (items.contains(item)) {
+                              items.remove(item);
+                              System.out.println("Removed " + item);
+                          } else {
+                              System.out.println(item + " is not on the list");
+                          }
+                      } else if (command.equals("show")) {
+                          if (items.isEmpty()) {
+                              System.out.println("The list is empty");
+                          }
+                          for (String item : items) {
+                              System.out.println("- " + item);
+                          }
+                      }
+                  }
+              }
+          }
+        hints:
+          - "One `if` per command. For `add` and `remove`, read the item with another `scanner.nextLine()` inside that branch."
+          - "`items.contains(item)` decides between the two messages of `add`, and of `remove`. For `show`, `items.isEmpty()` tells when to print `The list is empty`."
+        require:
+          - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
+            message: "Print the items for `show` with a for-each loop."
+        tests:
+          - stdin: |
+              add
+              bread
+              add
+              apples
+              add
+              bread
+              remove
+              cheese
+              remove
+              bread
+              show
+              quit
+          - stdin: |
+              show
+              add
+              milk
+              show
+              remove
+              milk
+              show
+              quit
+            hidden: true
+          - stdin: |
+              add
+              eggs
+              add
+              rice
+              add
+              tea
+              remove
+              rice
+              show
+              quit
+            hidden: true
+          - stdin: quit
+            hidden: true

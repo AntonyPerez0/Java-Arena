@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { marked } from "marked";
 import { highlightHtml } from "./highlight";
 
-const LABELS: Record<string, string> = { output: "Output", input: "Input", javac: "What javac prints" };
+const LABELS: Record<string, string> = { output: "Output", input: "Input", javac: "What javac prints", crash: "The program crashes with" };
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 marked.setOptions({ gfm: true, breaks: false });

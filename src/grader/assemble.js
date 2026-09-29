@@ -131,7 +131,9 @@ export const CHECK_FILE = "ArenaCheck.java";
  * belongs to).
  */
 export function checkSource(tests) {
-  const lines = [`public class ${CHECK_CLASS} extends Main {`, "    public static void main(String[] args) {", "        try {", "            switch (args[0]) {"];
+  // java.util.* lets a test's code use ArrayList, Arrays and friends as a learner's code would; an
+  // on-demand import never clashes with the learner's own classes (theirs win).
+  const lines = ["import java.util.*;", "", `public class ${CHECK_CLASS} extends Main {`, "    public static void main(String[] args) {", "        try {", "            switch (args[0]) {"];
   const ranges = [];
   tests.forEach((t, i) => {
     lines.push(`                case "${i}" -> {`);

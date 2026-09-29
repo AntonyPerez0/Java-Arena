@@ -78,17 +78,92 @@ export type Crash = {
   explanation: string;
 };
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** "Index 3 out of bounds for length 3", the message of a list, array or string index error. */
+function outOfBounds(m: string, kind: "list" | "array" | "string"): string | null {
+  const b = /^Index (-?\d+) out of bounds for length (\d+)$/.exec(m);
+  if (!b) return null;
+  const [i, n] = [Number(b[1]), Number(b[2])];
+  const size = kind === "list" ? "size()" : kind === "array" ? "length" : "length()";
+  const asked = kind === "string" ? `the character at index ${i}` : `index ${i}`;
+  if (n === 0) return `The program asked for ${asked} of an empty ${kind}, which has no indexes at all.${kind === "list" ? " Check size() before reading, or add values first." : ""}`;
+  const of = kind === "list" ? `a list with ${plural(n, "value", "values")}` : kind === "array" ? `an array of length ${n}` : `a string of length ${n}`;
+  let hint = "";
+  if (i === -1) hint = kind === "array" ? " Indexes start at 0; -1 is often what a search gives back when it finds nothing." : " Indexes start at 0; -1 is what indexOf gives back when it finds nothing.";
+  else if (i < 0) hint = " Indexes start at 0, so a negative index never works.";
+  else if (i === n) hint = ` Index ${n} is one past the end: a loop with <= ${size} instead of < ${size}, or one counting down that starts at ${size}, is a common cause.`;
+  return `The program asked for ${asked} of ${of}. Its indexes go from 0 to ${size} - 1, here 0 to ${n - 1}.${hint}`;
+}
+
+/** What a helpful NullPointerException message says was null, in plain words. */
+function nullThing(because: string): string {
+  const t = because.replace(/^"|"$/g, "");
+  if (/^<(local|parameter)\d+>$/.test(t)) return "a variable";
+  if (/^<(local|parameter)\d+>\[/.test(t) || /\[[^\]]*\]$/.test(t)) return "an element of an array";
+  const ret = /^the return value of "(?:[\w$]+\.)*([\w$]+\([^)]*\))"$/.exec(because);
+  if (ret) return `the value ${ret[1].replace(/\(.*\)/, "()")} returned`;
+  const field = /^(?:this|[\w$]+)\.([\w$]+)$/.exec(t);
+  if (field) return `the variable ${field[1]}`;
+  return /^[\w$]+$/.test(t) ? `the variable ${t}` : "a value";
+}
+
+function explainNull(m: string): string {
+  const call = /^Cannot invoke "(?:[\w$]+\.)*([\w$]+)\.([\w$]+)\((.*?)\)" because (.+) is null$/.exec(m);
+  if (call) {
+    const [, type, method, , because] = call;
+    const primitive: Record<string, string> = { Integer: "int", Double: "double", Long: "long", Boolean: "boolean", Character: "char" };
+    if (primitive[type] && /Value$/.test(method))
+      return `The program used ${/^[AEIOU]/.test(type) ? "an" : "a"} ${type} that is null as a plain ${primitive[type]} (it was ${nullThing(because)}). null means "no value": a list, a map or a variable that was never set may have given it.`;
+    return `The program called ${method}() on ${/^[AEIOU]/.test(type) ? "an" : "a"} ${type} that is null: ${nullThing(because)} holds no object, so there is nothing to call ${method}() on. Check where that value was supposed to be set.`;
+  }
+  const arr = /^Cannot (?:load from \w+ array|store to \w+ array|read the array length) because (.+) is null$/.exec(m);
+  if (arr)
+    return `The program used an array that is null: ${nullThing(arr[1])} holds no array. An array exists only after new, for example new int[5].`;
+  const field = /^Cannot (?:read|assign) field "([\w$]+)" because (.+) is null$/.exec(m);
+  if (field) return `The program used the field ${field[1]} of an object that is null: ${nullThing(field[2])} holds no object.`;
+  return `The program used a variable that holds null (no object) as if it held an object.${m ? " " + m + "." : ""}`;
+}
+
+function explainNumber(m: string): string {
+  if (m === "empty String") return "The program tried to turn empty text into a number. An empty line read with nextLine(), or an empty piece after split, can cause this.";
+  const text = /^For input string: "(.*)"(?: under radix \d+)?$/s.exec(m)?.[1];
+  if (text == null) return /null/.test(m) ? "The program tried to turn null into a number." : `The program tried to turn text into a number, but the text isn't a number: ${m}.`;
+  if (text === "") return "The program tried to turn empty text into a number. An empty line read with nextLine(), or an empty piece after split, can cause this.";
+  const bare = text.trim();
+  if (bare !== text && /^[-+]?\d+$/.test(bare)) return `The program tried to turn "${text}" into a number, but the text has a space at its start or end, and Integer.valueOf doesn't skip spaces. trim() removes them: Integer.valueOf(text.trim()).`;
+  if (/^[-+]?\d+\.\d+$/.test(bare)) return `The program tried to turn "${text}" into a whole number, but it has a decimal point. Double.valueOf reads numbers with decimals.`;
+  if (/[,;]/.test(bare)) return `The program tried to turn "${text}" into a number, but a comma or semicolon can't be part of a number. If it separates values (like "Ada,36"), split the text at it first and turn only the number part into a number. A decimal number is written with a point, such as 3.5.`;
+  if (/^[-+]?\d+$/.test(bare)) return `The program tried to turn "${text}" into an int, but it's outside the range an int can hold, -2147483648 to 2147483647. A long can hold bigger whole numbers.`;
+  return `The program tried to turn the text "${text}" into a number, but it isn't one.`;
+}
+
+function explainStringIndex(m: string): string {
+  const plain = outOfBounds(m, "string");
+  if (plain) return plain;
+  const r = /^Range \[(-?\d+), (-?\d+)\) out of bounds for length (\d+)$/.exec(m) ?? /^begin (-?\d+), end (-?\d+), length (\d+)$/.exec(m);
+  if (r) return `The program asked for a part of a string of length ${r[3]}, from index ${r[1]} up to ${r[2]}. With substring, both indexes must be between 0 and ${r[3]}, and the first can't be larger than the second.`;
+  return `The program used an index that isn't inside the string. ${m}. A string's indexes go from 0 to length() - 1.`;
+}
+
 const EXCEPTIONS: [RegExp, (message: string) => string][] = [
   [/ArithmeticException$/, (m) => (/by zero/.test(m) ? "The program divided a whole number by zero (or took % 0)." : "A calculation failed.")],
-  [/ArrayIndexOutOfBoundsException$/, (m) => `The program used an array index that doesn't exist. ${m}. Indexes go from 0 to length - 1.`],
-  [/StringIndexOutOfBoundsException$/, (m) => `The program used a position that isn't inside the string. ${m}. Positions go from 0 to length() - 1.`],
-  [/IndexOutOfBoundsException$/, (m) => `The program asked a list for an index it doesn't have. ${m}. Indexes go from 0 to size() - 1.`],
-  [/NullPointerException$/, (m) => `The program used a variable that holds null (no object) as if it held an object.${m ? " " + m + "." : ""}`],
-  [/NumberFormatException$/, (m) => `The program tried to turn text into a number, but the text isn't a number: ${m}.`],
+  [/ArrayIndexOutOfBoundsException$/, (m) => outOfBounds(m, "array") ?? `The program used an array index that doesn't exist. ${m}. Indexes go from 0 to length - 1.`],
+  [/StringIndexOutOfBoundsException$/, explainStringIndex],
+  [
+    /IndexOutOfBoundsException$/,
+    (m) => {
+      const add = /^Index: (-?\d+), Size: (\d+)$/.exec(m);
+      if (add) return `The program used index ${add[1]} of a list with ${plural(Number(add[2]), "value", "values")}. Its indexes go from 0 to size() - 1; add(index, value) can also add at index size(), the end.`;
+      return outOfBounds(m, "list") ?? `The program asked a list for an index it doesn't have. ${m}. Indexes go from 0 to size() - 1.`;
+    },
+  ],
+  [/NullPointerException$/, explainNull],
+  [/NumberFormatException$/, explainNumber],
   [/InputMismatchException$/, () => "The program asked the Scanner for a number, but the next input wasn't one."],
   [/NoSuchElementException$/, (m) => (/No line found/.test(m) ? "The program asked for more input than it was given: it read another line after the input ran out." : "The program asked for the next element, but there wasn't one.")],
   [/ClassCastException$/, () => "The program cast an object to a type it isn't."],
-  [/ConcurrentModificationException$/, () => "The program changed a list while looping over it with a for-each loop. Collect the changes and apply them after the loop, or use removeIf."],
+  [/ConcurrentModificationException$/, () => "The program added to or removed from a list while a for-each loop was going through it. Loop over the indexes instead (going backwards when removing), or collect the changes and make them after the loop."],
   [/StackOverflowError$/, () => "A method kept calling itself (or methods kept calling each other) without stopping, until the call stack ran out of room. Check the stopping condition of the recursion."],
   [/OutOfMemoryError$/, () => "The program used up all its memory, for example by adding to a list forever."],
   [/UnsupportedOperationException$/, () => "This collection can't be changed (lists from List.of(...) are fixed). Copy it into a new ArrayList<>(...) first."],

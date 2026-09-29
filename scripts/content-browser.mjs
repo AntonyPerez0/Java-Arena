@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { launchChromium } from "./browser.mjs";
 import { serve } from "./serve.mjs";
 import { normalizeOutput } from "../src/grader/assemble.js";
+import { stderrKey } from "./fidelity/suite.mjs";
 
 const file = new URL("../fidelity/out/content-checks.json", import.meta.url).pathname;
 if (!existsSync(file)) {
@@ -49,7 +50,10 @@ for (const c of checks) {
       else {
         if (r.exitCode !== t.exitCode) problems.push(`input ${i + 1}: exit code ${r.exitCode}, the JDK gives ${t.exitCode}`);
         if (r.stdout !== t.stdout) problems.push(`input ${i + 1}: output differs${normalizeOutput(r.stdout) === normalizeOutput(t.stdout) ? " (only in trailing spaces or blank lines)" : ""}\n--- JDK\n${t.stdout}--- browser\n${r.stdout}`);
-        if (r.stderr) problems.push(`input ${i + 1}: printed an error in the browser:\n${r.stderr}`);
+        // A lesson example that crashes on purpose must crash the same way: the exception line and the program's own frames.
+        if (t.stderrKey != null) {
+          if (stderrKey(r.stderr) !== t.stderrKey) problems.push(`input ${i + 1}: crashes differently\n--- JDK\n${t.stderrKey}\n--- browser\n${stderrKey(r.stderr)}`);
+        } else if (r.stderr) problems.push(`input ${i + 1}: printed an error in the browser:\n${r.stderr}`);
       }
     });
   }

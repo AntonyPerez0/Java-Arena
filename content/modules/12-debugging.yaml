@@ -1,0 +1,772 @@
+id: debugging
+summary: Finding and fixing bugs. Reading what a crash tells you, writing code that's easy to read with clear names and comments, printing values to see what a program really does, and testing with inputs that are likely to break it.
+steps:
+  - id: debugging-reading-crashes
+    slug: reading-a-crash
+    title: Reading a crash
+    text: |
+      Programs go wrong in two ways. You've met the first since module 1: **javac** finds a mistake, and the program doesn't run at all. The second kind happens while the program runs: it gets to a line it can't carry out, and it stops. This is a **crash**, and Java calls the problem an **exception**.
+
+      This program computes an average, but nothing has been added yet:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              int total = 0;
+              int count = 0;
+              System.out.println("Scores added: " + count);
+              int average = total / count;
+              System.out.println("Average: " + average);
+          }
+      }
+      ```
+
+      ```output
+      Scores added: 0
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.ArithmeticException: / by zero
+      	at Main.main(Main.java:6)
+      ```
+
+      A crash message has three parts worth reading:
+
+      - **What happened**: the exception's name, here `ArithmeticException`, a calculation that can't be done.
+      - **Why**: the message after the colon, `/ by zero`. A whole number can't be divided by zero.
+      - **Where**: `at Main.main(Main.java:6)`, the method `main` on line 6.
+
+      Everything printed before the crash still appears: `Scores added: 0` came out, and the lines after line 6 never ran.
+
+      When the crash happens inside a method, Java lists every method that was running, the one that crashed first. This is the call stack from module 11:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              printShare(12, 4);
+              printShare(12, 0);
+          }
+
+          public static void printShare(int total, int people) {
+              System.out.println("Each gets " + share(total, people));
+          }
+
+          public static int share(int total, int people) {
+              return total / people;
+          }
+      }
+      ```
+
+      ```output
+      Each gets 3
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.ArithmeticException: / by zero
+      	at Main.share(Main.java:12)
+      	at Main.printShare(Main.java:8)
+      	at Main.main(Main.java:4)
+      ```
+
+      Read it from the top: the division on line 12 in `share` failed. `share` was called by `printShare` on line 8, and that call came from line 4 of `main`, the second `printShare`. The first call worked; only the call with 0 people crashed.
+
+      Java Arena shows a crash the same way and explains it in plain words, with the line it happened on. The fix is often not on the crashing line itself: ask where the bad value came from.
+
+      **Your turn:** this program reads scores until the user types `0`, then prints their average. It crashes when the very first input is `0`. Make it print `No scores` in that case, and the average otherwise. With the input `0` it prints:
+
+      ```
+      No scores
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int total = 0;
+              int count = 0;
+              while (true) {
+                  int score = Integer.valueOf(scanner.nextLine());
+                  if (score == 0) {
+                      break;
+                  }
+                  total += score;
+                  count++;
+              }
+              System.out.println("Average: " + (total / count));
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int total = 0;
+              int count = 0;
+              while (true) {
+                  int score = Integer.valueOf(scanner.nextLine());
+                  if (score == 0) {
+                      break;
+                  }
+                  total += score;
+                  count++;
+              }
+              if (count == 0) {
+                  System.out.println("No scores");
+              } else {
+                  System.out.println("Average: " + (total / count));
+              }
+          }
+      }
+    hints:
+      - "Run it with the input `0` and read the crash: which line, and which value is zero there?"
+      - "`count` is 0 when no score was added. Check `if (count == 0)` before dividing, and print `No scores` then."
+    tests:
+      - stdin: "0"
+      - stdin: |
+          4
+          6
+          0
+      - stdin: |
+          10
+          0
+        hidden: true
+    more:
+      - task: |
+          This program prints how many points each team member gets. It crashes when a team has no members. Change only the method `perMember`, so it returns 0 when `members` is 0. The check runs `printPoints(30, 0);` and expects:
+
+          ```
+          Each member gets 0
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  printPoints(30, 3);
+                  printPoints(30, 0);
+              }
+
+              public static void printPoints(int points, int members) {
+                  System.out.println("Each member gets " + perMember(points, members));
+              }
+
+              public static int perMember(int points, int members) {
+                  return points / members;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  printPoints(30, 3);
+                  printPoints(30, 0);
+              }
+
+              public static void printPoints(int points, int members) {
+                  System.out.println("Each member gets " + perMember(points, members));
+              }
+
+              public static int perMember(int points, int members) {
+                  if (members == 0) {
+                      return 0;
+                  }
+                  return points / members;
+              }
+          }
+        hints:
+          - "The crash's first `at` line names the method where it happened: `perMember`."
+          - "Start `perMember` with `if (members == 0) { return 0; }`, before the division."
+        tests:
+          - call: printPoints(30, 0);
+          - call: printPoints(30, 3);
+            hidden: true
+          - call: System.out.println(perMember(7, 2));
+            hidden: true
+      - task: |
+          Here is a crash from a program you can't see:
+
+          ```crash
+          Exception in thread "main" java.lang.ArithmeticException: / by zero
+          	at Main.average(Main.java:14)
+          	at Main.report(Main.java:9)
+          	at Main.main(Main.java:4)
+          ```
+
+          Fill in the blanks: the method the crash happened in, and the line of `main` that started the call.
+        fill: |
+          public class Main {
+              public static void main(String[] args) {
+                  String crashedIn = "[[average]]";
+                  int mainLine = [[4]];
+                  System.out.println(crashedIn + " was called from line " + mainLine);
+              }
+          }
+        hints:
+          - "The first `at` line is where the crash happened; the last one is in `main`."
+          - "The method is `average`, and `main` was on line 4."
+        tests:
+          - expect: average was called from line 4
+
+  - id: debugging-names-comments
+    slug: names-and-comments
+    title: Names and comments
+    text: |
+      When you read your own code, you tend to see what you *meant* to write, not what's actually there. That's why a bug can sit in plain sight while you read over it again and again.
+
+      Two habits make code easier to read, both for others and for you next week.
+
+      ### Names that say what a value is
+
+      Compare these two versions of the same calculation:
+
+      ```java main
+      int a = 3;
+      int b = 250;
+      int c = a * b;
+      System.out.println(c);
+      ```
+
+      ```output
+      750
+      ```
+
+      ```java main
+      int tickets = 3;
+      int priceInCents = 250;
+      int totalInCents = tickets * priceInCents;
+      System.out.println(totalInCents);
+      ```
+
+      ```output
+      750
+      ```
+
+      Both work, but only the second one tells you what it does. A wrong line such as `int totalInCents = tickets + priceInCents;` stands out when the names make sense, and hides easily among `a`, `b` and `c`. Short names are fine where the meaning is obvious, such as `i` for a loop counter.
+
+      ### Comments that explain why
+
+      You met comments in module 1: `//` runs to the end of the line, and `/*` runs until `*/`. Java skips them, so they're written for people:
+
+      ```java main
+      /* Prices are kept in cents,
+         so no rounding happens. */
+      int priceInCents = 250;
+      // A discount of 10 percent on orders of 4 or more
+      int tickets = 4;
+      if (tickets >= 4) {
+          priceInCents = priceInCents * 90 / 100;
+      }
+      System.out.println(tickets * priceInCents);
+      ```
+
+      ```output
+      900
+      ```
+
+      Good comments say what the code can't: why it's written this way, or what a rule means. A comment that repeats the code (`// adds one to count` above `count++;`) adds nothing, and a comment that no longer matches the code is worse than none.
+
+      A comment that states a rule is also a debugging aid: when the code and the comment above it disagree, one of them is wrong, and you've found where to look.
+
+      **Your turn:** in this ticket program, one line doesn't do what the comment above it says. Find it and fix the code (the comments are right). With the input `5` it prints:
+
+      ```
+      Total: 5200 cents
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int tickets = Integer.valueOf(scanner.nextLine());
+              int priceInCents = 1250;
+              // Groups of 5 or more get 20 percent off each ticket
+              if (tickets > 5) {
+                  priceInCents = priceInCents * 80 / 100;
+              }
+              // A booking fee of 200 cents is added once per order
+              int totalInCents = tickets * priceInCents + 200;
+              System.out.println("Total: " + totalInCents + " cents");
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int tickets = Integer.valueOf(scanner.nextLine());
+              int priceInCents = 1250;
+              // Groups of 5 or more get 20 percent off each ticket
+              if (tickets >= 5) {
+                  priceInCents = priceInCents * 80 / 100;
+              }
+              // A booking fee of 200 cents is added once per order
+              int totalInCents = tickets * priceInCents + 200;
+              System.out.println("Total: " + totalInCents + " cents");
+          }
+      }
+    hints:
+      - "Read each comment, then check the line under it against it, for a group of exactly 5."
+      - "\"5 or more\" includes 5: the condition should be `tickets >= 5`."
+    tests:
+      - stdin: "5"
+      - stdin: "4"
+        hidden: true
+      - stdin: "6"
+        hidden: true
+      - stdin: "1"
+        hidden: true
+    more:
+      - task: |
+          This program works, but its names hide what it does. It reads a distance in kilometers and a time in minutes, and prints the average speed in kilometers per hour. Rename the variables `a`, `b` and `c` to names that say what they hold (the output must stay the same). With the input `42` and `210` it prints:
+
+          ```
+          Average speed: 12.0 km/h
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  double a = Double.valueOf(scanner.nextLine());
+                  double b = Double.valueOf(scanner.nextLine());
+                  double c = a / (b / 60);
+                  System.out.println("Average speed: " + c + " km/h");
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  double kilometers = Double.valueOf(scanner.nextLine());
+                  double minutes = Double.valueOf(scanner.nextLine());
+                  double kilometersPerHour = kilometers / (minutes / 60);
+                  System.out.println("Average speed: " + kilometersPerHour + " km/h");
+              }
+          }
+        hints:
+          - "`a` is the distance, `b` the time in minutes, and `c` the speed. Change every place a name is used, not only where it's declared."
+          - "For example `kilometers`, `minutes` and `kilometersPerHour`."
+        forbid:
+          - pattern: \b(double|int)\s+[a-z]\s*=
+            message: "Give every variable a name of more than one letter that says what it holds."
+        tests:
+          - stdin: |
+              42
+              210
+          - stdin: |
+              10
+              30
+            hidden: true
+      - task: |
+          What does this program print? Watch for the comments.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int lives = 3;
+                  // lives = lives + 1;
+                  System.out.println("Lives: " + lives);
+                  /* lives = 0;
+                  System.out.println("Game over"); */
+                  lives--; // one hit
+                  System.out.println("Lives: " + lives);
+              }
+          }
+        hints:
+          - "Java skips everything after `//` on a line, and everything between `/*` and `*/`."
+          - "Only three statements run: the first print, `lives--;` and the last print."
+
+  - id: debugging-print
+    slug: print-debugging
+    title: Print debugging
+    text: |
+      A crash tells you where to look. A wrong answer doesn't: the program runs to the end and prints something, just not the right thing. Then you need to see what the program actually does, step by step.
+
+      The simplest tool is a temporary print that shows the values of variables at an interesting point. This program should add up the numbers from 1 to 5, which is 15:
+
+      ```java main
+      int sum = 0;
+      for (int i = 1; i < 5; i++) {
+          sum += i;
+      }
+      System.out.println("Sum: " + sum);
+      ```
+
+      ```output
+      Sum: 10
+      ```
+
+      10 is wrong, but why? Add a print inside the loop:
+
+      ```java main
+      int sum = 0;
+      for (int i = 1; i < 5; i++) {
+          sum += i;
+          System.out.println("debug: i = " + i + ", sum = " + sum);
+      }
+      System.out.println("Sum: " + sum);
+      ```
+
+      ```output
+      debug: i = 1, sum = 1
+      debug: i = 2, sum = 3
+      debug: i = 3, sum = 6
+      debug: i = 4, sum = 10
+      Sum: 10
+      ```
+
+      Now it's plain to see: the loop stops after 4, so 5 is never added. The condition should be `i <= 5`. Fix it, run it again, and remove the debug print (or comment it out) once the answer is right.
+
+      Some tips:
+
+      - Print a label with each value (`"debug: i = " + i`), so you know which print you're looking at.
+      - Print in the places where the program decides something: inside loops, before and after an `if`, at the start of a method (its parameters) and just before it returns.
+      - Start with one or two prints. If the values are right there, move them later in the program; if they're already wrong, move them earlier.
+
+      **Your turn:** this program should count how many of the numbers typed are even, until the user types `-1`. It gives the wrong count. Find the bug (a debug print inside the loop helps), fix it, and make sure no debug prints are left. With the input `4`, `7`, `10`, `-1` it prints:
+
+      ```
+      Even numbers: 2
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int evens = 0;
+              while (true) {
+                  int number = Integer.valueOf(scanner.nextLine());
+                  if (number == -1) {
+                      break;
+                  }
+                  if (number % 2 == 1) {
+                      evens++;
+                  }
+              }
+              System.out.println("Even numbers: " + evens);
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int evens = 0;
+              while (true) {
+                  int number = Integer.valueOf(scanner.nextLine());
+                  if (number == -1) {
+                      break;
+                  }
+                  if (number % 2 == 0) {
+                      evens++;
+                  }
+              }
+              System.out.println("Even numbers: " + evens);
+          }
+      }
+    hints:
+      - "Print `number` and `evens` inside the loop, after the `if`. Which numbers make `evens` go up?"
+      - "An even number leaves no remainder when divided by 2: `number % 2 == 0`."
+    tests:
+      - stdin: |
+          4
+          7
+          10
+          -1
+      - stdin: |
+          -1
+        hidden: true
+      - stdin: |
+          2
+          4
+          6
+          9
+          -1
+        hidden: true
+    more:
+      - task: |
+          The method `sumBetween(int from, int to)` should add up every whole number from `from` to `to`, both included. For 3 and 6 that's 3 + 4 + 5 + 6 = 18, but it returns 12. Find the bug and fix it. The check runs `System.out.println(sumBetween(3, 6));` and expects:
+
+          ```
+          18
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(sumBetween(3, 6));
+              }
+
+              public static int sumBetween(int from, int to) {
+                  int sum = 0;
+                  for (int n = from; n < to; n++) {
+                      sum += n;
+                  }
+                  return sum;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(sumBetween(3, 6));
+              }
+
+              public static int sumBetween(int from, int to) {
+                  int sum = 0;
+                  for (int n = from; n <= to; n++) {
+                      sum += n;
+                  }
+                  return sum;
+              }
+          }
+        hints:
+          - "Print `n` inside the loop. Which numbers are added, and which one is missing?"
+          - "`to` itself must be added too: the condition should be `n <= to`."
+        tests:
+          - call: System.out.println(sumBetween(3, 6));
+          - call: System.out.println(sumBetween(5, 5));
+            hidden: true
+          - call: System.out.println(sumBetween(1, 10));
+            hidden: true
+      - task: |
+          This program reads two exam scores and should print their average with decimals. For 3 and 4 it prints `Average: 3.0` instead of `Average: 3.5`. Print the values along the way to see where the half goes missing, then fix it. With the input `3` and `4` it prints:
+
+          ```
+          Average: 3.5
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int first = Integer.valueOf(scanner.nextLine());
+                  int second = Integer.valueOf(scanner.nextLine());
+                  int sum = first + second;
+                  double average = sum / 2;
+                  System.out.println("Average: " + average);
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int first = Integer.valueOf(scanner.nextLine());
+                  int second = Integer.valueOf(scanner.nextLine());
+                  int sum = first + second;
+                  double average = sum / 2.0;
+                  System.out.println("Average: " + average);
+              }
+          }
+        hints:
+          - "`sum` is 7, which is right. The half is lost in the division: `sum / 2` divides two `int` values."
+          - "Divide by `2.0`, or cast first: `(double) sum / 2`."
+        tests:
+          - stdin: |
+              3
+              4
+          - stdin: |
+              10
+              10
+            hidden: true
+          - stdin: |
+              0
+              1
+            hidden: true
+
+  - id: debugging-testing
+    slug: testing-with-inputs
+    title: Testing with different inputs
+    text: |
+      A program that gives the right answer for one input can still be wrong. Bugs like to hide in the inputs nobody tried. So test with a few kinds of input on purpose:
+
+      - **A typical case**, like the example in the task.
+      - **The edges**: the smallest and largest values that are allowed, 0, 1, an empty input or a single value, and the values right at a limit (if something changes at 18, try 17 and 18).
+      - **The unusual**: negative numbers, all values the same, the largest value first or last.
+
+      This program finds the largest number typed. It works for the example `3`, `9`, `4`:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int count = Integer.valueOf(scanner.nextLine());
+              int largest = 0;
+              for (int i = 0; i < count; i++) {
+                  int number = Integer.valueOf(scanner.nextLine());
+                  if (number > largest) {
+                      largest = number;
+                  }
+              }
+              System.out.println("Largest: " + largest);
+          }
+      }
+      ```
+
+      ```input
+      3
+      3
+      9
+      4
+      ```
+
+      ```output
+      Largest: 9
+      ```
+
+      Now try numbers that are all negative, `-5`, `-2`, `-8`: it prints `Largest: 0`, a number that wasn't even typed. Starting from 0 only works when some number is bigger than 0. The fix is to start from the first number itself, and compare the rest with it.
+
+      ### Tracing by hand
+
+      For a short loop, you can also play the computer: write the variables in a table and fill in one row per round, without running anything. With the numbers `-5`, `-2`, `-8`:
+
+      | round | number | largest after the round |
+      |---|---|---|
+      | before the loop | | 0 |
+      | 1 | -5 | 0 |
+      | 2 | -2 | 0 |
+      | 3 | -8 | 0 |
+
+      The table shows the problem at once: `largest` never changes, because no number beats 0. Next to each row you can also write what the value *should* be: the first row where the two differ is where the bug is.
+
+      **Your turn:** fix the program above so it works for every input, negative numbers too. It reads how many numbers follow, then the numbers (at least one). With the input `3`, `-5`, `-2`, `-8` it prints:
+
+      ```
+      Largest: -2
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int count = Integer.valueOf(scanner.nextLine());
+              int largest = 0;
+              for (int i = 0; i < count; i++) {
+                  int number = Integer.valueOf(scanner.nextLine());
+                  if (number > largest) {
+                      largest = number;
+                  }
+              }
+              System.out.println("Largest: " + largest);
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int count = Integer.valueOf(scanner.nextLine());
+              int largest = Integer.valueOf(scanner.nextLine());
+              for (int i = 1; i < count; i++) {
+                  int number = Integer.valueOf(scanner.nextLine());
+                  if (number > largest) {
+                      largest = number;
+                  }
+              }
+              System.out.println("Largest: " + largest);
+          }
+      }
+    hints:
+      - "Read the first number before the loop and start `largest` from it. The loop then reads the remaining numbers."
+      - "If the first number is read before the loop, the loop runs one round fewer: start the counter at 1."
+    tests:
+      - stdin: |
+          3
+          -5
+          -2
+          -8
+      - stdin: |
+          3
+          3
+          9
+          4
+        hidden: true
+      - stdin: |
+          1
+          -7
+        hidden: true
+    more:
+      - task: |
+          A swimming pool charges by age: under 7 swim free, 7 to 17 pay 3 euros, and 18 or older pay 6 euros. This program gets some ages wrong. Test it with the ages at the edges (6, 7, 17 and 18), then fix it. With the input `17` it prints:
+
+          ```
+          Price: 3 euros
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int age = Integer.valueOf(scanner.nextLine());
+                  int price;
+                  if (age <= 7) {
+                      price = 0;
+                  } else if (age < 17) {
+                      price = 3;
+                  } else {
+                      price = 6;
+                  }
+                  System.out.println("Price: " + price + " euros");
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int age = Integer.valueOf(scanner.nextLine());
+                  int price;
+                  if (age < 7) {
+                      price = 0;
+                  } else if (age <= 17) {
+                      price = 3;
+                  } else {
+                      price = 6;
+                  }
+                  System.out.println("Price: " + price + " euros");
+              }
+          }
+        hints:
+          - "Work out by hand what the program does for 7 and for 17, and compare with the rules."
+          - "\"Under 7\" is `age < 7`, and \"7 to 17\" includes 17: `age <= 17`."
+        tests:
+          - stdin: "17"
+          - stdin: "7"
+            hidden: true
+          - stdin: "6"
+            hidden: true
+          - stdin: "18"
+            hidden: true
+          - stdin: "40"
+            hidden: true
+      - task: |
+          Trace this program by hand, with a table for `a` and `b`, then write down what it prints.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int a = 1;
+                  int b = 1;
+                  for (int round = 1; round <= 4; round++) {
+                      int next = a + b;
+                      a = b;
+                      b = next;
+                  }
+                  System.out.println(a);
+                  System.out.println(b);
+              }
+          }
+        hints:
+          - "Each round, `next` is the sum of the two, `a` takes the old `b`, and `b` takes `next`."
+          - "After the rounds, the pairs are (1, 2), (2, 3), (3, 5) and (5, 8)."

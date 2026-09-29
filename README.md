@@ -14,9 +14,10 @@ The site is built in batches, one pull request per batch.
 | 2 | Site foundation: design, lesson content pipeline, lesson pages, modules 1 and 2 | done |
 | 3 | Rest of MOOC part 1 (modules 3 to 6), the Playground, "What does it print?" challenges, an indentation check | done |
 | 4 | MOOC part 2 (modules 7 to 11), challenges whose tests call your methods | done |
-| 5 | Practice: Deathmatch drills for parts 1 and 2, interview prep, daily challenge, placement quiz | this batch |
-| 6 | MOOC part 3 (modules 12 to 16) and its drills | next |
-| 7 to 20 | Parts 4 to 14 of the course, progress sync, projects, Pro Track, tools, polish | planned |
+| 5 | Practice: Deathmatch drills for parts 1 and 2, interview prep, daily challenge, placement quiz | done |
+| 6 | MOOC part 3 (modules 12 to 16) and its drills, lessons that show a crash, plainer crash explanations | this batch |
+| 7 | MOOC part 4 (objects and classes), with an editor for programs of several files | next |
+| 8 to 20 | Parts 5 to 14 of the course, progress sync, projects, Pro Track, tools, polish | planned |
 
 The plan and the research behind it are in [`docs/research/`](docs/research/README.md), including the full curriculum map.
 

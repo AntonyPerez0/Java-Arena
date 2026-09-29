@@ -1,0 +1,1584 @@
+id: strings
+summary: Working with text. String methods such as length, toUpperCase and trim, comparing with equals and equalsIgnoreCase, characters and the char type, substring and indexOf, splitting text into an array, reading data in a fixed format line by line, and a program that uses lists, arrays and strings together. The end of MOOC part 3.
+steps:
+  - id: strings-reading-printing
+    slug: strings-again
+    title: Strings again
+    text: |
+      Strings have been with you since module 2: `nextLine()` reads one, `+` joins them, and `println` prints them. You've compared them with `equals` (module 6) and built them up in a loop with `+=` (module 11). This module is about what else you can do with text: look at its characters, cut out pieces, and split a line into parts. That's how a program makes sense of input such as `Aino,42`.
+
+      ### Methods of a String
+
+      A String has methods of its own. You call them with a dot after the string, the same way you call `nextLine()` on a scanner. `length()` tells how many characters the string has:
+
+      ```java main
+      Scanner scanner = new Scanner(System.in);
+      System.out.println("Name of your pet?");
+      String pet = scanner.nextLine();
+      System.out.println(pet + " has " + pet.length() + " characters");
+      ```
+
+      ```input
+      Mr Biscuit
+      ```
+
+      ```output
+      Name of your pet?
+      Mr Biscuit has 10 characters
+      ```
+
+      Every character counts, the space included. The empty string `""`, which is what `nextLine()` gives when the user presses Enter without typing anything, has the length 0. `isEmpty()` is `true` for it, and `false` for any other string.
+
+      ### Strings can't be changed
+
+      `toUpperCase()`, `toLowerCase()` and `trim()` look as if they change a string, but they don't: each one gives back a **new** string. `trim()` removes the spaces at the start and at the end, not the ones in the middle. The brackets show where the spaces are:
+
+      ```java main
+      String title = "  Tea Time ";
+      System.out.println("[" + title.toUpperCase() + "]");
+      System.out.println("[" + title.toLowerCase() + "]");
+      System.out.println("[" + title.trim() + "]");
+      System.out.println("[" + title + "]");
+      ```
+
+      ```output
+      [  TEA TIME ]
+      [  tea time ]
+      [Tea Time]
+      [  Tea Time ]
+      ```
+
+      The last line shows that `title` is still what it was. No String method ever changes the string it's called on: Strings are **immutable**. To keep a result, store it, often in the same variable: `title = title.trim();`. A line like `title.trim();` on its own does nothing useful, because the new string is thrown away, just like the value of a method call that isn't used (module 11).
+
+      Since each of these methods returns a string, you can call another method on the result straight away. `title.trim().toUpperCase()` trims first and then makes capitals of the trimmed text: `TEA TIME`.
+
+      **Your turn:** fill in the blanks. The program reads a word and prints it in capitals, followed by its length in parentheses. For the input `java` it prints:
+
+      ```
+      JAVA (4)
+      ```
+    fill: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String word = scanner.nextLine();
+              System.out.println(word.[[toUpperCase]]() + " (" + word.[[length]]() + ")");
+          }
+      }
+    hints:
+      - The method that gives the text in capitals is `toUpperCase`.
+      - The number of characters comes from `length()`.
+    tests:
+      - stdin: java
+      - stdin: Hello world
+        hidden: true
+      - stdin: x
+        hidden: true
+    more:
+      - task: |
+          People type email addresses in all sorts of ways, with capitals and stray spaces. Write a method `cleanEmail(String email)` that returns the address without the spaces at the start and the end, and in small letters. The check runs `System.out.println("[" + cleanEmail("  Ada@Example.COM ") + "]");` and expects:
+
+          ```
+          [ada@example.com]
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("[" + cleanEmail("  Ada@Example.COM ") + "]");
+              }
+
+              // Write the cleanEmail method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("[" + cleanEmail("  Ada@Example.COM ") + "]");
+              }
+
+              public static String cleanEmail(String email) {
+                  return email.trim().toLowerCase();
+              }
+          }
+        hints:
+          - "The method returns a String: `public static String cleanEmail(String email) {`."
+          - "`trim()` and `toLowerCase()` each return a new string, so they can be chained: `return email.trim().toLowerCase();`"
+        require:
+          - pattern: \.trim\s*\(
+            message: "Remove the spaces with `trim()`."
+          - pattern: \.toLowerCase\s*\(
+            message: "Make the letters small with `toLowerCase()`."
+        tests:
+          - call: System.out.println("[" + cleanEmail("  Ada@Example.COM ") + "]");
+          - call: System.out.println("[" + cleanEmail("grace@example.org") + "]");
+            hidden: true
+          - call: System.out.println("[" + cleanEmail("   LINUS@EXAMPLE.NET") + "]");
+            hidden: true
+          - call: System.out.println("[" + cleanEmail(" Mo@Example.com  ") + "]");
+            hidden: true
+      - task: |
+          What does this program print? Watch which results are kept.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  String city = "Lima";
+                  city.toUpperCase();
+                  System.out.println(city);
+                  city = city.toUpperCase();
+                  System.out.println(city);
+                  System.out.println(city.length() + city.toLowerCase());
+              }
+          }
+        hints:
+          - "`city.toUpperCase();` on a line of its own makes a new string and throws it away, so `city` is still `Lima`."
+          - "After `city = city.toUpperCase();` the variable holds `LIMA`. On the last line, the number 4 is joined to the text `lima`."
+
+  - id: strings-comparing
+    slug: comparing-strings
+    title: Comparing strings
+    text: |
+      Module 6 showed that text is compared with `equals`. Here's the rule once more, with the reason behind it. `==` asks whether two variables refer to one and the same String object in memory, while `equals` compares the characters:
+
+      ```java fragment
+      answer == "yes"         // wrong: are they the very same object?
+      answer.equals("yes")    // right: do they have the same characters?
+      ```
+
+      What makes `==` tricky is that it sometimes seems to work. Java may reuse one String object for equal texts written in the code, and whether two strings end up as the same object depends on where they came from and on Java's own internals. So a program that compares text with `==` can pass a quick test and then fail on real input. With `equals`, the result depends only on the text. (For `int` and `char` values, which aren't objects, `==` is the right tool.)
+
+      ### Ignoring capitals
+
+      `equals` counts capitals: `"Yes".equals("yes")` is `false`. When capitals shouldn't matter, use `equalsIgnoreCase`:
+
+      ```java main
+      Scanner scanner = new Scanner(System.in);
+      System.out.println("Play again? (yes/no)");
+      String answer = scanner.nextLine();
+      if (answer.equalsIgnoreCase("yes")) {
+          System.out.println("New game!");
+      } else {
+          System.out.println("Thanks for playing");
+      }
+      ```
+
+      ```input
+      YES
+      ```
+
+      ```output
+      Play again? (yes/no)
+      New game!
+      ```
+
+      Two more tools go well with comparing:
+
+      - `!` in front turns the result around: `if (!answer.equals("no"))` runs its block for every answer except `no`.
+      - People sometimes type a space before or after a word without noticing. `answer.trim().equalsIgnoreCase("yes")` trims first and then compares, so `" Yes "` counts too.
+
+      A method can return the result of a comparison as a `boolean`:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(isWeekend("Sunday"));
+              System.out.println(isWeekend("monday"));
+              System.out.println(isWeekend("SATURDAY"));
+          }
+
+          public static boolean isWeekend(String day) {
+              return day.equalsIgnoreCase("saturday") || day.equalsIgnoreCase("sunday");
+          }
+      }
+      ```
+
+      ```output
+      true
+      false
+      true
+      ```
+
+      **Your turn:** a shop's checkout takes one discount code, `SPRING10`, and capitals don't matter: `spring10` and `Spring10` work too. Ask for the code, read it, and print `Code accepted` for the right code, otherwise `Unknown code`. For the input `spring10` the program prints:
+
+      ```
+      Discount code:
+      Code accepted
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              System.out.println("Discount code:");
+              String code = scanner.nextLine();
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              System.out.println("Discount code:");
+              String code = scanner.nextLine();
+              if (code.equalsIgnoreCase("SPRING10")) {
+                  System.out.println("Code accepted");
+              } else {
+                  System.out.println("Unknown code");
+              }
+          }
+      }
+    hints:
+      - "`equals` would say no to `spring10`, because capitals count. `equalsIgnoreCase` doesn't count them."
+      - "`if (code.equalsIgnoreCase(\"SPRING10\")) { ... } else { ... }`"
+    forbid:
+      - pattern: (==|!=)\s*""|""\s*(==|!=)
+        message: "Compare text with `equals` or `equalsIgnoreCase`, not `==`."
+    tests:
+      - stdin: spring10
+      - stdin: SPRING10
+        hidden: true
+      - stdin: Spring10
+        hidden: true
+      - stdin: SPRING1
+        hidden: true
+      - stdin: SUMMER10
+        hidden: true
+    more:
+      - task: |
+          Write a method `isYes(String answer)` that returns `true` when the answer is `yes` or `y`, in any capitals and with or without spaces around it, and `false` for anything else. The check runs `System.out.println(isYes(" Yes "));` and expects:
+
+          ```
+          true
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(isYes(" Yes "));
+              }
+
+              // Write the isYes method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(isYes(" Yes "));
+              }
+
+              public static boolean isYes(String answer) {
+                  String cleaned = answer.trim();
+                  return cleaned.equalsIgnoreCase("yes") || cleaned.equalsIgnoreCase("y");
+              }
+          }
+        hints:
+          - "Trim the answer first and keep the result: `String cleaned = answer.trim();`."
+          - "Then compare twice and join the two comparisons with `||`, the way `isWeekend` does."
+        require:
+          - pattern: \.trim\s*\(
+            message: "Remove the spaces around the answer with `trim()`."
+        forbid:
+          - pattern: (==|!=)\s*""|""\s*(==|!=)
+            message: "Compare text with `equals` or `equalsIgnoreCase`, not `==`."
+        tests:
+          - call: System.out.println(isYes(" Yes "));
+          - call: System.out.println(isYes("y"));
+            hidden: true
+          - call: System.out.println(isYes("no"));
+            hidden: true
+          - call: System.out.println(isYes("YES"));
+            hidden: true
+          - call: System.out.println(isYes("yesterday"));
+            hidden: true
+          - call: System.out.println(isYes("Y  "));
+            hidden: true
+      - task: |
+          Read words, one per line, until a word is the same as the one just before it (capitals count). Then print `Said twice: ` and that word. For the input `red`, `green`, `blue` and `blue` the program prints:
+
+          ```
+          Said twice: blue
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String previous = "";
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String previous = "";
+                  while (true) {
+                      String word = scanner.nextLine();
+                      if (word.equals(previous)) {
+                          System.out.println("Said twice: " + word);
+                          break;
+                      }
+                      previous = word;
+                  }
+              }
+          }
+        hints:
+          - "`previous` keeps the last word. In each round, read a new word and compare it with `previous` before you overwrite it."
+          - "`if (word.equals(previous)) { ... break; }`, and after the `if`, `previous = word;`."
+        forbid:
+          - pattern: \b(word|previous)\s*(==|!=)|(==|!=)\s*(word|previous)\b|(==|!=)\s*""|""\s*(==|!=)
+            message: "Compare the words with `equals`: `==` checks whether two strings are the same object, not whether they hold the same text."
+        tests:
+          - stdin: |
+              red
+              green
+              blue
+              blue
+          - stdin: |
+              go
+              go
+            hidden: true
+          - stdin: |
+              a
+              A
+              b
+              b
+            hidden: true
+          - stdin: |
+              one two
+              one
+              one two
+              one two
+            hidden: true
+
+  - id: strings-characters
+    slug: characters
+    title: Characters
+    text: |
+      A string is a row of characters, and each character has an index, counted from 0, just like the elements of a list or an array. `charAt(index)` gives the character at an index:
+
+      | Index | 0 | 1 | 2 | 3 |
+      |---|---|---|---|---|
+      | `"Java"` | J | a | v | a |
+
+      ```java main
+      String word = "Java";
+      char first = word.charAt(0);
+      char last = word.charAt(word.length() - 1);
+      System.out.println(first);
+      System.out.println(last);
+      ```
+
+      ```output
+      J
+      a
+      ```
+
+      The last index is always `length() - 1`, one less than the length, because counting starts at 0.
+
+      ### The char type
+
+      `charAt` returns a `char`: a type that holds exactly one character. A char is written in **single** quotes, `'a'`, while double quotes make a String, `"a"`. Like `int`, `char` is a primitive type, not an object, so chars are compared with `==`:
+
+      ```java main
+      String word = "banana";
+      int count = 0;
+      for (int i = 0; i < word.length(); i++) {
+          char c = word.charAt(i);
+          if (c == 'a') {
+              count++;
+          }
+      }
+      System.out.println("The letter a appears " + count + " times");
+      ```
+
+      ```output
+      The letter a appears 3 times
+      ```
+
+      This loop is the way to go through a string: the index runs from 0 as long as it's less than `length()`, and `charAt(i)` gives each character in turn. Other characters work the same way: `' '` is a space and `'!'` an exclamation mark.
+
+      A char and a String are different types, even when they hold the same letter, so comparing one with the other doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              String word = "cat";
+              if (word.charAt(0) == "c") {
+                  System.out.println("Starts with c");
+              }
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: bad operand types for binary operator '=='
+              if (word.charAt(0) == "c") {
+                                 ^
+        first type:  char
+        second type: String
+      1 error
+      ```
+
+      One more surprise: a char is stored as a number, its character code, so `+` between two chars adds their codes. With a String first, `+` joins as usual:
+
+      ```java main
+      String word = "ok";
+      System.out.println(word.charAt(0) + word.charAt(1));
+      System.out.println("" + word.charAt(0) + word.charAt(1));
+      ```
+
+      ```output
+      218
+      ok
+      ```
+
+      ### Past the end
+
+      The indexes of `"cat"` are 0, 1 and 2. Asking for index 3 crashes the program with a `StringIndexOutOfBoundsException`. The usual cause is a loop that uses `<=` where it should use `<`:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              String word = "cat";
+              for (int i = 0; i <= word.length(); i++) {
+                  System.out.println(word.charAt(i));
+              }
+          }
+      }
+      ```
+
+      ```output
+      c
+      a
+      t
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.StringIndexOutOfBoundsException: Index 3 out of bounds for length 3
+      	at Main.main(Main.java:5)
+      ```
+
+      The message says which index was asked for and how long the string is, and the `at` line points to line 5, the `charAt` call. The loop condition should be `i < word.length()`.
+
+      **Your turn:** fill in the blanks, so the program counts the question marks in a line. For the input `Who? What? Why?` it prints:
+
+      ```
+      Questions: 3
+      ```
+    fill: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String text = scanner.nextLine();
+              int count = 0;
+              for (int i = 0; i < text.[[length]](); i++) {
+                  if (text.[[charAt]](i) == '?') {
+                      count++;
+                  }
+              }
+              System.out.println("Questions: " + count);
+          }
+      }
+    hints:
+      - The loop runs as long as `i` is less than the number of characters in `text`.
+      - "The character at index `i` is `text.charAt(i)`."
+    tests:
+      - stdin: Who? What? Why?
+      - stdin: No questions here.
+        hidden: true
+      - stdin: "???"
+        hidden: true
+    more:
+      - task: |
+          Write a method `countVowels(String text)` that returns how many vowels (a, e, i, o and u, small or capital) the text has. The check runs `System.out.println(countVowels("Education"));` and expects:
+
+          ```
+          5
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(countVowels("Education"));
+              }
+
+              // Write the countVowels method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(countVowels("Education"));
+              }
+
+              public static int countVowels(String text) {
+                  String lower = text.toLowerCase();
+                  int count = 0;
+                  for (int i = 0; i < lower.length(); i++) {
+                      char c = lower.charAt(i);
+                      if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u') {
+                          count++;
+                      }
+                  }
+                  return count;
+              }
+          }
+        hints:
+          - "Make the text small first, `String lower = text.toLowerCase();`, so there are only five vowels to look for."
+          - "In the loop, `char c = lower.charAt(i);` and then `if (c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u')`."
+        require:
+          - pattern: \.charAt\s*\(
+            message: "Look at the characters one at a time with `charAt`."
+        tests:
+          - call: System.out.println(countVowels("Education"));
+          - call: System.out.println(countVowels("rhythm"));
+            hidden: true
+          - call: System.out.println(countVowels("AEIOU aeiou"));
+            hidden: true
+          - call: System.out.println(countVowels(""));
+            hidden: true
+          - call: System.out.println(countVowels("Programming in Java"));
+            hidden: true
+      - task: |
+          What does this program print? The loop runs backwards.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  String word = "drawer";
+                  String result = "";
+                  for (int i = word.length() - 1; i >= 0; i--) {
+                      result += word.charAt(i);
+                  }
+                  System.out.println(result);
+                  System.out.println(word.charAt(1) + "" + word.charAt(4));
+              }
+          }
+        hints:
+          - The loop starts at the last index, 5, and goes down to 0, adding one character in each round.
+          - "`drawer` backwards is `reward`. On the last line, the `\"\"` in the middle makes `+` join the two chars instead of adding their codes."
+
+  - id: strings-parts
+    slug: finding-parts
+    title: Finding parts of a string
+    text: |
+      `substring` cuts a piece out of a string. Like every String method, it gives back a new string and leaves the original whole.
+
+      - `substring(start)` gives everything from the index `start` to the end.
+      - `substring(start, end)` gives the characters from `start` up to, **but not including**, `end`.
+
+      | Index | 0 | 1 | 2 | 3 | 4 | 5 |
+      |---|---|---|---|---|---|---|
+      | `"carpet"` | c | a | r | p | e | t |
+
+      ```java main
+      String word = "carpet";
+      System.out.println(word.substring(3));
+      System.out.println(word.substring(0, 3));
+      System.out.println(word.substring(1, 4));
+      ```
+
+      ```output
+      pet
+      car
+      arp
+      ```
+
+      Because the end isn't included, `substring(start, end)` is always `end - start` characters long: `substring(1, 4)` has 3. An index past the end crashes the program with the same `StringIndexOutOfBoundsException` as `charAt`.
+
+      ### Searching in a string
+
+      `indexOf` looks for a piece of text and returns the index where it first starts, or -1 when it isn't there. Together with `substring`, it cuts a string at a certain character, wherever that character happens to be:
+
+      ```java main
+      String email = "ada@example.com";
+      int at = email.indexOf("@");
+      System.out.println(at);
+      System.out.println(email.substring(0, at));
+      System.out.println(email.substring(at + 1));
+      System.out.println(email.indexOf("#"));
+      ```
+
+      ```output
+      3
+      ada
+      example.com
+      -1
+      ```
+
+      Three more methods answer yes-or-no questions with a `boolean`:
+
+      ```java main
+      String file = "holiday-photo.jpg";
+      System.out.println(file.contains("photo"));
+      System.out.println(file.startsWith("holiday"));
+      System.out.println(file.endsWith(".png"));
+      ```
+
+      ```output
+      true
+      true
+      false
+      ```
+
+      All of these count capitals: `"Photo.JPG".endsWith(".jpg")` is `false`. When capitals shouldn't matter, make the text small first: `file.toLowerCase().endsWith(".jpg")`.
+
+      **Your turn:** fill in the numbers, so the program cuts `sun` and `flower` out of `sunflower`. It prints:
+
+      ```
+      sun
+      flower
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              String word = "sunflower";
+              System.out.println(word.substring([[0]], [[3]]));
+              System.out.println(word.substring([[3]]));
+          }
+      }
+    hints:
+      - "`sun` is at the indexes 0, 1 and 2. The end index is the first one that's *not* included."
+      - "`flower` starts at index 3 and goes on to the end, so it needs only the start."
+    tests:
+      - expect: |
+          sun
+          flower
+    more:
+      - task: |
+          Read a file name with exactly one dot in it, such as `report.pdf`, and print the part before the dot and the part after it. For the input `report.pdf` the program prints:
+
+          ```
+          Name: report
+          Type: pdf
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String file = scanner.nextLine();
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String file = scanner.nextLine();
+                  int dot = file.indexOf(".");
+                  System.out.println("Name: " + file.substring(0, dot));
+                  System.out.println("Type: " + file.substring(dot + 1));
+              }
+          }
+        hints:
+          - "`int dot = file.indexOf(\".\");` finds where the dot is."
+          - "The name is `file.substring(0, dot)`, and the type starts one after the dot: `file.substring(dot + 1)`."
+        require:
+          - pattern: \.indexOf\s*\(
+            message: "Find the dot with `indexOf`."
+          - pattern: \.substring\s*\(
+            message: "Cut out the two parts with `substring`."
+        tests:
+          - stdin: report.pdf
+          - stdin: holiday.jpeg
+            hidden: true
+          - stdin: a.b
+            hidden: true
+          - stdin: notes-2024.txt
+            hidden: true
+      - task: |
+          Write a method `fileKind(String fileName)` that returns `image` for names that end in `.jpg` or `.png`, `document` for names that end in `.pdf` or `.txt`, and `other` for anything else. Capitals don't matter: `Beach.JPG` is an image. The check runs `System.out.println(fileKind("Beach.JPG"));` and expects:
+
+          ```
+          image
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(fileKind("Beach.JPG"));
+              }
+
+              // Write the fileKind method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(fileKind("Beach.JPG"));
+              }
+
+              public static String fileKind(String fileName) {
+                  String name = fileName.toLowerCase();
+                  if (name.endsWith(".jpg") || name.endsWith(".png")) {
+                      return "image";
+                  }
+                  if (name.endsWith(".pdf") || name.endsWith(".txt")) {
+                      return "document";
+                  }
+                  return "other";
+              }
+          }
+        hints:
+          - "Make the name small first: `String name = fileName.toLowerCase();`. Then `.JPG` becomes `.jpg`."
+          - "`if (name.endsWith(\".jpg\") || name.endsWith(\".png\")) { return \"image\"; }`, the same for documents, and `return \"other\";` last."
+        require:
+          - pattern: \.endsWith\s*\(
+            message: "Check the end of the name with `endsWith`."
+        tests:
+          - call: System.out.println(fileKind("Beach.JPG"));
+          - call: System.out.println(fileKind("notes.txt"));
+            hidden: true
+          - call: System.out.println(fileKind("Report.PDF"));
+            hidden: true
+          - call: System.out.println(fileKind("song.mp3"));
+            hidden: true
+          - call: System.out.println(fileKind("logo.png"));
+            hidden: true
+          - call: System.out.println(fileKind("jpg-files.zip"));
+            hidden: true
+
+  - id: strings-split
+    slug: splitting
+    title: Splitting a string
+    text: |
+      Text often holds several values in a row: the words of a sentence, or the day, month and year of a date. `split` cuts a string at every place where a separator appears, and returns the pieces in an **array** of Strings, a `String[]`:
+
+      ```java main
+      String sentence = "cats like warm sunny windows";
+      String[] words = sentence.split(" ");
+      System.out.println(words.length);
+      System.out.println(words[0]);
+      System.out.println(words[words.length - 1]);
+      ```
+
+      ```output
+      5
+      cats
+      windows
+      ```
+
+      - The separator isn't part of any piece: here the spaces are gone.
+      - `words.length` is the number of pieces. No parentheses: it's an array, not a String.
+      - `words[0]` is the first piece and `words[words.length - 1]` the last, as in any array.
+
+      To handle every piece, loop over the array. The for-each loop works on arrays just like on lists:
+
+      ```java main
+      String sentence = "a long and winding road leads here";
+      int longWords = 0;
+      for (String word : sentence.split(" ")) {
+          if (word.length() > 4) {
+              longWords++;
+          }
+      }
+      System.out.println(longWords + " words have more than 4 letters");
+      ```
+
+      ```output
+      2 words have more than 4 letters
+      ```
+
+      Any text can be the separator. A date splits at its dashes:
+
+      ```java main
+      String date = "2025-03-14";
+      String[] parts = date.split("-");
+      System.out.println("Day " + parts[2] + ", month " + parts[1] + ", year " + parts[0]);
+      ```
+
+      ```output
+      Day 14, month 03, year 2025
+      ```
+
+      Two things to watch for:
+
+      - Two separators in a row have an empty piece between them: `"a  b".split(" ")`, with two spaces, gives three pieces: `a`, the empty string and `b`.
+      - `split` reads its separator as a pattern, in which a few characters have a special meaning. The dot and `|` are two of them: to split at a dot, write `split("\\.")`. Spaces, commas, semicolons, colons, dashes and slashes work just as they are.
+
+      **Your turn:** fill in the blanks, so the program counts the words in a line. For the input `I like green tea` it prints:
+
+      ```
+      Words: 4
+      ```
+    fill: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String line = scanner.nextLine();
+              String[] words = line.[[split]](" ");
+              System.out.println("Words: " + words.[[length]]);
+          }
+      }
+    hints:
+      - "`split` cuts the line at every space and returns the pieces as an array."
+      - "The size of an array is `length`, without parentheses."
+    tests:
+      - stdin: I like green tea
+      - stdin: Hello
+        hidden: true
+      - stdin: one two three four five six
+        hidden: true
+    more:
+      - task: |
+          Write a method `fileName(String path)` that returns the last part of a path: the part after the last `/`. A path without any `/` is a file name already. The check runs `System.out.println(fileName("photos/2025/beach.jpg"));` and expects:
+
+          ```
+          beach.jpg
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(fileName("photos/2025/beach.jpg"));
+              }
+
+              // Write the fileName method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(fileName("photos/2025/beach.jpg"));
+              }
+
+              public static String fileName(String path) {
+                  String[] parts = path.split("/");
+                  return parts[parts.length - 1];
+              }
+          }
+        hints:
+          - "`String[] parts = path.split(\"/\");` cuts the path at every slash."
+          - "The last part has the index `parts.length - 1`. A path without a slash splits into one part, which is then the last one too."
+        require:
+          - pattern: \.split\s*\(
+            message: "Cut the path into parts with `split`."
+        tests:
+          - call: System.out.println(fileName("photos/2025/beach.jpg"));
+          - call: System.out.println(fileName("notes.txt"));
+            hidden: true
+          - call: System.out.println(fileName("music/jazz/2024/live/track01.mp3"));
+            hidden: true
+          - call: System.out.println(fileName("a/b"));
+            hidden: true
+      - task: |
+          Read a phrase and print its acronym: the first letter of every word, in capitals. The words are separated by single spaces. For the input `portable network graphics` the program prints:
+
+          ```
+          PNG
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String phrase = scanner.nextLine();
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String phrase = scanner.nextLine();
+                  String acronym = "";
+                  for (String word : phrase.split(" ")) {
+                      acronym += word.charAt(0);
+                  }
+                  System.out.println(acronym.toUpperCase());
+              }
+          }
+        hints:
+          - "Split the phrase at the spaces and loop over the words. Start from `String acronym = \"\";`."
+          - "Add each word's first letter with `acronym += word.charAt(0);`, and print `acronym.toUpperCase()` after the loop."
+        require:
+          - pattern: \.split\s*\(
+            message: "Cut the phrase into words with `split`."
+          - pattern: \.charAt\s*\(
+            message: "Take the first letter of each word with `charAt(0)`."
+        tests:
+          - stdin: portable network graphics
+          - stdin: as soon as possible
+            hidden: true
+          - stdin: Frequently Asked Questions
+            hidden: true
+          - stdin: hello
+            hidden: true
+
+  - id: strings-fixed-format
+    slug: fixed-format-data
+    title: Data in a fixed format
+    text: |
+      Programs often read data in which every line has the same shape: a name and a score, or a city and a temperature. The values are separated by a character that doesn't appear in the values themselves, often a comma or a semicolon:
+
+      ```
+      Mira,87
+      Otto,92
+      ```
+
+      Each line is split at the separator, and the parts are picked out by their index. The parts are Strings, so a number has to be turned into an `int` with `Integer.valueOf` (or into a `double` with `Double.valueOf`) before you can calculate with it:
+
+      ```java main
+      String line = "Mira,87";
+      String[] parts = line.split(",");
+      String name = parts[0];
+      int score = Integer.valueOf(parts[1]);
+      System.out.println(name + " scored " + score);
+      System.out.println("With the bonus: " + (score + 5));
+      ```
+
+      ```output
+      Mira scored 87
+      With the bonus: 92
+      ```
+
+      Without `Integer.valueOf`, `parts[1] + 5` would join the two as text and give `875`.
+
+      Decimal numbers separated by semicolons work the same way:
+
+      ```java main
+      String line = "Oulu;-4.5";
+      String[] parts = line.split(";");
+      double temperature = Double.valueOf(parts[1]);
+      if (temperature < 0) {
+          System.out.println(parts[0] + " is below freezing");
+      }
+      ```
+
+      ```output
+      Oulu is below freezing
+      ```
+
+      ### A space too many
+
+      Data typed by people isn't always tidy. If a line has a space after the comma, the second part starts with that space, and `Integer.valueOf` refuses it:
+
+      ```java run crash
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String line = scanner.nextLine();
+              String[] parts = line.split(",");
+              int score = Integer.valueOf(parts[1]);
+              System.out.println(parts[0] + ": " + score);
+          }
+      }
+      ```
+
+      ```input
+      Mira, 87
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NumberFormatException: For input string: " 87"
+      	at Main.main(Main.java:8)
+      ```
+
+      The quotes in the message show the culprit: the text was `" 87"`, with a space in front. `trim()` removes it, so `Integer.valueOf(parts[1].trim())` works whether the space is there or not.
+
+      A line with no comma at all splits into just one part, and `parts[1]` then crashes with an `ArrayIndexOutOfBoundsException`. When the input might have lines like that, check `parts.length` before you use the parts.
+
+      **Your turn:** a training app saves lines such as `running,35`: an activity and how many minutes it took. Fill in the blanks, so the program reads one such line and prints the activity and its length in minutes and in seconds. For the input `running,35` it prints:
+
+      ```
+      running for 35 minutes
+      That's 2100 seconds
+      ```
+    fill: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String line = scanner.nextLine();
+              String[] parts = line.split("[[,]]");
+              String activity = parts[0];
+              int minutes = Integer.[[valueOf‖parseInt]](parts[1]);
+              System.out.println(activity + " for " + minutes + " minutes");
+              System.out.println("That's " + (minutes * 60) + " seconds");
+          }
+      }
+    hints:
+      - The separator goes between the quotes of `split`. In `running,35` it's the comma.
+      - "Text becomes an `int` with `Integer.valueOf(...)`."
+    tests:
+      - stdin: running,35
+      - stdin: yoga,60
+        hidden: true
+      - stdin: swimming,5
+        hidden: true
+    more:
+      - task: |
+          Write a method `toMinutes(String time)` that turns a length of time written as hours and minutes, such as `2:45`, into minutes. There may be spaces around the numbers, as in `1 : 15`. The check runs `System.out.println(toMinutes("2:45"));` and expects:
+
+          ```
+          165
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(toMinutes("2:45"));
+              }
+
+              // Write the toMinutes method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(toMinutes("2:45"));
+              }
+
+              public static int toMinutes(String time) {
+                  String[] parts = time.split(":");
+                  int hours = Integer.valueOf(parts[0].trim());
+                  int minutes = Integer.valueOf(parts[1].trim());
+                  return hours * 60 + minutes;
+              }
+          }
+        hints:
+          - "Split at the colon: `String[] parts = time.split(\":\");`. Then `parts[0]` holds the hours and `parts[1]` the minutes."
+          - "Trim each part before turning it into a number, `Integer.valueOf(parts[0].trim())`, and return `hours * 60 + minutes`."
+        require:
+          - pattern: \.split\s*\(
+            message: "Cut the time into hours and minutes with `split`."
+        tests:
+          - call: System.out.println(toMinutes("2:45"));
+          - call: System.out.println(toMinutes("0:05"));
+            hidden: true
+          - call: System.out.println(toMinutes("10:00"));
+            hidden: true
+          - call: 'System.out.println(toMinutes("1 : 15"));'
+            hidden: true
+      - task: |
+          What does this program print? Watch when the parts are text and when they're numbers.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  String line = "Ana;3;4";
+                  String[] parts = line.split(";");
+                  System.out.println(parts.length);
+                  System.out.println(parts[1] + parts[2]);
+                  int sum = Integer.valueOf(parts[1]) + Integer.valueOf(parts[2]);
+                  System.out.println(parts[0] + " " + sum);
+              }
+          }
+        hints:
+          - "Two semicolons cut the line into three parts: `Ana`, `3` and `4`."
+          - "`parts[1] + parts[2]` joins two Strings. Only after `Integer.valueOf` are they numbers that `+` adds up."
+
+  - id: strings-processing-lines
+    slug: processing-many-lines
+    title: Processing many lines
+    text: |
+      Real data comes in many lines. The `while (true)` loop from module 8, which reads until a signal to stop, works here too. This time the signal is an empty line, and each line before it is split and used:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int total = 0;
+              int highest = 0;
+              String priciest = "";
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.isEmpty()) {
+                      break;
+                  }
+                  String[] parts = line.split(",");
+                  int price = Integer.valueOf(parts[1]);
+                  total += price;
+                  if (price > highest) {
+                      highest = price;
+                      priciest = parts[0];
+                  }
+              }
+              System.out.println("Total: " + total);
+              System.out.println("Most expensive: " + priciest + " (" + highest + ")");
+          }
+      }
+      ```
+
+      ```input
+      bread,3
+      cheese,7
+      milk,2
+
+      ```
+
+      ```output
+      Total: 12
+      Most expensive: cheese (7)
+      ```
+
+      - `line.isEmpty()` is true for the empty line at the end of the input, where the user pressed Enter without typing anything, and `break` ends the loop. `line.equals("")` does the same, but `line == ""` isn't reliable, for the reasons in the step on comparing.
+      - The total and the highest price are updated in every round. Each line is used once and then forgotten, so the program needs no list.
+      - To know which product was the most expensive, its name is kept in a variable of its own, updated together with the price.
+
+      Starting `highest` at 0 works because prices are never negative. For values that can be below zero, such as temperatures, start from a number that no real value can beat, or from the first line's value.
+
+      ### Other ways to stop
+
+      The signal to stop can be anything the data never contains. Instead of an empty line, it's often a word such as `end`, checked with `line.equals("end")`.
+
+      When the lines are already in an array, there's nothing to read and no signal to wait for: a for-each loop goes through the lines, and its body is the same as above.
+
+      ```java fragment
+      for (String line : lines) {
+          String[] parts = line.split(",");
+          int price = Integer.valueOf(parts[1]);
+          // ... the same as in the while loop
+      }
+      ```
+
+      **Your turn:** read lines in the form `runner,minutes` until the line `end`. Then print how many runners there were, how many of them finished in under an hour (less than 60 minutes), and their average time as a decimal number. For the input `Aino,42`, `Bruno,65`, `Chen,49` and `end` the program prints:
+
+      ```
+      Runners: 3
+      Under an hour: 2
+      Average: 52.0
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int count = 0;
+              int underHour = 0;
+              int sum = 0;
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.equals("end")) {
+                      break;
+                  }
+                  String[] parts = line.split(",");
+                  int minutes = Integer.valueOf(parts[1]);
+                  sum += minutes;
+                  count++;
+                  if (minutes < 60) {
+                      underHour++;
+                  }
+              }
+              System.out.println("Runners: " + count);
+              System.out.println("Under an hour: " + underHour);
+              System.out.println("Average: " + (double) sum / count);
+          }
+      }
+    hints:
+      - "Before the loop, three counters start at 0: all runners, runners under an hour, and the sum of the times. In the loop, stop at `end`; otherwise split the line and turn `parts[1]` into a number."
+      - "Add the minutes to the sum and count the runner; if the minutes are less than 60, count them in the second counter too."
+      - "After the loop, `(double) sum / count` keeps the decimals."
+    require:
+      - pattern: \.split\s*\(
+        message: "Cut each line into its parts with `split`."
+    forbid:
+      - pattern: (==|!=)\s*""|""\s*(==|!=)
+        message: "Check for `end` with `equals`, not `==`."
+    tests:
+      - stdin: |
+          Aino,42
+          Bruno,65
+          Chen,49
+          end
+      - stdin: |
+          Dana,50
+          end
+        hidden: true
+      - stdin: |
+          Eero,70
+          Fay,61
+          end
+        hidden: true
+      - stdin: |
+          Gus,40
+          Hana,60
+          Ilse,59
+          Juno,75
+          end
+        hidden: true
+    more:
+      - task: |
+          Write a method `coldest(String[] lines)` that gets lines in the form `city,temperature` and returns the coldest city with its temperature in parentheses. The temperatures are whole numbers, and some can be below zero. The check runs this and expects the output below:
+
+          ```java fragment
+          String[] lines = {"Lisbon,14", "Oslo,-3", "Rome,11"};
+          System.out.println(coldest(lines));
+          ```
+
+          ```
+          Oslo (-3)
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  String[] lines = {"Lisbon,14", "Oslo,-3", "Rome,11"};
+                  System.out.println(coldest(lines));
+              }
+
+              // Write the coldest method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  String[] lines = {"Lisbon,14", "Oslo,-3", "Rome,11"};
+                  System.out.println(coldest(lines));
+              }
+
+              public static String coldest(String[] lines) {
+                  int lowest = 1000;
+                  String city = "";
+                  for (String line : lines) {
+                      String[] parts = line.split(",");
+                      int temperature = Integer.valueOf(parts[1]);
+                      if (temperature < lowest) {
+                          lowest = temperature;
+                          city = parts[0];
+                      }
+                  }
+                  return city + " (" + lowest + ")";
+              }
+          }
+        hints:
+          - "Keep the lowest temperature so far, and its city, in two variables. Start the temperature from a number no city will beat, such as 1000, so the first line always replaces it."
+          - "For each line: split it, and `if (temperature < lowest) { lowest = temperature; city = parts[0]; }`. After the loop, return `city + \" (\" + lowest + \")\"`."
+        require:
+          - pattern: \.split\s*\(
+            message: "Cut each line into its parts with `split`."
+        tests:
+          - call: |
+              String[] lines = {"Lisbon,14", "Oslo,-3", "Rome,11"};
+              System.out.println(coldest(lines));
+          - call: |
+              String[] lines = {"Nuuk,-12", "Reykjavik,-2", "Tromso,-15"};
+              System.out.println(coldest(lines));
+            hidden: true
+          - call: |
+              String[] lines = {"Cairo,25"};
+              System.out.println(coldest(lines));
+            hidden: true
+          - call: |
+              String[] lines = {"Madrid,5", "Paris,5", "Berlin,3", "Vienna,4"};
+              System.out.println(coldest(lines));
+            hidden: true
+      - task: |
+          Read an order, one line per item in the form `item,price,count`, until the line `end`. For each item, print its name, the count and what that line costs. At the end, print the total of the whole order. For the input `pen,2,3`, `notebook,4,2`, `bag,15,1` and `end` the program prints:
+
+          ```
+          pen x3 = 6
+          notebook x2 = 8
+          bag x1 = 15
+          Total: 29
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int total = 0;
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      String[] parts = line.split(",");
+                      int price = Integer.valueOf(parts[1]);
+                      int count = Integer.valueOf(parts[2]);
+                      int cost = price * count;
+                      System.out.println(parts[0] + " x" + count + " = " + cost);
+                      total += cost;
+                  }
+                  System.out.println("Total: " + total);
+              }
+          }
+        hints:
+          - "Each line has three parts: `parts[0]` is the item, `parts[1]` the price and `parts[2]` the count. Turn the last two into numbers."
+          - "Print each item's line inside the loop, add its cost to `total`, and print the total after the loop."
+        require:
+          - pattern: \.split\s*\(
+            message: "Cut each line into its parts with `split`."
+        forbid:
+          - pattern: (==|!=)\s*""|""\s*(==|!=)
+            message: "Check for `end` with `equals`, not `==`."
+        tests:
+          - stdin: |
+              pen,2,3
+              notebook,4,2
+              bag,15,1
+              end
+          - stdin: |
+              stamp,1,10
+              end
+            hidden: true
+          - stdin: |
+              mug,8,2
+              plate,6,4
+              end
+            hidden: true
+
+  - id: strings-part-summary
+    slug: putting-it-together
+    title: Putting it together
+    text: |
+      Lists, arrays and strings often work together. The program below reads quiz results as `name,score` lines until an empty line, and then prints everyone who scored above the average. The average is known only after the last line, so the program has to remember every name and score until then: that's what the two lists are for.
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> names = new ArrayList<>();
+              ArrayList<Integer> scores = new ArrayList<>();
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.isEmpty()) {
+                      break;
+                  }
+                  String[] parts = line.split(",");
+                  names.add(parts[0]);
+                  scores.add(Integer.valueOf(parts[1].trim()));
+              }
+
+              int sum = 0;
+              for (int score : scores) {
+                  sum += score;
+              }
+              double average = (double) sum / scores.size();
+              System.out.println("Average: " + average);
+
+              System.out.println("Above the average:");
+              for (int i = 0; i < names.size(); i++) {
+                  if (scores.get(i) > average) {
+                      System.out.println(names.get(i) + " (" + scores.get(i) + ")");
+                  }
+              }
+          }
+      }
+      ```
+
+      ```input
+      Aino,72
+      Kai, 55
+      Lumi,90
+      Noor,61
+
+      ```
+
+      ```output
+      Average: 69.5
+      Above the average:
+      Aino (72)
+      Lumi (90)
+      ```
+
+      - Each line is split into an array of two parts. The name goes into one list and the score into the other, so the same index points to the same person in both lists.
+      - `trim()` lets the program accept `Kai, 55` as well as `Kai,55`.
+      - The last loop goes through the indexes, so it can look up the name and the score of the same person.
+
+      ### The end of part 3
+
+      This step ends the material of the MOOC's third part. Part 3 was about handling more data than a few variables can hold. It started with finding bugs, and then brought lists, which grow as values are added, and arrays, whose size is fixed when they're made. A loop goes through either of them one element at a time. This module added the tools for taking text apart: its characters, its pieces and `split`. Together they let a program read any amount of input and make sense of it. The MOOC closes the part with [a summary page](https://java-programming.mooc.fi/part-3/5-increasing-amounts-of-data) on its own site, for reading only.
+
+      **Your turn:** read one line of whole numbers separated by spaces, such as `4 8 15 16`, and print their sum and the largest of them. The numbers can be negative too. For the input `4 8 15 16` the program prints:
+
+      ```
+      Sum: 43
+      Largest: 16
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String line = scanner.nextLine();
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String line = scanner.nextLine();
+              String[] parts = line.split(" ");
+              int sum = 0;
+              int largest = Integer.valueOf(parts[0]);
+              for (String part : parts) {
+                  int number = Integer.valueOf(part);
+                  sum += number;
+                  if (number > largest) {
+                      largest = number;
+                  }
+              }
+              System.out.println("Sum: " + sum);
+              System.out.println("Largest: " + largest);
+          }
+      }
+    hints:
+      - "Split the line at the spaces and loop over the parts. Each part is text: turn it into a number with `Integer.valueOf(part)`."
+      - "All the numbers can be negative, so start `largest` from the first number, `Integer.valueOf(parts[0])`, not from 0."
+    require:
+      - pattern: \.split\s*\(
+        message: "Cut the line into numbers with `split`."
+    tests:
+      - stdin: 4 8 15 16
+      - stdin: -5 -2 -9
+        hidden: true
+      - stdin: "7"
+        hidden: true
+      - stdin: 10 -3 10 2
+        hidden: true
+    more:
+      - task: |
+          Write a method `countWord(String text, String word)` that returns how many of the words in `text` are `word`, whatever the capitals. The words in `text` are separated by single spaces. The check runs `System.out.println(countWord("The cat saw the other cat", "the"));` and expects:
+
+          ```
+          2
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(countWord("The cat saw the other cat", "the"));
+              }
+
+              // Write the countWord method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(countWord("The cat saw the other cat", "the"));
+              }
+
+              public static int countWord(String text, String word) {
+                  int count = 0;
+                  for (String part : text.split(" ")) {
+                      if (part.equalsIgnoreCase(word)) {
+                          count++;
+                      }
+                  }
+                  return count;
+              }
+          }
+        hints:
+          - "Split `text` at the spaces, and compare each part with `word` using `equalsIgnoreCase`."
+          - "Compare whole words: `contains` would also count the `the` inside `other`."
+        require:
+          - pattern: \.split\s*\(
+            message: "Cut the text into words with `split`."
+        forbid:
+          - pattern: (==|!=)\s*""|""\s*(==|!=)
+            message: "Compare text with `equals` or `equalsIgnoreCase`, not `==`."
+        tests:
+          - call: System.out.println(countWord("The cat saw the other cat", "the"));
+          - call: System.out.println(countWord("to be or not to be", "BE"));
+            hidden: true
+          - call: System.out.println(countWord("Nothing here", "cat"));
+            hidden: true
+          - call: System.out.println(countWord("go", "go"));
+            hidden: true
+      - task: |
+          Read lines in the form `name,city` until an empty line. Then read one more line, a city, and print the names of everyone from that city, in the order they were read. If nobody is from there, print `Nobody from ` and the city. For the input `Aino,Oulu`, `Ben,Turku`, `Carla,Oulu`, an empty line and `Oulu` the program prints:
+
+          ```
+          Aino
+          Carla
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> names = new ArrayList<>();
+                  ArrayList<String> cities = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> names = new ArrayList<>();
+                  ArrayList<String> cities = new ArrayList<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.isEmpty()) {
+                          break;
+                      }
+                      String[] parts = line.split(",");
+                      names.add(parts[0]);
+                      cities.add(parts[1]);
+                  }
+                  String wanted = scanner.nextLine();
+                  int found = 0;
+                  for (int i = 0; i < names.size(); i++) {
+                      if (cities.get(i).equals(wanted)) {
+                          System.out.println(names.get(i));
+                          found++;
+                      }
+                  }
+                  if (found == 0) {
+                      System.out.println("Nobody from " + wanted);
+                  }
+              }
+          }
+        hints:
+          - "The first loop is like the ones in the last step: stop at an empty line, split, and add `parts[0]` to `names` and `parts[1]` to `cities`."
+          - "Then read the city to look for, and loop over the indexes: when `cities.get(i).equals(wanted)`, print `names.get(i)`. Count the matches, so that at the end you know whether there were none."
+        require:
+          - pattern: \.split\s*\(
+            message: "Cut each line into its parts with `split`."
+          - pattern: \.equals(IgnoreCase)?\s*\(
+            message: "Compare the cities with `equals`."
+        forbid:
+          - pattern: (==|!=)\s*""|""\s*(==|!=)
+            message: "Check for the empty line with `isEmpty()` or `equals(\"\")`, not `==`."
+          - pattern: \bwanted\s*(==|!=)|(==|!=)\s*wanted\b
+            message: "Compare the cities with `equals`, not `==`."
+        tests:
+          - stdin: "Aino,Oulu\nBen,Turku\nCarla,Oulu\n\nOulu\n"
+          - stdin: "Aino,Oulu\nBen,Turku\n\nTampere\n"
+            hidden: true
+          - stdin: "Dev,Espoo\nEli,Espoo\nFin,Espoo\n\nEspoo\n"
+            hidden: true
+          - stdin: "Gus,Turku\nHal,Vaasa\n\nVaasa\n"
+            hidden: true

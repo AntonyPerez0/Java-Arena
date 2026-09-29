@@ -12,6 +12,7 @@
 // Usage: node scripts/build-content.mjs [--no-cache] [--dry] [--drill-file <name>.yaml]
 //   --dry         check only: write nothing (no cache, no generated files), so several checks can run at once
 //   --drill-file  check only this file of content/drills, or placement.yaml (with --dry, for writing drills)
+//   --module-file check only this file of content/modules and its drills (with --dry, for writing a module)
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +21,7 @@ import { spawn, spawnSync } from "node:child_process";
 import YAML from "yaml";
 import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, mainProgram, normalizeOutput, parseTemplate, templateSolution } from "../src/grader/assemble.js";
 import { indentMessages } from "../src/grader/style.js";
-import { REFERENCE_JVM_FLAGS, referenceJavaHome } from "./fidelity/suite.mjs";
+import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/suite.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const CACHE_FILE = path.join(ROOT, "node_modules", ".cache", "java-arena-content.json");
@@ -45,6 +46,15 @@ delete env.JDK_JAVA_OPTIONS;
 const useCache = !process.argv.includes("--no-cache");
 const dry = process.argv.includes("--dry");
 const drillFileArg = process.argv.includes("--drill-file") ? process.argv[process.argv.indexOf("--drill-file") + 1] : null;
+const moduleFileArg = process.argv.includes("--module-file") ? process.argv[process.argv.indexOf("--module-file") + 1] : null;
+if (process.argv.includes("--module-file") && !/\.ya?ml$/.test(moduleFileArg ?? "")) {
+  console.error("--module-file needs a file name, such as 13-lists.yaml.");
+  process.exit(2);
+}
+if ((drillFileArg || moduleFileArg) && !dry) {
+  console.error("--drill-file and --module-file check part of the content, so they need --dry.");
+  process.exit(2);
+}
 const CACHE_VERSION = 2;
 let cache = {};
 if (useCache && fs.existsSync(CACHE_FILE)) {
@@ -192,7 +202,7 @@ const KEBAB = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const mainFile = (text) => [{ path: "Main.java", text }];
 
 /** Imports a ```java main example gets automatically, when it uses these classes. */
-const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", HashMap: "java.util.HashMap", Random: "java.util.Random" };
+const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", HashMap: "java.util.HashMap", Random: "java.util.Random" };
 function importsFor(code) {
   const lines = Object.entries(AUTO_IMPORTS)
     .filter(([name]) => new RegExp(`\\b${name}\\b`).test(code))
@@ -246,6 +256,9 @@ function checkRuleShape(where, list, kind) {
  *   ```java error     code that must NOT compile. A ```javac block after it must be exactly what
  *                     javac prints for it (the site's compiler prints the same).
  *   ```java fragment  a piece of code that can't run on its own (for example a class body); shown only.
+ *   ```java run crash a complete program that must stop with an uncaught exception. After its
+ *                     ```input and ```output blocks (both optional), a ```crash block must be what
+ *                     Java prints: the exception line and the program's own "at" lines.
  * Returns the text with plain ```java info strings.
  */
 async function checkExamples(where, text) {
@@ -254,13 +267,14 @@ async function checkExamples(where, text) {
   for (let i = 0; i < blocks.length; i++) {
     const info = blocks[i][1].trim();
     if (!/^java\b/.test(info)) continue;
-    const kind = info.split(/\s+/)[1];
+    const [, kind, extra, ...rest] = info.split(/\s+/);
     const code = blocks[i][2];
     const w = `${where}, example ${i + 1}`;
-    if (!["run", "main", "error", "fragment"].includes(kind)) {
-      errors.push(`${w}: a java block must be "java run", "java main", "java error" or "java fragment"`);
+    if (!["run", "main", "error", "fragment"].includes(kind) || (extra && !(kind === "run" && extra === "crash")) || rest.length) {
+      errors.push(`${w}: a java block must be "java run", "java run crash", "java main", "java error" or "java fragment"`);
       continue;
     }
+    const crash = extra === "crash";
     if (kind === "fragment") continue;
     const source = kind === "main" ? mainProgram(code, importsFor(code)) : code;
     const c = await compile(mainFile(source));
@@ -285,15 +299,29 @@ async function checkExamples(where, text) {
     const hasInput = blocks[i + 1]?.[1].trim() === "input";
     const stdin = hasInput ? blocks[i + 1][2] : "";
     const r = await run(c, stdin);
-    if (r.timedOut || r.exitCode !== 0) errors.push(`${w}: exits with ${r.timedOut ? "a time out" : r.exitCode}\n${r.stderr}`);
-    if (r.stderr) errors.push(`${w}: printed an error:\n${r.stderr}`);
-    const out = blocks[i + (hasInput ? 2 : 1)];
+    let key = null;
+    if (crash) {
+      key = stderrKey(r.stderr);
+      if (r.timedOut || r.exitCode === 0 || !/^Exception in thread "main" /.test(key)) errors.push(`${w}: marked "java run crash", but it ${r.timedOut ? "times out" : r.exitCode === 0 ? "ends normally" : "doesn't stop with an exception"}\n${r.stderr}`);
+    } else {
+      if (r.timedOut || r.exitCode !== 0) errors.push(`${w}: exits with ${r.timedOut ? "a time out" : r.exitCode}\n${r.stderr}`);
+      if (r.stderr) errors.push(`${w}: printed an error:\n${r.stderr}`);
+    }
+    let next = i + (hasInput ? 2 : 1);
+    const out = blocks[next];
     if (out && out[1].trim() === "output") {
+      next++;
       if (normalizeOutput(out[2]) !== normalizeOutput(r.stdout)) errors.push(`${w}: the output block says\n${out[2]}\nbut it prints\n${r.stdout}`);
     } else if (normalizeOutput(r.stdout)) warnings.push(`${w}: prints something but has no output block`);
-    checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, stdout: r.stdout, exitCode: 0 }] });
+    if (!crash && blocks[next]?.[1].trim() === "crash") errors.push(`${w}: a crash block follows it, but only a "java run crash" example is checked against one`);
+    if (crash) {
+      const shown = blocks[next];
+      if (!shown || shown[1].trim() !== "crash") errors.push(`${w}: a "java run crash" block needs a crash block after it (and after its output block), with what Java prints:\n${key}`);
+      else if (normalizeOutput(shown[2]) !== normalizeOutput(key)) errors.push(`${w}: the crash block says\n${shown[2]}\nbut Java prints\n${key}`);
+    }
+    checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, stdout: r.stdout, exitCode: r.exitCode, ...(crash ? { stderrKey: key } : {}) }] });
   }
-  return text.replace(/^```java (run|main|error|fragment)[ \t]*$/gm, "```java");
+  return text.replace(/^```java[ \t]+(run|main|error|fragment)([ \t]+crash)?[ \t]*$/gm, "```java");
 }
 
 // ---------------------------------------------------------------- exercises
@@ -423,10 +451,11 @@ async function buildExercise(where, raw) {
  */
 function checkTaskOutput(where, task, ex) {
   if (!ex || ex.kind === "predict" || typeof task !== "string") return;
-  const blocks = [...task.matchAll(/^```[ \t]*\n([\s\S]*?)^```[ \t]*$/gm)];
+  // Fences are read in order (an info string such as "java" opens a block too), then the plain ones kept.
+  const blocks = [...task.matchAll(/^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm)].filter((b) => !b[1].trim());
   const shown = ex.tests.find((t) => !t.hidden && t.expect);
   if (!blocks.length || !shown) return;
-  const block = blocks[blocks.length - 1][1];
+  const block = blocks[blocks.length - 1][2];
   const norm = (x) => normalizeOutput(x).trim();
   if (norm(block) !== norm(shown.expect)) errors.push(`${where}: the task shows the output\n${block}but the first visible test prints\n${shown.expect}`);
 }
@@ -484,7 +513,8 @@ async function buildStep(file, m, s, i, slugs, ids) {
 
 async function buildModules() {
   const dir = path.join(ROOT, "content", "modules");
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : [];
+  const files = (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : []).filter((f) => !moduleFileArg || f === moduleFileArg);
+  if (moduleFileArg && !files.length) errors.push(`--module-file: no content/modules/${moduleFileArg}`);
   const ids = new Set();
   const out = [];
   for (const name of files) {
@@ -680,7 +710,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
 
 async function buildDrills(modules) {
   const dir = path.join(ROOT, "content", "drills");
-  const files = (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : []).filter((f) => !drillFileArg || f === drillFileArg);
+  const files = (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : []).filter((f) => (!drillFileArg || f === drillFileArg) && (!moduleFileArg || modules.some((m) => f === `${m.id}.yaml`)));
   const byId = new Map(modules.map((m) => [m.id, m]));
   const seen = new Set();
   const out = [];
@@ -737,7 +767,7 @@ async function buildPlacement(modules) {
 
 const modules = await buildModules();
 const drills = await buildDrills(modules);
-const placement = drillFileArg && drillFileArg !== "placement.yaml" ? [] : await buildPlacement(modules);
+const placement = moduleFileArg || (drillFileArg && drillFileArg !== "placement.yaml") ? [] : await buildPlacement(modules);
 
 if (!dry) {
   fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
@@ -753,7 +783,7 @@ if (errors.length) {
 }
 
 if (dry) {
-  console.log(`check ok (nothing written): ${modules.length} modules, ${drills.length} drills${drillFileArg ? ` in ${drillFileArg}` : ""}, ${placement.length} placement questions`);
+  console.log(`check ok (nothing written): ${modules.length} modules${moduleFileArg ? ` (${moduleFileArg})` : ""}, ${drills.length} drills${drillFileArg ? ` in ${drillFileArg}` : ""}, ${placement.length} placement questions`);
   process.exit(0);
 }
 

@@ -1,0 +1,419 @@
+topic: references
+drills:
+  - type: predict
+    after: primitive-variables
+    body: |
+      int a = 3;
+      int b = a;
+      a = a + 4;
+      b = b * 2;
+      System.out.println(a + " " + b);
+    why: "`int b = a;` copies the value 3 into `b`. After that the two variables are separate: `a` becomes 7, and `b` doubles its own 3 into 6."
+
+  - type: choice
+    after: primitive-variables
+    prompt: Which of these variables holds its value itself, and not a reference to an object?
+    choices:
+      - "`int[] scores`"
+      - "`String letter`"
+      - "`char letter`"
+      - "`ArrayList<Integer> numbers`"
+    answer: 3
+    why: "`char` is one of the eight primitive types, so the variable holds the character itself. Arrays, Strings and lists are objects, and their variables hold references, even an array of `int`s."
+
+  - type: fill
+    after: primitive-variables
+    prompt: Fill in the variable name so the program swaps the values of `left` and `right`.
+    body: |
+      int left = 4;
+      int right = 9;
+      int temp = left;
+      left = right;
+      right = [[temp]];
+      System.out.println(left + " " + right);
+    why: "By the time of the last assignment, `left = right;` has already replaced the 4 in `left` with 9, so `right = left;` would copy the 9 back. `temp` kept a copy of the old 4."
+
+  - type: predict
+    after: reference-variables
+    classes: |
+      class Tally {
+          private int count;
+
+          public Tally() {
+              this.count = 0;
+          }
+
+          public void click() {
+              this.count++;
+          }
+
+          public int getCount() {
+              return this.count;
+          }
+      }
+    body: |
+      Tally a = new Tally();
+      Tally b = a;
+      Tally c = new Tally();
+      a.click();
+      b.click();
+      c.click();
+      System.out.println(a.getCount() + " " + b.getCount() + " " + c.getCount());
+    why: "There are two `new`s, so two tallies. `a` and `b` point at the same one, which gets both of their clicks: 2. `c` is a tally of its own and was clicked once."
+
+  - type: predict
+    after: reference-variables
+    classes: |
+      class Tally {
+          private int count;
+
+          public Tally() {
+              this.count = 0;
+          }
+
+          public void click() {
+              this.count++;
+          }
+
+          public int getCount() {
+              return this.count;
+          }
+      }
+    body: |
+      ArrayList<Tally> tallies = new ArrayList<>();
+      Tally t = new Tally();
+      tallies.add(t);
+      tallies.add(t);
+      tallies.add(new Tally());
+      for (Tally each : tallies) {
+          each.click();
+      }
+      System.out.println(tallies.size() + " " + t.getCount());
+    why: "The list holds three references, but two of them point at the same tally, `t`. The loop clicks that tally once for each of its two places in the list, so `t` counts 2."
+
+  - type: choice
+    after: reference-variables
+    prompt: "`a` and `b` are variables of your own class `Bike`, and `a == b` is `true`. What does that tell you?"
+    choices:
+      - They point at the same object
+      - They point at two objects whose instance variables hold the same values
+      - The two objects were created with the same constructor arguments
+    answer: 1
+    why: "For objects, `==` compares references: it's `true` only when both variables point at the very same object. Two separate objects with the same values give `false`; comparing their values is the job of `equals`."
+
+  - type: bug
+    after: reference-variables
+    prompt: "Each door should count its own visitors, so the program should print `2 1`. The clicks are right. Which line is wrong?"
+    classes: |
+      class Tally {
+          private int count;
+
+          public Tally() {
+              this.count = 0;
+          }
+
+          public void click() {
+              this.count++;
+          }
+
+          public int getCount() {
+              return this.count;
+          }
+      }
+    body: |
+      Tally front = new Tally();
+      Tally back = front; // BUG
+      front.click();
+      front.click();
+      back.click();
+      System.out.println(front.getCount() + " " + back.getCount());
+    fix: Tally back = new Tally();
+    why: "`Tally back = front;` copies the reference, so both doors share one tally and it prints `3 3`. Only `new` makes a second tally."
+
+  - type: predict
+    after: values-and-references-as-parameters
+    classes: |
+      class Tally {
+          private int count;
+
+          public Tally() {
+              this.count = 0;
+          }
+
+          public void click() {
+              this.count++;
+          }
+
+          public int getCount() {
+              return this.count;
+          }
+      }
+    pre: |
+      public static void boost(int level, Tally tally) {
+          level = level + 10;
+          tally.click();
+      }
+    body: |
+      int level = 1;
+      Tally tally = new Tally();
+      boost(level, tally);
+      boost(level, tally);
+      System.out.println(level + " " + tally.getCount());
+    why: "`level` is an `int`, so the method gets a copy of 1 and adds 10 to its own copy only. `tally` is a reference, and the method's copy points at `main`'s tally, so both clicks count."
+
+  - type: predict
+    after: values-and-references-as-parameters
+    classes: |
+      class Tally {
+          private int count;
+
+          public Tally() {
+              this.count = 0;
+          }
+
+          public void click() {
+              this.count++;
+          }
+
+          public int getCount() {
+              return this.count;
+          }
+      }
+    pre: |
+      public static Tally fresh(Tally old) {
+          old.click();
+          return new Tally();
+      }
+    body: |
+      Tally a = new Tally();
+      Tally b = fresh(a);
+      b.click();
+      b.click();
+      a = fresh(b);
+      System.out.println(a.getCount() + " " + b.getCount());
+    why: "`fresh` clicks the tally it's given and returns a new one at 0. `b` gets a new tally and is clicked twice, then `fresh(b)` clicks it a third time. The new tally it returns goes into `a`, and nothing clicks that one."
+
+  - type: bug
+    after: values-and-references-as-parameters
+    prompt: "After a sale the basket should be empty, so the program should print `Sold 12` and then `Sold 5`. Which line is wrong?"
+    classes: |
+      class Basket {
+          private int apples;
+
+          public Basket() {
+              this.apples = 0;
+          }
+
+          public void add(int apples) {
+              this.apples = this.apples + apples;
+          }
+
+          public void empty() {
+              this.apples = 0;
+          }
+
+          public int getApples() {
+              return this.apples;
+          }
+      }
+    pre: |
+      public static void sell(Basket basket) {
+          System.out.println("Sold " + basket.getApples());
+          basket = new Basket(); // BUG
+      }
+    body: |
+      Basket basket = new Basket();
+      basket.add(12);
+      sell(basket);
+      basket.add(5);
+      sell(basket);
+    fix: basket.empty();
+    why: "`basket = new Basket();` only points the parameter at a new basket. `main`'s variable still points at the old one with its 12 apples, so the second sale says 17. `basket.empty();` empties the basket that both variables point at."
+
+  - type: fill
+    after: null-and-nullpointerexception
+    prompt: Fill in the operator, so the program prints only the seats that are taken.
+    body: |
+      String[] seats = new String[3];
+      seats[1] = "Ada";
+      for (int i = 0; i < seats.length; i++) {
+          if (seats[i] [[!=]] null) {
+              System.out.println(i + ": " + seats[i].toUpperCase());
+          }
+      }
+    why: "A new String array is full of `null`s, and only `seats[1]` is filled in. `!= null` skips the empty seats. With `==`, the program would call `toUpperCase()` on `null` and crash with a NullPointerException."
+
+  - type: bug
+    after: null-and-nullpointerexception
+    prompt: "The program should print `SPICES`, but it crashes with a NullPointerException. Which line is wrong?"
+    classes: |
+      class Shelf {
+          private String label;
+
+          public Shelf(String label) {
+              label = label; // BUG
+          }
+
+          public String getLabel() {
+              return this.label.toUpperCase();
+          }
+      }
+    body: |
+      Shelf shelf = new Shelf("spices");
+      System.out.println(shelf.getLabel());
+    fix: this.label = label;
+    why: "Without `this.`, `label = label;` copies the parameter into itself, and the instance variable `label` is never set. It stays `null`, so `toUpperCase()` in `getLabel` has no String to run on."
+
+  - type: compiles
+    after: null-and-nullpointerexception
+    body: |
+      int score = null;
+      System.out.println(score);
+    why: "No. `null` means \"no object\", and an `int` isn't an object: a primitive variable always holds a value of its type. javac says `incompatible types: <null> cannot be converted to int`."
+
+  - type: compiles
+    after: null-and-nullpointerexception
+    classes: |
+      class Tally {
+          private int count;
+
+          public Tally() {
+              this.count = 0;
+          }
+
+          public void click() {
+              this.count++;
+          }
+      }
+    body: |
+      Tally tally;
+      tally.click();
+    why: "No. A local variable has no value at all until something is assigned to it, not even `null`, and javac reports `variable tally might not have been initialized`. Instance variables and array elements get a starting value on their own (`null` for objects), but local variables don't."
+
+  - type: choice
+    after: null-and-nullpointerexception
+    prompt: What happens when this runs?
+    body: |
+      String word = null;
+      System.out.println(word);
+      System.out.println(word.length());
+    choices:
+      - It prints `null` twice
+      - It prints `null` and then `0`
+      - It prints `null` and then crashes with a NullPointerException
+      - It doesn't compile
+    answer: 3
+    why: "Printing `null` is fine: `println` shows the word `null`. But `word.length()` calls a method, and there's no String to call it on, so the program crashes at that line."
+
+  - type: boss
+    after: null-and-nullpointerexception
+    prompt: |
+      At a pumpkin contest, the plots are kept in an array, and an empty plot is `null`. `Pumpkin.java` is ready. In `Main`, write a method `heaviest(Pumpkin[] plots)` that returns the heaviest pumpkin. When two pumpkins share the top weight, return the one that comes first, and when every plot is empty, return `null`. The check fills plots 0, 2 and 3 of an array of four, calls `System.out.println(heaviest(plots));`, and expects:
+
+      ```
+      Omar's pumpkin, 58 kg
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Pumpkin[] plots = new Pumpkin[4];
+                plots[0] = new Pumpkin("Ines", 41);
+                plots[2] = new Pumpkin("Omar", 58);
+                plots[3] = new Pumpkin("Kai", 37);
+                System.out.println(heaviest(plots));
+            }
+
+            // Write the heaviest method here.
+        }
+      Pumpkin.java: |
+        public class Pumpkin {
+            private String grower;
+            private int kilos;
+
+            public Pumpkin(String grower, int kilos) {
+                this.grower = grower;
+                this.kilos = kilos;
+            }
+
+            public int getKilos() {
+                return this.kilos;
+            }
+
+            public String toString() {
+                return this.grower + "'s pumpkin, " + this.kilos + " kg";
+            }
+        }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Pumpkin[] plots = new Pumpkin[4];
+                plots[0] = new Pumpkin("Ines", 41);
+                plots[2] = new Pumpkin("Omar", 58);
+                plots[3] = new Pumpkin("Kai", 37);
+                System.out.println(heaviest(plots));
+            }
+
+            public static Pumpkin heaviest(Pumpkin[] plots) {
+                Pumpkin best = null;
+                for (Pumpkin pumpkin : plots) {
+                    if (pumpkin != null) {
+                        if (best == null || pumpkin.getKilos() > best.getKilos()) {
+                            best = pumpkin;
+                        }
+                    }
+                }
+                return best;
+            }
+        }
+      Pumpkin.java: |
+        public class Pumpkin {
+            private String grower;
+            private int kilos;
+
+            public Pumpkin(String grower, int kilos) {
+                this.grower = grower;
+                this.kilos = kilos;
+            }
+
+            public int getKilos() {
+                return this.kilos;
+            }
+
+            public String toString() {
+                return this.grower + "'s pumpkin, " + this.kilos + " kg";
+            }
+        }
+    hints:
+      - "Start with `Pumpkin best = null;`: no pumpkin found yet. Skip the plots that are `null`, and when every plot is empty, `best` is still `null` at the end, which is what the method should return."
+      - "A pumpkin becomes the new best when `best == null || pumpkin.getKilos() > best.getKilos()`. `||` checks the right side only when `best` isn't `null`, so `best.getKilos()` never runs on `null`. With `>`, the first of two equal pumpkins stays the best."
+    tests:
+      - call: |
+          Pumpkin[] plots = new Pumpkin[4];
+          plots[0] = new Pumpkin("Ines", 41);
+          plots[2] = new Pumpkin("Omar", 58);
+          plots[3] = new Pumpkin("Kai", 37);
+          System.out.println(heaviest(plots));
+      - call: |
+          Pumpkin[] plots = new Pumpkin[3];
+          System.out.println(heaviest(plots));
+        hidden: true
+      - call: |
+          Pumpkin[] plots = new Pumpkin[4];
+          plots[1] = new Pumpkin("Ruth", 60);
+          plots[3] = new Pumpkin("Sam", 60);
+          System.out.println(heaviest(plots));
+        hidden: true
+      - call: |
+          Pumpkin[] plots = new Pumpkin[3];
+          plots[2] = new Pumpkin("Lena", 12);
+          System.out.println(heaviest(plots));
+        hidden: true
+      - call: |
+          Pumpkin[] plots = new Pumpkin[3];
+          plots[0] = new Pumpkin("Ada", 20);
+          plots[1] = new Pumpkin("Bo", 35);
+          plots[2] = new Pumpkin("Cy", 30);
+          System.out.println(heaviest(plots));
+        hidden: true

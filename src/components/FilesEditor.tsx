@@ -2,7 +2,7 @@
 // row of tabs (one per file), each file in its own editor with its own javac marks.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { FileCode, Plus, X } from "lucide-react";
-import CodeEditor from "./CodeEditor";
+import CodeEditor, { type SavedEditor } from "./CodeEditor";
 import type { FriendlyDiagnostic } from "../grader/grade";
 import { joinFiles, splitFiles } from "../grader/files.js";
 
@@ -30,12 +30,23 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
   useEffect(() => {
     if (value === lastOut.current) return;
     lastOut.current = value;
+    fromOutside.current = true;
     const next = splitFiles(value) as SourceFile[];
     setFiles(next);
     setActive((a) => Math.min(a, next.length - 1));
   }, [value]);
   const [active, setActive] = useState(0);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  // Each file's editor state (cursor and undo history), kept while another file is open.
+  const saved = useRef(new Map<string, SavedEditor>());
+  const fromOutside = useRef(false);
+  // States of removed files, and all of them after a new program from outside (Reset, a share link),
+  // are dropped. This runs after the closing editor has saved its own state.
+  useEffect(() => {
+    if (fromOutside.current) saved.current.clear();
+    else for (const p of [...saved.current.keys()]) if (!files.some((f) => f.path === p)) saved.current.delete(p);
+    fromOutside.current = false;
+  }, [files]);
   const errorsIn = (f: SourceFile) => diagnostics.filter((d) => d.kind === "error" && base(d.file) === f.path).length;
 
   // After a check with errors, show a file that has them.
@@ -167,7 +178,7 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
       {/* Only the open file has an editor; switching files opens a fresh one on that file. */}
       {files[active] && (
         <div key={files[active].path} role="tabpanel" id={`file-panel-${active}`} aria-labelledby={`file-tab-${active}`}>
-          <CodeEditor value={files[active].text} onChange={(v) => change(active, v)} onRun={onRun} diagnostics={diagnostics} minHeight={minHeight} label={`${label}, ${files[active].path}`} runAction={runAction} file={files[active].path} />
+          <CodeEditor value={files[active].text} onChange={(v) => change(active, v)} onRun={onRun} diagnostics={diagnostics} minHeight={minHeight} label={`${label}, ${files[active].path}`} runAction={runAction} file={files[active].path} saved={saved.current.get(files[active].path)} onLeave={(st) => saved.current.set(files[active].path, st)} />
         </div>
       )}
       {addRow}

@@ -277,3 +277,91 @@ questions:
           System.out.println("Error after " + sum);
       }
     why: "The empty line is skipped, so 5 and 7 are added. `Integer.valueOf(\"x\")` then throws, the rest of the `try` block (the 2 and the `Sum` line) is skipped, and the `catch` block prints `Error after 12`."
+
+  - module: class-design
+    type: predict
+    classes: |
+      class Flask {
+          private String drink;
+          private int ml;
+
+          public Flask(String drink, int ml) {
+              this.drink = drink;
+              this.ml = ml;
+          }
+
+          public Flask(String drink) {
+              this(drink, 250);
+          }
+
+          public Flask(int ml) {
+              this("water", ml);
+          }
+
+          public String toString() {
+              return this.ml + " ml of " + this.drink;
+          }
+      }
+    body: |
+      System.out.println(new Flask("tea"));
+      System.out.println(new Flask(400));
+    why: "`new` picks the constructor by the type of the value: a String runs `Flask(String drink)`, an int runs `Flask(int ml)`. Each hands the work to `Flask(String drink, int ml)` with `this(...)`, filling in the missing value: 250 ml for the tea, and water for the 400 ml."
+
+  - module: references
+    type: predict
+    classes: |
+      class Box {
+          private int count;
+
+          public Box(int count) {
+              this.count = count;
+          }
+
+          public void add(int more) {
+              this.count = this.count + more;
+          }
+
+          public int getCount() {
+              return this.count;
+          }
+      }
+    body: |
+      int n = 5;
+      int m = n;
+      m = m + 1;
+      Box a = new Box(5);
+      Box b = a;
+      b.add(1);
+      System.out.println(n + " " + a.getCount());
+    why: "`int m = n;` copies the value, so changing `m` leaves `n` at 5. `Box b = a;` copies the reference, so `a` and `b` point at the same Box, and `b.add(1)` shows through `a`: 6."
+
+  - module: object-interaction
+    type: predict
+    classes: |
+      class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+      }
+    body: |
+      Seat a = new Seat("B", 7);
+      Seat b = new Seat("B", 7);
+      ArrayList<Seat> booked = new ArrayList<>();
+      booked.add(a);
+      System.out.println((a == b) + " " + a.equals(b) + " " + booked.contains(b));
+    why: "`a` and `b` are two objects, so `==` is false. Seat's own `equals` compares the row and the number, so they're equal, and `contains` uses `equals`, so it finds the seat equal to `b`: `false true true`."

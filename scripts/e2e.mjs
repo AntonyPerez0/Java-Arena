@@ -391,6 +391,16 @@ const lessonSession = await newPage();
     expect((await page.locator('.file-tab-on').innerText()).includes('Main.java') && (await page.locator('.file-tab-on .file-tab-errors').count()) === 1, 'the file with the error is shown, with its count');
     await axe(page, 'a challenge of two files, with an error');
     await page.click('#file-tab-0');
+    // Each file keeps its undo history: a change in Parcel.java can be undone after a visit to Main.java.
+    await page.click('.cm-content');
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.insertText('// a note\n');
+    await page.click('#file-tab-1');
+    await page.locator('.file-tab-on', { hasText: 'Main.java' }).waitFor();
+    await page.click('#file-tab-0');
+    await page.click('.cm-content');
+    await page.keyboard.press('ControlOrMeta+Z');
+    expect(!(await editorText(page)).includes('// a note'), 'the change was undone after switching files');
     await setCode(page, 'public class Parcel {\n    private String recipient;\n    private int grams;\n\n    public Parcel(String recipient, int grams) {\n        this.recipient = recipient;\n        this.grams = grams;\n    }\n\n    public void printInfo() {\n        System.out.println("Parcel for " + this.recipient + ", " + this.grams + " g");\n    }\n}\n');
     await check(page);
     const passed = await page.locator('.results').innerText();
@@ -484,6 +494,33 @@ await test('playground: a class in a file of its own; errors and crashes name th
   await other.page.locator('.banner-info').waitFor();
   expect((await other.page.locator('.file-tab').allInnerTexts()).join() === 'Main.java,Greeter.java', 'both files came with the link');
   await other.ctx.close();
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('part 5 mistakes are explained: a missing cast in equals, and an instance variable that is null', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, MAIN('        Pot pot = new Pot();\n        pot.water();'));
+  await page.click('text=Add a class');
+  await page.fill('#new-class', 'Pot');
+  await page.click('.file-add-form button[type=submit]');
+  await setCode(page, 'public class Pot {\n    private String plant;\n\n    public void water() {\n        System.out.println(this.plant.length());\n    }\n\n    public boolean equals(Object compared) {\n        return this.plant.equals(compared.plant);\n    }\n}\n');
+  let out = await check(page);
+  expect(/Pot\.java, line 9/i.test(out) && out.includes('compared has the type Object') && out.includes('other.plant'), out);
+  await setCode(page, 'public class Pot {\n    private String plant;\n\n    public void water() {\n        System.out.println(this.plant.length());\n    }\n}\n');
+  out = await check(page);
+  expect(out.includes('NullPointerException') && out.includes('the instance variable plant holds no object') && out.includes('for example in the constructor'), out);
+  // A removed class leaves nothing behind: added again, it starts empty and undo can't bring the old code back.
+  page.once('dialog', (d) => d.accept());
+  await page.click('text=Remove Pot.java');
+  await page.click('text=Add a class');
+  await page.fill('#new-class', 'Pot');
+  await page.click('.file-add-form button[type=submit]');
+  await page.click('.cm-content');
+  await page.keyboard.press('ControlOrMeta+Z');
+  expect(!(await editorText(page)).includes('plant'), 'the removed code came back');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });

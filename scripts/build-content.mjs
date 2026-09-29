@@ -106,7 +106,7 @@ function runBatch(b) {
     }
     fs.mkdirSync(path.join(job.dir, "classes"), { recursive: true });
   }
-  const r = spawnSync(bin("java"), [path.join(ROOT, "scripts", "content", "JavaCheck.java"), path.join(TMP, "jobs"), ...b.keys()], { env, encoding: "utf8", maxBuffer: 64 << 20 });
+  const r = spawnSync(bin("java"), ["-XX:-UsePerfData", path.join(ROOT, "scripts", "content", "JavaCheck.java"), path.join(TMP, "jobs"), ...b.keys()], { env, encoding: "utf8", maxBuffer: 64 << 20 });
   if (r.status !== 0) {
     console.error(r.stdout, r.stderr);
     console.error("build-content: the javac batch failed");
@@ -152,7 +152,17 @@ function limit(fn) {
  * Runs a compiled program on one input with the reference JVM flags. Cached by program and input.
  * `mainClass` and `args` are for the check program of tests that call methods.
  */
-async function run(compiled, stdin, { mainClass = "Main", args = [], files = null } = {}) {
+async function run(compiled, stdin, opts = {}, tries = 3) {
+  const res = await runOnce(compiled, stdin, opts);
+  // A line the JVM itself logged (such as "[0.001s][warning]...") isn't the program's output: run it again.
+  if (!JVM_LOG.test(res.stdout + res.stderr)) return res;
+  if (tries > 1) return run(compiled, stdin, opts, tries - 1);
+  errors.push(`the reference JVM kept logging into a program's output:\n${(res.stdout + res.stderr).match(JVM_LOG)[0]}`);
+  return res;
+}
+const JVM_LOG = /^\[\d+\.\d+s\]\[(warning|error)\].*$/m;
+
+async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files = null } = {}) {
   const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS, ...(files ? [files] : [])]);
   if (cache[id]) return cache[id];
   const { classes } = await javacBatch(compiled.files);
@@ -178,7 +188,7 @@ async function run(compiled, stdin, { mainClass = "Main", args = [], files = nul
           clearTimeout(timer);
           fs.rmSync(cwd, { recursive: true, force: true });
           const res = { stdout, stderr, exitCode: timedOut ? null : code, timedOut };
-          if (!timedOut) cache[id] = res;
+          if (!timedOut && !JVM_LOG.test(stdout + stderr)) cache[id] = res;
           resolve(res);
         });
       }),
@@ -273,6 +283,8 @@ function checkRuleShape(where, list, kind) {
         errors.push(`${where}: bad ${kind} pattern ${r.pattern}: ${e.message}`);
       }
       if (kind === "forbid" && (r.min != null || r.max != null)) errors.push(`${where}: forbid rules can't have min or max`);
+      // Safari before 16.4 can't read a lookbehind, and the check would fail there.
+      if (/\(\?<[=!]/.test(r.pattern)) errors.push(`${where}: ${kind} pattern ${r.pattern} uses a lookbehind, which older Safari can't read; match the text before it instead`);
     }
   }
 }

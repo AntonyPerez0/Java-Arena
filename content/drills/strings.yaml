@@ -1,0 +1,248 @@
+topic: strings
+drills:
+  - type: predict
+    after: strings-again
+    body: |
+      String name = "  Ada ";
+      name.trim();
+      System.out.println("[" + name.trim() + "]" + name.length());
+    why: "`name.trim();` on its own line throws its result away, so `name` keeps its spaces and its length of 6. Only the trimmed copy made inside the print line is shown in the brackets."
+
+  - type: predict
+    after: characters
+    body: |
+      String text = "a-b-c-d";
+      int dashes = 0;
+      for (int i = 0; i < text.length(); i++) {
+          if (text.charAt(i) == '-') {
+              dashes++;
+          }
+      }
+      System.out.println(dashes + " of " + text.length());
+    why: "The loop looks at all 7 characters, and 3 of them are dashes. Chars are compared with `==` and single quotes: `'-'`."
+
+  - type: predict
+    after: finding-parts
+    body: |
+      String word = "notebook";
+      System.out.println(word.substring(4) + word.substring(0, 4));
+      System.out.println(word.indexOf("o"));
+    why: "`substring(4)` is everything from index 4 on, `book`, and `substring(0, 4)` is indices 0 to 3, `note`. `indexOf` gives the first place where `o` appears, which is index 1."
+
+  - type: predict
+    after: splitting
+    body: |
+      String date = "2024-11-05";
+      String[] parts = date.split("-");
+      System.out.println(parts.length);
+      System.out.println(parts[2] + "." + parts[1]);
+    why: "Two dashes cut the date into three parts, `2024`, `11` and `05`. The parts are text, so `05` keeps its zero."
+
+  - type: predict
+    after: processing-many-lines
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int count = 0;
+      while (true) {
+          String line = scanner.nextLine();
+          if (line.isEmpty()) {
+              break;
+          }
+          String[] parts = line.split(",");
+          if (Integer.valueOf(parts[1]) >= 10) {
+              count++;
+          }
+      }
+      System.out.println("Big orders: " + count);
+    stdin: "tea,5\ncups,12\nplates,10\n\nforks,20\n"
+    why: "`cups` (12) and `plates` (10) are at least 10, `tea` (5) isn't. The empty line ends the loop, so `forks,20` is never read."
+
+  - type: fill
+    after: comparing-strings
+    prompt: The input is `YES`. Fill the blank with a method name, so the program prints the output shown.
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      String answer = scanner.nextLine();
+      if (answer.[[equalsIgnoreCase]]("yes")) {
+          System.out.println("Let's go!");
+      } else {
+          System.out.println("Maybe later");
+      }
+    stdin: "YES"
+    why: "`equals` counts capitals, so `\"YES\".equals(\"yes\")` is false. `equalsIgnoreCase` compares the letters without caring about capitals."
+
+  - type: fill
+    after: splitting
+    prompt: Fill the blank, so the program prints the last part of the path.
+    body: |
+      String path = "music/rock/night-drive.mp3";
+      String[] parts = path.split("/");
+      System.out.println(parts[parts.[[length]] - 1]);
+    why: "An array's size is `length`, without parentheses. The last part is at the index `parts.length - 1`, here 2."
+
+  - type: bug
+    after: characters
+    prompt: The program should print the letters of `tree`, each followed by a space. Which line is wrong?
+    body: |
+      String word = "tree";
+      for (int i = 0; i <= word.length(); i++) { // BUG
+          System.out.print(word.charAt(i) + " ");
+      }
+      System.out.println();
+    fix: for (int i = 0; i < word.length(); i++) {
+    why: "The indices of `tree` are 0 to 3. With `<=` the loop also asks for index 4, and `charAt(4)` crashes with a `StringIndexOutOfBoundsException`. The condition must be `i < word.length()`."
+
+  - type: bug
+    after: fixed-format-data
+    prompt: "The lines come from a file, some with a space after the comma and some without, so the `split(\",\")` stays as it is. The program should print `Leo turns 32`. Which line is wrong?"
+    body: |
+      String line = "Leo, 31";
+      String[] parts = line.split(",");
+      int age = Integer.valueOf(parts[1]); // BUG
+      System.out.println(parts[0] + " turns " + (age + 1));
+    fix: int age = Integer.valueOf(parts[1].trim());
+    why: "The second part is `\" 31\"`, with a space in front, and `Integer.valueOf` stops with a `NumberFormatException`. `parts[1].trim()` removes the space first, and works for lines without it too."
+
+  - type: compiles
+    after: splitting
+    body: |
+      String[] words = "one two three".split(" ");
+      System.out.println(words.length());
+    why: "No. An array's size is `words.length`, without parentheses. `length()` with parentheses is the String method, and an array has no such method."
+
+  - type: compiles
+    after: characters
+    body: |
+      String word = "level";
+      boolean same = word.charAt(0) == word.charAt(word.length() - 1);
+      System.out.println(same);
+    why: "Yes. `charAt` returns `char` values, and chars are compared with `==`, like numbers. It prints `true`, since `level` starts and ends with `l`."
+
+  - type: choice
+    after: characters
+    prompt: What does this print?
+    body: |
+      String word = "ok";
+      System.out.println(word.charAt(0) + word.charAt(1));
+    choices:
+      - "`ok`"
+      - "`o k`"
+      - "`218`"
+    answer: 3
+    verify: output
+    why: "`charAt` gives chars, and a char is stored as a number, its character code. `+` between two chars adds the codes (111 for `o` and 107 for `k`). With a String first, `\"\" + word.charAt(0) + word.charAt(1)`, it would print `ok`."
+
+  - type: choice
+    after: fixed-format-data
+    prompt: What is in `parts` after this line?
+    body: |
+      String[] parts = "Ada;36".split(",");
+    choices:
+      - "One part: `Ada;36`"
+      - "Two parts: `Ada` and `36`"
+      - "Nothing: `parts.length` is 0"
+    answer: 1
+    why: "The text has no comma, so there's nowhere to cut: `split` returns an array with a single part, the whole text. Using `parts[1]` would crash with an `ArrayIndexOutOfBoundsException`. This data needs `split(\";\")`."
+
+  - type: boss
+    after: characters
+    prompt: |
+      Write a method `isPalindrome(String word)` that returns `true` when the word reads the same forwards and backwards, whatever the capitals, and `false` otherwise. The check runs `System.out.println(isPalindrome("Level"));` and expects:
+
+      ```
+      true
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(isPalindrome("Level"));
+          }
+
+          // Write the isPalindrome method here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(isPalindrome("Level"));
+          }
+
+          public static boolean isPalindrome(String word) {
+              String lower = word.toLowerCase();
+              for (int i = 0; i < lower.length(); i++) {
+                  if (lower.charAt(i) != lower.charAt(lower.length() - 1 - i)) {
+                      return false;
+                  }
+              }
+              return true;
+          }
+      }
+    hints:
+      - Make the word small first. Then compare the first character with the last, the second with the second to last, and so on.
+      - "The character that mirrors index `i` is at `lower.length() - 1 - i`. Return `false` at the first pair that differs, and `true` after the loop."
+    require:
+      - pattern: \.charAt\s*\(
+        message: "Compare the characters with `charAt`."
+    tests:
+      - call: System.out.println(isPalindrome("Level"));
+      - call: System.out.println(isPalindrome("kayak"));
+        hidden: true
+      - call: System.out.println(isPalindrome("Java"));
+        hidden: true
+      - call: System.out.println(isPalindrome("a"));
+        hidden: true
+      - call: System.out.println(isPalindrome("Noon"));
+        hidden: true
+      - call: System.out.println(isPalindrome("abca"));
+        hidden: true
+
+  - type: boss
+    after: putting-it-together
+    prompt: |
+      Write a method `capitalizeWords(String sentence)` that returns the sentence with the first letter of every word in capitals, and the rest of each word as it was. The words are separated by single spaces. The check runs `System.out.println(capitalizeWords("the quick brown fox"));` and expects:
+
+      ```
+      The Quick Brown Fox
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(capitalizeWords("the quick brown fox"));
+          }
+
+          // Write the capitalizeWords method here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(capitalizeWords("the quick brown fox"));
+          }
+
+          public static String capitalizeWords(String sentence) {
+              String[] words = sentence.split(" ");
+              String result = "";
+              for (int i = 0; i < words.length; i++) {
+                  String word = words[i];
+                  result += word.substring(0, 1).toUpperCase() + word.substring(1);
+                  if (i < words.length - 1) {
+                      result += " ";
+                  }
+              }
+              return result;
+          }
+      }
+    hints:
+      - "Split the sentence into words. For each word, `word.substring(0, 1).toUpperCase()` is its first letter in capitals, and `word.substring(1)` is the rest."
+      - "Put a space between the words but not after the last one: add `\" \"` only when `i < words.length - 1`. (Or add one after every word and `trim()` the result at the end.)"
+    require:
+      - pattern: \.split\s*\(
+        message: "Cut the sentence into words with `split`."
+    tests:
+      - call: System.out.println(capitalizeWords("the quick brown fox"));
+      - call: System.out.println(capitalizeWords("hello"));
+        hidden: true
+      - call: System.out.println(capitalizeWords("java is fun"));
+        hidden: true
+      - call: System.out.println("[" + capitalizeWords("a b c") + "]");
+        hidden: true
+      - call: System.out.println(capitalizeWords("use camelCase names"));
+        hidden: true

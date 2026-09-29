@@ -25,6 +25,21 @@ public final class JavacExports {
         return JAVAC.loadPlatform(archive.copyToJavaArray());
     }
 
+    /** Loads a library's class files (same archive format) under a name. Returns the class count. */
+    @JSExport
+    public static int loadLibrary(String name, Int8Array archive) throws IOException {
+        return JAVAC.loadLibrary(name, archive.copyToJavaArray());
+    }
+
+    /**
+     * Puts the named libraries (comma-separated) on the class path of the next compiles;
+     * "" for none. Returns the names that aren't loaded, comma-separated.
+     */
+    @JSExport
+    public static String useLibraries(String names) {
+        return JAVAC.useLibraries(names);
+    }
+
     /** Forgets the sources and results of the previous compile. */
     @JSExport
     public static void reset() {

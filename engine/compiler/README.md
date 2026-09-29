@@ -26,6 +26,8 @@ const r = javac.compile([
 
 Each diagnostic has `kind` (`error`, `warning` or `note`), `code` (the javac key, such as `compiler.err.expected`), `file`, `line`, `column`, character offsets, `message` (javac's text) and `formatted`. `formatted` is exactly what `javac -d out <files>` prints for that diagnostic, for example `Main.java:3: error: ';' expected` followed by the source line and the caret line. `r.output` is javac's complete output for the compile, including notes and the `1 error` line. Each `compile()` is a fresh javac run with javac's default options (the same as the command line, so `-g:source,lines`), and the instance can be reused for any number of compiles. The full API is documented at the top of `javac-host.mjs`.
 
+**Libraries.** `await javac.loadLibrary('junit4', bytes)` loads a library's class files once (an archive in the same format as `java-base-sdk.bin`, such as `engine/dist/libraries/junit4.bin`), and `javac.compile(files, { libraries: ['junit4'] })` puts them on the class path of that compile, as `javac -cp .:junit.jar:hamcrest.jar` would. A compile without the option sees no libraries, like a plain `javac`. The class files a compile produces, and javac's messages, are the same as the JDK's javac with the same class path (checked for JUnit 4: identical class files, identical errors for misused assertions, and the same `package org.junit does not exist` without the library).
+
 ## Rebuild
 
 ```sh

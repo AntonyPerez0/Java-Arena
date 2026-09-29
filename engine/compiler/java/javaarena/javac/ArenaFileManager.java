@@ -22,7 +22,8 @@ import javax.tools.StandardLocation;
  * in a directory that holds only the given sources:
  * - SYSTEM_MODULES holds one module, java.base (the SDK archive);
  * - CLASS_PATH is "." and so holds the source files (no -sourcepath given,
- *   so javac also looks for sources there);
+ *   so javac also looks for sources there), plus the class files of the
+ *   libraries chosen for this compile (as with "-cp .:junit.jar:...");
  * - CLASS_OUTPUT is an in-memory map, cleared before every compile.
  */
 final class ArenaFileManager implements JavaFileManager {
@@ -51,13 +52,18 @@ final class ArenaFileManager implements JavaFileManager {
     private final Map<String, List<ArenaFile>> platformByPackage;
     private final Map<String, ArenaFile> platformByPath;
     private final Map<String, ArenaFile> sources;
+    private final Map<String, ArenaFile> libraryClasses;
+    private final Map<String, List<ArenaFile>> libraryByPackage;
     private final Map<String, ArenaFile> outputs;
 
     ArenaFileManager(Map<String, List<ArenaFile>> platformByPackage, Map<String, ArenaFile> platformByPath,
-            Map<String, ArenaFile> sources, Map<String, ArenaFile> outputs) {
+            Map<String, ArenaFile> sources, Map<String, ArenaFile> libraryClasses,
+            Map<String, List<ArenaFile>> libraryByPackage, Map<String, ArenaFile> outputs) {
         this.platformByPackage = platformByPackage;
         this.platformByPath = platformByPath;
         this.sources = sources;
+        this.libraryClasses = libraryClasses;
+        this.libraryByPackage = libraryByPackage;
         this.outputs = outputs;
     }
 
@@ -90,6 +96,14 @@ final class ArenaFileManager implements JavaFileManager {
                 if (pkg.equals(packageName) || recurse && (packageName.isEmpty() || pkg.startsWith(packageName + "."))) {
                     if (kinds.contains(f.kind)) {
                         result.add(f);
+                    }
+                }
+            }
+            if (kinds.contains(JavaFileObject.Kind.CLASS)) {
+                for (var e : libraryByPackage.entrySet()) {
+                    String pkg = e.getKey();
+                    if (pkg.equals(packageName) || recurse && (packageName.isEmpty() || pkg.startsWith(packageName + "."))) {
+                        result.addAll(e.getValue());
                     }
                 }
             }
@@ -149,7 +163,8 @@ final class ArenaFileManager implements JavaFileManager {
         if (location == JAVA_BASE) {
             return platformByPath.get(path);
         } else if (location == StandardLocation.CLASS_PATH) {
-            return sources.get(path);
+            ArenaFile f = sources.get(path);
+            return f != null ? f : libraryClasses.get(path);
         } else if (location == StandardLocation.CLASS_OUTPUT) {
             return outputs.get(path);
         }
@@ -189,7 +204,7 @@ final class ArenaFileManager implements JavaFileManager {
         if (location == JAVA_BASE) {
             return f.platform;
         } else if (location == StandardLocation.CLASS_PATH) {
-            return sources.get(f.path) == f;
+            return sources.get(f.path) == f || libraryClasses.get(f.path) == f;
         } else if (location == StandardLocation.CLASS_OUTPUT) {
             return outputs.get(f.path) == f;
         }

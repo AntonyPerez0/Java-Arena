@@ -41,6 +41,11 @@ public final class ArenaJavac {
     private final Map<String, List<ArenaFile>> platformByPackage = new HashMap<>();
     private final Map<String, ArenaFile> platformByPath = new HashMap<>();
     private final Map<String, ArenaFile> sources = new LinkedHashMap<>();
+    /** Libraries loaded with loadLibrary, by name: their class files by path. */
+    private final Map<String, Map<String, ArenaFile>> libraries = new HashMap<>();
+    /** Class files of the libraries chosen with useLibraries, on the class path of the next compile. */
+    private final Map<String, ArenaFile> classPath = new HashMap<>();
+    private final Map<String, List<ArenaFile>> classPathByPackage = new HashMap<>();
     private final Map<String, ArenaFile> outputs = new LinkedHashMap<>();
     private final List<Diag> diagnostics = new ArrayList<>();
     private String output = "";
@@ -95,6 +100,67 @@ public final class ArenaJavac {
         return count;
     }
 
+    /**
+     * Loads a library's class files (an archive in the same format as the platform
+     * classes, such as JUnit 4 with Hamcrest) under a name, for useLibraries. Entries
+     * that aren't class files are skipped. Returns the number of class files.
+     */
+    public int loadLibrary(String name, byte[] archive) throws IOException {
+        byte[] data = archive;
+        if (archive.length > 2 && (archive[0] & 0xff) == 0x1f && (archive[1] & 0xff) == 0x8b) {
+            try (InputStream in = new GZIPInputStream(new ByteArrayInputStream(archive), 65536)) {
+                data = in.readAllBytes();
+            }
+        }
+        Map<String, ArenaFile> files = new HashMap<>();
+        int pos = 0;
+        while (pos < data.length) {
+            int nameLength = ((data[pos] & 0xff) << 8) | (data[pos + 1] & 0xff);
+            pos += 2;
+            String path = new String(data, pos, nameLength, StandardCharsets.UTF_8);
+            pos += nameLength;
+            int length = ((data[pos] & 0xff) << 24) | ((data[pos + 1] & 0xff) << 16)
+                    | ((data[pos + 2] & 0xff) << 8) | (data[pos + 3] & 0xff);
+            pos += 4;
+            if (path.endsWith(".class") && !path.endsWith("module-info.class")) {
+                files.put(path, ArenaFile.libraryClass(path, data, pos, length));
+            }
+            pos += length;
+        }
+        libraries.put(name, files);
+        return files.size();
+    }
+
+    /**
+     * Puts the named libraries (comma-separated, loaded with loadLibrary) on the class
+     * path of the next compiles, like "javac -cp junit.jar:hamcrest.jar". An empty
+     * string means no libraries, as for a plain "javac". Returns the names that aren't
+     * loaded, comma-separated (empty when all are).
+     */
+    public String useLibraries(String names) {
+        classPath.clear();
+        classPathByPackage.clear();
+        StringBuilder missing = new StringBuilder();
+        for (String name : names.split(",")) {
+            name = name.trim();
+            if (name.isEmpty()) {
+                continue;
+            }
+            Map<String, ArenaFile> files = libraries.get(name);
+            if (files == null) {
+                missing.append(missing.length() == 0 ? "" : ",").append(name);
+                continue;
+            }
+            for (ArenaFile f : files.values()) {
+                // The first library that has a class wins, as on a class path.
+                if (classPath.putIfAbsent(f.path, f) == null) {
+                    classPathByPackage.computeIfAbsent(ArenaFile.packageOf(f.path), k -> new ArrayList<>()).add(f);
+                }
+            }
+        }
+        return missing.toString();
+    }
+
     /** Removes all sources and results of the previous compile. */
     public void reset() {
         sources.clear();
@@ -119,7 +185,7 @@ public final class ArenaJavac {
         Context context = new Context();
         Log log = new RecordingLog(context, writer, text);
         context.put(JavaFileManager.class,
-                new ArenaFileManager(platformByPackage, platformByPath, sources, outputs));
+                new ArenaFileManager(platformByPackage, platformByPath, sources, classPath, classPathByPackage, outputs));
         // No annotation processor search (the Wasm build removes it anyway).
         Options.instance(context).put(Option.PROC, "none");
         JavaCompiler compiler = JavaCompiler.instance(context);

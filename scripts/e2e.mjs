@@ -379,6 +379,9 @@ const lessonSession = await newPage();
     await page.goto(BASE + 'learn/classes/constructors/');
     await lessonReady(page);
     expect((await page.locator('.file-tab').allInnerTexts()).join() === 'Parcel.java,Main.java', 'a tab per file, the class first');
+    // The editor sits below the tabs, not over them (the desktop column shrinks the editor, never the tabs).
+    const gap = await page.evaluate(() => document.querySelector('[role=tabpanel]').getBoundingClientRect().top - document.querySelector('.file-tab').getBoundingClientRect().bottom);
+    expect(gap >= -1, `the editor covers the tabs by ${-gap} px`);
     // The starter Parcel has no constructor yet, so Main's new Parcel("Amir", 1200) doesn't compile.
     await check(page);
     const res = await page.locator('.results').innerText();

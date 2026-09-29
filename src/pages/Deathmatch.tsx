@@ -180,9 +180,10 @@ function Arena({ drills }: { drills: Drill[] }) {
     const h = (e: KeyboardEvent) => {
       if (e.repeat) return;
       const t = e.target as HTMLElement | null;
-      // Esc leaves a run from an answer box too, but not from the code editor (there it leaves the editor).
+      // Esc leaves a run from an answer box too, but not from the code editor (there it leaves the
+      // editor) or the site menu (there it closes the menu).
       if (e.key === "Escape") {
-        if (t?.isContentEditable) return;
+        if (t?.isContentEditable || t?.closest("header")) return;
         if (phase === "playing" || phase === "review" || phase === "cleared") leave();
         else if (phase === "dead") setPhase("lobby");
         return;
@@ -329,8 +330,9 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      // Only when nothing in particular has focus: Enter on a control or the runs table does its own thing.
       const t = e.target as HTMLElement | null;
-      if (e.key !== "Enter" || e.repeat || t?.isContentEditable || t?.closest("a, button, input, textarea, select, summary")) return;
+      if (e.key !== "Enter" || e.repeat || (t && t !== document.body && t !== document.documentElement)) return;
       if (canStart("deathmatch")) onStart("deathmatch");
     };
     window.addEventListener("keydown", h);
@@ -394,7 +396,7 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
           <div className="modes">
             <button type="button" className="mode mode-dm" onClick={() => onStart("deathmatch")} disabled={!canStart("deathmatch")}>
               <span className="mode-name">Deathmatch</span>
-              <span className="mode-desc">{canStart("deathmatch") ? "One life. A single miss ends the run. Your best streak sets your rank." : `Opens at ${MIN_RANKED} drills in the rotation (${quickCount} so far), so a rank can't come from a few answers learned by heart. Casual works now.`}</span>
+              <span className="mode-desc">{canStart("deathmatch") ? "One life. A single miss ends the run. Your best streak sets your rank." : `Opens at ${MIN_RANKED} quick drills in the rotation (${quickCount} so far), so a rank can't come from a few answers learned by heart. Casual works now.`}</span>
               <span className="mode-best">best {s.dm.best.deathmatch}{canStart("deathmatch") ? " · Enter" : ""}</span>
             </button>
             <button type="button" className="mode" onClick={() => onStart("casual")} disabled={!canStart("casual")}>
@@ -444,7 +446,7 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
                 title={!isOpen ? "Finish a step of this module to unlock its drills" : open < all.length ? `${open} of ${all.length} drills unlocked: each unlocks with the step that teaches it` : n(all.length, "drill", "drills")}
                 onClick={() => {
                   // At least one topic stays in the rotation.
-                  if (on && selected.length > 1) patchSettings({ topicsOff: [...off, m.id] });
+                  if (on && selected.length > 1) patchSettings({ topicsOff: [...new Set([...off.filter((t) => !selected.includes(t)), m.id])] });
                   else if (!on) patchSettings({ topicsOff: off.filter((t) => t !== m.id) });
                 }}
               >
@@ -455,7 +457,10 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
             );
           })}
         </div>
-        <p className="muted small">{n(pool.length, "drill", "drills")} in the rotation.</p>
+        <p className="muted small">
+          {n(quickCount, "quick drill", "quick drills")}
+          {pool.length > quickCount ? ` and ${n(pool.length - quickCount, "boss rep", "boss reps")}` : ""} in the rotation.
+        </p>
         <div className="toggles">
           <label>
             <input type="checkbox" checked={s.settings.boss && canRun} disabled={!canRun} onChange={(e) => patchSettings({ boss: e.target.checked })} /> Boss reps (a small program every {BOSS_EVERY}th rep, run by the Java engine){canRun ? "" : ": this browser can't run the engine, so they're off"}
@@ -473,7 +478,7 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
       </section>
 
       {s.dm.runs.length > 0 && (
-        <section className="card" aria-labelledby="runs-h">
+        <section className="card">
           <h2 className="h3" id="runs-h">
             Recent runs
           </h2>

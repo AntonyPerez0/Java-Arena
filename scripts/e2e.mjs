@@ -581,6 +581,12 @@ await test('Deathmatch: a finished step unlocks its drills; right answers of eve
   await page.goBack();
   await page.locator('.lobby .modes').waitFor();
   expect((await page.locator('.runs').innerText()).includes('Deathmatch'), 'the run is listed');
+  await axe(page, 'deathmatch lobby with runs');
+  // Enter on the (scrollable, focusable) runs table doesn't start a run.
+  await page.locator('.table-scroll').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  expect((await page.locator('.rep').count()) === 0, 'Enter on the runs table started a run');
   await page.locator('.mode-dm').click();
   await page.locator('.rep').waitFor();
   await page.keyboard.press('Escape');

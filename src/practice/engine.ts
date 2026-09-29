@@ -50,7 +50,8 @@ export function checkAnswer(d: Drill, answer: string): boolean {
       return looseOutput(answer) === looseOutput(d.answer);
     case "fill": {
       // Spaces only matter between two words or numbers: "(a+b)" is "( a + b )", but "elseif" isn't "else if".
-      const squash = (x: string) => x.trim().replace(/\s+/g, " ").replace(/ (?!\w)|(?<!\w) /g, "");
+      // (No regex lookbehind: Safari before 16.4 can't parse it.)
+      const squash = (x: string) => x.trim().split(/\s+/).reduce((a, w) => (/\w$/.test(a) && /^\w/.test(w) ? a + " " + w : a + w), "");
       return (d.accept ?? [d.answer]).some((a) => squash(a) === squash(answer));
     }
     case "bug":

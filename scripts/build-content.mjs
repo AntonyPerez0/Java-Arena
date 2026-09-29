@@ -637,7 +637,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
       const answer = c.ok ? "yes" : "no";
       if (d.answer != null && String(d.answer) !== answer) errors.push(`${where}: the answer says ${d.answer}, but javac says ${answer}:\n${c.output}`);
       checks.push(c.ok ? { where, kind: "compiles", files: mainFile(program) } : { where, kind: "error", files: mainFile(program), javac: c.output });
-      const why = d.why || (c.ok ? "" : `javac says: ${firstError(c.output)}`);
+      const why = d.why || (c.ok ? "" : `javac says: \`${firstError(c.output)}\``);
       if (!why) errors.push(`${where}: needs an explanation (why)`);
       return { ...base, why, prompt: d.prompt ?? "Does this compile?", display, answer };
     }
@@ -658,8 +658,10 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
         else if (d.verify === "output") {
           const out = await runDrill(where, program, stdin);
           if (out != null) {
-            if (normalizeOutput(choices[answer - 1]) !== out) errors.push(`${where}: the right choice is "${choices[answer - 1]}", but the program prints "${out}"`);
-            choices.forEach((ch, i) => i !== answer - 1 && normalizeOutput(ch) === out && errors.push(`${where}: choice ${i + 1} is also what it prints`));
+            // A choice may be in backticks (as code), which aren't part of the output.
+            const shown = (ch) => normalizeOutput(ch.replace(/^`([^`]*)`$/, "$1"));
+            if (shown(choices[answer - 1]) !== out) errors.push(`${where}: the right choice is "${choices[answer - 1]}", but the program prints "${out}"`);
+            choices.forEach((ch, i) => i !== answer - 1 && shown(ch) === out && errors.push(`${where}: choice ${i + 1} is also what it prints`));
           }
         } else checks.push({ where, kind: "compiles", files: mainFile(program) });
       } else if (d.verify) errors.push(`${where}: verify needs code to run`);

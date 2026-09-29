@@ -140,6 +140,16 @@ export default function Results({ result }: { result: GradeResult }) {
           ))}
         </ul>
       )}
+      {result.styleNotes.length > 0 && result.status !== "compile-error" && (
+        <div className="style-notes">
+          <span className="lbl">Style note (doesn't affect passing)</span>
+          <ul>
+            {result.styleNotes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {warnings.length > 0 && result.status !== "compile-error" && (
         <details className="warnings">
           <summary>

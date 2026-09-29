@@ -4,6 +4,7 @@ import { java } from "@codemirror/lang-java";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { keymap, EditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
+import { indentUnit } from "@codemirror/language";
 import { linter, lintGutter, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
 import type { FriendlyDiagnostic } from "../grader/grade";
 import { useResolvedTheme } from "../lib/appearance";
@@ -27,6 +28,8 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
     const marks = diagnostics.filter((d) => d.line > 0 && d.kind !== "note" && d.file.endsWith("Main.java"));
     return [
       java(),
+      // Four spaces per level, like the lessons and the style check (CodeMirror's default is two).
+      indentUnit.of("    "),
       EditorView.lineWrapping,
       // An explicit tabindex keeps the text area a tab stop that tools like axe recognise inside the scroll area.
       EditorView.contentAttributes.of({ "aria-label": label, "aria-describedby": helpId, tabindex: "0", autocapitalize: "off", autocorrect: "off", spellcheck: "false" }),

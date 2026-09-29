@@ -13,34 +13,42 @@ import { patchSettings } from "./state/store";
 import { useAppearance, useResolvedTheme } from "./lib/appearance";
 import { MOOC_LICENSE_URL, MOOC_URL, REPO_URL } from "./lib/site";
 
-// The lesson page carries the code editor, so it loads separately. main.tsx loads it before the
-// app starts when a lesson is the first page opened; then it renders at once (React.lazy would
+// Pages with the code editor (CodeMirror) load separately. main.tsx loads the page's code before the
+// app starts when one of them is the first page opened; then it renders at once (React.lazy would
 // show a loading message for a moment, and the pre-rendered page would jump).
-let StepPageComponent: ComponentType | null = null;
-export const loadStepPage = () =>
-  import("./pages/StepPage").then((m) => {
-    StepPageComponent = m.default;
-  });
-
-function StepRoute() {
-  const [, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (!StepPageComponent) loadStepPage().then(() => setLoaded(true), () => setFailed(true));
-  }, []);
-  if (StepPageComponent) return <StepPageComponent />;
-  return failed ? (
-    <p role="alert">
-      The lesson page couldn't be loaded. Check the connection and{" "}
-      <button type="button" className="linkish" onClick={() => location.reload()}>
-        reload the page
-      </button>
-      .
-    </p>
-  ) : (
-    <p className="muted">Loading the lesson…</p>
-  );
+function editorPage(load: () => Promise<{ default: ComponentType }>) {
+  let component: ComponentType | null = null;
+  const preload = () =>
+    load().then((m) => {
+      component = m.default;
+    });
+  function Route() {
+    const [, setLoaded] = useState(false);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => {
+      if (!component) preload().then(() => setLoaded(true), () => setFailed(true));
+    }, []);
+    const Page = component;
+    if (Page) return <Page />;
+    return failed ? (
+      <p role="alert">
+        This page couldn't be loaded. Check the connection and{" "}
+        <button type="button" className="linkish" onClick={() => location.reload()}>
+          reload the page
+        </button>
+        .
+      </p>
+    ) : (
+      <p className="muted">Loading…</p>
+    );
+  }
+  return { Route, preload };
 }
+
+const stepPage = editorPage(() => import("./pages/StepPage"));
+const playgroundPage = editorPage(() => import("./pages/Playground"));
+export const loadStepPage = stepPage.preload;
+export const loadPlayground = playgroundPage.preload;
 
 /** On navigation: scroll to the top and move keyboard and screen-reader focus to the new page. */
 function RouteChange() {
@@ -96,6 +104,9 @@ function Footer() {
               <li>
                 <Link to="/learn/printing/">Start with module 1</Link>
               </li>
+              <li>
+                <Link to="/playground/">Playground</Link>
+              </li>
             </ul>
           </div>
           <div className="footer-col">
@@ -141,6 +152,7 @@ function Footer() {
 
 const NAV: [string, string][] = [
   ["/learn/", "Learn"],
+  ["/playground/", "Playground"],
   ["/settings/", "Settings"],
   ["/about/", "About"],
 ];
@@ -227,7 +239,8 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/learn" element={<Learn />} />
           <Route path="/learn/:moduleId" element={<ModulePage />} />
-          <Route path="/learn/:moduleId/:stepSlug" element={<StepRoute />} />
+          <Route path="/learn/:moduleId/:stepSlug" element={<stepPage.Route />} />
+          <Route path="/playground" element={<playgroundPage.Route />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<NotFound />} />

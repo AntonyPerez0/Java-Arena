@@ -1,0 +1,236 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link2, Play, RotateCcw } from "lucide-react";
+import CodeEditor from "../components/CodeEditor";
+import SymbolBar from "../components/SymbolBar";
+import { DiagnosticList } from "../components/Results";
+import { DownloadCard, EngineErrorCard, UnsupportedCard, useEngineAutoload, useEngineStatus } from "../components/Engine";
+import { engineSupported } from "../engine/client";
+import { runOnly, type FreeRun } from "../grader/grade";
+import { decodeShare, encodeShare } from "../lib/share";
+import { useTitle } from "../lib/title";
+
+const KEY = "java-arena-playground";
+
+const EXAMPLE = `import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("What is your name?");
+        String name = scanner.nextLine();
+        System.out.println("Hello, " + name + "!");
+    }
+}
+`;
+
+type Saved = { code: string; stdin: string };
+
+function loadSaved(): Saved {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY) ?? "null");
+    if (s && typeof s.code === "string") return { code: s.code, stdin: typeof s.stdin === "string" ? s.stdin : "" };
+  } catch {
+    /* ignore */
+  }
+  return { code: EXAMPLE, stdin: "Ada\n" };
+}
+
+function save(s: Saved) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(s));
+  } catch {
+    /* storage full or blocked */
+  }
+}
+
+function announce(r: FreeRun): string {
+  if (r.status === "compile-error") return "It didn't compile. The errors are listed below.";
+  if (r.status === "internal-error") return "The Java engine couldn't run this. Try again.";
+  return r.note ? "The program stopped with a problem. The output and an explanation are below." : "The program finished. Its output is below.";
+}
+
+/** Write and run any Java program, with your own input; share it as a link. */
+export default function Playground() {
+  useTitle("Playground");
+  const [code, setCode] = useState(() => loadSaved().code);
+  const [stdin, setStdin] = useState(() => loadSaved().stdin);
+  // Opened from a share link: the learner's own saved program stays untouched until they edit.
+  const [shared, setShared] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const [result, setResult] = useState<FreeRun | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [runs, setRuns] = useState(0);
+  const [link, setLink] = useState("");
+  const [status, setStatus] = useState("");
+  const engine = useEngineStatus();
+  const askFirst = useEngineAutoload();
+  const boxRef = useRef<HTMLDivElement>(null);
+  const busyRef = useRef(false);
+
+  useEffect(() => {
+    if (!location.hash) return;
+    decodeShare(location.hash).then(
+      (p) => {
+        if (!p) return;
+        setCode(p.code);
+        setStdin(p.stdin);
+        setShared(true);
+      },
+      () => setShareError("This share link is damaged, so it couldn't be opened. Your own program is shown instead."),
+    );
+  }, []);
+
+  const edit = (next: Partial<Saved>) => {
+    const s = { code, stdin, ...next };
+    if (next.code !== undefined) setCode(next.code);
+    if (next.stdin !== undefined) setStdin(next.stdin);
+    // Editing a shared program makes it this learner's own.
+    setShared(false);
+    if (shared) history.replaceState(null, "", location.pathname + location.search);
+    save(s);
+  };
+
+  const run = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setStatus("");
+    try {
+      setResult(await runOnly(code, stdin));
+      setRuns((n) => n + 1);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, [code, stdin]);
+
+  const share = async () => {
+    const url = new URL(location.pathname, location.origin).href + "#" + (await encodeShare({ code, stdin }));
+    setLink(url);
+    if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+      try {
+        await navigator.share({ title: "A Java program", url });
+        setStatus("Shared.");
+        return;
+      } catch {
+        /* cancelled: the link is still shown below */
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus("Link copied. Anyone who opens it sees this program and its input.");
+    } catch {
+      setStatus("Copy the link below. Anyone who opens it sees this program and its input.");
+    }
+  };
+
+  const waiting = engine.state !== "ready";
+  const unsupported = !engineSupported();
+  const out = result?.status === "ran" ? (result.run?.stdout ?? "") + (result.run?.stderr ?? "") : "";
+
+  return (
+    <div className="playground">
+      <div className="page-head">
+        <h1>Playground</h1>
+        <p className="muted">Write any Java program and run it with your own input. It runs on your device with the real javac 21, and it's saved in this browser.</p>
+      </div>
+      {shared && (
+        <div className="banner banner-info" role="status">
+          <span>You opened a shared program. Your own playground program is still saved; editing this one replaces it.</span>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => {
+              const s = loadSaved();
+              setCode(s.code);
+              setStdin(s.stdin);
+              setShared(false);
+              history.replaceState(null, "", location.pathname + location.search);
+            }}
+          >
+            Back to my program
+          </button>
+        </div>
+      )}
+      {shareError && (
+        <p className="banner banner-fail" role="alert">
+          {shareError}
+        </p>
+      )}
+      <div className="workbench" ref={boxRef} data-checks={runs}>
+        {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="Running programs" />}
+        {engine.state === "error" && !unsupported && <EngineErrorCard message={engine.message} />}
+        <CodeEditor value={code} onChange={(v) => edit({ code: v })} onRun={run} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="16rem" label="Java code editor (Main.java)" />
+        <SymbolBar container={boxRef} />
+        <label className="lbl" htmlFor="pg-stdin">
+          Input (what the program reads)
+        </label>
+        <textarea id="pg-stdin" className="stdin" rows={3} value={stdin} onChange={(e) => edit({ stdin: e.target.value })} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off" />
+        <div className="actions">
+          <button type="button" className="btn btn-primary" id="check" onClick={run} aria-busy={busy || undefined} aria-keyshortcuts="Control+Enter Meta+Enter" disabled={unsupported}>
+            {busy ? (
+              waiting ? (
+                "Starting Java…"
+              ) : (
+                "Running…"
+              )
+            ) : (
+              <>
+                <Play className="icon" aria-hidden="true" /> Run <kbd aria-hidden="true">Ctrl ↵</kbd>
+              </>
+            )}
+          </button>
+          <button type="button" className="btn" onClick={share}>
+            <Link2 className="icon" aria-hidden="true" /> Share
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              if (!confirm("Replace your program with the example?")) return;
+              edit({ code: EXAMPLE, stdin: "Ada\n" });
+              setResult(null);
+            }}
+          >
+            <RotateCcw className="icon" aria-hidden="true" /> Example
+          </button>
+        </div>
+        {link && (
+          <div className="share-box">
+            <label className="lbl" htmlFor="pg-link">
+              Share link
+            </label>
+            <input id="pg-link" className="share-link" readOnly value={link} onFocus={(e) => e.currentTarget.select()} />
+          </div>
+        )}
+        <p className="visually-hidden" role="status" aria-live="polite">
+          {busy ? "Running your program." : status || (result ? announce(result) : "")}
+        </p>
+        {status && <p className="small muted">{status}</p>}
+        {result && (
+          <div className="results">
+            {result.status === "internal-error" ? (
+              <div className="banner banner-fail">The Java engine couldn't run this ({result.internalError}). Try again.</div>
+            ) : result.status === "compile-error" ? (
+              <>
+                <div className="banner banner-fail">
+                  <span>It didn't compile</span>
+                </div>
+                <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} />
+              </>
+            ) : (
+              <>
+                <span className="lbl">Output</span>
+                <pre tabIndex={0} className="console">
+                  {out || "(no output)"}
+                </pre>
+                {result.note && <div className="t-note">{result.note}</div>}
+                {result.run && <div className="muted small">Exit code {result.run.exitCode ?? "none"}</div>}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

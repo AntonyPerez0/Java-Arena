@@ -57,10 +57,10 @@ export function friendlyDiagnostics(list: Diagnostic[]): FriendlyDiagnostic[] {
 
 /** A sentence about what went wrong in a run, or undefined when it ended normally. `sources` are
  * the learner's file names, where the crash's line is looked for. */
-export function describeRun(r: RunResult | undefined, sources: string[] = ["Main.java"]): string | undefined {
+export function describeRun(r: RunResult | undefined, sources: string[] = ["Main.java"], limitMs = DEFAULT_TIME_LIMIT_MS): string | undefined {
   if (!r) return "This test didn't run.";
   if (r.internalError) return `The Java engine couldn't run the program (${r.internalError}). Try again; if it keeps happening, reload the page.`;
-  if (r.timedOut) return `Time limit: the program ran for more than ${DEFAULT_TIME_LIMIT_MS / 1000} seconds and was stopped. Look for a loop that never ends. What it printed until then is shown.`;
+  if (r.timedOut) return `Time limit: the program ran for more than ${limitMs / 1000} seconds and was stopped. Look for a loop that never ends. What it printed until then is shown.`;
   const crash = explainCrash(r.stderr, sources);
   if (crash && crash.line == null && /^(no main method|main is not static|no main class)$/.test(crash.exception)) return `The program didn't start. ${crash.explanation}`;
   if (crash) {
@@ -129,7 +129,12 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
 async function gradeJUnit(ex: Exercise, own: { path: string; text: string }[], rest: { ruleProblems: string[]; styleProblems: string[]; styleNotes: string[] }): Promise<GradeResult> {
   const sources = own.map((f) => f.path);
   const libraries = [JUNIT_LIBRARY];
-  const withRunner = (replace?: Record<string, string>) => [...own.map((f) => ({ path: f.path, text: replace?.[f.path] ?? f.text })), { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }];
+  // Files the challenge gives ready (the same in the starter code and the solution) are checked as
+  // given: otherwise a learner could change the class under test to suit a wrong test.
+  const solution = new Map((splitFiles(ex.solution) as { path: string; text: string }[]).map((f) => [f.path, f.text]));
+  const given = new Map((splitFiles(ex.seed) as { path: string; text: string }[]).filter((f) => solution.get(f.path) === f.text).map((f) => [f.path, f.text]));
+  const changedGiven = own.filter((f) => given.has(f.path) && given.get(f.path)!.trim() !== f.text.trim()).map((f) => f.path);
+  const withRunner = (replace?: Record<string, string>) => [...own.map((f) => ({ path: f.path, text: replace?.[f.path] ?? given.get(f.path) ?? f.text })), { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }];
   const c = await compile(withRunner(), { libraries });
   const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", ...rest, callProblems: [], compileMs: c.ms, multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", tests: [], internalError: c.internalError };
@@ -152,17 +157,28 @@ async function gradeJUnit(ex: Exercise, own: { path: string; text: string }[], r
     const [r] = await runClasses(classes, TEST_RUNNER_CLASS, [{ args: [t.junit!] }], JUNIT_TIME_LIMIT_MS, { libraries });
     if (r.internalError) return { ...base, status: "internal-error", tests: [], internalError: r.internalError };
     const report = parseTestReport(r.stdout);
-    const ran = !r.timedOut && r.exitCode === 0 && report.complete && report.run > 0;
+    const ran = !r.timedOut && r.exitCode === 0 && report.complete && report.run > 0 && report.problems.length === 0;
     const pass = ran && (t.outcome === "fail" ? report.passed < report.run : report.passed === report.run);
     const failed = report.run - report.passed;
     const note = pass
       ? undefined
       : !ran
-        ? (report.complete && report.run === 0 ? "No test ran: a test method needs @Test in front of it, and must be public void with no parameters." : describeRun(r, sources) ?? "The tests stopped before the end.")
+        ? report.problems.length
+          ? `JUnit couldn't run the tests: ${report.problems[0]}. A test method needs @Test in front of it, and must be public void with no parameters.`
+          : report.complete && report.run === 0
+            ? "No test ran: a test method needs @Test in front of it, and must be public void with no parameters."
+            : describeRun(r, sources, JUNIT_TIME_LIMIT_MS) ?? "The tests stopped before the end."
         : t.outcome === "fail"
           ? "Every test passed, but this version has a bug your tests should catch. Add a test that fails on it."
           : `${failed} of ${report.run} ${report.run === 1 ? "test" : "tests"} failed on this version, which should pass every test. Check what those tests expect.`;
     tests.push(result(pass, normalizeOutput(r.stdout), note, !pass && r.stderr ? r.stderr : undefined));
+  }
+  // Say so on the first failed test when the learner changed a file that's checked as given.
+  const firstFailed = tests.findIndex((t) => !t.pass);
+  if (changedGiven.length && firstFailed >= 0) {
+    const note = `${changedGiven.join(" and ")} ${changedGiven.length === 1 ? "is" : "are"} checked as given, so changes to ${changedGiven.length === 1 ? "it" : "them"} don't count here.`;
+    const t = tests[firstFailed];
+    tests[firstFailed] = { ...t, note: t.note ? `${note} ${t.note}` : note };
   }
   const allPass = tests.every((t) => t.pass) && rest.ruleProblems.length === 0 && rest.styleProblems.length === 0;
   return { ...base, status: allPass ? "pass" : "fail", tests };
@@ -186,7 +202,10 @@ export type FreeRun = {
 export async function runOnly(code: string, stdin: string, files?: Record<string, string>): Promise<FreeRun> {
   const own = splitFiles(code) as { path: string; text: string }[];
   const libraries = usesJUnit(own) ? [JUNIT_LIBRARY] : [];
-  const testClasses = libraries.length && !/\bstatic\s+void\s+main\s*\(/.test(code) ? testClassesOf(own) : [];
+  const noMain = !/\bstatic\s+void\s+main\s*\(/.test(code);
+  const found = testClassesOf(own);
+  // Without a @Test, the classes that use JUnit are run, so the report says why no test ran.
+  const testClasses = libraries.length && noMain ? (found.length ? found : own.filter((f) => /\borg\s*\.\s*junit\b/.test(f.text)).map((f) => f.path.replace(/\.java$/, "").replace(/\//g, "."))) : [];
   const c = await compile(testClasses.length ? [...own, { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }] : own, { libraries });
   const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", internalError: c.internalError };
@@ -195,7 +214,7 @@ export async function runOnly(code: string, stdin: string, files?: Record<string
     ? await runClasses(c.classes, TEST_RUNNER_CLASS, [{ args: testClasses }], JUNIT_TIME_LIMIT_MS, { libraries })
     : await runClasses(c.classes, "Main", [{ stdin, ...(files ? { files } : {}) }], libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS, { libraries });
   if (run?.internalError) return { ...base, status: "internal-error", internalError: run.internalError };
-  return { ...base, status: "ran", run, note: describeRun(run, own.map((f) => f.path)) };
+  return { ...base, status: "ran", run, note: describeRun(run, own.map((f) => f.path), libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS) };
 }
 
 export type PredictResult = { pass: boolean; lines: { pass: boolean; got: string }[] };

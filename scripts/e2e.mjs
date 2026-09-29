@@ -422,6 +422,15 @@ const lessonSession = await newPage();
     let out = await check(page);
     expect(out.includes('Not yet') && out.includes('this version has a bug your tests should catch') && /your tests printed/i.test(out), out);
     await axe(page, 'a JUnit challenge, not passed yet');
+    // The class under test is checked as given: changing it can't make a wrong test pass.
+    const givenTab = page.locator('.file-tab').nth(1);
+    const givenName = (await givenTab.innerText()).trim();
+    await givenTab.click();
+    await page.click('.cm-content');
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.insertText('// changed\n');
+    out = await check(page);
+    expect(out.includes(`${givenName} is checked as given`), out);
     // "Run my tests" shows the report of the learner's tests.
     await page.getByRole('button', { name: 'Run my tests' }).click();
     await page.waitForFunction(() => /tests? passed/.test(document.querySelector('.freerun')?.textContent ?? ''), null, { timeout: 120_000 });

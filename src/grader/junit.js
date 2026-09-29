@@ -27,9 +27,14 @@ export const testClassesOf = (files) =>
  *   1 of 2 tests passed
  *
  * Tests are listed in alphabetical order. A failure shows the exception JUnit reports and the
- * first line of the program's own code in its stack trace.
+ * first line of the program's own code in its stack trace. A class whose tests JUnit can't run (a
+ * test method that isn't public, no @Test at all) gets a "couldn't run:" line with JUnit's reason.
+ * What the tests print goes after the report, under "Printed by the tests:", so printed text can't
+ * pass for the report.
  */
-export const TEST_RUNNER_SOURCE = `import java.util.ArrayList;
+export const TEST_RUNNER_SOURCE = `import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import org.junit.runner.Description;
@@ -40,31 +45,46 @@ import org.junit.runner.notification.RunListener;
 
 public class ArenaTests {
     public static void main(String[] args) throws Exception {
+        PrintStream out = System.out;
+        PrintStream err = System.err;
+        // What the tests print goes after the report, so it can't be mistaken for it.
+        ByteArrayOutputStream printed = new ByteArrayOutputStream();
+        PrintStream capture = new PrintStream(printed, true, "UTF-8");
         int run = 0;
         int passed = 0;
         for (String name : args) {
-            Class<?> testClass = Class.forName(name);
             final List<Description> tests = new ArrayList<>();
             final List<Failure> failures = new ArrayList<>();
-            JUnitCore core = new JUnitCore();
-            core.addListener(new RunListener() {
-                public void testStarted(Description d) {
-                    tests.add(d);
-                }
-
-                public void testFailure(Failure f) {
-                    failures.add(f);
-                    if (!tests.contains(f.getDescription())) {
-                        tests.add(f.getDescription());
+            System.setOut(capture);
+            System.setErr(capture);
+            try {
+                Class<?> testClass = Class.forName(name, false, ArenaTests.class.getClassLoader());
+                JUnitCore core = new JUnitCore();
+                core.addListener(new RunListener() {
+                    public void testStarted(Description d) {
+                        tests.add(d);
                     }
+
+                    public void testFailure(Failure f) {
+                        failures.add(f);
+                    }
+                });
+                core.run(Request.aClass(testClass).sortWith(new Comparator<Description>() {
+                    public int compare(Description a, Description b) {
+                        return String.valueOf(a.getMethodName()).compareTo(String.valueOf(b.getMethodName()));
+                    }
+                }));
+            } finally {
+                System.setOut(out);
+                System.setErr(err);
+            }
+            out.println(name + ": " + tests.size() + (tests.size() == 1 ? " test" : " tests"));
+            // A failure that belongs to no test that ran: JUnit couldn't run the class's tests.
+            for (Failure f : failures) {
+                if (!tests.contains(f.getDescription())) {
+                    out.println("  couldn't run: " + oneLine(f.getException().getMessage()));
                 }
-            });
-            core.run(Request.aClass(testClass).sortWith(new Comparator<Description>() {
-                public int compare(Description a, Description b) {
-                    return String.valueOf(a.getMethodName()).compareTo(String.valueOf(b.getMethodName()));
-                }
-            }));
-            System.out.println(name + ": " + tests.size() + (tests.size() == 1 ? " test" : " tests"));
+            }
             for (Description test : tests) {
                 Failure failure = null;
                 for (Failure f : failures) {
@@ -72,38 +92,59 @@ public class ArenaTests {
                         failure = f;
                     }
                 }
-                String method = test.getMethodName() == null ? test.getDisplayName() : test.getMethodName();
                 run++;
                 if (failure == null) {
                     passed++;
-                    System.out.println("  " + method + ": passed");
+                    out.println("  " + test.getMethodName() + ": passed");
                 } else {
-                    System.out.println("  " + method + ": FAILED");
+                    out.println("  " + test.getMethodName() + ": FAILED");
                     Throwable e = failure.getException();
-                    System.out.println("    " + e);
+                    for (String line : String.valueOf(e).split("\\n")) {
+                        out.println("    " + line);
+                    }
                     for (StackTraceElement frame : e.getStackTrace()) {
                         String c = frame.getClassName();
                         if (!c.startsWith("org.junit.") && !c.startsWith("junit.") && !c.startsWith("org.hamcrest.")
-                                && !c.startsWith("java.") && !c.startsWith("jdk.") && !c.startsWith("sun.")) {
-                            System.out.println("    at " + c + "." + frame.getMethodName() + "(" + frame.getFileName() + ":" + frame.getLineNumber() + ")");
+                                && !c.startsWith("java.") && !c.startsWith("jdk.") && !c.startsWith("sun.")
+                                && !c.equals("ArenaTests") && !c.startsWith("ArenaTests$")) {
+                            out.println("    at " + c + "." + frame.getMethodName() + "(" + frame.getFileName() + ":" + frame.getLineNumber() + ")");
                             break;
                         }
                     }
                 }
             }
         }
-        System.out.println(passed + " of " + run + (run == 1 ? " test" : " tests") + " passed");
+        out.println(passed + " of " + run + (run == 1 ? " test" : " tests") + " passed");
+        String text = printed.toString("UTF-8");
+        if (!text.isEmpty()) {
+            out.println("Printed by the tests:");
+            out.print(text);
+            if (!text.endsWith("\\n")) {
+                out.println();
+            }
+        }
+    }
+
+    private static String oneLine(String message) {
+        return message == null ? "" : message.replace("\\n", " ");
     }
 }
 `;
 
-/** The results in an ArenaTests report: every test with whether it passed. */
+/** The results in an ArenaTests report: every test with whether it passed, and classes JUnit couldn't run. */
 export function parseTestReport(stdout) {
+  const text = String(stdout);
+  // Only the report counts: the tests' own output comes after it.
+  const cut = text.indexOf("\nPrinted by the tests:\n");
+  const report = cut >= 0 ? text.slice(0, cut + 1) : text;
   const tests = [];
-  for (const line of String(stdout).split("\n")) {
+  const problems = [];
+  for (const line of report.split("\n")) {
     const m = /^ {2}(\S+): (passed|FAILED)$/.exec(line);
     if (m) tests.push({ name: m[1], passed: m[2] === "passed" });
+    const p = /^ {2}couldn't run: (.*)$/.exec(line);
+    if (p) problems.push(p[1]);
   }
-  const summary = /^(\d+) of (\d+) tests? passed$/m.exec(String(stdout));
-  return { tests, run: summary ? Number(summary[2]) : tests.length, passed: summary ? Number(summary[1]) : tests.filter((t) => t.passed).length, complete: !!summary };
+  const summary = /^(\d+) of (\d+) tests? passed$/m.exec(report);
+  return { tests, problems, run: summary ? Number(summary[2]) : tests.length, passed: summary ? Number(summary[1]) : tests.filter((t) => t.passed).length, complete: !!summary };
 }

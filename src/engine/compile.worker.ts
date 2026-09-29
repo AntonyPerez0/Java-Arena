@@ -29,7 +29,12 @@ const libraries = new Map<string, Promise<number>>();
 function loadLibrary(name: string): Promise<number> {
   let p = libraries.get(name);
   if (!p) {
-    p = fetchCached(engineBase, manifest!, `${name}.bin`, () => {}).then((bytes) => javac!.loadLibrary(name, bytes));
+    p = fetchCached(engineBase, manifest!, `${name}.bin`, () => {}).then(async (bytes) => {
+      const n = await javac!.loadLibrary(name, bytes);
+      // The page keeps a copy for the run workers.
+      post({ type: "library", name, bytes: bytes.slice() });
+      return n;
+    });
     p.catch(() => libraries.delete(name));
     libraries.set(name, p);
   }
@@ -111,13 +116,13 @@ self.onmessage = async (e: MessageEvent) => {
     try {
       if (!readyPromise) throw new Error("the engine hasn't started");
       await readyPromise;
-      if (javac!.broken) await javac!.recover();
       const wanted: string[] = msg.libraries ?? [];
       try {
         await Promise.all(wanted.map(loadLibrary));
       } catch (err: any) {
         throw new Error(`couldn't download the ${wanted.join(" and ")} library (${err?.message ?? err})`);
       }
+      if (javac!.broken) await javac!.recover();
       const r = javac!.compile(msg.files, { libraries: wanted });
       if (r.crashed) {
         // javac itself failed (for example extremely deep nesting overflowed its stack); the next

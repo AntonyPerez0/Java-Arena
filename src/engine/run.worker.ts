@@ -18,11 +18,11 @@ let assetBase = "";
 let assetManifest: Manifest | null = null;
 const libraryCache = new Map<string, Promise<{ path: string; bytes: Uint8Array }[]>>();
 
-/** A library's class files (such as JUnit's), from the engine cache. */
-function library(name: string) {
+/** A library's class files (such as JUnit's): from the archive the page sent, or the engine cache. */
+function library(name: string, archive?: Uint8Array) {
   let p = libraryCache.get(name);
   if (!p) {
-    p = fetchCached(assetBase, assetManifest!, `${name}.bin`, () => {}).then(libraryClasses);
+    p = (archive ? Promise.resolve(archive) : fetchCached(assetBase, assetManifest!, `${name}.bin`, () => {})).then(libraryClasses);
     libraryCache.set(name, p);
   }
   return p;
@@ -45,14 +45,15 @@ self.onmessage = async (e: MessageEvent) => {
     return;
   }
   if (msg.type !== "run") return;
-  const { mainClass, inputs, first, libraries = [] } = msg as { classes: { path: string; bytes: Uint8Array }[]; mainClass: string; inputs: RunInput[]; first: number; libraries?: string[] };
+  const { mainClass, inputs, first, libraries = [], archives = {} } = msg as { classes: { path: string; bytes: Uint8Array }[]; mainClass: string; inputs: RunInput[]; first: number; libraries?: string[]; archives?: Record<string, Uint8Array> };
   let classes = msg.classes as { path: string; bytes: Uint8Array }[];
   let runner: any;
   try {
     if (!runnerPromise) throw new Error("the runner wasn't started");
     runner = await runnerPromise;
-    // The program's own classes come first, as on a class path.
-    for (const name of libraries) classes = [...classes, ...(await library(name))];
+    // The program's own classes win over a library's, as on a class path: the runner keeps the
+    // last class it's given for a name, so the library's go first.
+    for (const name of libraries) classes = [...(await library(name, archives[name])), ...classes];
   } catch (err: any) {
     post({ type: "fatal", message: String(err?.message ?? err) });
     return;

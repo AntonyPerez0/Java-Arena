@@ -69,16 +69,22 @@ function unzip(zip) {
   return entries;
 }
 
-const classes = new Map();
-const manifest = { files: [], sources: [] };
-rmSync(out, { recursive: true, force: true });
-mkdirSync(join(out, 'licenses'), { recursive: true });
+// Everything is downloaded and checked first, so a failed download leaves the old files in place.
+const downloads = [];
 for (const jar of JARS) {
   const res = await fetch(jar.url);
   if (!res.ok) throw new Error(`${jar.url}: HTTP ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (sha256(bytes) !== jar.sha256) throw new Error(`${jar.url}: SHA-256 is ${sha256(bytes)}, expected ${jar.sha256}`);
-  const entries = unzip(bytes);
+  downloads.push(bytes);
+}
+
+const classes = new Map();
+const manifest = { files: [], sources: [] };
+rmSync(out, { recursive: true, force: true });
+mkdirSync(join(out, 'licenses'), { recursive: true });
+for (const [k, jar] of JARS.entries()) {
+  const entries = unzip(downloads[k]);
   let n = 0;
   for (const [name, data] of entries) {
     if (!name.endsWith('.class') || name.endsWith('module-info.class')) continue;

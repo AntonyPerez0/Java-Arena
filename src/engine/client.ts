@@ -25,6 +25,8 @@ const pending = new Map<number, (m: CompileResult) => void>();
 let runnerManifest: Manifest | null = null;
 let runnerModules: Record<string, WebAssembly.Module> | null = null;
 let jdkZip: Uint8Array | null = null;
+/** Library archives (such as junit4) the compile worker downloaded, handed to every run worker. */
+const libraryArchives = new Map<string, Uint8Array>();
 
 type RunWorker = { worker: Worker; failed: string | null };
 /** A run worker started in advance, so a Run click doesn't wait for the JVM's WebAssembly to start. */
@@ -144,6 +146,8 @@ export function ensureEngine() {
       jdkZip = m.jdkZip ?? null;
       setStatus({ state: "ready" });
       prepareSpare();
+    } else if (m.type === "library") {
+      libraryArchives.set(m.name, m.bytes);
     } else if (m.type === "error") {
       failEngine(m.message);
     } else if (m.type === "compiled") {
@@ -281,7 +285,9 @@ function runBatch(classes: ClassFile[], mainClass: string, cases: RunInput[], fi
       results[first] = failed("the Java runner took too long to start");
       finish(cases.length);
     });
-    runner.postMessage({ type: "run", classes, mainClass, inputs: cases, first, libraries });
+    // The run worker gets the library archives from here, so it needn't fetch them again.
+    const archives = Object.fromEntries(libraries.filter((n) => libraryArchives.has(n)).map((n) => [n, libraryArchives.get(n)]));
+    runner.postMessage({ type: "run", classes, mainClass, inputs: cases, first, libraries, archives });
   });
 }
 

@@ -147,8 +147,9 @@ export async function createJavac(options = {}) {
 
     async loadLibrary(name, src) {
       const bytes = await toBytes(src).then(gunzip);
+      const count = loadLibraryInto(String(name), bytes);
       libraries.set(String(name), bytes);
-      return loadLibraryInto(String(name), bytes);
+      return count;
     },
 
     compile(files, options = {}) {
@@ -162,7 +163,8 @@ export async function createJavac(options = {}) {
       let json;
       try {
         exports.reset();
-        exports.useLibraries(names.join(','));
+        const missing = exports.useLibraries(names.join(','));
+        if (missing) throw new Error(`javac: library not loaded: ${missing}`);
         for (const f of files) exports.addSource(String(f.path), String(f.text));
         json = exports.compile();
       } catch (e) {

@@ -1,0 +1,351 @@
+topic: unit-testing
+drills:
+  - type: predict
+    after: troubleshooting
+    classes: |
+      class Car {
+          private int seats;
+          private int passengers;
+
+          public Car(int seats, int passengers) {
+              this.seats = seats;
+              this.passengers = passengers;
+          }
+
+          public int percentFull() {
+              System.out.println("percentFull starts");
+              return 100 * this.passengers / this.seats;
+          }
+      }
+
+      class Train {
+          public void report(Car car) {
+              System.out.println("report starts");
+              System.out.println(car.percentFull() + "%");
+              System.out.println("report ends");
+          }
+      }
+    body: |
+      Train train = new Train();
+      train.report(new Car(40, 30));
+    why: "`report` prints its first line and then calls `percentFull`, and waits for it. `percentFull` prints its own line and returns 75, and only then does `report` go on, printing `75%` and its last line. That waiting is what a stack trace shows: had `percentFull` crashed, the trace would list `percentFull` on top, and under it `report`, the method still waiting for it."
+
+  - type: bug
+    after: troubleshooting
+    prompt: "The program crashes with `/ by zero`. The `if` before the division is meant to prevent that, so the fix goes there. Which line is wrong?"
+    classes: |
+      class Car {
+          private int seats;
+          private int passengers;
+
+          public Car(int seats, int passengers) {
+              this.seats = seats;
+              this.passengers = passengers;
+          }
+
+          public int percentFull() {
+              if (this.seats < 0) { // BUG
+                  return 0;
+              }
+              return 100 * this.passengers / this.seats;
+          }
+      }
+    body: |
+      Car dining = new Car(0, 0);
+      Car sleeper = new Car(20, 15);
+      System.out.println(dining.percentFull() + " " + sleeper.percentFull());
+    fix: "if (this.seats == 0) {"
+    why: "A car can't have fewer than 0 seats, so `this.seats < 0` is never true, and the dining car with 0 seats goes on to the division. The check should catch exactly the case that crashes: `this.seats == 0`."
+
+  - type: predict
+    after: test-input
+    body: |
+      Scanner reader = new Scanner("4\n5\n\n6\n");
+      int sum = 0;
+      while (reader.hasNextLine()) {
+          String line = reader.nextLine();
+          if (line.isEmpty()) {
+              continue;
+          }
+          sum += Integer.valueOf(line);
+      }
+      System.out.println(sum);
+    why: "The String holds four lines: `4`, `5`, an empty line and `6`. `continue` skips the empty line and goes on with the loop, so all three numbers are added: 15. With `break` instead, the loop would stop at the empty line, and the sum would be 9."
+
+  - type: predict
+    after: test-input
+    prompt: "`countShort` should count the words shorter than 4 letters. What does this print?"
+    pre: |
+      public static int countShort(Scanner scanner) {
+          int count = 0;
+          while (scanner.hasNextLine()) {
+              if (scanner.nextLine().length() <= 4) {
+                  count++;
+              }
+          }
+          return count;
+      }
+
+      public static void check(String input, int expected) {
+          int result = countShort(new Scanner(input));
+          if (result == expected) {
+              System.out.println("ok");
+          } else {
+              System.out.println("WRONG: expected " + expected + " but got " + result);
+          }
+      }
+    body: |
+      check("cat\nhorse\n", 1);
+      check("bird\nowl\n", 1);
+    why: "`<= 4` also counts words of exactly 4 letters. The first check has no such word, so it gets the right answer by luck: `cat` is counted, `horse` isn't. The second has `bird`, which has 4 letters, so the method counts 2 instead of 1. A check only finds a bug when its input reaches the bug, here a word right at the limit."
+
+  - type: fill
+    after: test-input
+    prompt: Fill in the parameter's type, so the method can read from any Scanner, the keyboard or a String.
+    pre: |
+      public static int countLines([[Scanner]] scanner) {
+          int count = 0;
+          while (scanner.hasNextLine()) {
+              scanner.nextLine();
+              count++;
+          }
+          return count;
+      }
+    body: |
+      System.out.println(countLines(new Scanner("red\ngreen\nblue\n")));
+    why: "The method takes a `Scanner` and uses only that one. The caller decides what it reads: here three lines of a String, and in a finished program `new Scanner(System.in)`."
+
+  - type: fill
+    after: test-input
+    prompt: "`totalKilometers` stops at the first empty line. Fill in the expected value, so the check prints `ok`."
+    pre: |
+      public static int totalKilometers(Scanner scanner) {
+          int total = 0;
+          while (scanner.hasNextLine()) {
+              String line = scanner.nextLine();
+              if (line.isEmpty()) {
+                  break;
+              }
+              total += Integer.valueOf(line);
+          }
+          return total;
+      }
+
+      public static void check(String input, int expected) {
+          int result = totalKilometers(new Scanner(input));
+          if (result == expected) {
+              System.out.println("ok");
+          } else {
+              System.out.println("WRONG: expected " + expected + " but got " + result);
+          }
+      }
+    body: |
+      check("5\n\n9\n", [[5]]);
+    why: "The input is `5`, an empty line and `9`. The method adds the 5, then stops at the empty line and never reads the 9, so the right result is 5. Working out the expected value by hand, from what the method should do, is what makes a check worth having."
+
+  - type: bug
+    after: test-input
+    prompt: "This test run should count the `yes` votes in `votes`, and print `2`. Which line is wrong?"
+    pre: |
+      public static int countYes(Scanner scanner) {
+          int count = 0;
+          while (scanner.hasNextLine()) {
+              if (scanner.nextLine().equals("yes")) {
+                  count++;
+              }
+          }
+          return count;
+      }
+    body: |
+      String votes = "yes\nno\nyes\n";
+      System.out.println(countYes(new Scanner(System.in))); // BUG
+    fix: System.out.println(countYes(new Scanner(votes)));
+    why: "`new Scanner(System.in)` reads the keyboard, not the String, so the votes are never read. To read a String, the Scanner is made from it: `new Scanner(votes)`."
+
+  - type: compiles
+    after: test-input
+    pre: |
+      public static int total(Scanner scanner) {
+          int sum = 0;
+          while (scanner.hasNextLine()) {
+              sum += Integer.valueOf(scanner.nextLine());
+          }
+          return sum;
+      }
+    body: |
+      System.out.println(total("3\n4\n"));
+    why: "No. `total` takes a Scanner, and a String isn't one: `incompatible types: String cannot be converted to Scanner`. The String has to be wrapped in a Scanner first: `total(new Scanner(\"3\\n4\\n\"))`."
+
+  - type: compiles
+    after: test-input
+    pre: |
+      public static int countLines(String text) {
+          Scanner scanner = new Scanner(text);
+          int count = 0;
+          while (scanner.hasNextLine()) {
+              scanner.nextLine();
+              count++;
+          }
+          return count;
+      }
+    body: |
+      System.out.println(countLines("a\nb\n"));
+    why: "Yes. `new Scanner(...)` takes any String, a parameter as well as a String in quotes, so the method makes its Scanner from `text` and counts 2 lines."
+
+  - type: choice
+    after: junit
+    prompt: "A test fails with `java.lang.AssertionError: expected:<750> but was:<450>`, on the line `assertEquals(750, cart.total());`. What happened?"
+    choices:
+      - "`cart.total()` returned 450, and the test expected 750"
+      - "`cart.total()` returned 750, and the test expected 450"
+      - "The cart has 450 products in it"
+      - "The test crashed before it compared anything"
+    answer: 1
+    why: "`assertEquals(expected, actual)` takes the value the test expects first, and the real value second. The message repeats them in that order: expected 750, but `cart.total()` was 450. That's why the expected value must come first: the other way around, the message would get them backwards."
+
+  - type: predict
+    after: good-tests
+    body: |
+      double sum = 0.1 + 0.2;
+      System.out.println(sum == 0.3);
+      System.out.println(Math.abs(sum - 0.3) < 0.001);
+    why: "A double can't hold 0.1 or 0.2 exactly, so their sum is 0.30000000000000004, and `==` says false. The difference from 0.3 is tiny, though, far smaller than 0.001. That's what `assertEquals(0.3, sum, 0.001)` checks, with 0.001 as the delta."
+
+  - type: bug
+    after: good-tests
+    prompt: "A hand-made check prints `WRONG`, although the sum is as right as a double can be. Which line should change?"
+    body: |
+      double total = 0.1 + 0.2;
+      if (total == 0.3) { // BUG
+          System.out.println("ok");
+      } else {
+          System.out.println("WRONG: " + total);
+      }
+    fix: "if (Math.abs(total - 0.3) < 0.0001) {"
+    why: "`0.1 + 0.2` comes out as 0.30000000000000004, so `==` with 0.3 is false. Doubles are compared with a margin: close enough counts as equal. That's the delta JUnit's `assertEquals` takes for doubles."
+
+  - type: choice
+    after: good-tests
+    prompt: "Free shipping should start at 50 euros, but this method has `>` where it should have `>=`. Which assertion catches the bug: it fails on this method, and passes on the right one?"
+    pre: |
+      public static boolean freeShipping(int euros) {
+          return euros > 50;
+      }
+    choices:
+      - "`assertTrue(freeShipping(80));`"
+      - "`assertFalse(freeShipping(20));`"
+      - "`assertTrue(freeShipping(50));`"
+      - "`assertFalse(freeShipping(49));`"
+    answer: 3
+    why: "`>` and `>=` only disagree at exactly 50. For 80, 20 and 49, both give the same answer, so those tests pass on either version. A test right at the limit is the one that catches a mistake at the limit."
+
+  - type: choice
+    after: test-driven-development
+    prompt: In test-driven development, what do you do right after writing a new test?
+    choices:
+      - Write all the code the class will ever need
+      - Run the tests, and see the new one fail
+      - Change the test until it passes
+      - Delete the tests that already pass
+    answer: 2
+    why: "The new test is for something the code doesn't do yet, so it should fail. Seeing it fail shows that it really tests something. Only then do you write just enough code to make it pass, and run all the tests again."
+
+  - type: predict
+    classes: |
+      class Poll {
+          private int yes;
+          private int no;
+
+          public Poll() {
+              this.yes = 0;
+              this.no = 0;
+          }
+
+          public void readAnswers(Scanner scanner) {
+              while (scanner.hasNextLine()) {
+                  String answer = scanner.nextLine();
+                  if (answer.equals("yes")) {
+                      this.yes++;
+                  } else if (answer.equals("no")) {
+                      this.no++;
+                  }
+              }
+          }
+
+          public int yesVotes() {
+              return this.yes;
+          }
+
+          public int noVotes() {
+              return this.no;
+          }
+      }
+    body: |
+      Poll poll = new Poll();
+      poll.readAnswers(new Scanner("yes\nYes\nno\n\nyes\n"));
+      System.out.println(poll.yesVotes() + " " + poll.noVotes());
+    why: "`equals` compares the letters exactly, capitals too, so `Yes` is neither a yes nor a no, and the empty line isn't either. That leaves two `yes` lines and one `no`. A test with input like this shows whether that's what the poll should do."
+
+  - type: boss
+    prompt: |
+      A habit tracker reads one line per day, `yes` or `no`: did you exercise that day? Write the method `longestStreak(Scanner scanner)`: it reads lines until the input ends and returns the longest run of `yes` days in a row. With no lines, or no `yes` at all, it returns 0. The check gives it Strings, such as:
+
+      ```java fragment
+      System.out.println(longestStreak(new Scanner("yes\nyes\nno\nyes\nyes\nyes\nno\n")));
+      ```
+
+      and expects:
+
+      ```
+      3
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(longestStreak(new Scanner(System.in)));
+          }
+
+          public static int longestStreak(Scanner scanner) {
+              return 0;
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(longestStreak(new Scanner(System.in)));
+          }
+
+          public static int longestStreak(Scanner scanner) {
+              int longest = 0;
+              int current = 0;
+              while (scanner.hasNextLine()) {
+                  if (scanner.nextLine().equals("yes")) {
+                      current++;
+                      if (current > longest) {
+                          longest = current;
+                      }
+                  } else {
+                      current = 0;
+                  }
+              }
+              return longest;
+          }
+      }
+    hints:
+      - "Keep two counts: the run going on now, and the longest run so far. A `yes` makes the current run one longer, and a `no` sets it back to 0."
+      - "Update the longest right after the current run grows: `if (current > longest) { longest = current; }`. Then a run that lasts until the input ends counts too."
+    tests:
+      - call: System.out.println(longestStreak(new Scanner("yes\nyes\nno\nyes\nyes\nyes\nno\n")));
+      - call: |
+          System.out.println(longestStreak(new Scanner("")));
+          System.out.println(longestStreak(new Scanner("no\nno\n")));
+          System.out.println(longestStreak(new Scanner("yes\n")));
+        hidden: true
+      - call: |
+          System.out.println(longestStreak(new Scanner("no\nyes\nyes\n")));
+          System.out.println(longestStreak(new Scanner("yes\nyes\nyes\nno\nyes\n")));
+        hidden: true

@@ -5,9 +5,13 @@ steps:
     slug: reading-until-end
     title: Reading until the input ends
     text: |
-      This module is about reading data from files. A program reads a file one line at a time, much as it reads what a user types, so it starts with a look back at reading the keyboard.
+      This module is about reading data from files. A program reads a file one line at a time, much as it reads what a user types, so it starts at the keyboard.
 
-      When a program doesn't know how many lines are coming, it reads them in a `while (true)` loop and stops at a signal: an agreed word such as `end`, or an **empty line**, where the user presses Enter without typing anything.
+      Module 19 read input in a `while (true)` loop that stops at a signal, such as an empty line: read a line, `break` if it's the signal, and only then use it. This step adds two more ways to know when to stop.
+
+      ### Until the input ends
+
+      A Scanner's `hasNextLine()` tells whether there's another line to read. It's `true` while there is one, and `false` once the input has ended, so a loop can read every line without waiting for a signal:
 
       ```java run
       import java.util.Scanner;
@@ -16,60 +20,51 @@ steps:
           public static void main(String[] args) {
               Scanner scanner = new Scanner(System.in);
               int count = 0;
-              String longest = "";
-              while (true) {
-                  String word = scanner.nextLine();
-                  if (word.isEmpty()) {
-                      break;
-                  }
+              while (scanner.hasNextLine()) {
+                  String line = scanner.nextLine();
                   count++;
-                  if (word.length() > longest.length()) {
-                      longest = word;
-                  }
+                  System.out.println(count + ": " + line);
               }
-              System.out.println("Words: " + count);
-              System.out.println("Longest: " + longest);
+              System.out.println("Lines: " + count);
           }
       }
       ```
 
       ```input
-      river
-      mountain
-      sea
-
+      red
+      green
+      blue
       ```
 
       ```output
-      Words: 3
-      Longest: mountain
+      1: red
+      2: green
+      3: blue
+      Lines: 3
       ```
 
-      - Each round reads a line, checks it for the signal, and only then uses it. The empty line ends the loop before it's counted.
-      - `count` and `longest` are needed after the loop, so they're made before it. Made inside the loop, they would start over in every round.
-      - `word.isEmpty()` is true for the empty line. With a stop word, the check is `word.equals("end")` instead.
+      - `hasNextLine()` only looks. `nextLine()` then reads the line, so the next round sees the line after it.
+      - An empty line is a line too: `hasNextLine()` is `true` for it, and `nextLine()` gives `""`.
+      - In the checks on this site, the input ends after its last line. A person at a keyboard has no natural end, which is why keyboard programs usually wait for a stop signal instead. (In a terminal, Ctrl+D ends the input, or Ctrl+Z and then Enter on Windows.)
 
-      ### Numbers until an empty line
+      A file does have an end, and this loop is exactly how the next steps read one.
 
-      When the lines hold numbers, turn a line into a number only after the check. The empty line isn't a number, and `Integer.valueOf("")` crashes with a `NumberFormatException`:
+      ### A stop word in any capitals
+
+      A stop word typed by a person may come as `end`, `End` or `END`. `equalsIgnoreCase` from module 16 accepts all of them:
 
       ```java fragment
       String line = scanner.nextLine();
-      if (line.isEmpty()) {
+      if (line.equalsIgnoreCase("end")) {
           break;
       }
-      int number = Integer.valueOf(line);
       ```
 
-      Reading a file follows the same pattern: read a line, use it, repeat. A file has a real end, though, so there the loop can simply stop when no lines are left. The next steps show how.
-
-      **Your turn:** the program reads song titles until an empty line. It prints each title with its place in the playlist, and at the end the number of songs. Fill in the blanks. For the input `Morning Rain`, `City Lights`, `Slow River` and an empty line, it prints:
+      **Your turn:** the program reads a letter until its input ends, and prints how many lines it has and how many of them are empty (the gaps between paragraphs). Fill in the blanks. For the input shown below, it prints:
 
       ```
-      1. Morning Rain
-      2. City Lights
-      3. Slow River
-      Songs: 3
+      Lines: 5
+      Empty lines: 2
       ```
     fill: |
       import java.util.Scanner;
@@ -77,35 +72,36 @@ steps:
       public class Main {
           public static void main(String[] args) {
               Scanner scanner = new Scanner(System.in);
-              int count = 0;
-              while (true) {
-                  String title = scanner.nextLine();
-                  if ([[title.isEmpty()‖title.equals("")]]) {
-                      [[break]];
+              int lines = 0;
+              int empty = 0;
+              while (scanner.[[hasNextLine]]()) {
+                  String line = scanner.nextLine();
+                  lines++;
+                  if ([[line.isEmpty()‖line.equals("")]]) {
+                      empty++;
                   }
-                  count++;
-                  System.out.println(count + ". " + title);
               }
-              System.out.println("Songs: " + count);
+              System.out.println("Lines: " + lines);
+              System.out.println("Empty lines: " + empty);
           }
       }
     hints:
-      - "The first blank is the check for the empty line: `title.isEmpty()`."
-      - "The second blank ends the loop: `break`."
+      - "The loop runs while there's another line to read: `hasNextLine`."
+      - "The second blank checks whether the line is empty: `line.isEmpty()`."
     tests:
-      - stdin: "Morning Rain\nCity Lights\nSlow River\n\n"
-      - stdin: "Paper Moon\n\n"
+      - stdin: "Dear Mia,\n\nthe garden is in bloom.\n\nLeo\n"
+      - stdin: "Hello\n"
         hidden: true
-      - stdin: "One\nTwo\nThree\nFour\nFive\n\n"
+      - stdin: "One\n\n\nTwo\nThree\n\n"
         hidden: true
     more:
       - task: |
-          Read the lengths of your bike rides in whole kilometers, one per line, until an empty line. Then print the number of rides, the total distance and the longest ride. There's at least one ride. For the input `12`, `31`, `14` and an empty line, the program prints:
+          Read words until the stop word `end`, which may be typed in any capitals, such as `End` or `END`. Print each word in capital letters with `!` after it, and at the end the number of words, not counting the stop word. For the input `hello`, `world`, `End`, the program prints:
 
           ```
-          Rides: 3
-          Total: 57 km
-          Longest: 31 km
+          HELLO!
+          WORLD!
+          Words: 2
           ```
         seed: |
           import java.util.Scanner;
@@ -122,42 +118,36 @@ steps:
           public class Main {
               public static void main(String[] args) {
                   Scanner scanner = new Scanner(System.in);
-                  int rides = 0;
-                  int total = 0;
-                  int longest = 0;
+                  int words = 0;
                   while (true) {
-                      String line = scanner.nextLine();
-                      if (line.isEmpty()) {
+                      String word = scanner.nextLine();
+                      if (word.equalsIgnoreCase("end")) {
                           break;
                       }
-                      int km = Integer.valueOf(line);
-                      rides++;
-                      total += km;
-                      if (km > longest) {
-                          longest = km;
-                      }
+                      words++;
+                      System.out.println(word.toUpperCase() + "!");
                   }
-                  System.out.println("Rides: " + rides);
-                  System.out.println("Total: " + total + " km");
-                  System.out.println("Longest: " + longest + " km");
+                  System.out.println("Words: " + words);
               }
           }
         hints:
-          - "Make three variables before the loop: the number of rides, the total and the longest ride, all starting at 0. A ride is never shorter than 0 km, so 0 is a safe start for the longest."
-          - "Check for the empty line first, and only then turn the line into a number: `int km = Integer.valueOf(line);`."
+          - "`word.equalsIgnoreCase(\"end\")` is true for `end`, `End`, `END` and every other mix of capitals."
+          - "`word.toUpperCase()` gives the word in capitals. Check for the stop word before you print or count."
         tests:
-          - stdin: "12\n31\n14\n\n"
-          - stdin: "5\n\n"
+          - stdin: "hello\nworld\nEnd\n"
+          - stdin: "quiet\nEND\n"
             hidden: true
-          - stdin: "40\n8\n40\n23\n\n"
+          - stdin: "a\nbee\nsea\nend\nextra\n"
+            hidden: true
+          - stdin: "eNd\n"
             hidden: true
       - task: |
-          Read lines until the line `end`. As they come, print the lines that are questions: the ones that end with `?`. At the end, print how many lines were read, not counting `end`, and how many of them were questions. For the input shown below, the program prints:
+          A traffic counter types a line for each vehicle that passes: `car`, `bike` or `bus`. Read the lines until the input ends, with `hasNextLine()`, and print how many vehicles of each kind passed. For the input shown below, the program prints:
 
           ```
-          Is it raining?
-          Where are my keys?
-          Lines: 4, questions: 2
+          Cars: 3
+          Bikes: 2
+          Buses: 1
           ```
         seed: |
           import java.util.Scanner;
@@ -174,30 +164,35 @@ steps:
           public class Main {
               public static void main(String[] args) {
                   Scanner scanner = new Scanner(System.in);
-                  int lines = 0;
-                  int questions = 0;
-                  while (true) {
-                      String line = scanner.nextLine();
-                      if (line.equals("end")) {
-                          break;
-                      }
-                      lines++;
-                      if (line.endsWith("?")) {
-                          System.out.println(line);
-                          questions++;
+                  int cars = 0;
+                  int bikes = 0;
+                  int buses = 0;
+                  while (scanner.hasNextLine()) {
+                      String vehicle = scanner.nextLine();
+                      if (vehicle.equals("car")) {
+                          cars++;
+                      } else if (vehicle.equals("bike")) {
+                          bikes++;
+                      } else if (vehicle.equals("bus")) {
+                          buses++;
                       }
                   }
-                  System.out.println("Lines: " + lines + ", questions: " + questions);
+                  System.out.println("Cars: " + cars);
+                  System.out.println("Bikes: " + bikes);
+                  System.out.println("Buses: " + buses);
               }
           }
         hints:
-          - "The stop word is checked with `line.equals(\"end\")`, before the line is counted."
-          - "`line.endsWith(\"?\")` tells whether the line is a question. Print it right away, and count it."
+          - "One counter for each kind, all made before the loop and starting at 0."
+          - "In the loop, read the line and compare it with `equals`: `if (vehicle.equals(\"car\")) { cars++; } else if ...`."
+        require:
+          - pattern: \.hasNextLine\s*\(
+            message: "Read until the input ends with `hasNextLine()`."
         tests:
-          - stdin: "Is it raining?\nTake an umbrella.\nWhere are my keys?\nIn the drawer.\nend\n"
-          - stdin: "Hello\nend\n"
+          - stdin: "car\nbike\ncar\nbus\nbike\ncar\n"
+          - stdin: "bus\n"
             hidden: true
-          - stdin: "Why?\nWhy not?\nBecause.\nReally?\nend\n"
+          - stdin: "bike\nbike\nbike\ncar\n"
             hidden: true
 
   - id: reading-files-files
@@ -407,7 +402,7 @@ steps:
 
       - `Paths.get("plants.txt")` turns the file's name into a **path**, Java's way of pointing to a file. `Paths` needs its own import at the top: `import java.nio.file.Paths;`.
       - `new Scanner(...)` with a path makes a Scanner that reads the file instead of the keyboard (`System.in`). Its `nextLine()` works like the keyboard's: each call gives the next line, without the line break at its end.
-      - `scanner.hasNextLine()` asks whether there's still a line to read. It's `true` until every line has been read, so the loop runs once for each line and then stops. A file has an end, so no stop signal is needed.
+      - `scanner.hasNextLine()` works as it did on the keyboard in the first step: it's `true` until every line has been read, so the loop runs once for each line of the file and then stops.
       - `try (...)` opens the file for the block after it and **closes** it when the block ends. A program should close a file when it's done with it, and this form of `try`, called **try-with-resources**, does that for you. The Scanner exists only inside the block's braces.
       - `catch (Exception e) { ... }` is what happens when the reading fails, for example because there's no such file. The next step is about it.
 
@@ -1867,15 +1862,15 @@ steps:
           }
 
           public String getName() {
-              return name;
+              return this.name;
           }
 
           public int getLength() {
-              return length;
+              return this.length;
           }
 
           public String toString() {
-              return name + " (" + length + " km)";
+              return this.name + " (" + this.length + " km)";
           }
       }
       ```
@@ -1953,15 +1948,15 @@ steps:
             }
 
             public String getName() {
-                return name;
+                return this.name;
             }
 
             public int getDays() {
-                return days;
+                return this.days;
             }
 
             public String toString() {
-                return name + ": water every " + days + " days";
+                return this.name + ": water every " + this.days + " days";
             }
         }
     solution:
@@ -1998,15 +1993,15 @@ steps:
             }
 
             public String getName() {
-                return name;
+                return this.name;
             }
 
             public int getDays() {
-                return days;
+                return this.days;
             }
 
             public String toString() {
-                return name + ": water every " + days + " days";
+                return this.name + ": water every " + this.days + " days";
             }
         }
     hints:
@@ -2035,9 +2030,12 @@ steps:
         hidden: true
     more:
       - task: |
-          `Recipe.java` is ready. Write a method `readRecipes(String fileName)` that reads a file of lines such as `pancakes,20` (a recipe and the minutes it takes) and returns them in an `ArrayList<Recipe>`. If the file can't be read, it prints `Error: ` and the error's message, and returns the empty list. The check reads `recipes.txt`, shown below, with your method, and prints the list's size and its first recipe:
+          `Recipe.java` is ready. Write a method `readRecipes(String fileName, ArrayList<Recipe> recipes)` that reads a file of lines such as `pancakes,20` (a recipe and the minutes it takes) and adds a `Recipe` for each of them to the list it's given. Some lines are notes with no comma, such as `ask Grandma about the pie`: skip them. The method returns how many lines it skipped. If the file can't be read, it prints `Error: ` and the error's message, and returns 0.
+
+          The check makes an empty list and calls `readRecipes("recipes.txt", recipes)` with the file shown below. It prints what the method returned, the list's size and its first recipe:
 
           ```
+          1
           3
           pancakes (20 min)
           ```
@@ -2049,7 +2047,9 @@ steps:
 
             public class Main {
                 public static void main(String[] args) {
-                    ArrayList<Recipe> recipes = readRecipes("recipes.txt");
+                    ArrayList<Recipe> recipes = new ArrayList<>();
+                    int skipped = readRecipes("recipes.txt", recipes);
+                    System.out.println("Skipped lines: " + skipped);
                     for (Recipe recipe : recipes) {
                         System.out.println(recipe);
                     }
@@ -2068,15 +2068,15 @@ steps:
                 }
 
                 public String getName() {
-                    return name;
+                    return this.name;
                 }
 
                 public int getMinutes() {
-                    return minutes;
+                    return this.minutes;
                 }
 
                 public String toString() {
-                    return name + " (" + minutes + " min)";
+                    return this.name + " (" + this.minutes + " min)";
                 }
             }
         solution:
@@ -2087,23 +2087,30 @@ steps:
 
             public class Main {
                 public static void main(String[] args) {
-                    ArrayList<Recipe> recipes = readRecipes("recipes.txt");
+                    ArrayList<Recipe> recipes = new ArrayList<>();
+                    int skipped = readRecipes("recipes.txt", recipes);
+                    System.out.println("Skipped lines: " + skipped);
                     for (Recipe recipe : recipes) {
                         System.out.println(recipe);
                     }
                 }
 
-                public static ArrayList<Recipe> readRecipes(String fileName) {
-                    ArrayList<Recipe> recipes = new ArrayList<>();
+                public static int readRecipes(String fileName, ArrayList<Recipe> recipes) {
+                    int skipped = 0;
                     try (Scanner scanner = new Scanner(Paths.get(fileName))) {
                         while (scanner.hasNextLine()) {
                             String[] parts = scanner.nextLine().split(",");
+                            if (parts.length < 2) {
+                                skipped++;
+                                continue;
+                            }
                             recipes.add(new Recipe(parts[0], Integer.valueOf(parts[1])));
                         }
                     } catch (Exception e) {
                         System.out.println("Error: " + e.getMessage());
+                        return 0;
                     }
-                    return recipes;
+                    return skipped;
                 }
             }
           Recipe.java: |
@@ -2117,34 +2124,38 @@ steps:
                 }
 
                 public String getName() {
-                    return name;
+                    return this.name;
                 }
 
                 public int getMinutes() {
-                    return minutes;
+                    return this.minutes;
                 }
 
                 public String toString() {
-                    return name + " (" + minutes + " min)";
+                    return this.name + " (" + this.minutes + " min)";
                 }
             }
         hints:
-          - "The method starts `public static ArrayList<Recipe> readRecipes(String fileName) {`, makes an empty list, fills it in the loop, and ends with `return recipes;` after the `try`/`catch`."
-          - "Open the file the method was given: `new Scanner(Paths.get(fileName))`."
+          - "The method starts `public static int readRecipes(String fileName, ArrayList<Recipe> recipes) {`. It adds to the caller's list, as in module 14, so it doesn't make a list of its own."
+          - "A note has no comma, so it splits into one part: `if (parts.length < 2) { skipped++; continue; }`. Return `skipped` after the `try`/`catch`, and 0 from the `catch` block."
         tests:
           - name: Reading recipes.txt
             call: |
-              ArrayList<Recipe> recipes = readRecipes("recipes.txt");
+              ArrayList<Recipe> recipes = new ArrayList<>();
+              System.out.println(readRecipes("recipes.txt", recipes));
               System.out.println(recipes.size());
               System.out.println(recipes.get(0));
             files:
               recipes.txt: |
                 pancakes,20
                 tomato soup,45
+                ask Grandma about the pie
                 green salad,10
-          - name: Another file
+          - name: A list that isn't empty
             call: |
-              ArrayList<Recipe> recipes = readRecipes("quick.txt");
+              ArrayList<Recipe> recipes = new ArrayList<>();
+              recipes.add(new Recipe("toast", 5));
+              System.out.println(readRecipes("quick.txt", recipes));
               System.out.println(recipes.size());
               System.out.println(recipes.get(1).getName());
               System.out.println(recipes.get(1).getMinutes());
@@ -2152,12 +2163,24 @@ steps:
               recipes.txt: |
                 pancakes,20
               quick.txt: |
-                toast,5
                 omelette,8
+                porridge needs oats
+                QUICK MEALS
+            hidden: true
+          - name: No notes
+            call: |
+              ArrayList<Recipe> recipes = new ArrayList<>();
+              System.out.println(readRecipes("recipes.txt", recipes));
+              System.out.println(recipes);
+            files:
+              recipes.txt: |
+                curry,50
+                rice,15
             hidden: true
           - name: A missing file
             call: |
-              ArrayList<Recipe> recipes = readRecipes("desserts.txt");
+              ArrayList<Recipe> recipes = new ArrayList<>();
+              System.out.println(readRecipes("desserts.txt", recipes));
               System.out.println(recipes.size());
             files:
               recipes.txt: |
@@ -2193,15 +2216,15 @@ steps:
                 }
 
                 public String getCode() {
-                    return code;
+                    return this.code;
                 }
 
                 public int getDelay() {
-                    return delay;
+                    return this.delay;
                 }
 
                 public String toString() {
-                    return code + " (" + delay + " min late)";
+                    return this.code + " (" + this.delay + " min late)";
                 }
             }
         solution:
@@ -2248,15 +2271,15 @@ steps:
                 }
 
                 public String getCode() {
-                    return code;
+                    return this.code;
                 }
 
                 public int getDelay() {
-                    return delay;
+                    return this.delay;
                 }
 
                 public String toString() {
-                    return code + " (" + delay + " min late)";
+                    return this.code + " (" + this.delay + " min late)";
                 }
             }
         hints:

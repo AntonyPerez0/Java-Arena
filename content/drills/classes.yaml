@@ -1,0 +1,414 @@
+topic: classes
+drills:
+  - type: choice
+    after: objects-you-know
+    prompt: "What does `new ArrayList<>()` do in `ArrayList<String> names = new ArrayList<>();`?"
+    choices:
+      - "It declares the variable `names`"
+      - "It builds a new, empty list object from the class `ArrayList`"
+      - "It writes a new class called `ArrayList`"
+      - "It empties the list that `names` already holds"
+    answer: 2
+    why: "`ArrayList` is a class, the blueprint for lists, and `new` builds one new object from it. The variable is declared on the left, by `ArrayList<String> names`, and then holds the new list."
+
+  - type: predict
+    after: objects-you-know
+    body: |
+      ArrayList<String> mine = new ArrayList<>();
+      ArrayList<String> yours = new ArrayList<>();
+      mine.add("kite");
+      yours.add("ball");
+      mine.add("yo-yo");
+      String toy = "marbles";
+      yours.add(toy);
+      yours.add(toy.toUpperCase());
+      System.out.println(mine.size() + " " + yours.size());
+      System.out.println(toy);
+    why: "`mine` and `yours` are two separate list objects, so each counts only its own items: 2 and 3. `toy.toUpperCase()` builds a new String for the list, and the String in `toy` is still `marbles`."
+
+  - type: choice
+    after: writing-a-class
+    prompt: "The class `Kite` has the instance variable `private int length;`. What does `private` mean here?"
+    choices:
+      - "`length` can't be changed once it has a value"
+      - "All Kite objects share one `length`"
+      - "Only the code inside the `Kite` class can use `length`"
+      - "Only the `main` method can use `length`"
+    answer: 3
+    why: "`private` limits where the variable can be used: only in the `Kite` class's own code. Each Kite object still has its own `length`, and the class's methods can change it as often as they like."
+
+  - type: choice
+    after: writing-a-class
+    prompt: "Where does `public class Kite { ... }` go?"
+    choices:
+      - "In `Main.java`, after the end of class `Main`"
+      - "In any file whose name ends with `.java`"
+      - "In a file called `kite.java`"
+      - "In a file of its own, called `Kite.java`"
+    answer: 4
+    why: "A `public` class must be in a file named exactly after it, capitals included, so `Kite` goes in `Kite.java`, next to `Main.java`. In any other file, javac refuses it."
+
+  - type: compiles
+    after: writing-a-class
+    classes: |
+      class Robot {
+          private String name;
+      }
+    body: |
+      Robot robot = new Robot();
+      robot.name = "Bolt";
+      System.out.println("Robot ready");
+    why: "No. `name` is `private`, so only the `Robot` class's own code can use it. In `main`, javac says `name has private access in Robot`."
+
+  - type: compiles
+    after: constructors
+    classes: |
+      class Tent {
+          private String model;
+
+          public Tent(String model) {
+              this.model = model;
+          }
+      }
+    body: |
+      Tent tent = Tent("Dome");
+      System.out.println("Tent packed");
+    why: "No. Without `new`, `Tent(\"Dome\")` is a call to a method called `Tent`, and there is no such method, so javac says `cannot find symbol`. Building an object takes `new Tent(\"Dome\")`."
+
+  - type: predict
+    after: constructors
+    classes: |
+      class Pizza {
+          private int slices;
+
+          public Pizza(int people) {
+              this.slices = people * 2;
+              System.out.println("Pizza for " + people + ", " + this.slices + " slices");
+          }
+      }
+    body: |
+      Pizza small = new Pizza(2);
+      System.out.println("Ordered");
+      Pizza big = new Pizza(5);
+    why: "The constructor runs at each `new`, so its line comes before `Ordered` for the first pizza and after it for the second. `slices` doesn't have to be a copy of a parameter: here it's worked out from `people`."
+
+  - type: fill
+    after: methods-of-an-object
+    classes: |
+      class Bench {
+          private int seats;
+
+          public [[Bench]](int seats) {
+              this.seats = seats;
+          }
+
+          public void printSeats() {
+              System.out.println(this.seats + " seats");
+          }
+      }
+    body: |
+      Bench bench = new Bench(4);
+      bench.printSeats();
+    why: "A constructor has the name of its class, `Bench`, and no return type, not even `void`. That's how Java knows it's the code to run at `new Bench(4)`."
+
+  - type: bug
+    after: methods-of-an-object
+    prompt: "A rug 2 meters wide and 5 meters long covers 10 square meters. Which line is wrong?"
+    classes: |
+      class Rug {
+          private int width;
+          private int length;
+
+          public Rug(int width, int length) {
+              this.width = width;
+              this.length = width; // BUG
+          }
+
+          public void printArea() {
+              System.out.println(this.width * this.length + " square meters");
+          }
+      }
+    body: |
+      Rug hall = new Rug(2, 5);
+      hall.printArea();
+    fix: this.length = length;
+    why: "The constructor stores the width in both instance variables, so the rug is 2 by 2 and the program prints 4. `this.length = length;` stores the second parameter."
+
+  - type: predict
+    after: methods-of-an-object
+    classes: |
+      class Greeter {
+          private String greeting;
+
+          public Greeter(String greeting) {
+              this.greeting = greeting;
+          }
+
+          public void greet(String name) {
+              System.out.println(this.greeting + ", " + name);
+          }
+      }
+    body: |
+      Greeter formal = new Greeter("Good evening");
+      Greeter casual = new Greeter("Hey");
+      casual.greet("Sam");
+      formal.greet("Ms Lee");
+      casual.greet("Ms Lee");
+    why: "`this.greeting` is the greeting of the object in front of the dot, and `name` comes from the call. So `casual` always says `Hey`, whoever it greets."
+
+  - type: bug
+    after: methods-of-an-object
+    prompt: "This doesn't compile. Which line is wrong?"
+    classes: |
+      class Parrot {
+          private String word;
+
+          public Parrot(String word) {
+              this.word = word;
+          }
+
+          public static void speak() { // BUG
+              System.out.println(this.word + "! " + this.word + "!");
+          }
+      }
+    body: |
+      Parrot polly = new Parrot("Hello");
+      polly.speak();
+    fix: public void speak() {
+    why: "A `static` method belongs to the class as a whole, not to one object, so it has no `this`: javac says `non-static variable this cannot be referenced from a static context`. Without `static`, `speak` runs on the parrot it's called on."
+
+  - type: predict
+    after: changing-an-object
+    classes: |
+      class Battery {
+          private int percent;
+
+          public Battery(int percent) {
+              this.percent = percent;
+          }
+
+          public void use(int amount) {
+              this.percent = this.percent - amount;
+              if (this.percent < 0) {
+                  this.percent = 0;
+              }
+          }
+
+          public void charge(int amount) {
+              this.percent = this.percent + amount;
+              if (this.percent > 100) {
+                  this.percent = 100;
+              }
+          }
+
+          public void print() {
+              System.out.println(this.percent + "%");
+          }
+      }
+    body: |
+      Battery phone = new Battery(40);
+      phone.use(55);
+      phone.print();
+      phone.charge(70);
+      phone.charge(50);
+      phone.print();
+      phone.use(30);
+      phone.print();
+    why: "40 - 55 would be -15, so `use` stops at 0. Charging 70 gives 70, and 50 more would be 120, so `charge` stops at 100. Then 30 is used, which leaves 70."
+
+  - type: fill
+    after: changing-an-object
+    prompt: "The blank is an expression. Fill it so the program prints the output shown."
+    classes: |
+      class TicketMachine {
+          private int sold;
+
+          public void sell(int tickets) {
+              this.sold = [[this.sold + tickets‖tickets + this.sold‖sold + tickets‖tickets + sold]];
+          }
+
+          public void print() {
+              System.out.println(this.sold + " tickets sold");
+          }
+      }
+    body: |
+      TicketMachine machine = new TicketMachine();
+      machine.sell(3);
+      machine.print();
+      machine.sell(2);
+      machine.print();
+    why: "The machine keeps a running total, so each sale adds to what was sold before: `this.sold + tickets`. With only `tickets`, the second line would say 2 instead of 5."
+
+  - type: bug
+    after: changing-an-object
+    prompt: "Each call to `brighter()` should raise the level by one, so the program should print `Level 4`. Which line is wrong?"
+    classes: |
+      class Dimmer {
+          private int level;
+
+          public Dimmer(int level) {
+              this.level = level;
+          }
+
+          public void brighter() {
+              int level = this.level + 1; // BUG
+          }
+
+          public void print() {
+              System.out.println("Level " + this.level);
+          }
+      }
+    body: |
+      Dimmer lamp = new Dimmer(2);
+      lamp.brighter();
+      lamp.brighter();
+      lamp.print();
+    fix: this.level = this.level + 1;
+    why: "`int level = ...` declares a new local variable, which disappears when the method ends, so the object's own `level` never changes and the program prints `Level 2`. `this.level = this.level + 1;` changes the instance variable."
+
+  - type: predict
+    after: several-objects
+    classes: |
+      class Switch {
+          private boolean on;
+
+          public Switch() {
+              this.on = false;
+          }
+
+          public void flip() {
+              this.on = !this.on;
+          }
+
+          public void print() {
+              System.out.println(this.on);
+          }
+      }
+    body: |
+      Switch a = new Switch();
+      Switch b = new Switch();
+      Switch c = new Switch();
+      a.flip();
+      b.flip();
+      a.flip();
+      c.flip();
+      b.flip();
+      b.flip();
+      a.print();
+      b.print();
+      c.print();
+    why: "Each switch has its own `on`, and every `flip()` turns it around. `a` is flipped twice and is back to `false`, `b` three times and `c` once, so both of them are `true`."
+
+  - type: boss
+    after: changing-an-object
+    prompt: |
+      Write the class `CookieJar` in `CookieJar.java`. A jar has a capacity and starts empty.
+
+      - `CookieJar(int capacity)` builds an empty jar that holds at most `capacity` cookies.
+      - `add(int cookies)` puts cookies in the jar. Cookies that don't fit are left out: the jar never holds more than its capacity.
+      - `take()` takes one cookie out, if there is one.
+      - `printInfo()` prints how many cookies there are, as below.
+
+      The check runs:
+
+      ```java fragment
+      CookieJar jar = new CookieJar(10);
+      jar.add(4);
+      jar.take();
+      jar.printInfo();
+      jar.add(9);
+      jar.printInfo();
+      ```
+
+      and expects:
+
+      ```
+      3 cookies in the jar
+      10 cookies in the jar
+      ```
+    seed:
+      CookieJar.java: |
+        public class CookieJar {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                CookieJar jar = new CookieJar(10);
+                jar.add(4);
+                jar.take();
+                jar.printInfo();
+                jar.add(9);
+                jar.printInfo();
+            }
+        }
+    solution:
+      CookieJar.java: |
+        public class CookieJar {
+            private int capacity;
+            private int cookies;
+
+            public CookieJar(int capacity) {
+                this.capacity = capacity;
+                this.cookies = 0;
+            }
+
+            public void add(int cookies) {
+                this.cookies = this.cookies + cookies;
+                if (this.cookies > this.capacity) {
+                    this.cookies = this.capacity;
+                }
+            }
+
+            public void take() {
+                if (this.cookies > 0) {
+                    this.cookies = this.cookies - 1;
+                }
+            }
+
+            public void printInfo() {
+                System.out.println(this.cookies + " cookies in the jar");
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                CookieJar jar = new CookieJar(10);
+                jar.add(4);
+                jar.take();
+                jar.printInfo();
+                jar.add(9);
+                jar.printInfo();
+            }
+        }
+    hints:
+      - "Two private instance variables: the capacity and the number of cookies. The constructor stores the capacity and sets the cookies to 0."
+      - "`add` adds and then brings the number back down to the capacity when it's over. `take` takes one away only `if (this.cookies > 0)`."
+    tests:
+      - call: |
+          CookieJar jar = new CookieJar(10);
+          jar.add(4);
+          jar.take();
+          jar.printInfo();
+          jar.add(9);
+          jar.printInfo();
+      - call: |
+          CookieJar jar = new CookieJar(3);
+          jar.take();
+          jar.printInfo();
+          jar.add(3);
+          jar.take();
+          jar.take();
+          jar.take();
+          jar.take();
+          jar.printInfo();
+        hidden: true
+      - call: |
+          CookieJar small = new CookieJar(2);
+          CookieJar big = new CookieJar(50);
+          small.add(5);
+          big.add(5);
+          big.add(40);
+          small.printInfo();
+          big.printInfo();
+        hidden: true

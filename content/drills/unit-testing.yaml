@@ -3,59 +3,59 @@ drills:
   - type: predict
     after: troubleshooting
     classes: |
-      class Car {
-          private int seats;
-          private int passengers;
+      class AppleTree {
+          private int apples;
+          private int ripe;
 
-          public Car(int seats, int passengers) {
-              this.seats = seats;
-              this.passengers = passengers;
+          public AppleTree(int apples, int ripe) {
+              this.apples = apples;
+              this.ripe = ripe;
           }
 
-          public int percentFull() {
-              System.out.println("percentFull starts");
-              return 100 * this.passengers / this.seats;
+          public int percentRipe() {
+              System.out.println("percentRipe starts");
+              return 100 * this.ripe / this.apples;
           }
       }
 
-      class Train {
-          public void report(Car car) {
+      class Orchard {
+          public void report(AppleTree tree) {
               System.out.println("report starts");
-              System.out.println(car.percentFull() + "%");
+              System.out.println(tree.percentRipe() + "%");
               System.out.println("report ends");
           }
       }
     body: |
-      Train train = new Train();
-      train.report(new Car(40, 30));
-    why: "`report` prints its first line and then calls `percentFull`, and waits for it. `percentFull` prints its own line and returns 75, and only then does `report` go on, printing `75%` and its last line. That waiting is what a stack trace shows: had `percentFull` crashed, the trace would list `percentFull` on top, and under it `report`, the method still waiting for it."
+      Orchard orchard = new Orchard();
+      orchard.report(new AppleTree(40, 30));
+    why: "`report` prints its first line and then calls `percentRipe`, and waits for it. `percentRipe` prints its own line and returns 75, and only then does `report` go on, printing `75%` and its last line. That waiting is what a stack trace shows: had `percentRipe` crashed, the trace would list `percentRipe` on top, and under it `report`, the method still waiting for it."
 
   - type: bug
     after: troubleshooting
     prompt: "The program crashes with `/ by zero`. The `if` before the division is meant to prevent that, so the fix goes there. Which line is wrong?"
     classes: |
-      class Car {
-          private int seats;
-          private int passengers;
+      class AppleTree {
+          private int apples;
+          private int ripe;
 
-          public Car(int seats, int passengers) {
-              this.seats = seats;
-              this.passengers = passengers;
+          public AppleTree(int apples, int ripe) {
+              this.apples = apples;
+              this.ripe = ripe;
           }
 
-          public int percentFull() {
-              if (this.seats < 0) { // BUG
+          public int percentRipe() {
+              if (this.apples < 0) { // BUG
                   return 0;
               }
-              return 100 * this.passengers / this.seats;
+              return 100 * this.ripe / this.apples;
           }
       }
     body: |
-      Car dining = new Car(0, 0);
-      Car sleeper = new Car(20, 15);
-      System.out.println(dining.percentFull() + " " + sleeper.percentFull());
-    fix: "if (this.seats == 0) {"
-    why: "A car can't have fewer than 0 seats, so `this.seats < 0` is never true, and the dining car with 0 seats goes on to the division. The check should catch exactly the case that crashes: `this.seats == 0`."
+      AppleTree sapling = new AppleTree(0, 0);
+      AppleTree gala = new AppleTree(20, 15);
+      System.out.println(sapling.percentRipe() + " " + gala.percentRipe());
+    fix: "if (this.apples == 0) {"
+    why: "A tree can't have fewer than 0 apples, so `this.apples < 0` is never true, and the sapling with 0 apples goes on to the division. The check should catch exactly the case that crashes: `this.apples == 0`."
 
   - type: predict
     after: test-input
@@ -252,39 +252,39 @@ drills:
 
   - type: predict
     classes: |
-      class Poll {
-          private int yes;
-          private int no;
+      class FlipLog {
+          private int heads;
+          private int tails;
 
-          public Poll() {
-              this.yes = 0;
-              this.no = 0;
+          public FlipLog() {
+              this.heads = 0;
+              this.tails = 0;
           }
 
-          public void readAnswers(Scanner scanner) {
+          public void readFlips(Scanner scanner) {
               while (scanner.hasNextLine()) {
-                  String answer = scanner.nextLine();
-                  if (answer.equals("yes")) {
-                      this.yes++;
-                  } else if (answer.equals("no")) {
-                      this.no++;
+                  String flip = scanner.nextLine();
+                  if (flip.equals("heads")) {
+                      this.heads++;
+                  } else if (flip.equals("tails")) {
+                      this.tails++;
                   }
               }
           }
 
-          public int yesVotes() {
-              return this.yes;
+          public int headsCount() {
+              return this.heads;
           }
 
-          public int noVotes() {
-              return this.no;
+          public int tailsCount() {
+              return this.tails;
           }
       }
     body: |
-      Poll poll = new Poll();
-      poll.readAnswers(new Scanner("yes\nYes\nno\n\nyes\n"));
-      System.out.println(poll.yesVotes() + " " + poll.noVotes());
-    why: "`equals` compares the letters exactly, capitals too, so `Yes` is neither a yes nor a no, and the empty line isn't either. That leaves two `yes` lines and one `no`. A test with input like this shows whether that's what the poll should do."
+      FlipLog log = new FlipLog();
+      log.readFlips(new Scanner("heads\nHeads\ntails\n\nheads\n"));
+      System.out.println(log.headsCount() + " " + log.tailsCount());
+    why: "`equals` compares the letters exactly, capitals too, so `Heads` is neither heads nor tails, and the empty line isn't either. That leaves two `heads` lines and one `tails`. A test with input like this shows whether that's what the log should do."
 
   - type: boss
     prompt: |

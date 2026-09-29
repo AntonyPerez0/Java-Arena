@@ -1,0 +1,3306 @@
+id: object-interaction
+summary: Objects that use other objects. Objects as method parameters, an object as an instance variable of another object, methods that compare two objects of the same class, writing equals and how lists use it, methods that return new objects, and programs of several classes working together. The end of MOOC part 5.
+steps:
+  - id: object-interaction-parameter
+    slug: object-as-parameter
+    title: An object as a parameter
+    text: |
+      So far, the methods of your classes have taken numbers and Strings as parameters. A parameter can also be an object of one of your own classes, and then two objects can work together. Here a printer prints documents, and each document knows its own title and number of pages:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Printer printer = new Printer(10);
+              Document letter = new Document("Letter", 2);
+              Document report = new Document("Report", 12);
+              printer.print(letter);
+              printer.print(report);
+              printer.print(new Document("Poster", 1));
+              System.out.println(printer);
+          }
+      }
+      // ==== Printer.java ====
+      public class Printer {
+          private int paper;
+          private int printed;
+
+          public Printer(int paper) {
+              this.paper = paper;
+              this.printed = 0;
+          }
+
+          public void print(Document document) {
+              if (document.getPages() <= this.paper) {
+                  this.paper = this.paper - document.getPages();
+                  this.printed++;
+                  System.out.println("Printed " + document.getTitle());
+              } else {
+                  System.out.println("Not enough paper for " + document.getTitle());
+              }
+          }
+
+          public String toString() {
+              return this.printed + " documents printed, " + this.paper + " sheets left";
+          }
+      }
+      // ==== Document.java ====
+      public class Document {
+          private String title;
+          private int pages;
+
+          public Document(String title, int pages) {
+              this.title = title;
+              this.pages = pages;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int getPages() {
+              return this.pages;
+          }
+      }
+      ```
+
+      ```output
+      Printed Letter
+      Not enough paper for Report
+      Printed Poster
+      2 documents printed, 7 sheets left
+      ```
+
+      - The parameter's type is the name of the class: `public void print(Document document)`. The method takes a Document and nothing else: `printer.print("Letter")` doesn't compile.
+      - Inside `print`, `document` is the Document it was given. The printer uses it through its public methods, `getTitle()` and `getPages()`, just as `main` would. Writing `document.pages` in `Printer` doesn't compile, because `pages` is private to the `Document` class.
+      - The call can give an object that's in a variable, as in `printer.print(letter)`, or a new one made right in the call: `printer.print(new Document("Poster", 1))`.
+      - `this.paper` is the printer's own variable, and `document.getPages()` asks the document. Each object keeps its own data, and the method brings the two together.
+
+      ### The object itself, not a copy
+
+      A variable of a class type holds a reference to an object (module 22), and a parameter is no different: `printer.print(letter)` gives the method a reference to the very object in `letter`, not a copy of it. So when a method changes the object it was given, the change is still there after the method ends:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Phone phone = new Phone(15);
+              Charger charger = new Charger(2);
+              System.out.println(phone);
+              charger.charge(phone, 30);
+              System.out.println(phone);
+              charger.charge(phone, 60);
+              System.out.println(phone);
+          }
+      }
+      // ==== Charger.java ====
+      public class Charger {
+          private int percentPerMinute;
+
+          public Charger(int percentPerMinute) {
+              this.percentPerMinute = percentPerMinute;
+          }
+
+          public void charge(Phone phone, int minutes) {
+              phone.addBattery(minutes * this.percentPerMinute);
+          }
+      }
+      // ==== Phone.java ====
+      public class Phone {
+          private int battery;
+
+          public Phone(int battery) {
+              this.battery = battery;
+          }
+
+          public void addBattery(int percent) {
+              this.battery = this.battery + percent;
+              if (this.battery > 100) {
+                  this.battery = 100;
+              }
+          }
+
+          public String toString() {
+              return "Battery " + this.battery + "%";
+          }
+      }
+      ```
+
+      ```output
+      Battery 15%
+      Battery 75%
+      Battery 100%
+      ```
+
+      `charge` changes the phone through the phone's own method, `addBattery`, and `main` sees the new level in `phone`: the variable in `main` and the parameter refer to the same Phone. The charger can't set `battery` directly. Only Phone's own code can, and it makes sure the battery never goes over 100%.
+
+      **Your turn:** a piggy bank counts the coins put into it and adds up their value in cents. In `PiggyBank.java`, write the method `insert(Coin coin)`: it adds one to `coins`, and the coin's value to `cents`. `Coin.java` is ready, and a coin tells its value with `getCents()`. The check runs:
+
+      ```java fragment
+      PiggyBank piggy = new PiggyBank();
+      piggy.insert(new Coin(50));
+      piggy.insert(new Coin(20));
+      piggy.insert(new Coin(100));
+      System.out.println(piggy);
+      ```
+
+      and expects:
+
+      ```
+      Coins: 3, total 170 cents
+      ```
+    seed:
+      PiggyBank.java: |
+        public class PiggyBank {
+            private int coins;
+            private int cents;
+
+            public PiggyBank() {
+                this.coins = 0;
+                this.cents = 0;
+            }
+
+            // Write the insert method here.
+
+            public String toString() {
+                return "Coins: " + this.coins + ", total " + this.cents + " cents";
+            }
+        }
+      Coin.java: |
+        public class Coin {
+            private int cents;
+
+            public Coin(int cents) {
+                this.cents = cents;
+            }
+
+            public int getCents() {
+                return this.cents;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                PiggyBank piggy = new PiggyBank();
+                piggy.insert(new Coin(50));
+                piggy.insert(new Coin(20));
+                piggy.insert(new Coin(100));
+                System.out.println(piggy);
+            }
+        }
+    solution:
+      PiggyBank.java: |
+        public class PiggyBank {
+            private int coins;
+            private int cents;
+
+            public PiggyBank() {
+                this.coins = 0;
+                this.cents = 0;
+            }
+
+            public void insert(Coin coin) {
+                this.coins++;
+                this.cents = this.cents + coin.getCents();
+            }
+
+            public String toString() {
+                return "Coins: " + this.coins + ", total " + this.cents + " cents";
+            }
+        }
+      Coin.java: |
+        public class Coin {
+            private int cents;
+
+            public Coin(int cents) {
+                this.cents = cents;
+            }
+
+            public int getCents() {
+                return this.cents;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                PiggyBank piggy = new PiggyBank();
+                piggy.insert(new Coin(50));
+                piggy.insert(new Coin(20));
+                piggy.insert(new Coin(100));
+                System.out.println(piggy);
+            }
+        }
+    hints:
+      - "The parameter's type is the class: `public void insert(Coin coin) {`. Inside the method, `coin` is the coin that was put in."
+      - "`this.coins++;` counts the coin, and `this.cents = this.cents + coin.getCents();` adds its value. `coin.cents` doesn't compile in PiggyBank, because it's private to Coin."
+    require:
+      - pattern: \bpublic\s+void\s+insert\s*\(\s*Coin\s+\w+\s*\)
+        message: "Write the method as `public void insert(Coin coin)`."
+      - pattern: \.getCents\s*\(\s*\)
+        message: "Ask the coin for its value with `getCents()`."
+    tests:
+      - call: |
+          PiggyBank piggy = new PiggyBank();
+          piggy.insert(new Coin(50));
+          piggy.insert(new Coin(20));
+          piggy.insert(new Coin(100));
+          System.out.println(piggy);
+      - call: |
+          PiggyBank piggy = new PiggyBank();
+          System.out.println(piggy);
+          Coin big = new Coin(200);
+          piggy.insert(big);
+          piggy.insert(big);
+          System.out.println(piggy);
+        hidden: true
+      - call: |
+          PiggyBank first = new PiggyBank();
+          PiggyBank second = new PiggyBank();
+          first.insert(new Coin(5));
+          second.insert(new Coin(10));
+          second.insert(new Coin(1));
+          System.out.println(first);
+          System.out.println(second);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Each call to `enter` works with two objects: the gate it's called on and the passport it's given.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Passport ana = new Passport("Ana");
+                  Passport ben = new Passport("Ben");
+                  Gate north = new Gate("North gate");
+                  Gate south = new Gate("South gate");
+                  north.enter(ana);
+                  south.enter(ben);
+                  north.enter(ana);
+                  south.enter(ana);
+                  System.out.println(ana);
+                  System.out.println(ben);
+                  System.out.println(north);
+              }
+          }
+          // ==== Gate.java ====
+          public class Gate {
+              private String name;
+              private int entries;
+
+              public Gate(String name) {
+                  this.name = name;
+                  this.entries = 0;
+              }
+
+              public void enter(Passport passport) {
+                  passport.addStamp();
+                  this.entries++;
+              }
+
+              public String toString() {
+                  return this.name + ": " + this.entries + " entries";
+              }
+          }
+          // ==== Passport.java ====
+          public class Passport {
+              private String owner;
+              private int stamps;
+
+              public Passport(String owner) {
+                  this.owner = owner;
+                  this.stamps = 0;
+              }
+
+              public void addStamp() {
+                  this.stamps++;
+              }
+
+              public String toString() {
+                  return this.owner + ", stamps: " + this.stamps;
+              }
+          }
+        hints:
+          - "`enter` gets the passport itself, not a copy, so `passport.addStamp()` changes the Passport object in `ana` or `ben`. Then the gate counts one more entry of its own."
+          - "Ana goes through three gates' `enter` calls: twice at the north gate and once at the south gate. Ben goes through once. The north gate saw two entries, both Ana's."
+      - task: |
+          A kettle pours hot water into cups. `Cup.java` is ready: `space()` returns how many milliliters still fit in the cup, and `fill(int ml)` adds water to it. In `Kettle.java`, write the method `pour(Cup cup)`. It pours until the cup is full or the kettle is empty, whichever comes first, and the kettle then has that much less water. The check runs:
+
+          ```java fragment
+          Kettle kettle = new Kettle(500);
+          Cup mug = new Cup(300);
+          Cup glass = new Cup(250);
+          kettle.pour(mug);
+          kettle.pour(glass);
+          System.out.println(mug);
+          System.out.println(glass);
+          System.out.println(kettle);
+          ```
+
+          and expects:
+
+          ```
+          300/300 ml
+          200/250 ml
+          Kettle: 0 ml
+          ```
+        seed:
+          Kettle.java: |
+            public class Kettle {
+                private int water;
+
+                public Kettle(int water) {
+                    this.water = water;
+                }
+
+                // Write the pour method here.
+
+                public String toString() {
+                    return "Kettle: " + this.water + " ml";
+                }
+            }
+          Cup.java: |
+            public class Cup {
+                private int capacity;
+                private int water;
+
+                public Cup(int capacity) {
+                    this.capacity = capacity;
+                    this.water = 0;
+                }
+
+                public int space() {
+                    return this.capacity - this.water;
+                }
+
+                public void fill(int ml) {
+                    this.water = this.water + ml;
+                }
+
+                public String toString() {
+                    return this.water + "/" + this.capacity + " ml";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Kettle kettle = new Kettle(500);
+                    Cup mug = new Cup(300);
+                    Cup glass = new Cup(250);
+                    kettle.pour(mug);
+                    kettle.pour(glass);
+                    System.out.println(mug);
+                    System.out.println(glass);
+                    System.out.println(kettle);
+                }
+            }
+        solution:
+          Kettle.java: |
+            public class Kettle {
+                private int water;
+
+                public Kettle(int water) {
+                    this.water = water;
+                }
+
+                public void pour(Cup cup) {
+                    int amount = Math.min(this.water, cup.space());
+                    cup.fill(amount);
+                    this.water = this.water - amount;
+                }
+
+                public String toString() {
+                    return "Kettle: " + this.water + " ml";
+                }
+            }
+          Cup.java: |
+            public class Cup {
+                private int capacity;
+                private int water;
+
+                public Cup(int capacity) {
+                    this.capacity = capacity;
+                    this.water = 0;
+                }
+
+                public int space() {
+                    return this.capacity - this.water;
+                }
+
+                public void fill(int ml) {
+                    this.water = this.water + ml;
+                }
+
+                public String toString() {
+                    return this.water + "/" + this.capacity + " ml";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Kettle kettle = new Kettle(500);
+                    Cup mug = new Cup(300);
+                    Cup glass = new Cup(250);
+                    kettle.pour(mug);
+                    kettle.pour(glass);
+                    System.out.println(mug);
+                    System.out.println(glass);
+                    System.out.println(kettle);
+                }
+            }
+        hints:
+          - "The amount to pour is the smaller of two numbers: the kettle's own `this.water` and the cup's `cup.space()`. `Math.min` gives the smaller one."
+          - "Then give the cup that amount with `cup.fill(amount);`, and take it from the kettle: `this.water = this.water - amount;`."
+        require:
+          - pattern: \bpublic\s+void\s+pour\s*\(\s*Cup\s+\w+\s*\)
+            message: "Write the method as `public void pour(Cup cup)`."
+          - pattern: \.space\s*\(\s*\)
+            message: "Ask the cup how much still fits with `space()`."
+          - pattern: \.fill\s*\(
+            message: "Put the water in the cup with its `fill` method."
+        tests:
+          - call: |
+              Kettle kettle = new Kettle(500);
+              Cup mug = new Cup(300);
+              Cup glass = new Cup(250);
+              kettle.pour(mug);
+              kettle.pour(glass);
+              System.out.println(mug);
+              System.out.println(glass);
+              System.out.println(kettle);
+          - call: |
+              Kettle kettle = new Kettle(1000);
+              Cup cup = new Cup(200);
+              cup.fill(50);
+              kettle.pour(cup);
+              kettle.pour(cup);
+              System.out.println(cup);
+              System.out.println(kettle);
+            hidden: true
+          - call: |
+              Kettle kettle = new Kettle(100);
+              Cup first = new Cup(250);
+              Cup second = new Cup(300);
+              kettle.pour(first);
+              kettle.pour(second);
+              System.out.println(first);
+              System.out.println(second);
+              System.out.println(kettle);
+            hidden: true
+
+  - id: object-interaction-inner-object
+    slug: object-inside-object
+    title: An object inside an object
+    text: |
+      An instance variable can hold an object too. You've done it all along: an instance variable of type `String` holds a String object. In the same way, its type can be one of your own classes. A parcel has a recipient and a weight, and it goes to an address, which is a thing of its own, with a street, a house number and a city:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Address address = new Address("Elm Street", 12, "Riverton");
+              Parcel parcel = new Parcel("Amir", address, 1200);
+              System.out.println(parcel);
+              System.out.println(parcel.isGoingTo("Riverton"));
+              System.out.println(parcel.isGoingTo("Lakeside"));
+          }
+      }
+      // ==== Parcel.java ====
+      public class Parcel {
+          private String recipient;
+          private Address address;
+          private int grams;
+
+          public Parcel(String recipient, Address address, int grams) {
+              this.recipient = recipient;
+              this.address = address;
+              this.grams = grams;
+          }
+
+          public boolean isGoingTo(String city) {
+              return this.address.getCity().equals(city);
+          }
+
+          public String toString() {
+              return this.recipient + ", " + this.address + " (" + this.grams + " g)";
+          }
+      }
+      // ==== Address.java ====
+      public class Address {
+          private String street;
+          private int number;
+          private String city;
+
+          public Address(String street, int number, String city) {
+              this.street = street;
+              this.number = number;
+              this.city = city;
+          }
+
+          public String getCity() {
+              return this.city;
+          }
+
+          public String toString() {
+              return this.street + " " + this.number + ", " + this.city;
+          }
+      }
+      ```
+
+      ```output
+      Amir, Elm Street 12, Riverton (1200 g)
+      true
+      false
+      ```
+
+      - `private Address address;` is an instance variable like the others, and its type is the class `Address`. The constructor stores the Address it's given, just as it stores the name and the weight.
+      - In `toString`, joining `this.address` to a String with `+` calls the address's own `toString`. The parcel doesn't need to know how an address is written out: that's the address's job.
+      - `isGoingTo` asks the address for its city with `this.address.getCity()`, and then compares the city it gets back with `equals`. Calls can follow each other like this: each one is made on what the one before it returned.
+      - A getter can return the inner object. With `public Address getAddress()` in Parcel, `parcel.getAddress().getCity()` asks the parcel for its address, and then the address for its city.
+
+      Keeping the address in a class of its own keeps both classes small, and a class for letters or for a delivery route could use the same Address class. If the constructor forgot to set `this.address`, it would stay `null`, and `isGoingTo` would crash with a NullPointerException (module 22).
+
+      ### Making the inner object in the constructor
+
+      The caller doesn't have to build the inner object. A constructor can make it from the values it's given:
+
+      ```java fragment
+      public Parcel(String recipient, String street, int number, String city, int grams) {
+          this.recipient = recipient;
+          this.address = new Address(street, number, city);
+          this.grams = grams;
+      }
+      ```
+
+      With this constructor, `new Parcel("Amir", "Elm Street", 12, "Riverton", 1200)` makes the parcel and its address in one go. Either way, the parcel ends up with an Address object in its instance variable.
+
+      **Your turn:** a sports team has a name and a coach, and `Coach.java` is ready. In `Team.java`, add a private instance variable `coach` of type `Coach`, change the constructor to `Team(String name, Coach coach)`, and make `toString` return the team's name, then `, coached by ` and the coach. Let the coach's own `toString` write out the coach. The check runs:
+
+      ```java fragment
+      Coach rosa = new Coach("Rosa", 12);
+      Team team = new Team("Hawks", rosa);
+      System.out.println(team);
+      ```
+
+      and expects:
+
+      ```
+      Hawks, coached by Rosa (12 years)
+      ```
+    seed:
+      Team.java: |
+        public class Team {
+            private String name;
+
+            public Team(String name) {
+                this.name = name;
+            }
+
+            public String toString() {
+                return this.name;
+            }
+        }
+      Coach.java: |
+        public class Coach {
+            private String name;
+            private int years;
+
+            public Coach(String name, int years) {
+                this.name = name;
+                this.years = years;
+            }
+
+            public String toString() {
+                return this.name + " (" + this.years + " years)";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Coach rosa = new Coach("Rosa", 12);
+                Team team = new Team("Hawks", rosa);
+                System.out.println(team);
+            }
+        }
+    solution:
+      Team.java: |
+        public class Team {
+            private String name;
+            private Coach coach;
+
+            public Team(String name, Coach coach) {
+                this.name = name;
+                this.coach = coach;
+            }
+
+            public String toString() {
+                return this.name + ", coached by " + this.coach;
+            }
+        }
+      Coach.java: |
+        public class Coach {
+            private String name;
+            private int years;
+
+            public Coach(String name, int years) {
+                this.name = name;
+                this.years = years;
+            }
+
+            public String toString() {
+                return this.name + " (" + this.years + " years)";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Coach rosa = new Coach("Rosa", 12);
+                Team team = new Team("Hawks", rosa);
+                System.out.println(team);
+            }
+        }
+    hints:
+      - "The new instance variable is declared like the others, with the class as its type: `private Coach coach;`. The constructor gets a second parameter, `Coach coach`, and stores it with `this.coach = coach;`."
+      - "In `toString`, `this.name + \", coached by \" + this.coach` joins the coach with `+`, which calls the coach's own `toString`."
+    require:
+      - pattern: \bprivate\s+Coach\s+coach\s*;
+        message: "Keep the coach in a private instance variable: `private Coach coach;`."
+      - pattern: \bpublic\s+Team\s*\(\s*String\s+\w+\s*,\s*Coach\s+\w+\s*\)
+        message: "The constructor takes the name and the coach: `public Team(String name, Coach coach)`."
+    tests:
+      - call: |
+          Coach rosa = new Coach("Rosa", 12);
+          Team team = new Team("Hawks", rosa);
+          System.out.println(team);
+      - call: |
+          Team team = new Team("River Otters", new Coach("Ken", 3));
+          System.out.println("Team: " + team);
+        hidden: true
+      - call: |
+          Coach lou = new Coach("Lou", 25);
+          Team first = new Team("Comets", lou);
+          Team second = new Team("Lynx", lou);
+          System.out.println(second);
+          System.out.println(first);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Follow the Engine object: which variables refer to it?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Engine engine = new Engine(90);
+                  Boat boat = new Boat("Gull", engine);
+                  System.out.println(boat);
+                  boat.getEngine().tune(10);
+                  System.out.println(boat);
+                  engine.tune(5);
+                  System.out.println(boat.getEngine());
+              }
+          }
+          // ==== Boat.java ====
+          public class Boat {
+              private String name;
+              private Engine engine;
+
+              public Boat(String name, Engine engine) {
+                  this.name = name;
+                  this.engine = engine;
+              }
+
+              public Engine getEngine() {
+                  return this.engine;
+              }
+
+              public String toString() {
+                  return this.name + " with a " + this.engine + " engine";
+              }
+          }
+          // ==== Engine.java ====
+          public class Engine {
+              private int power;
+
+              public Engine(int power) {
+                  this.power = power;
+              }
+
+              public void tune(int extra) {
+                  this.power = this.power + extra;
+              }
+
+              public String toString() {
+                  return this.power + " hp";
+              }
+          }
+        hints:
+          - "`boat.getEngine()` returns the boat's Engine object, and `.tune(10)` is called on it. The boat's engine now has 100 hp."
+          - "The constructor stored the same Engine that `engine` in `main` refers to. So `engine.tune(5)` tunes the boat's engine as well, and printing it calls the engine's `toString`."
+      - task: |
+          A train ticket keeps its route in a `Route` object, and `Route.java` is ready. In `Ticket.java`, write:
+
+          - the constructor `Ticket(String passenger, String from, String to)`, which stores the passenger and makes the route itself, from `from` and `to`;
+          - the method `goesTo(String city)`, which returns `true` when the ticket's route ends in that city. Ask the route where it ends with `getTo()`.
+
+          The check runs:
+
+          ```java fragment
+          Ticket ticket = new Ticket("Lea", "Harbor Town", "Hill Park");
+          System.out.println(ticket);
+          System.out.println(ticket.goesTo("Hill Park"));
+          System.out.println(ticket.goesTo("Harbor Town"));
+          ```
+
+          and expects:
+
+          ```
+          Lea: Harbor Town to Hill Park
+          true
+          false
+          ```
+        seed:
+          Ticket.java: |
+            public class Ticket {
+                private String passenger;
+                private Route route;
+
+                // Write the constructor and the goesTo method here.
+
+                public String toString() {
+                    return this.passenger + ": " + this.route;
+                }
+            }
+          Route.java: |
+            public class Route {
+                private String from;
+                private String to;
+
+                public Route(String from, String to) {
+                    this.from = from;
+                    this.to = to;
+                }
+
+                public String getFrom() {
+                    return this.from;
+                }
+
+                public String getTo() {
+                    return this.to;
+                }
+
+                public String toString() {
+                    return this.from + " to " + this.to;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Ticket ticket = new Ticket("Lea", "Harbor Town", "Hill Park");
+                    System.out.println(ticket);
+                    System.out.println(ticket.goesTo("Hill Park"));
+                    System.out.println(ticket.goesTo("Harbor Town"));
+                }
+            }
+        solution:
+          Ticket.java: |
+            public class Ticket {
+                private String passenger;
+                private Route route;
+
+                public Ticket(String passenger, String from, String to) {
+                    this.passenger = passenger;
+                    this.route = new Route(from, to);
+                }
+
+                public boolean goesTo(String city) {
+                    return this.route.getTo().equals(city);
+                }
+
+                public String toString() {
+                    return this.passenger + ": " + this.route;
+                }
+            }
+          Route.java: |
+            public class Route {
+                private String from;
+                private String to;
+
+                public Route(String from, String to) {
+                    this.from = from;
+                    this.to = to;
+                }
+
+                public String getFrom() {
+                    return this.from;
+                }
+
+                public String getTo() {
+                    return this.to;
+                }
+
+                public String toString() {
+                    return this.from + " to " + this.to;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Ticket ticket = new Ticket("Lea", "Harbor Town", "Hill Park");
+                    System.out.println(ticket);
+                    System.out.println(ticket.goesTo("Hill Park"));
+                    System.out.println(ticket.goesTo("Harbor Town"));
+                }
+            }
+        hints:
+          - "In the constructor, `this.passenger = passenger;` as usual, and the route is made with `new`: `this.route = new Route(from, to);`."
+          - "`goesTo` asks the route and compares the String it gets back: `return this.route.getTo().equals(city);`. Compare text with `equals`, not `==`."
+        require:
+          - pattern: \bnew\s+Route\s*\(
+            message: "Make the route in the constructor with `new Route(from, to)`."
+          - pattern: \.getTo\s*\(\s*\)
+            message: "Ask the route where it ends with `getTo()`."
+        tests:
+          - call: |
+              Ticket ticket = new Ticket("Lea", "Harbor Town", "Hill Park");
+              System.out.println(ticket);
+              System.out.println(ticket.goesTo("Hill Park"));
+              System.out.println(ticket.goesTo("Harbor Town"));
+          - call: |
+              Ticket ticket = new Ticket("Oskar", "Mill End", "Stone Bay");
+              String first = "Stone";
+              System.out.println(ticket.goesTo(first + " Bay"));
+              System.out.println(ticket.goesTo("Mill End"));
+              System.out.println(ticket);
+            hidden: true
+          - call: |
+              Ticket out = new Ticket("Noor", "Ash Lane", "Oak Hill");
+              Ticket back = new Ticket("Noor", "Oak Hill", "Ash Lane");
+              System.out.println(back);
+              System.out.println(out.goesTo("Ash Lane") + " " + back.goesTo("Ash Lane"));
+            hidden: true
+
+  - id: object-interaction-same-class
+    slug: same-class-parameter
+    title: Comparing with another object of the same class
+    text: |
+      A parameter can also be an object of the method's own class. That's how an object compares itself with another of its kind. Is this parcel heavier than that one?
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Parcel small = new Parcel("Lina", 400);
+              Parcel big = new Parcel("Omar", 2500);
+              System.out.println(big.isHeavierThan(small));
+              System.out.println(small.isHeavierThan(big));
+              System.out.println(small.isHeavierThan(small));
+              System.out.println(big.gramsMoreThan(small));
+          }
+      }
+      // ==== Parcel.java ====
+      public class Parcel {
+          private String recipient;
+          private int grams;
+
+          public Parcel(String recipient, int grams) {
+              this.recipient = recipient;
+              this.grams = grams;
+          }
+
+          public boolean isHeavierThan(Parcel other) {
+              return this.grams > other.grams;
+          }
+
+          public int gramsMoreThan(Parcel other) {
+              return this.grams - other.grams;
+          }
+
+          public String toString() {
+              return "Parcel for " + this.recipient + ", " + this.grams + " g";
+          }
+      }
+      ```
+
+      ```output
+      true
+      false
+      false
+      2100
+      ```
+
+      - In `big.isHeavierThan(small)`, `this` is `big`, the object before the dot, and `other` is `small`, the one in the parentheses. The method compares the two.
+      - `other.grams` reads the other parcel's private variable, and that's allowed. `private` means *only the code of the class Parcel*, not *only this object*: code written in Parcel may use the private variables of any Parcel. In `Main`, `small.grams` still doesn't compile.
+      - `small.isHeavierThan(small)` compares the parcel with itself, and a parcel isn't heavier than itself: `>` is false for equal weights. The same goes for two different parcels of the same weight: neither is heavier than the other.
+      - `gramsMoreThan` answers with a number instead of true or false: how many grams more this parcel weighs than the other one.
+
+      The parameter's name, `other`, is only a name: `compared` or `another` work just as well. If the class has getters, `other.getGrams()` works too, but inside the class the variable itself is the usual way.
+
+      ### The class compares, main decides
+
+      With `isHeavierThan`, finding the heaviest parcel in a list is the loop from module 19, but the comparison is the parcel's own method:
+
+      ```java fragment
+      Parcel heaviest = parcels.get(0);
+      for (Parcel parcel : parcels) {
+          if (parcel.isHeavierThan(heaviest)) {
+              heaviest = parcel;
+          }
+      }
+      ```
+
+      The loop doesn't need to know how parcels are compared, or even that they're weighed in grams. How to compare two parcels is written once, in the class, and every part of the program asks the class.
+
+      **Your turn:** in `Mountain.java`, write the method `isHigherThan(Mountain other)`. It returns `true` when this mountain is higher than the other one, and `false` otherwise (also when both are equally high). The check runs:
+
+      ```java fragment
+      Mountain grayPeak = new Mountain("Gray Peak", 2410);
+      Mountain redHill = new Mountain("Red Hill", 980);
+      System.out.println(grayPeak.isHigherThan(redHill));
+      System.out.println(redHill.isHigherThan(grayPeak));
+      ```
+
+      and expects:
+
+      ```
+      true
+      false
+      ```
+    seed:
+      Mountain.java: |
+        public class Mountain {
+            private String name;
+            private int meters;
+
+            public Mountain(String name, int meters) {
+                this.name = name;
+                this.meters = meters;
+            }
+
+            // Write the isHigherThan method here.
+
+            public String toString() {
+                return this.name + " (" + this.meters + " m)";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Mountain grayPeak = new Mountain("Gray Peak", 2410);
+                Mountain redHill = new Mountain("Red Hill", 980);
+                System.out.println(grayPeak.isHigherThan(redHill));
+                System.out.println(redHill.isHigherThan(grayPeak));
+            }
+        }
+    solution:
+      Mountain.java: |
+        public class Mountain {
+            private String name;
+            private int meters;
+
+            public Mountain(String name, int meters) {
+                this.name = name;
+                this.meters = meters;
+            }
+
+            public boolean isHigherThan(Mountain other) {
+                return this.meters > other.meters;
+            }
+
+            public String toString() {
+                return this.name + " (" + this.meters + " m)";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Mountain grayPeak = new Mountain("Gray Peak", 2410);
+                Mountain redHill = new Mountain("Red Hill", 980);
+                System.out.println(grayPeak.isHigherThan(redHill));
+                System.out.println(redHill.isHigherThan(grayPeak));
+            }
+        }
+    hints:
+      - "The parameter is a Mountain: `public boolean isHigherThan(Mountain other) {`."
+      - "Compare this mountain's meters with the other's. The method is in the Mountain class, so it may read `other.meters`: `return this.meters > other.meters;`."
+    require:
+      - pattern: \bpublic\s+boolean\s+isHigherThan\s*\(\s*Mountain\s+\w+\s*\)
+        message: "Write the method as `public boolean isHigherThan(Mountain other)`."
+    tests:
+      - call: |
+          Mountain grayPeak = new Mountain("Gray Peak", 2410);
+          Mountain redHill = new Mountain("Red Hill", 980);
+          System.out.println(grayPeak.isHigherThan(redHill));
+          System.out.println(redHill.isHigherThan(grayPeak));
+      - call: |
+          Mountain north = new Mountain("North Top", 1500);
+          Mountain south = new Mountain("South Top", 1500);
+          System.out.println(north.isHigherThan(south));
+          System.out.println(south.isHigherThan(north));
+          System.out.println(north.isHigherThan(north));
+        hidden: true
+      - call: |
+          Mountain low = new Mountain("Mole Hill", 12);
+          Mountain high = new Mountain("Cloud Peak", 4001);
+          Mountain middle = new Mountain("Wind Ridge", 1999);
+          System.out.println(middle.isHigherThan(low) + " " + middle.isHigherThan(high));
+          System.out.println(high.isHigherThan(middle) + " " + low.isHigherThan(middle));
+        hidden: true
+    more:
+      - task: |
+          Packing to move house: a box fits inside another box when it's smaller in all three measures, so that its width, its height and its depth are each less than the other box's. (The boxes aren't turned around.) In `Box.java`, write the method `fitsInside(Box other)`. The check runs:
+
+          ```java fragment
+          Box shoebox = new Box(30, 12, 18);
+          Box crate = new Box(50, 40, 40);
+          System.out.println(shoebox.fitsInside(crate));
+          System.out.println(crate.fitsInside(shoebox));
+          ```
+
+          and expects:
+
+          ```
+          true
+          false
+          ```
+        seed:
+          Box.java: |
+            public class Box {
+                private int width;
+                private int height;
+                private int depth;
+
+                public Box(int width, int height, int depth) {
+                    this.width = width;
+                    this.height = height;
+                    this.depth = depth;
+                }
+
+                // Write the fitsInside method here.
+
+                public String toString() {
+                    return this.width + " x " + this.height + " x " + this.depth + " cm";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Box shoebox = new Box(30, 12, 18);
+                    Box crate = new Box(50, 40, 40);
+                    System.out.println(shoebox.fitsInside(crate));
+                    System.out.println(crate.fitsInside(shoebox));
+                }
+            }
+        solution:
+          Box.java: |
+            public class Box {
+                private int width;
+                private int height;
+                private int depth;
+
+                public Box(int width, int height, int depth) {
+                    this.width = width;
+                    this.height = height;
+                    this.depth = depth;
+                }
+
+                public boolean fitsInside(Box other) {
+                    return this.width < other.width && this.height < other.height && this.depth < other.depth;
+                }
+
+                public String toString() {
+                    return this.width + " x " + this.height + " x " + this.depth + " cm";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Box shoebox = new Box(30, 12, 18);
+                    Box crate = new Box(50, 40, 40);
+                    System.out.println(shoebox.fitsInside(crate));
+                    System.out.println(crate.fitsInside(shoebox));
+                }
+            }
+        hints:
+          - "Three comparisons, one for each measure, and all three must be true: join them with `&&`."
+          - "`return this.width < other.width && this.height < other.height && this.depth < other.depth;`"
+        require:
+          - pattern: \bpublic\s+boolean\s+fitsInside\s*\(\s*Box\s+\w+\s*\)
+            message: "Write the method as `public boolean fitsInside(Box other)`."
+        tests:
+          - call: |
+              Box shoebox = new Box(30, 12, 18);
+              Box crate = new Box(50, 40, 40);
+              System.out.println(shoebox.fitsInside(crate));
+              System.out.println(crate.fitsInside(shoebox));
+          - call: |
+              Box crate = new Box(50, 40, 40);
+              System.out.println(new Box(60, 10, 10).fitsInside(crate));
+              System.out.println(new Box(10, 45, 10).fitsInside(crate));
+              System.out.println(new Box(10, 10, 41).fitsInside(crate));
+              System.out.println(new Box(49, 39, 39).fitsInside(crate));
+            hidden: true
+          - call: |
+              Box cube = new Box(20, 20, 20);
+              Box same = new Box(20, 20, 20);
+              System.out.println(cube.fitsInside(same));
+              System.out.println(cube.fitsInside(cube));
+              System.out.println(new Box(19, 20, 19).fitsInside(cube));
+            hidden: true
+      - task: |
+          What does this program print? A racer beats another one with a smaller time, and the loop keeps the best racer so far.
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Racer> racers = new ArrayList<>();
+                  racers.add(new Racer("Joe", 61));
+                  racers.add(new Racer("Ida", 58));
+                  racers.add(new Racer("Kai", 58));
+                  racers.add(new Racer("Liv", 60));
+
+                  Racer winner = racers.get(0);
+                  for (Racer racer : racers) {
+                      if (racer.beats(winner)) {
+                          winner = racer;
+                      }
+                  }
+                  System.out.println(winner);
+                  System.out.println(winner.beats(racers.get(2)));
+              }
+          }
+          // ==== Racer.java ====
+          public class Racer {
+              private String name;
+              private int seconds;
+
+              public Racer(String name, int seconds) {
+                  this.name = name;
+                  this.seconds = seconds;
+              }
+
+              public boolean beats(Racer other) {
+                  return this.seconds < other.seconds;
+              }
+
+              public String toString() {
+                  return this.name + ", " + this.seconds + " s";
+              }
+          }
+        hints:
+          - "The winner starts as Joe (61 s). Ida's 58 beats it, so Ida becomes the winner. Kai's 58 doesn't beat Ida's 58: `<` is false for equal times. Liv's 60 doesn't either."
+          - "The last line asks whether the winner, Ida, beats `racers.get(2)`, which is Kai. Both have 58 seconds."
+
+  - id: object-interaction-equals
+    slug: equals
+    title: Equal objects
+    text: |
+      ### == compares references
+
+      When are two objects the same? Here are two theater seats, both in row B, seat 7:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Seat mine = new Seat("B", 7);
+              Seat yours = new Seat("B", 7);
+              Seat same = mine;
+              System.out.println(mine == yours);
+              System.out.println(mine == same);
+              System.out.println(mine.equals(yours));
+          }
+      }
+      // ==== Seat.java ====
+      public class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public String toString() {
+              return this.row + this.number;
+          }
+      }
+      ```
+
+      ```output
+      false
+      true
+      false
+      ```
+
+      - `==` on two objects asks whether both variables refer to the **same object**. `mine` and `yours` were made by two `new`s, so they're two objects, even though what's in them is the same. `Seat same = mine;` copies the reference, so `mine == same` is true.
+      - Seat has no method called `equals`, yet `mine.equals(yours)` compiles. Every class gets a few methods from Java without writing them, among them `toString` and `equals`. The `toString` it gets prints the class name and a code (module 18), and the `equals` it gets does the same as `==`.
+
+      You've met this with Strings: `==` asks whether two Strings are the same object, while `equals` compares their letters. That's why text is always compared with `equals`. To make `equals` compare the contents of your own objects, the class writes its own `equals`, just as it writes its own `toString`.
+
+      ### Writing equals
+
+      Two seats are equal when they have the same row and the same number. Here's the `equals` method for Seat:
+
+      ```java fragment
+      public boolean equals(Object compared) {
+          if (this == compared) {
+              return true;
+          }
+          if (!(compared instanceof Seat)) {
+              return false;
+          }
+          Seat other = (Seat) compared;
+          return this.row.equals(other.row) && this.number == other.number;
+      }
+      ```
+
+      Line by line:
+
+      - The header must be exactly `public boolean equals(Object compared)`. `Object` is Java's type for any object at all, so `equals` can be given a Seat, a String, a list or anything else. Java's own methods, such as a list's `contains` in the next step, use only an `equals` with exactly this header. (The parameter's name can be anything; `compared` is a common one.)
+      - `if (this == compared)`: when it's the very same object, it's certainly equal, and nothing else needs checking.
+      - `compared instanceof Seat` is true when `compared` is a Seat object. Anything else, such as a String, can't be equal to a seat, so the method returns `false`. `instanceof` is false for `null` too, so `seat.equals(null)` gives `false` without a crash.
+      - `Seat other = (Seat) compared;` is a **cast**. `compared` is a Seat, but its type says only `Object`, and an Object has no `row` or `number`. The cast lets the code use it as a Seat. It's safe here, because the line before made sure it is one.
+      - The last line compares the contents: Strings with `equals`, numbers with `==`. As in the previous step, `other.row` may read the private variables, because this code is in the Seat class.
+
+      With the method in the class:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Seat mine = new Seat("B", 7);
+              Seat yours = new Seat("B", 7);
+              Seat next = new Seat("B", 8);
+              System.out.println(mine == yours);
+              System.out.println(mine.equals(yours));
+              System.out.println(mine.equals(next));
+              System.out.println(mine.equals("B7"));
+          }
+      }
+      // ==== Seat.java ====
+      public class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+
+          public String toString() {
+              return this.row + this.number;
+          }
+      }
+      ```
+
+      ```output
+      false
+      true
+      false
+      false
+      ```
+
+      `==` still says `false`: `mine` and `yours` are two objects. But `equals` now compares what's in them, and says they're equal. A String is never equal to a seat, even when it looks like the seat printed out: `"B7"` doesn't pass the `instanceof` check.
+
+      What counts as equal is up to the class. Two seats are equal when the row and the number match. A class for library members might say two members are equal when their membership numbers match, whatever names they were written down with.
+
+      Newer versions of Java can do the `instanceof` check and the cast in one go (`compared instanceof Seat other`), but in this course they're written as two separate steps.
+
+      **Your turn:** two playing cards are equal when they have the same suit and the same rank. In `PlayingCard.java`, write the method `equals`, in the way shown above. The check runs:
+
+      ```java fragment
+      PlayingCard first = new PlayingCard("hearts", 7);
+      PlayingCard second = new PlayingCard("hearts", 7);
+      PlayingCard third = new PlayingCard("spades", 7);
+      System.out.println(first.equals(second));
+      System.out.println(first.equals(third));
+      ```
+
+      and expects:
+
+      ```
+      true
+      false
+      ```
+    seed:
+      PlayingCard.java: |
+        public class PlayingCard {
+            private String suit;
+            private int rank;
+
+            public PlayingCard(String suit, int rank) {
+                this.suit = suit;
+                this.rank = rank;
+            }
+
+            // Write the equals method here.
+
+            public String toString() {
+                return this.rank + " of " + this.suit;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                PlayingCard first = new PlayingCard("hearts", 7);
+                PlayingCard second = new PlayingCard("hearts", 7);
+                PlayingCard third = new PlayingCard("spades", 7);
+                System.out.println(first.equals(second));
+                System.out.println(first.equals(third));
+            }
+        }
+    solution:
+      PlayingCard.java: |
+        public class PlayingCard {
+            private String suit;
+            private int rank;
+
+            public PlayingCard(String suit, int rank) {
+                this.suit = suit;
+                this.rank = rank;
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof PlayingCard)) {
+                    return false;
+                }
+                PlayingCard other = (PlayingCard) compared;
+                return this.suit.equals(other.suit) && this.rank == other.rank;
+            }
+
+            public String toString() {
+                return this.rank + " of " + this.suit;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                PlayingCard first = new PlayingCard("hearts", 7);
+                PlayingCard second = new PlayingCard("hearts", 7);
+                PlayingCard third = new PlayingCard("spades", 7);
+                System.out.println(first.equals(second));
+                System.out.println(first.equals(third));
+            }
+        }
+    hints:
+      - "The header is `public boolean equals(Object compared) {`. Then the three steps: `if (this == compared)` returns true, `if (!(compared instanceof PlayingCard))` returns false, and the cast `PlayingCard other = (PlayingCard) compared;`."
+      - "The last line compares the contents: `return this.suit.equals(other.suit) && this.rank == other.rank;`. The suit is a String, so it's compared with `equals`."
+    require:
+      - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+        message: "Write the header exactly as `public boolean equals(Object compared)`, so Java uses your method."
+      - pattern: \binstanceof\s+PlayingCard\b
+        message: "Check with `instanceof PlayingCard` that the compared object is a card, before the cast."
+      - pattern: \(\s*PlayingCard\s*\)
+        message: "Cast the compared object to a card: `PlayingCard other = (PlayingCard) compared;`."
+    tests:
+      - call: |
+          PlayingCard first = new PlayingCard("hearts", 7);
+          PlayingCard second = new PlayingCard("hearts", 7);
+          PlayingCard third = new PlayingCard("spades", 7);
+          System.out.println(first.equals(second));
+          System.out.println(first.equals(third));
+      - call: |
+          PlayingCard card = new PlayingCard("clubs", 3);
+          System.out.println(card.equals(new PlayingCard("clubs", 4)));
+          System.out.println(card.equals(card));
+          System.out.println(card.equals("3 of clubs"));
+          System.out.println(card.equals(null));
+        hidden: true
+      - call: |
+          String start = "dia";
+          PlayingCard built = new PlayingCard(start + "monds", 12);
+          PlayingCard written = new PlayingCard("diamonds", 12);
+          System.out.println(built.equals(written));
+          System.out.println(written.equals(built));
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Here two members are equal when their membership numbers are the same.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Member a = new Member(1042, "Ana Silva");
+                  Member b = new Member(1042, "A. Silva");
+                  Member c = new Member(2077, "Ana Silva");
+                  System.out.println(a.equals(b));
+                  System.out.println(a.equals(c));
+                  System.out.println(a == b);
+                  System.out.println(b.equals(a));
+              }
+          }
+          // ==== Member.java ====
+          public class Member {
+              private int number;
+              private String name;
+
+              public Member(int number, String name) {
+                  this.number = number;
+                  this.name = name;
+              }
+
+              public boolean equals(Object compared) {
+                  if (this == compared) {
+                      return true;
+                  }
+                  if (!(compared instanceof Member)) {
+                      return false;
+                  }
+                  Member other = (Member) compared;
+                  return this.number == other.number;
+              }
+          }
+        hints:
+          - "`equals` compares only the numbers, so the names don't matter at all. `a` and `b` have the same number, `a` and `c` don't."
+          - "`==` still asks whether two variables refer to the same object, and `a` and `b` were made by two `new`s."
+      - task: |
+          A parking app looks for one car by its license plate. `LicensePlate` has an `equals` method, but it has two problems. With the input `ABC-123`, the plates aren't equal, although the codes are the same: the codes are Strings, compared with `==`. And comparing a plate with something that isn't a plate, such as the String `"ABC-123"`, crashes the program with a `ClassCastException`, since `(LicensePlate)` can't turn a String into a plate.
+
+          Rewrite `equals` the way the lesson showed: the `this ==` check, `instanceof`, the cast, and the code compared with `equals`. `Main.java` is ready: it reads a code and prints whether that plate equals the wanted one, and then whether it equals the String `"ABC-123"`, which it never does, because a String isn't a plate. For the input `ABC-123` the program prints:
+
+          ```
+          true
+          false
+          ```
+        seed:
+          LicensePlate.java: |
+            public class LicensePlate {
+                private String code;
+
+                public LicensePlate(String code) {
+                    this.code = code;
+                }
+
+                public boolean equals(Object compared) {
+                    LicensePlate other = (LicensePlate) compared;
+                    return this.code == other.code;
+                }
+
+                public String toString() {
+                    return this.code;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    LicensePlate wanted = new LicensePlate("ABC-123");
+                    LicensePlate seen = new LicensePlate(scanner.nextLine());
+                    System.out.println(seen.equals(wanted));
+                    System.out.println(seen.equals("ABC-123"));
+                }
+            }
+        solution:
+          LicensePlate.java: |
+            public class LicensePlate {
+                private String code;
+
+                public LicensePlate(String code) {
+                    this.code = code;
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof LicensePlate)) {
+                        return false;
+                    }
+                    LicensePlate other = (LicensePlate) compared;
+                    return this.code.equals(other.code);
+                }
+
+                public String toString() {
+                    return this.code;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    LicensePlate wanted = new LicensePlate("ABC-123");
+                    LicensePlate seen = new LicensePlate(scanner.nextLine());
+                    System.out.println(seen.equals(wanted));
+                    System.out.println(seen.equals("ABC-123"));
+                }
+            }
+        hints:
+          - "Before the cast, add the check: `if (!(compared instanceof LicensePlate)) { return false; }`. Then a String never reaches the cast. The `if (this == compared)` check goes first, as in the lesson."
+          - "The codes are Strings, so the last line is `return this.code.equals(other.code);`."
+        require:
+          - pattern: \binstanceof\s+LicensePlate\b
+            message: "Check with `instanceof LicensePlate` before the cast, so comparing with something else gives false instead of a crash."
+        forbid:
+          - pattern: \.code\s*==|==\s*\w+\.code\b
+            message: "The codes are Strings: compare them with `equals`, not `==`."
+        tests:
+          - stdin: ABC-123
+          - stdin: XYZ-999
+            hidden: true
+          - stdin: abc-123
+            hidden: true
+          - call: |
+              LicensePlate plate = new LicensePlate("KLM-4");
+              System.out.println(plate.equals(plate));
+              System.out.println(plate.equals(null));
+              String letters = "KLM";
+              System.out.println(plate.equals(new LicensePlate(letters + "-4")));
+            hidden: true
+
+  - id: object-interaction-lists
+    slug: equals-and-lists
+    title: equals and lists
+    text: |
+      The list methods `contains`, `indexOf` and `remove(value)` from module 14 all search the list. To decide whether a value in the list is the one they're looking for, they call `equals`. With Strings that has always worked, because String has an `equals` of its own that compares the letters. With objects of your own class, it works as soon as the class has its own `equals`, like the Seat from the previous step:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Seat> booked = new ArrayList<>();
+              booked.add(new Seat("A", 3));
+              booked.add(new Seat("B", 7));
+              booked.add(new Seat("C", 1));
+
+              System.out.println(booked.contains(new Seat("B", 7)));
+              System.out.println(booked.indexOf(new Seat("C", 1)));
+              booked.remove(new Seat("A", 3));
+              System.out.println(booked);
+          }
+      }
+      // ==== Seat.java ====
+      public class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+
+          public String toString() {
+              return this.row + this.number;
+          }
+      }
+      ```
+
+      ```output
+      true
+      2
+      [B7, C1]
+      ```
+
+      - Each `new Seat(...)` in the parentheses is a brand-new object, not one of the objects in the list. `contains` finds it anyway, because it compares with `equals`, and a seat in the list is equal to it.
+      - `indexOf` gives the index of the first equal seat, and `remove(value)` removes the first equal seat, as they did with Strings.
+      - Printing a list prints each value with its `toString`, between brackets and separated by commas.
+
+      Without the `equals` method in Seat, all three would miss: `contains` would print `false`, `indexOf` would print `-1`, and `remove` wouldn't remove anything. The seat they're given is never the very same object as one in the list, and the `equals` that every class gets only looks for the same object.
+
+      ### Only once in the list
+
+      A common use is a list that holds each value only once: before adding, check that no equal value is in it yet.
+
+      ```java fragment
+      Seat seat = new Seat(row, number);
+      if (booked.contains(seat)) {
+          System.out.println(seat + " is already taken");
+      } else {
+          booked.add(seat);
+          System.out.println("Booked " + seat);
+      }
+      ```
+
+      **Your turn:** a sticker collector puts each sticker in the album once, and counts the doubles. `Main.java` is ready: it reads stickers such as `animals 12` until an empty line, and adds a sticker to the album only when `album.contains(sticker)` is false. But every sticker ends up in the album, because `Sticker` has no `equals` of its own. Write `equals` in `Sticker.java`: two stickers are equal when their series and their number are the same. For the input below, the program prints:
+
+      ```input
+      animals 12
+      space 3
+      animals 12
+      animals 4
+      space 3
+
+      ```
+
+      ```
+      In the album: [animals 12, space 3, animals 4]
+      Doubles: 2
+      ```
+    seed:
+      Sticker.java: |
+        public class Sticker {
+            private String series;
+            private int number;
+
+            public Sticker(String series, int number) {
+                this.series = series;
+                this.number = number;
+            }
+
+            // Write the equals method here.
+
+            public String toString() {
+                return this.series + " " + this.number;
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                ArrayList<Sticker> album = new ArrayList<>();
+                int doubles = 0;
+                while (true) {
+                    String line = scanner.nextLine();
+                    if (line.isEmpty()) {
+                        break;
+                    }
+                    String[] parts = line.split(" ");
+                    Sticker sticker = new Sticker(parts[0], Integer.valueOf(parts[1]));
+                    if (album.contains(sticker)) {
+                        doubles++;
+                    } else {
+                        album.add(sticker);
+                    }
+                }
+                System.out.println("In the album: " + album);
+                System.out.println("Doubles: " + doubles);
+            }
+        }
+    solution:
+      Sticker.java: |
+        public class Sticker {
+            private String series;
+            private int number;
+
+            public Sticker(String series, int number) {
+                this.series = series;
+                this.number = number;
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Sticker)) {
+                    return false;
+                }
+                Sticker other = (Sticker) compared;
+                return this.series.equals(other.series) && this.number == other.number;
+            }
+
+            public String toString() {
+                return this.series + " " + this.number;
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                ArrayList<Sticker> album = new ArrayList<>();
+                int doubles = 0;
+                while (true) {
+                    String line = scanner.nextLine();
+                    if (line.isEmpty()) {
+                        break;
+                    }
+                    String[] parts = line.split(" ");
+                    Sticker sticker = new Sticker(parts[0], Integer.valueOf(parts[1]));
+                    if (album.contains(sticker)) {
+                        doubles++;
+                    } else {
+                        album.add(sticker);
+                    }
+                }
+                System.out.println("In the album: " + album);
+                System.out.println("Doubles: " + doubles);
+            }
+        }
+    hints:
+      - "`contains` calls `equals`, so `Main` needs no change: once `Sticker` has an `equals` that compares the series and the number, `contains` finds the doubles."
+      - "Write it as in the previous step: `public boolean equals(Object compared)`, the `this ==` check, `instanceof Sticker`, the cast, and `return this.series.equals(other.series) && this.number == other.number;`."
+    require:
+      - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+        message: "Write the header exactly as `public boolean equals(Object compared)`: `contains` uses only an equals with that header."
+      - pattern: \binstanceof\s+Sticker\b
+        message: "Check with `instanceof Sticker` that the compared object is a sticker, before the cast."
+    tests:
+      - stdin: |+
+          animals 12
+          space 3
+          animals 12
+          animals 4
+          space 3
+
+      - stdin: |+
+          cars 1
+          cars 1
+          cars 1
+          cars 2
+
+        hidden: true
+      - stdin: |+
+          birds 5
+          birds 6
+          fish 5
+
+        hidden: true
+      - call: |
+          Sticker sticker = new Sticker("space", 3);
+          System.out.println(sticker.equals(new Sticker("space", 4)));
+          System.out.println(sticker.equals("space 3"));
+          System.out.println(sticker.equals(sticker));
+        hidden: true
+    more:
+      - task: |
+          The lost and found keeps the things people have left behind in a list, and `Item.java` (with `equals`) is ready. In `Main.java`, read lines such as `red scarf` (a color and a thing) until an empty line. For each, make an `Item`. If an equal item is in the list, remove it from the list and print `Returned: ` and the item; if not, print `No ` and the item and ` here`. At the end, print how many items are left. Let `contains` and `remove` do the searching, without a loop over the list. For the input below, the program prints:
+
+          ```input
+          red scarf
+          green hat
+          red scarf
+          red scarf
+
+          ```
+
+          ```
+          Returned: red scarf
+          No green hat here
+          Returned: red scarf
+          No red scarf here
+          Items left: 2
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Item> found = new ArrayList<>();
+                    found.add(new Item("blue", "umbrella"));
+                    found.add(new Item("red", "scarf"));
+                    found.add(new Item("black", "glove"));
+                    found.add(new Item("red", "scarf"));
+
+                    Scanner scanner = new Scanner(System.in);
+
+                }
+            }
+          Item.java: |
+            public class Item {
+                private String color;
+                private String thing;
+
+                public Item(String color, String thing) {
+                    this.color = color;
+                    this.thing = thing;
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Item)) {
+                        return false;
+                    }
+                    Item other = (Item) compared;
+                    return this.color.equals(other.color) && this.thing.equals(other.thing);
+                }
+
+                public String toString() {
+                    return this.color + " " + this.thing;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Item> found = new ArrayList<>();
+                    found.add(new Item("blue", "umbrella"));
+                    found.add(new Item("red", "scarf"));
+                    found.add(new Item("black", "glove"));
+                    found.add(new Item("red", "scarf"));
+
+                    Scanner scanner = new Scanner(System.in);
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.isEmpty()) {
+                            break;
+                        }
+                        String[] parts = line.split(" ");
+                        Item item = new Item(parts[0], parts[1]);
+                        if (found.contains(item)) {
+                            found.remove(item);
+                            System.out.println("Returned: " + item);
+                        } else {
+                            System.out.println("No " + item + " here");
+                        }
+                    }
+                    System.out.println("Items left: " + found.size());
+                }
+            }
+          Item.java: |
+            public class Item {
+                private String color;
+                private String thing;
+
+                public Item(String color, String thing) {
+                    this.color = color;
+                    this.thing = thing;
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Item)) {
+                        return false;
+                    }
+                    Item other = (Item) compared;
+                    return this.color.equals(other.color) && this.thing.equals(other.thing);
+                }
+
+                public String toString() {
+                    return this.color + " " + this.thing;
+                }
+            }
+        hints:
+          - "Read in a `while (true)` loop that breaks at the empty line. Split each line at the space and make the item: `Item item = new Item(parts[0], parts[1]);`."
+          - "`if (found.contains(item))`, then `found.remove(item);` and print `\"Returned: \" + item`. The new item isn't the object in the list, but it's equal to it, and that's all `contains` and `remove` need."
+        require:
+          - pattern: \.contains\s*\(
+            message: "Check whether an equal item is in the list with `contains`."
+          - pattern: \.remove\s*\(
+            message: "Take the item out of the list with `remove`."
+        forbid:
+          - pattern: \bfor\s*\(
+            message: "Let `contains` and `remove` do the searching, without a loop over the list."
+        tests:
+          - stdin: |+
+              red scarf
+              green hat
+              red scarf
+              red scarf
+
+          - stdin: |+
+              black glove
+              blue umbrella
+              black glove
+
+            hidden: true
+          - stdin: |+
+
+            hidden: true
+          - stdin: |+
+              red umbrella
+              blue scarf
+              red scarf
+
+            hidden: true
+      - task: |
+          What does this program print? `Tag` has no `equals` of its own.
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Tag> tags = new ArrayList<>();
+                  Tag urgent = new Tag("urgent");
+                  tags.add(urgent);
+                  tags.add(new Tag("home"));
+                  System.out.println(tags.contains(urgent));
+                  System.out.println(tags.contains(new Tag("home")));
+                  System.out.println(tags.indexOf(urgent));
+                  System.out.println(tags.indexOf(new Tag("urgent")));
+              }
+          }
+          // ==== Tag.java ====
+          public class Tag {
+              private String name;
+
+              public Tag(String name) {
+                  this.name = name;
+              }
+
+              public String toString() {
+                  return "#" + this.name;
+              }
+          }
+        hints:
+          - "Without an `equals` of its own, Tag uses the one every class gets, which does the same as `==`: an object is equal only to itself."
+          - "`urgent` is the very object in the list, at index 0, so it's found. Each `new Tag(...)` is a new object that isn't in the list, so it's never found."
+
+  - id: object-interaction-returning
+    slug: returning-objects
+    title: Methods that return objects
+    text: |
+      A method can return an object, just as it returns a number or a String. You've seen some already: a getter such as `getAddress()` returns the object in an instance variable, and module 19's `findOldest` returned one of the pets in a list. This step is about methods that **make a new object** and return it:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Photo photo = new Photo(800, 600);
+              Photo turned = photo.rotated();
+              Photo small = photo.scaled(25);
+              System.out.println(photo);
+              System.out.println(turned);
+              System.out.println(small);
+              System.out.println(photo.rotated().scaled(50));
+          }
+      }
+      // ==== Photo.java ====
+      public class Photo {
+          private int width;
+          private int height;
+
+          public Photo(int width, int height) {
+              this.width = width;
+              this.height = height;
+          }
+
+          public Photo rotated() {
+              return new Photo(this.height, this.width);
+          }
+
+          public Photo scaled(int percent) {
+              return new Photo(this.width * percent / 100, this.height * percent / 100);
+          }
+
+          public String toString() {
+              return this.width + " x " + this.height + " pixels";
+          }
+      }
+      ```
+
+      ```output
+      800 x 600 pixels
+      600 x 800 pixels
+      200 x 150 pixels
+      300 x 400 pixels
+      ```
+
+      - The return type is the class: `public Photo rotated()` returns a Photo.
+      - `return new Photo(this.height, this.width);` makes a new Photo from this photo's values and returns it. The photo the method was called on doesn't change: after both calls, `photo` is still 800 x 600.
+      - The caller keeps the new object in a variable, as in `Photo turned = photo.rotated();`, or uses it right away: `photo.rotated().scaled(50)` rotates the photo, and then scales the rotated one.
+      - Like any return value, the new object is lost if the caller doesn't use it. `photo.rotated();` on a line of its own changes nothing.
+
+      ### Changing it, or returning a new one?
+
+      A class could also have a method that turns the photo itself around:
+
+      ```java fragment
+      public void rotate() {
+          int oldWidth = this.width;
+          this.width = this.height;
+          this.height = oldWidth;
+      }
+      ```
+
+      `photo.rotate()` changes that photo, and every variable that refers to it sees the change. `photo.rotated()` leaves it alone and gives back a new photo. Both are fine, and the names tell them apart. Java's Strings always work the second way: `word.toUpperCase()` returns a new String, and `word` stays as it was.
+
+      ### Returning an object that's already there
+
+      The returned object doesn't have to be new. This method returns whichever of two parcels is heavier, either the other one or the parcel it was called on, which is `this`:
+
+      ```java fragment
+      public Parcel heavierOf(Parcel other) {
+          if (other.grams > this.grams) {
+              return other;
+          }
+          return this;
+      }
+      ```
+
+      No new parcel is made: the caller gets a reference to one of the two that already exist.
+
+      **Your turn:** in `Route.java`, write the method `reversed()`. It returns a new Route for the way back: from where this route ends to where it starts. The route it's called on stays as it was. The check runs:
+
+      ```java fragment
+      Route there = new Route("Harbor Town", "Hill Park");
+      Route back = there.reversed();
+      System.out.println(there);
+      System.out.println(back);
+      ```
+
+      and expects:
+
+      ```
+      Harbor Town to Hill Park
+      Hill Park to Harbor Town
+      ```
+    seed:
+      Route.java: |
+        public class Route {
+            private String from;
+            private String to;
+
+            public Route(String from, String to) {
+                this.from = from;
+                this.to = to;
+            }
+
+            // Write the reversed method here.
+
+            public String toString() {
+                return this.from + " to " + this.to;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Route there = new Route("Harbor Town", "Hill Park");
+                Route back = there.reversed();
+                System.out.println(there);
+                System.out.println(back);
+            }
+        }
+    solution:
+      Route.java: |
+        public class Route {
+            private String from;
+            private String to;
+
+            public Route(String from, String to) {
+                this.from = from;
+                this.to = to;
+            }
+
+            public Route reversed() {
+                return new Route(this.to, this.from);
+            }
+
+            public String toString() {
+                return this.from + " to " + this.to;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Route there = new Route("Harbor Town", "Hill Park");
+                Route back = there.reversed();
+                System.out.println(there);
+                System.out.println(back);
+            }
+        }
+    hints:
+      - "The method returns a Route: `public Route reversed() {`."
+      - "Make the new route with the ends swapped, and return it: `return new Route(this.to, this.from);`. Nothing in `this` changes."
+    require:
+      - pattern: \bpublic\s+Route\s+reversed\s*\(\s*\)
+        message: "Write the method as `public Route reversed()`."
+    tests:
+      - call: |
+          Route there = new Route("Harbor Town", "Hill Park");
+          Route back = there.reversed();
+          System.out.println(there);
+          System.out.println(back);
+      - call: |
+          Route route = new Route("Mill End", "Lake View");
+          route.reversed();
+          System.out.println(route);
+          System.out.println(route.reversed().reversed());
+        hidden: true
+      - call: |
+          Route route = new Route("Ash Lane", "Oak Hill");
+          Route back = route.reversed();
+          System.out.println(back == route);
+          System.out.println(back);
+          System.out.println(route);
+        hidden: true
+    more:
+      - task: |
+          A journey is made of legs. In `Leg.java`, write the method `then(Leg next)`. It returns a new Leg that starts where this leg starts and ends where the next leg ends, and its kilometers are the two legs' kilometers added up. Neither leg changes. The check runs:
+
+          ```java fragment
+          Leg first = new Leg("Northport", "Eastvale", 120);
+          Leg second = new Leg("Eastvale", "Southby", 85);
+          Leg whole = first.then(second);
+          System.out.println(whole);
+          System.out.println(first);
+          ```
+
+          and expects:
+
+          ```
+          Northport to Southby, 205 km
+          Northport to Eastvale, 120 km
+          ```
+        seed:
+          Leg.java: |
+            public class Leg {
+                private String from;
+                private String to;
+                private int km;
+
+                public Leg(String from, String to, int km) {
+                    this.from = from;
+                    this.to = to;
+                    this.km = km;
+                }
+
+                // Write the then method here.
+
+                public String toString() {
+                    return this.from + " to " + this.to + ", " + this.km + " km";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Leg first = new Leg("Northport", "Eastvale", 120);
+                    Leg second = new Leg("Eastvale", "Southby", 85);
+                    Leg whole = first.then(second);
+                    System.out.println(whole);
+                    System.out.println(first);
+                }
+            }
+        solution:
+          Leg.java: |
+            public class Leg {
+                private String from;
+                private String to;
+                private int km;
+
+                public Leg(String from, String to, int km) {
+                    this.from = from;
+                    this.to = to;
+                    this.km = km;
+                }
+
+                public Leg then(Leg next) {
+                    return new Leg(this.from, next.to, this.km + next.km);
+                }
+
+                public String toString() {
+                    return this.from + " to " + this.to + ", " + this.km + " km";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Leg first = new Leg("Northport", "Eastvale", 120);
+                    Leg second = new Leg("Eastvale", "Southby", 85);
+                    Leg whole = first.then(second);
+                    System.out.println(whole);
+                    System.out.println(first);
+                }
+            }
+        hints:
+          - "The method takes a Leg and returns a Leg: `public Leg then(Leg next) {`. Inside, `this.from` is where this leg starts, and `next.to` is where the next one ends."
+          - "`return new Leg(this.from, next.to, this.km + next.km);`"
+        require:
+          - pattern: \bpublic\s+Leg\s+then\s*\(\s*Leg\s+\w+\s*\)
+            message: "Write the method as `public Leg then(Leg next)`."
+        tests:
+          - call: |
+              Leg first = new Leg("Northport", "Eastvale", 120);
+              Leg second = new Leg("Eastvale", "Southby", 85);
+              Leg whole = first.then(second);
+              System.out.println(whole);
+              System.out.println(first);
+          - call: |
+              Leg a = new Leg("Brook", "Marsh", 12);
+              Leg b = new Leg("Marsh", "Ferry", 30);
+              Leg c = new Leg("Ferry", "Cliff", 7);
+              System.out.println(a.then(b).then(c));
+              System.out.println(b);
+              System.out.println(c);
+            hidden: true
+          - call: |
+              Leg up = new Leg("Base", "Top", 4);
+              Leg down = new Leg("Top", "Base", 4);
+              Leg trip = up.then(down);
+              System.out.println(trip);
+              System.out.println(trip == up);
+              System.out.println(up);
+            hidden: true
+      - task: |
+          What does this program print? A cutting is a small piece taken from a plant to grow a new one.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Plant mother = new Plant("mint", 20);
+                  Plant same = mother;
+                  Plant young = mother.cutting();
+                  same.grow(10);
+                  young.grow(3);
+                  System.out.println(mother);
+                  System.out.println(young);
+                  System.out.println(mother.cutting());
+              }
+          }
+          // ==== Plant.java ====
+          public class Plant {
+              private String name;
+              private int height;
+
+              public Plant(String name, int height) {
+                  this.name = name;
+                  this.height = height;
+              }
+
+              public void grow(int cm) {
+                  this.height = this.height + cm;
+              }
+
+              public Plant cutting() {
+                  return new Plant(this.name, 5);
+              }
+
+              public String toString() {
+                  return this.name + ", " + this.height + " cm";
+              }
+          }
+        hints:
+          - "`same = mother` copies the reference: `same` and `mother` are one plant, so `same.grow(10)` makes it 30 cm."
+          - "`cutting()` makes a new, separate Plant of 5 cm each time it's called. `young` then grows 3 cm on its own, and the last line prints a brand-new cutting."
+
+  - id: object-interaction-together
+    slug: objects-working-together
+    title: Several objects working together
+    text: |
+      Programs are usually made of several classes, each with a job of its own, and their objects use each other. Here's a small football tournament:
+
+      - A `Team` keeps its own name and points.
+      - A `Match` knows its two teams and the goals they scored, and the rule for giving points: 3 to the winner, and 1 to each team for a draw.
+      - `main` only sets things up and prints.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Team owls = new Team("Owls");
+              Team foxes = new Team("Foxes");
+              Team bears = new Team("Bears");
+
+              Match first = new Match(owls, foxes, 2, 1);
+              Match second = new Match(foxes, bears, 0, 0);
+              Match third = new Match(bears, owls, 3, 1);
+              first.givePoints();
+              second.givePoints();
+              third.givePoints();
+
+              System.out.println(first);
+              System.out.println(second);
+              System.out.println(third);
+              System.out.println(owls);
+              System.out.println(foxes);
+              System.out.println(bears);
+          }
+      }
+      // ==== Match.java ====
+      public class Match {
+          private Team home;
+          private Team away;
+          private int homeGoals;
+          private int awayGoals;
+
+          public Match(Team home, Team away, int homeGoals, int awayGoals) {
+              this.home = home;
+              this.away = away;
+              this.homeGoals = homeGoals;
+              this.awayGoals = awayGoals;
+          }
+
+          public void givePoints() {
+              if (this.homeGoals > this.awayGoals) {
+                  this.home.addPoints(3);
+              } else if (this.awayGoals > this.homeGoals) {
+                  this.away.addPoints(3);
+              } else {
+                  this.home.addPoints(1);
+                  this.away.addPoints(1);
+              }
+          }
+
+          public String toString() {
+              return this.home.getName() + " " + this.homeGoals + "-" + this.awayGoals + " " + this.away.getName();
+          }
+      }
+      // ==== Team.java ====
+      public class Team {
+          private String name;
+          private int points;
+
+          public Team(String name) {
+              this.name = name;
+              this.points = 0;
+          }
+
+          public void addPoints(int points) {
+              this.points = this.points + points;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public String toString() {
+              return this.name + ", points: " + this.points;
+          }
+      }
+      ```
+
+      ```output
+      Owls 2-1 Foxes
+      Foxes 0-0 Bears
+      Bears 3-1 Owls
+      Owls, points: 3
+      Foxes, points: 1
+      Bears, points: 4
+      ```
+
+      - A Match has two Team objects as instance variables (step 2). They aren't copies: `first` and `third` both refer to the one Owls object that `owls` refers to, so the points from both matches add up in the same team.
+      - `givePoints` changes the teams through their own method, `addPoints` (step 1). It can't touch a team's `points` directly, and it doesn't need to.
+      - The match's `toString` asks the teams for their names with `getName()`, because the result line should show only the names, not the points.
+
+      Each class does one job. Team doesn't know the rules of football, and Match doesn't keep a table. A tournament that gave 2 points for a win would change only `givePoints`, and a team that also counted its goals would change only Team and the lines that call it.
+
+      ### Planning a program of several classes
+
+      When you plan a program like this, go through its data and its rules. For each piece of data, ask which object it belongs to: the points belong to a team, the goals to a match. For each rule, ask which class knows enough to apply it: giving points needs both teams and both scores, and only a Match has all four. The class that has the data is usually the one that gets the method.
+
+      **Your turn:** add a method `winner()` to `Match`. It returns the team that scored more goals, or `null` when the match is a draw (`null` means *no object*, module 22). It returns one of the match's own Team objects, not a new team. `Team.java` and `Main.java` are ready, and `main` prints the winner's name, or `Draw`. For the matches in `main`, the program prints:
+
+      ```
+      Owls
+      Bears
+      Draw
+      ```
+    seed:
+      Match.java: |
+        public class Match {
+            private Team home;
+            private Team away;
+            private int homeGoals;
+            private int awayGoals;
+
+            public Match(Team home, Team away, int homeGoals, int awayGoals) {
+                this.home = home;
+                this.away = away;
+                this.homeGoals = homeGoals;
+                this.awayGoals = awayGoals;
+            }
+
+            // Write the winner method here.
+
+            public String toString() {
+                return this.home.getName() + " " + this.homeGoals + "-" + this.awayGoals + " " + this.away.getName();
+            }
+        }
+      Team.java: |
+        public class Team {
+            private String name;
+            private int points;
+
+            public Team(String name) {
+                this.name = name;
+                this.points = 0;
+            }
+
+            public void addPoints(int points) {
+                this.points = this.points + points;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public String toString() {
+                return this.name + ", points: " + this.points;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Team owls = new Team("Owls");
+                Team foxes = new Team("Foxes");
+                Team bears = new Team("Bears");
+                printWinner(new Match(owls, foxes, 2, 1));
+                printWinner(new Match(owls, bears, 0, 2));
+                printWinner(new Match(foxes, bears, 1, 1));
+            }
+
+            public static void printWinner(Match match) {
+                Team winner = match.winner();
+                if (winner == null) {
+                    System.out.println("Draw");
+                } else {
+                    System.out.println(winner.getName());
+                }
+            }
+        }
+    solution:
+      Match.java: |
+        public class Match {
+            private Team home;
+            private Team away;
+            private int homeGoals;
+            private int awayGoals;
+
+            public Match(Team home, Team away, int homeGoals, int awayGoals) {
+                this.home = home;
+                this.away = away;
+                this.homeGoals = homeGoals;
+                this.awayGoals = awayGoals;
+            }
+
+            public Team winner() {
+                if (this.homeGoals > this.awayGoals) {
+                    return this.home;
+                }
+                if (this.awayGoals > this.homeGoals) {
+                    return this.away;
+                }
+                return null;
+            }
+
+            public String toString() {
+                return this.home.getName() + " " + this.homeGoals + "-" + this.awayGoals + " " + this.away.getName();
+            }
+        }
+      Team.java: |
+        public class Team {
+            private String name;
+            private int points;
+
+            public Team(String name) {
+                this.name = name;
+                this.points = 0;
+            }
+
+            public void addPoints(int points) {
+                this.points = this.points + points;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public String toString() {
+                return this.name + ", points: " + this.points;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Team owls = new Team("Owls");
+                Team foxes = new Team("Foxes");
+                Team bears = new Team("Bears");
+                printWinner(new Match(owls, foxes, 2, 1));
+                printWinner(new Match(owls, bears, 0, 2));
+                printWinner(new Match(foxes, bears, 1, 1));
+            }
+
+            public static void printWinner(Match match) {
+                Team winner = match.winner();
+                if (winner == null) {
+                    System.out.println("Draw");
+                } else {
+                    System.out.println(winner.getName());
+                }
+            }
+        }
+    hints:
+      - "The method returns a Team: `public Team winner() {`. Compare `this.homeGoals` and `this.awayGoals`."
+      - "Return the team itself: `return this.home;` or `return this.away;`. When neither scored more, `return null;`."
+    require:
+      - pattern: \bpublic\s+Team\s+winner\s*\(\s*\)
+        message: "Write the method as `public Team winner()`."
+      - pattern: \breturn\s+null\s*;
+        message: "For a draw, return `null`."
+    forbid:
+      - pattern: \bnew\s+Team\s*\([^)]*\)[^;]*;[^}]*\breturn\b
+        message: "Return one of the match's own teams, `this.home` or `this.away`, not a new Team."
+    tests:
+      - name: The program
+      - call: |
+          Team kites = new Team("Kites");
+          Team moles = new Team("Moles");
+          Match match = new Match(kites, moles, 0, 5);
+          System.out.println(match.winner() == moles);
+          System.out.println(match.winner() == kites);
+          System.out.println(new Match(kites, moles, 3, 3).winner() == null);
+        hidden: true
+      - call: |
+          Team hares = new Team("Hares");
+          Team crows = new Team("Crows");
+          hares.addPoints(9);
+          Match match = new Match(hares, crows, 4, 3);
+          System.out.println(match.winner());
+          System.out.println(new Match(crows, hares, 0, 0).winner());
+        hidden: true
+    more:
+      - task: |
+          What does this program print? It uses the `Team` and `Match` classes from the lesson. Watch when points are given, and which variables refer to the same team.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Team owls = new Team("Owls");
+                  Team foxes = new Team("Foxes");
+                  Team favorite = foxes;
+                  Match first = new Match(owls, foxes, 1, 1);
+                  Match second = new Match(foxes, owls, 2, 0);
+                  Match third = new Match(owls, favorite, 1, 3);
+                  first.givePoints();
+                  second.givePoints();
+                  System.out.println(owls);
+                  System.out.println(favorite);
+                  third.givePoints();
+                  System.out.println(foxes);
+              }
+          }
+          // ==== Match.java ====
+          public class Match {
+              private Team home;
+              private Team away;
+              private int homeGoals;
+              private int awayGoals;
+
+              public Match(Team home, Team away, int homeGoals, int awayGoals) {
+                  this.home = home;
+                  this.away = away;
+                  this.homeGoals = homeGoals;
+                  this.awayGoals = awayGoals;
+              }
+
+              public void givePoints() {
+                  if (this.homeGoals > this.awayGoals) {
+                      this.home.addPoints(3);
+                  } else if (this.awayGoals > this.homeGoals) {
+                      this.away.addPoints(3);
+                  } else {
+                      this.home.addPoints(1);
+                      this.away.addPoints(1);
+                  }
+              }
+          }
+          // ==== Team.java ====
+          public class Team {
+              private String name;
+              private int points;
+
+              public Team(String name) {
+                  this.name = name;
+                  this.points = 0;
+              }
+
+              public void addPoints(int points) {
+                  this.points = this.points + points;
+              }
+
+              public String toString() {
+                  return this.name + ", points: " + this.points;
+              }
+          }
+        hints:
+          - "Making a Match gives no points: only `givePoints()` does. After the first two matches, the draw has given each team 1 point, and the Foxes won the second match for 3 more."
+          - "`favorite` refers to the same team as `foxes`. The third match is a Foxes win too, but its points come only when `third.givePoints()` runs, after the first two lines are printed."
+      - task: |
+          An auction keeps the best bid so far in its instance variable `best`, which is `null` until the first bid comes in. `Bid.java` is ready, with the method `isHigherThan(Bid other)`. In `Auction.java`, write the method `offer(Bid bid)`: the bid becomes the best one when there's no best bid yet, or when it's higher than the best one. A bid that's only as high as the best one doesn't count, so the earlier bidder stays ahead.
+
+          `Main.java` is ready: it reads bids such as `Mia 40` (a name and euros) until an empty line, and prints the auction before and after. For the input below, it prints:
+
+          ```input
+          Mia 40
+          Sam 55
+          Ada 50
+          Leo 55
+
+          ```
+
+          ```
+          Painting: no bids yet
+          Painting: Sam (55 euros)
+          ```
+        seed:
+          Auction.java: |
+            public class Auction {
+                private String item;
+                private Bid best;
+
+                public Auction(String item) {
+                    this.item = item;
+                    this.best = null;
+                }
+
+                // Write the offer method here.
+
+                public String toString() {
+                    if (this.best == null) {
+                        return this.item + ": no bids yet";
+                    }
+                    return this.item + ": " + this.best;
+                }
+            }
+          Bid.java: |
+            public class Bid {
+                private String bidder;
+                private int euros;
+
+                public Bid(String bidder, int euros) {
+                    this.bidder = bidder;
+                    this.euros = euros;
+                }
+
+                public boolean isHigherThan(Bid other) {
+                    return this.euros > other.euros;
+                }
+
+                public String toString() {
+                    return this.bidder + " (" + this.euros + " euros)";
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Auction auction = new Auction("Painting");
+                    System.out.println(auction);
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.isEmpty()) {
+                            break;
+                        }
+                        String[] parts = line.split(" ");
+                        auction.offer(new Bid(parts[0], Integer.valueOf(parts[1])));
+                    }
+                    System.out.println(auction);
+                }
+            }
+        solution:
+          Auction.java: |
+            public class Auction {
+                private String item;
+                private Bid best;
+
+                public Auction(String item) {
+                    this.item = item;
+                    this.best = null;
+                }
+
+                public void offer(Bid bid) {
+                    if (this.best == null || bid.isHigherThan(this.best)) {
+                        this.best = bid;
+                    }
+                }
+
+                public String toString() {
+                    if (this.best == null) {
+                        return this.item + ": no bids yet";
+                    }
+                    return this.item + ": " + this.best;
+                }
+            }
+          Bid.java: |
+            public class Bid {
+                private String bidder;
+                private int euros;
+
+                public Bid(String bidder, int euros) {
+                    this.bidder = bidder;
+                    this.euros = euros;
+                }
+
+                public boolean isHigherThan(Bid other) {
+                    return this.euros > other.euros;
+                }
+
+                public String toString() {
+                    return this.bidder + " (" + this.euros + " euros)";
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Auction auction = new Auction("Painting");
+                    System.out.println(auction);
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.isEmpty()) {
+                            break;
+                        }
+                        String[] parts = line.split(" ");
+                        auction.offer(new Bid(parts[0], Integer.valueOf(parts[1])));
+                    }
+                    System.out.println(auction);
+                }
+            }
+        hints:
+          - "Check for `null` first: `if (this.best == null || bid.isHigherThan(this.best))`. With `||`, the second part runs only when there is a best bid, so `isHigherThan` never gets `null`."
+          - "Inside the `if`, `this.best = bid;`: the auction now refers to the new bid."
+        require:
+          - pattern: \bpublic\s+void\s+offer\s*\(\s*Bid\s+\w+\s*\)
+            message: "Write the method as `public void offer(Bid bid)`."
+          - pattern: \.isHigherThan\s*\(
+            message: "Compare the bids with the bid's `isHigherThan` method."
+        tests:
+          - stdin: |+
+              Mia 40
+              Sam 55
+              Ada 50
+              Leo 55
+
+          - stdin: |+
+
+            hidden: true
+          - stdin: |+
+              Zoe 5
+
+            hidden: true
+          - stdin: |+
+              Ann 10
+              Bo 20
+              Cy 30
+              Di 25
+
+            hidden: true
+          - call: |
+              Auction auction = new Auction("Lamp");
+              auction.offer(new Bid("Kim", 10));
+              auction.offer(new Bid("Lou", 10));
+              auction.offer(new Bid("Max", 9));
+              System.out.println(auction);
+            hidden: true
+
+  - id: object-interaction-review
+    slug: end-of-part-5
+    title: Putting it all together
+    text: |
+      This module's tools often turn up together, even in a single class. Here they are side by side:
+
+      | Tool | Example |
+      | --- | --- |
+      | An object as a parameter | `printer.print(document)` |
+      | An object as an instance variable | `private Address address;` |
+      | A parameter of the class's own type | `big.isHeavierThan(small)` |
+      | Equal contents, not the same object | `mine.equals(yours)` |
+      | List methods that use `equals` | `booked.contains(new Seat("B", 7))` |
+      | A method that returns a new object | `photo.rotated()` |
+
+      A position on a grid of squares uses four of them. A position can make the position next to it, tell how many steps away another position is, and tell whether it's equal to another:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Position start = new Position(0, 0);
+              Position shop = new Position(3, -2);
+              Position next = start.moved(1, 0);
+              System.out.println(next);
+              System.out.println(start.stepsTo(shop));
+              System.out.println(next.moved(2, -2).equals(shop));
+              System.out.println(start);
+          }
+      }
+      // ==== Position.java ====
+      public class Position {
+          private int x;
+          private int y;
+
+          public Position(int x, int y) {
+              this.x = x;
+              this.y = y;
+          }
+
+          public Position moved(int dx, int dy) {
+              return new Position(this.x + dx, this.y + dy);
+          }
+
+          public int stepsTo(Position other) {
+              return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Position)) {
+                  return false;
+              }
+              Position other = (Position) compared;
+              return this.x == other.x && this.y == other.y;
+          }
+
+          public String toString() {
+              return "(" + this.x + ", " + this.y + ")";
+          }
+      }
+      ```
+
+      ```output
+      (1, 0)
+      5
+      true
+      (0, 0)
+      ```
+
+      - `moved` returns a new Position, so `start` stays at (0, 0), as the last line shows.
+      - `stepsTo` takes another Position and reads its private `x` and `y`. It counts the steps from square to square along the rows and columns, without going diagonally: 3 steps across and 2 steps down make 5.
+      - `next.moved(2, -2)` is a new object, never the one in `shop`, but its contents are the same, so `equals` says they're equal. With the `equals` every class gets, it would say false.
+
+      The challenges below build on this class: a robot that moves around the grid, and a treasure hunt that uses a list of positions.
+
+      ### The end of part 5
+
+      This step ends the material of the MOOC's fifth part. Part 5 went deeper into object-oriented programming. You planned classes and gave methods and constructors several versions by overloading them. You saw that a variable of a class type holds a reference to an object, that two variables can refer to the same object, and that a reference can be `null`. In this module, objects started working together: as parameters, as instance variables of other objects, compared with `equals`, found in lists and returned from methods. Next, part 6 puts lists inside objects. The MOOC closes part 5 with [the MOOC's conclusion page](https://java-programming.mooc.fi/part-5/5-conclusion) on its own site, for reading only.
+
+      **Your turn:** a robot moves on the grid, and `Position.java` is the class from above. `Robot.java` has the robot's name and position. Write two methods in it:
+
+      - `move(String direction)` moves the robot one square: `up` adds 1 to y, `down` takes 1 from y, `right` adds 1 to x and `left` takes 1 from x. Any other direction does nothing. Use the position's `moved` method, and keep the new position it returns.
+      - `isAt(Position place)` returns `true` when the robot is at that place. Compare the positions with `equals`.
+
+      The check runs:
+
+      ```java fragment
+      Robot robo = new Robot("Robo", new Position(0, 0));
+      robo.move("up");
+      robo.move("up");
+      robo.move("right");
+      System.out.println(robo);
+      System.out.println(robo.isAt(new Position(1, 2)));
+      System.out.println(robo.isAt(new Position(2, 1)));
+      ```
+
+      and expects:
+
+      ```
+      Robo at (1, 2)
+      true
+      false
+      ```
+    seed:
+      Robot.java: |
+        public class Robot {
+            private String name;
+            private Position position;
+
+            public Robot(String name, Position start) {
+                this.name = name;
+                this.position = start;
+            }
+
+            // Write the methods move and isAt here.
+
+            public String toString() {
+                return this.name + " at " + this.position;
+            }
+        }
+      Position.java: |
+        public class Position {
+            private int x;
+            private int y;
+
+            public Position(int x, int y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            public Position moved(int dx, int dy) {
+                return new Position(this.x + dx, this.y + dy);
+            }
+
+            public int stepsTo(Position other) {
+                return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Position)) {
+                    return false;
+                }
+                Position other = (Position) compared;
+                return this.x == other.x && this.y == other.y;
+            }
+
+            public String toString() {
+                return "(" + this.x + ", " + this.y + ")";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Robot robo = new Robot("Robo", new Position(0, 0));
+                robo.move("up");
+                robo.move("up");
+                robo.move("right");
+                System.out.println(robo);
+                System.out.println(robo.isAt(new Position(1, 2)));
+                System.out.println(robo.isAt(new Position(2, 1)));
+            }
+        }
+    solution:
+      Robot.java: |
+        public class Robot {
+            private String name;
+            private Position position;
+
+            public Robot(String name, Position start) {
+                this.name = name;
+                this.position = start;
+            }
+
+            public void move(String direction) {
+                if (direction.equals("up")) {
+                    this.position = this.position.moved(0, 1);
+                } else if (direction.equals("down")) {
+                    this.position = this.position.moved(0, -1);
+                } else if (direction.equals("right")) {
+                    this.position = this.position.moved(1, 0);
+                } else if (direction.equals("left")) {
+                    this.position = this.position.moved(-1, 0);
+                }
+            }
+
+            public boolean isAt(Position place) {
+                return this.position.equals(place);
+            }
+
+            public String toString() {
+                return this.name + " at " + this.position;
+            }
+        }
+      Position.java: |
+        public class Position {
+            private int x;
+            private int y;
+
+            public Position(int x, int y) {
+                this.x = x;
+                this.y = y;
+            }
+
+            public Position moved(int dx, int dy) {
+                return new Position(this.x + dx, this.y + dy);
+            }
+
+            public int stepsTo(Position other) {
+                return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Position)) {
+                    return false;
+                }
+                Position other = (Position) compared;
+                return this.x == other.x && this.y == other.y;
+            }
+
+            public String toString() {
+                return "(" + this.x + ", " + this.y + ")";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Robot robo = new Robot("Robo", new Position(0, 0));
+                robo.move("up");
+                robo.move("up");
+                robo.move("right");
+                System.out.println(robo);
+                System.out.println(robo.isAt(new Position(1, 2)));
+                System.out.println(robo.isAt(new Position(2, 1)));
+            }
+        }
+    hints:
+      - "`moved` doesn't change the position: it returns a new one. Keep it in the robot's instance variable: `this.position = this.position.moved(0, 1);` for `up`, and the same with other numbers for the other directions."
+      - "`isAt` compares the robot's position with the one it's given: `return this.position.equals(place);`. With `==` it would be false, because the check's `new Position(1, 2)` is a different object."
+    require:
+      - pattern: \.moved\s*\(
+        message: "Move the robot with the position's `moved` method, and keep the Position it returns."
+      - pattern: \bposition\s*\.\s*equals\s*\(
+        message: "In `isAt`, compare the positions with `equals`."
+    tests:
+      - call: |
+          Robot robo = new Robot("Robo", new Position(0, 0));
+          robo.move("up");
+          robo.move("up");
+          robo.move("right");
+          System.out.println(robo);
+          System.out.println(robo.isAt(new Position(1, 2)));
+          System.out.println(robo.isAt(new Position(2, 1)));
+      - call: |
+          Position home = new Position(5, 5);
+          Robot bolt = new Robot("Bolt", home);
+          bolt.move("left");
+          bolt.move("down");
+          bolt.move("down");
+          bolt.move("jump");
+          System.out.println(bolt);
+          System.out.println(home);
+          System.out.println(bolt.isAt(new Position(4, 3)) + " " + bolt.isAt(home));
+        hidden: true
+      - call: |
+          Robot rover = new Robot("Rover", new Position(-1, 2));
+          System.out.println(rover.isAt(new Position(-1, 2)));
+          rover.move("right");
+          rover.move("left");
+          rover.move("left");
+          System.out.println(rover);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? It uses the `Position` class from the lesson, and a list of the places visited so far.
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Position> visited = new ArrayList<>();
+                  Position here = new Position(0, 0);
+                  visited.add(here);
+                  here = here.moved(1, 0);
+                  visited.add(here);
+                  here = here.moved(-1, 0);
+                  System.out.println(here);
+                  System.out.println(visited.contains(here));
+                  System.out.println(here == visited.get(0));
+                  System.out.println(visited.indexOf(new Position(1, 0)));
+              }
+          }
+          // ==== Position.java ====
+          public class Position {
+              private int x;
+              private int y;
+
+              public Position(int x, int y) {
+                  this.x = x;
+                  this.y = y;
+              }
+
+              public Position moved(int dx, int dy) {
+                  return new Position(this.x + dx, this.y + dy);
+              }
+
+              public boolean equals(Object compared) {
+                  if (this == compared) {
+                      return true;
+                  }
+                  if (!(compared instanceof Position)) {
+                      return false;
+                  }
+                  Position other = (Position) compared;
+                  return this.x == other.x && this.y == other.y;
+              }
+
+              public String toString() {
+                  return "(" + this.x + ", " + this.y + ")";
+              }
+          }
+        hints:
+          - "Each `moved` call makes a new Position, and `here` is set to refer to it. After moving right and back left, `here` is at (0, 0) again, but it's a third object, not the first one."
+          - "`contains` and `indexOf` use `equals`, so they find equal positions. `==` asks about the very same object."
+      - task: |
+          A treasure hunt. The list `treasures` in `Main.java` holds the positions of three hidden coins, and `Position.java` is the class from the lesson. The player starts at (0, 0). Read moves, `up`, `down`, `left` or `right`, one per line, until an empty line, and move the player one square each time, with `moved`. After each move, if a coin is at the new position, remove it from the list and print `Found a coin at ` and the position. At the end, print how many coins are left. Let `contains` and `remove` do the searching, without a loop over the list. For the input below, the program prints:
+
+          ```input
+          right
+          up
+          right
+          up
+          left
+
+          ```
+
+          ```
+          Found a coin at (1, 0)
+          Found a coin at (2, 2)
+          Coins left: 1
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Position> treasures = new ArrayList<>();
+                    treasures.add(new Position(1, 0));
+                    treasures.add(new Position(2, 2));
+                    treasures.add(new Position(-1, 3));
+
+                    Scanner scanner = new Scanner(System.in);
+                    Position here = new Position(0, 0);
+
+                }
+            }
+          Position.java: |
+            public class Position {
+                private int x;
+                private int y;
+
+                public Position(int x, int y) {
+                    this.x = x;
+                    this.y = y;
+                }
+
+                public Position moved(int dx, int dy) {
+                    return new Position(this.x + dx, this.y + dy);
+                }
+
+                public int stepsTo(Position other) {
+                    return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Position)) {
+                        return false;
+                    }
+                    Position other = (Position) compared;
+                    return this.x == other.x && this.y == other.y;
+                }
+
+                public String toString() {
+                    return "(" + this.x + ", " + this.y + ")";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Position> treasures = new ArrayList<>();
+                    treasures.add(new Position(1, 0));
+                    treasures.add(new Position(2, 2));
+                    treasures.add(new Position(-1, 3));
+
+                    Scanner scanner = new Scanner(System.in);
+                    Position here = new Position(0, 0);
+                    while (true) {
+                        String move = scanner.nextLine();
+                        if (move.isEmpty()) {
+                            break;
+                        }
+                        if (move.equals("up")) {
+                            here = here.moved(0, 1);
+                        } else if (move.equals("down")) {
+                            here = here.moved(0, -1);
+                        } else if (move.equals("right")) {
+                            here = here.moved(1, 0);
+                        } else if (move.equals("left")) {
+                            here = here.moved(-1, 0);
+                        }
+                        if (treasures.contains(here)) {
+                            treasures.remove(here);
+                            System.out.println("Found a coin at " + here);
+                        }
+                    }
+                    System.out.println("Coins left: " + treasures.size());
+                }
+            }
+          Position.java: |
+            public class Position {
+                private int x;
+                private int y;
+
+                public Position(int x, int y) {
+                    this.x = x;
+                    this.y = y;
+                }
+
+                public Position moved(int dx, int dy) {
+                    return new Position(this.x + dx, this.y + dy);
+                }
+
+                public int stepsTo(Position other) {
+                    return Math.abs(this.x - other.x) + Math.abs(this.y - other.y);
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Position)) {
+                        return false;
+                    }
+                    Position other = (Position) compared;
+                    return this.x == other.x && this.y == other.y;
+                }
+
+                public String toString() {
+                    return "(" + this.x + ", " + this.y + ")";
+                }
+            }
+        hints:
+          - "In the loop, read a move and `break` at the empty line. Then move with, for example, `here = here.moved(1, 0);` for `right`: `moved` returns the new position, and `here` must be set to it."
+          - "After the move: `if (treasures.contains(here)) { treasures.remove(here); ... }`. The list's positions are other objects than `here`, but `equals` finds the equal one. At the end, `treasures.size()` is the number of coins left."
+        require:
+          - pattern: \.moved\s*\(
+            message: "Move the player with the position's `moved` method."
+          - pattern: \.remove\s*\(
+            message: "Take a found coin out of the list with `remove`."
+        forbid:
+          - pattern: \bfor\s*\(
+            message: "Let `contains` and `remove` find the coin, without a loop over the list."
+        tests:
+          - stdin: |+
+              right
+              up
+              right
+              up
+              left
+
+          - stdin: |+
+              right
+              left
+              right
+
+            hidden: true
+          - stdin: |+
+
+            hidden: true
+          - stdin: |+
+              left
+              up
+              up
+              up
+              down
+              right
+              right
+              right
+              down
+              down
+
+            hidden: true

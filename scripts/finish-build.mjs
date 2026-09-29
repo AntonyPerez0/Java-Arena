@@ -1,11 +1,11 @@
-// After vite build: fills in the service worker's file list and version, and writes the sitemap.
+// After vite build and scripts/prerender.mjs: fills in the service worker's file list and version,
+// and checks the workers' size budgets.
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
 const dist = join(root, 'dist');
-const siteUrl = (process.env.SITE_URL ?? 'https://antonyperez0.github.io/Java-Arena').replace(/\/$/, '');
 
 function walk(dir) {
   const out = [];
@@ -33,13 +33,7 @@ const sw = readFileSync(swPath, 'utf8')
   .replace('const ASSETS = [];', `const ASSETS = ${JSON.stringify(assets)};`);
 writeFileSync(swPath, sw);
 
-const pages = ['', 'bench/'];
-writeFileSync(
-  join(dist, 'sitemap.xml'),
-  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages.map((p) => `  <url><loc>${siteUrl}/${p}</loc></url>`).join('\n')}\n</urlset>\n`,
-);
-writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}/sitemap.xml\n`);
-console.log(`finish-build: service worker ${version} with ${assets.length} files; sitemap with ${pages.length} pages`);
+console.log(`finish-build: service worker ${version} with ${assets.length} files`);
 
 // Lighthouse's script budget only sees the page's own scripts, so the workers get their own budget.
 const WORKER_BUDGET = { 'compile.worker': 100_000, 'run.worker': 600_000 };

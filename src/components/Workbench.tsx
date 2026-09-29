@@ -1,0 +1,246 @@
+import { useCallback, useRef, useState } from "react";
+import { Lightbulb, Play } from "lucide-react";
+import type { Exercise } from "../content/types";
+import { grade, runOnly, type FreeRun, type GradeResult } from "../grader/grade";
+import { blankMatches, fillTemplate, parseTemplate } from "../grader/assemble.js";
+import type { ChallengeProgress } from "../state/store";
+import type { ReportInfo } from "../lib/site";
+import CodeEditor from "./CodeEditor";
+import FillCode from "./FillCode";
+import Results, { DiagnosticList } from "./Results";
+import Markdown from "./Markdown";
+import { CodeView } from "./highlight";
+import SymbolBar from "./SymbolBar";
+import ReportLink from "./ReportLink";
+import { DownloadCard, EngineErrorCard, UnsupportedCard, useEngineAutoload, useEngineStatus } from "./Engine";
+import { engineSupported } from "../engine/client";
+
+type Props = {
+  ex: Exercise;
+  progress?: ChallengeProgress;
+  onChange: (patch: Partial<ChallengeProgress>) => void;
+  onPass: (info: { hintsUsed: number; sawSolution: boolean }) => void;
+  /** What a "Report a problem" issue says (the code and last result are added). */
+  report: Omit<ReportInfo, "code" | "result">;
+};
+
+/** A short summary of a result for screen readers; the results panel has the details. */
+function announce(r: GradeResult): string {
+  if (r.status === "pass") return "All tests passed.";
+  if (r.status === "compile-error") return "It didn't compile. The errors are listed below the editor.";
+  if (r.status === "internal-error") return "The Java engine couldn't check this. Try again.";
+  const failed = r.tests.filter((t) => !t.pass).length;
+  const rules = r.ruleProblems.length ? ` ${r.ruleProblems.length} rule${r.ruleProblems.length > 1 ? "s" : ""} not met.` : "";
+  return `${failed ? `${failed} of ${r.tests.length} tests failed.` : "All tests passed, but"}${rules} Details are below the editor.`;
+}
+
+const SOLUTION_AFTER_ATTEMPTS = 3;
+
+/** The editor (or the fill-in code), Check, Run with my input, results, hints and the solution. */
+export default function Workbench({ ex, progress, onChange, onPass, report }: Props) {
+  const isFill = ex.kind === "fill";
+  const blanksOf = parseTemplate(ex.seed).blanks as { answer: string; accept: string[] }[];
+  const [code, setCode] = useState(progress?.code ?? ex.seed);
+  const [blanks, setBlanks] = useState<string[]>(progress?.blanks ?? blanksOf.map(() => ""));
+  const [busy, setBusy] = useState<"check" | "run" | null>(null);
+  const [result, setResult] = useState<GradeResult | null>(null);
+  const [showSolution, setShowSolution] = useState(false);
+  const [stdin, setStdin] = useState(ex.tests[0]?.stdin ?? "");
+  const [freeRun, setFreeRun] = useState<FreeRun | null>(null);
+  const [showConsole, setShowConsole] = useState(false);
+  // Counts finished checks (the browser tests wait on it).
+  const [checks, setChecks] = useState(0);
+  const status = useEngineStatus();
+  const askFirst = useEngineAutoload();
+  const busyRef = useRef(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const hintsUsed = progress?.hintsUsed ?? 0;
+  const attempts = progress?.attempts ?? 0;
+  const sawSolution = !!progress?.sawSolution;
+
+  const source = isFill ? fillTemplate(ex.seed, blanks) : code;
+
+  const check = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy("check");
+    setFreeRun(null);
+    try {
+      const r = await grade(ex, source);
+      setResult(r);
+      setChecks((n) => n + 1);
+      if (r.status !== "internal-error") onChange({ attempts: attempts + 1 });
+      // On a desktop the editor fills the window, so bring the results into view.
+      requestAnimationFrame(() =>
+        boxRef.current?.querySelector(".results")?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }),
+      );
+      if (r.status === "pass") onPass({ hintsUsed, sawSolution });
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
+  }, [ex, source, onPass, onChange, hintsUsed, sawSolution, attempts]);
+
+  const runFree = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy("run");
+    try {
+      setFreeRun(await runOnly(source, stdin));
+      setChecks((n) => n + 1);
+    } finally {
+      busyRef.current = false;
+      setBusy(null);
+    }
+  };
+
+  const reset = () => {
+    if (!confirm("Reset this challenge to its starting code? Your changes will be lost.")) return;
+    setCode(ex.seed);
+    setBlanks(blanksOf.map(() => ""));
+    setResult(null);
+    onChange({ code: ex.seed, blanks: blanksOf.map(() => "") });
+  };
+
+  const wrongBlanks = isFill && result && result.status !== "pass" ? blanksOf.map((b, i) => !blankMatches(b, blanks[i])) : [];
+  const canShowSolution = hintsUsed >= ex.hints.length || attempts >= SOLUTION_AFTER_ATTEMPTS;
+  const waiting = status.state !== "ready";
+  const unsupported = !engineSupported();
+  const busyLabel = waiting ? (status.state === "loading" && status.stage !== "start" ? `Loading Java ${Math.round((status.loaded / Math.max(status.total, 1)) * 100)}%…` : "Starting Java…") : busy === "run" ? "Running…" : "Checking…";
+
+  return (
+    <div className="workbench" ref={boxRef} data-checks={checks}>
+      {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="Checking your code" />}
+      {status.state === "error" && !unsupported && <EngineErrorCard message={status.message} />}
+      {isFill ? (
+        <FillCode
+          template={ex.seed}
+          values={blanks}
+          wrong={wrongBlanks}
+          autoFocus={false}
+          onChange={(v) => {
+            setBlanks(v);
+            onChange({ blanks: v });
+          }}
+          onSubmit={check}
+        />
+      ) : (
+        <CodeEditor
+          value={code}
+          onChange={(v) => {
+            setCode(v);
+            onChange({ code: v });
+          }}
+          onRun={check}
+          diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined}
+        />
+      )}
+      <SymbolBar container={boxRef} />
+
+      <div className="actions">
+        <button type="button" className="btn btn-primary" id="check" onClick={check} aria-busy={busy === "check" || undefined} aria-keyshortcuts="Control+Enter Meta+Enter" disabled={unsupported}>
+          {busy === "check" ? (
+            busyLabel
+          ) : (
+            <>
+              Check <kbd aria-hidden="true">Ctrl ↵</kbd>
+            </>
+          )}
+        </button>
+        {!isFill && (
+          <button type="button" className="btn" aria-expanded={showConsole} onClick={() => setShowConsole(!showConsole)} disabled={unsupported}>
+            {showConsole ? "Hide my input" : "Run with my input"}
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost" onClick={reset}>
+          Reset
+        </button>
+      </div>
+
+      {showConsole && (
+        <div className="freerun">
+          <label className="lbl" htmlFor="stdin">
+            Input (what the program reads)
+          </label>
+          <textarea id="stdin" className="stdin" rows={3} value={stdin} onChange={(e) => setStdin(e.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off" />
+          <button type="button" className="btn" onClick={runFree} aria-busy={busy === "run" || undefined}>
+            <Play className="icon" aria-hidden="true" /> {busy === "run" ? busyLabel : "Run"}
+          </button>
+          {freeRun && (
+            <div className="results">
+              {freeRun.status === "internal-error" ? (
+                <div className="banner banner-fail">The Java engine couldn't run this ({freeRun.internalError}). Try again.</div>
+              ) : freeRun.status === "compile-error" ? (
+                <DiagnosticList diagnostics={freeRun.diagnostics} raw={freeRun.javacOutput} />
+              ) : (
+                <>
+                  <span className="lbl">Output</span>
+                  <pre tabIndex={0} className="console">
+                    {(freeRun.run?.stdout ?? "") + (freeRun.run?.stderr ?? "") || "(no output)"}
+                  </pre>
+                  {freeRun.note && <div className="t-note">{freeRun.note}</div>}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {busy === "check" ? "Checking your code." : result ? announce(result) : ""}
+      </p>
+      {result && <Results result={result} />}
+
+      <div className="hints">
+        {ex.hints.slice(0, hintsUsed).map((h, i) => (
+          <div key={i} className="hint">
+            <span className="hint-n">Hint {i + 1}</span>
+            <Markdown text={h} />
+          </div>
+        ))}
+        <div className="hint-actions">
+          {hintsUsed < ex.hints.length && (
+            <button type="button" className={"btn btn-hint" + (attempts >= 2 && result?.status !== "pass" ? " pulse" : "")} onClick={() => onChange({ hintsUsed: hintsUsed + 1 })}>
+              <Lightbulb className="icon" aria-hidden="true" /> Hint ({hintsUsed + 1} of {ex.hints.length})
+            </button>
+          )}
+          {canShowSolution && !showSolution && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setShowSolution(true);
+                onChange({ sawSolution: true });
+              }}
+            >
+              Show solution
+            </button>
+          )}
+        </div>
+        {!canShowSolution && <p className="muted small">The solution can be shown after all the hints or {SOLUTION_AFTER_ATTEMPTS} checks.</p>}
+        {showSolution && (
+          <div className="solution">
+            <div className="lbl">A solution (typing it in yourself helps it stick)</div>
+            <CodeView code={ex.solution} label="Solution" />
+            {isFill && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  const answers = blanksOf.map((b) => b.answer);
+                  setBlanks(answers);
+                  onChange({ blanks: answers });
+                }}
+              >
+                Fill the blanks for me
+              </button>
+            )}
+          </div>
+        )}
+        <p className="report-row">
+          <ReportLink info={() => ({ ...report, code: source, result: result ? announce(result) : undefined })} />
+        </p>
+      </div>
+    </div>
+  );
+}

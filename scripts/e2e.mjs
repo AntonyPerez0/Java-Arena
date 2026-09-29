@@ -1,7 +1,8 @@
 // End-to-end tests in headless Chromium against the built site (dist/), served under BASE_PATH
-// like GitHub Pages: the engine downloads, programs compile and run, errors and crashes are
-// explained, endless loops are stopped, the mobile-data prompt holds the download, the site
-// works offline, and every page state passes axe (WCAG 2.2 AA) in both themes and at phone widths.
+// like GitHub Pages: pre-rendered pages, lessons (fill-ins, code challenges, hidden tests, rules,
+// hints, solutions, progress), the engine prototype page, errors and crashes explained, endless
+// loops stopped, the mobile-data question holding the download, offline use, and axe (WCAG 2.2 AA)
+// on every page type in both themes and at phone widths.
 //
 // Usage: npm run build && node scripts/e2e.mjs [--shots dir]
 import { mkdirSync } from 'node:fs';
@@ -62,24 +63,214 @@ async function runExample(page, name, stdin) {
   return page.locator('#result').innerText();
 }
 
+// Lesson helpers. The workbench counts finished checks in data-checks.
+async function lessonReady(page) {
+  await page.locator('.pill-ready').waitFor({ timeout: ENGINE_TIMEOUT });
+}
+async function check(page) {
+  const wb = page.locator('.workbench');
+  const before = Number(await wb.getAttribute('data-checks'));
+  await page.click('#check');
+  await page.waitForFunction((n) => Number(document.querySelector('.workbench')?.getAttribute('data-checks')) > n, before, { timeout: 120_000 });
+  return page.locator('.workbench').innerText();
+}
+async function setCode(page, text) {
+  await page.click('.cm-content');
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.insertText(text);
+}
+const editorText = (page) => page.evaluate(() => [...document.querySelectorAll('.cm-content .cm-line')].map((l) => l.textContent).join('\n'));
+const MAIN = (body) => `public class Main {\n    public static void main(String[] args) {\n${body}\n    }\n}\n`;
+
 console.log('Pages');
-await test('landing page: content, credits, SEO basics', async () => {
-  const { ctx, page, errors } = await newPage();
-  await page.goto(BASE);
-  expect((await page.title()).includes('Java Arena'), 'title');
-  expect(await page.locator('meta[name="description"]').getAttribute('content'), 'meta description');
-  expect((await page.locator('html').getAttribute('lang')) === 'en', 'lang');
-  const text = await page.locator('main').innerText();
-  expect(text.includes('CC BY-NC-SA 4.0') && text.includes('not affiliated'), 'credits and non-affiliation line');
-  expect(errors.length === 0, errors.join('\n'));
-  await ctx.close();
+const PRERENDERED = {
+  '': 'Learn Java by writing real Java',
+  'learn/': 'The course',
+  'learn/printing/': 'Printing',
+  'learn/printing/first-program/': 'Your first Java program',
+  'learn/reading-input/several-inputs/': 'Several inputs in order',
+  'settings/': 'Settings',
+  'about/': 'About and credits',
+};
+await test('every page is pre-rendered with its own title, description, canonical link and text', async () => {
+  for (const [path, h1] of Object.entries(PRERENDERED)) {
+    const res = await fetch(BASE + path);
+    expect(res.status === 200, `${path}: HTTP ${res.status}`);
+    const html = await res.text();
+    expect(html.includes(`<h1>${h1}</h1>`), `${path}: pre-rendered h1 "${h1}"`);
+    expect(/<title>[^<]*Java Arena[^<]*<\/title>/.test(html), `${path}: title`);
+    expect(/<meta name="description" content="[^"]{40,}"/.test(html), `${path}: description`);
+    expect(html.includes('<link rel="canonical" href="https://'), `${path}: canonical`);
+    expect(html.includes('CC BY-NC-SA 4.0') && html.includes('not affiliated'), `${path}: credit and non-affiliation line`);
+  }
+  const lesson = await (await fetch(BASE + 'learn/printing/first-program/')).text();
+  expect(lesson.includes('Getting started with programming') && lesson.includes('https://java-programming.mooc.fi/part-1/2-printing'), 'lesson page credits its MOOC sections');
+  expect(lesson.includes('"@type":"LearningResource"'), 'structured data');
+  const missing = await fetch(BASE + 'learn/no-such-module/');
+  expect(missing.status === 404 && (await missing.text()).includes('noindex'), '404 page, not indexed');
 });
 await test('sitemap and robots', async () => {
   const sitemap = await (await fetch(BASE + 'sitemap.xml')).text();
   expect(sitemap.includes('/bench/</loc>'), 'sitemap lists the prototype page');
+  expect(sitemap.includes('/learn/reading-input/joining-strings/</loc>'), 'sitemap lists lesson steps');
+  expect(!sitemap.includes('404'), 'no 404 page in the sitemap');
   const robots = await (await fetch(BASE + 'robots.txt')).text();
   expect(robots.includes('Sitemap:'), 'robots.txt points to the sitemap');
 });
+await test('home page: the app starts, credits in the footer, no errors', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE);
+  await page.locator('.hero h1').waitFor();
+  expect((await page.title()).includes('Java Arena'), 'title');
+  expect((await page.locator('html').getAttribute('lang')) === 'en', 'lang');
+  const footer = await page.locator('footer').innerText();
+  expect(footer.includes('CC BY-NC-SA 4.0') && footer.includes('not affiliated') && footer.includes('trademark of Oracle'), 'credits in the footer');
+  const status = await page.locator('.status-card').innerText();
+  expect(/2 of 59 modules are online/.test(status), status);
+  await page.click('text=See all modules');
+  await page.locator('h1', { hasText: 'The course' }).waitFor();
+  expect((await page.evaluate(() => document.activeElement?.tagName)) === 'H1', 'focus moved to the new page heading');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+await test('an unknown address shows "Page not found"', async () => {
+  const { ctx, page } = await newPage();
+  await page.goto(BASE + 'learn/printing/no-such-step');
+  await page.locator('h1', { hasText: 'Page not found' }).waitFor();
+  await ctx.close();
+});
+
+console.log('Lessons');
+const lessonSession = await newPage();
+{
+  const { page, errors } = lessonSession;
+  await test('a fill-in challenge: a wrong blank is explained, the right one passes', async () => {
+    await page.goto(BASE + 'learn/printing/first-program/');
+    await lessonReady(page);
+    await page.fill('input.blank', 'printn');
+    let out = await check(page);
+    expect(out.includes("It didn't compile") && out.includes('cannot find symbol') && out.includes('There is no method with this name'), out);
+    expect((await page.locator('input.blank').getAttribute('aria-invalid')) === 'true', 'the wrong blank is marked');
+    await axe(page, 'lesson with a compile error');
+    await page.fill('input.blank', 'println');
+    out = await check(page);
+    expect(out.includes('All tests passed'), out);
+    expect((await page.locator('.banner-pass.big').innerText()).includes('Challenge 1 of 3 complete'), 'banner');
+    await shot(page, 'lesson-desktop-pass');
+  });
+  await test('a launcher error (main misspelled) says the program did not start', async () => {
+    await page.click('.banner-pass.big button');
+    await page.waitForFunction(() => document.activeElement?.id === 'task-h', null, { timeout: 5000 });
+    const blanks = page.locator('input.blank');
+    await blanks.nth(0).fill('class');
+    await blanks.nth(1).fill('static');
+    await blanks.nth(2).fill('Main');
+    const out = await check(page);
+    expect(out.includes("The program didn't start") && out.includes("class Main doesn't have it"), out);
+    // Java's own message is kept in a details box.
+    expect((await page.locator('details.stderr').textContent()).includes('Main method not found in class Main'), 'Java prints the launcher error');
+  });
+  await test('hints one at a time, then the solution and "Fill the blanks for me"', async () => {
+    const hint = page.locator('.btn-hint');
+    await hint.click();
+    await hint.click();
+    await hint.click();
+    expect((await page.locator('.hint').count()) === 3, 'three hints shown');
+    await page.click('text=Show solution');
+    await page.locator('.solution').waitFor();
+    await axe(page, 'lesson with hints and solution');
+    await page.click('text=Fill the blanks for me');
+    const out = await check(page);
+    expect(out.includes('All tests passed'), out);
+  });
+  await test('a code challenge: write a whole program; Ctrl+Enter checks', async () => {
+    await page.click('.banner-pass.big button');
+    await setCode(page, '// Write the whole program below this line.\n' + MAIN('        System.out.println("Ready, set, code!")'));
+    await page.keyboard.press('Control+Enter');
+    await page.waitForFunction(() => document.querySelector('.results')?.textContent?.includes("didn't compile"), null, { timeout: 120_000 });
+    const out = await page.locator('.results').innerText();
+    expect(out.includes("';' expected") && /line 4/i.test(out) && out.includes('semicolon'), out);
+    expect((await page.locator('.cm-lint-marker-error').count()) > 0, 'the editor marks the line');
+    await setCode(page, '// Write the whole program below this line.\n' + MAIN('        System.out.println("Ready, set, code!");'));
+    const passed = await check(page);
+    expect(passed.includes('All tests passed'), passed);
+    expect((await page.locator('.banner-pass.big').innerText()).includes('Step complete'), 'the step is complete');
+  });
+  await test('progress is saved: after a reload the step and its challenges are done', async () => {
+    await page.goto(BASE + 'learn/printing/');
+    await page.locator('.steplist').waitFor();
+    const first = await page.locator('.steplist li').first().innerText();
+    expect(first.includes('3/3'), first);
+    expect((await page.locator('.steplist li.done').count()) === 1, 'one step done');
+    await page.goto(BASE + 'learn/');
+    await page.locator('.module-live').first().waitFor();
+    expect((await page.locator('.module-live').first().innerText()).includes('1/5'), 'course page shows 1 of 5 steps');
+    await page.goto(BASE + 'learn/printing/first-program/');
+    await page.locator('.challenges').waitFor();
+    expect((await page.locator('.challenge-done').count()) === 3, 'all three challenges marked done');
+    expect((await page.locator('.dot-done').count()) === 1, 'step dot done');
+  });
+  await test('a rule is enforced: deleting the line instead of commenting it out is not accepted', async () => {
+    await page.goto(BASE + 'learn/printing/comments/');
+    await lessonReady(page);
+    await setCode(page, MAIN('        System.out.println("Shopping list:");\n        System.out.println("- bread");\n        System.out.println("- milk");'));
+    const out = await check(page);
+    expect(out.includes('Not yet') && out.includes('instead of deleting it'), out);
+    expect(!out.includes('Failed:'), 'the output itself matched');
+  });
+  await test('hidden tests catch a hard-coded answer', async () => {
+    await page.goto(BASE + 'learn/reading-input/joining-strings/');
+    await lessonReady(page);
+    await page.click('text=Challenge 2');
+    await setCode(page, MAIN('        System.out.println("What is your name?");\n        System.out.println("Hello, Ada!");'));
+    const out = await check(page);
+    expect(out.includes('Passed: Test 1') || out.includes('Test 1'), out);
+    expect((await page.locator('.t-fail').count()) === 2 && out.includes('Hidden test'), out);
+  });
+  await test('input: tests give the program its input; "Run with my input" runs it freely', async () => {
+    await setCode(page, 'import java.util.Scanner;\n\n' + MAIN('        Scanner scanner = new Scanner(System.in);\n        System.out.println("What is your name?");\n        String name = scanner.nextLine();\n        System.out.println("Hello, " + name + "!");'));
+    const out = await check(page);
+    expect(out.includes('All tests passed'), out);
+    await page.click('text=Run with my input');
+    await page.fill('#stdin', 'Grace');
+    const wb = page.locator('.workbench');
+    const before = Number(await wb.getAttribute('data-checks'));
+    await page.click('.freerun button');
+    await page.waitForFunction((n) => Number(document.querySelector('.workbench')?.getAttribute('data-checks')) > n, before, { timeout: 120_000 });
+    const free = await page.locator('.freerun').innerText();
+    expect(free.includes('Hello, Grace!'), free);
+  });
+  await test('a crash in a lesson is explained with its line', async () => {
+    await page.goto(BASE + 'learn/reading-input/several-inputs/');
+    await lessonReady(page);
+    await setCode(page, 'import java.util.Scanner;\n\n' + MAIN('        Scanner scanner = new Scanner(System.in);\n        String a = scanner.nextLine();\n        String b = scanner.nextLine();\n        String c = scanner.nextLine();\n        System.out.println(a + b + c);'));
+    const out = await check(page);
+    expect(out.includes('NoSuchElementException') && out.includes('line 8') && out.includes('more input than it was given'), out);
+    await axe(page, 'lesson with a crash');
+  });
+  await test('"Report a problem" opens a GitHub issue with the code filled in', async () => {
+    const link = page.locator('.report-link');
+    await link.focus();
+    const href = await link.getAttribute('href');
+    expect(href.startsWith('https://github.com/AntonyPerez0/Java-Arena/issues/new?'), href);
+    expect(decodeURIComponent(href.replace(/\+/g, ' ')).includes('String c = scanner.nextLine();'), 'the code is in the issue');
+  });
+  await test('settings: text size and theme are applied and saved', async () => {
+    await page.goto(BASE + 'settings/');
+    await page.check('input[name="size"][value="1.25"]');
+    await page.check('input[name="theme"][value="light"]');
+    await page.reload();
+    expect((await page.evaluate(() => document.documentElement.style.getPropertyValue('--scale'))) === '1.25', 'text size kept');
+    expect((await page.evaluate(() => document.documentElement.dataset.theme)) === 'light', 'theme kept');
+    await axe(page, 'settings');
+    await page.check('input[name="size"][value="1"]');
+    await page.check('input[name="theme"][value="system"]');
+  });
+  await test('no errors in the console on lesson pages', async () => {
+    expect(errors.length === 0, errors.join('\n'));
+  });
+}
+await lessonSession.ctx.close();
 
 console.log('Engine prototype');
 const { ctx: mainCtx, page, errors } = await newPage();
@@ -252,16 +443,32 @@ await test('offline: after one visit, pages and the engine work without a connec
   expect(out.includes('Alan drinks 2 cups'), out);
   expect(failed.length === 0, `failed requests: ${failed.join(', ')}`);
   await page.goto(BASE);
-  expect((await page.locator('h1').innerText()) === 'Java Arena', 'landing page offline');
+  await page.locator('.hero h1').waitFor();
+  // A lesson visited once works offline too: it compiles, runs and checks.
+  await ctx.setOffline(false);
+  await page.goto(BASE + 'learn/printing/print-and-println/');
+  await lessonReady(page);
+  await ctx.setOffline(true);
+  await page.reload();
+  await lessonReady(page);
+  const blanks = page.locator('input.blank');
+  await blanks.nth(0).fill('print');
+  await blanks.nth(1).fill('println');
+  const result = await check(page);
+  expect(result.includes('All tests passed'), result);
   await ctx.close();
 });
 
 console.log('Accessibility and layout');
+const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'settings/', 'about/', 'learn/nowhere/'];
 for (const colorScheme of ['light', 'dark']) {
-  await test(`axe, ${colorScheme} theme: landing and prototype`, async () => {
+  await test(`axe, ${colorScheme} theme: every page type`, async () => {
     const { ctx, page } = await newPage({ colorScheme });
-    await page.goto(BASE);
-    await axe(page, `landing ${colorScheme}`);
+    for (const p of PAGES) {
+      await page.goto(BASE + p);
+      await page.locator('#main h1').first().waitFor();
+      await axe(page, `${p || 'home'} ${colorScheme}`);
+    }
     await page.goto(BASE + 'bench/');
     await waitReady(page);
     await axe(page, `prototype ${colorScheme}`);
@@ -271,13 +478,52 @@ for (const colorScheme of ['light', 'dark']) {
     await ctx.close();
   });
 }
+await test('phone: a lesson asks before downloading, the symbol bar types into the editor', async () => {
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, 'connection', { value: { type: 'cellular', effectiveType: '4g', saveData: false }, configurable: true });
+  });
+  requests.length = 0;
+  await page.goto(BASE + 'learn/printing/several-lines/');
+  await page.getByText('Download the Java engine?').waitFor();
+  await page.waitForTimeout(1000);
+  const engineRequests = requests.filter((p) => p.includes('/engine/') && !p.endsWith('manifest.json'));
+  expect(engineRequests.length === 0, `requested before agreeing: ${engineRequests.join(', ')}`);
+  await axe(page, 'lesson download question');
+  await shot(page, 'lesson-phone-download-question');
+  await page.click('text=Download now');
+  await lessonReady(page);
+  // Tap sout at the end of line 3: it types System.out.println(); with the cursor inside the parentheses.
+  await page.locator('.cm-line').nth(2).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.locator('.symkey', { hasText: 'sout' }).tap();
+  await page.locator('.symkey', { hasText: '" "' }).tap();
+  await page.keyboard.insertText('braces keep the blocks in line,');
+  const code = await editorText(page);
+  expect(code.includes('System.out.println("braces keep the blocks in line,");'), code);
+  await ctx.close();
+});
 for (const width of [360, 390]) {
   await test(`phone width ${width} px: no sideways scrolling, axe passes`, async () => {
     const { ctx, page } = await newPage({ viewport: { width, height: 800 }, isMobile: true, hasTouch: true, colorScheme: width === 360 ? 'dark' : 'light' });
-    await page.goto(BASE);
-    await noOverflow(page, `landing ${width}`);
-    await axe(page, `landing ${width}`);
-    await shot(page, `landing-phone-${width}`);
+    await ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+    for (const p of ['', 'learn/', 'learn/printing/', 'about/']) {
+      await page.goto(BASE + p);
+      await page.locator('#main h1').first().waitFor();
+      await noOverflow(page, `${p || 'home'} ${width}`);
+      await axe(page, `${p || 'home'} ${width}`);
+      await shot(page, `phone-${width}-${p.replace(/\//g, '_') || 'home'}`);
+    }
+    await page.goto(BASE + 'learn/reading-input/reading-a-line/');
+    await lessonReady(page);
+    await page.fill('input.blank >> nth=0', 'Scanner');
+    await check(page);
+    await noOverflow(page, `lesson ${width}`);
+    await axe(page, `lesson ${width}`);
+    await shot(page, `lesson-phone-${width}`);
+    await page.click('button[aria-label="Open menu"]');
+    await axe(page, `menu open ${width}`);
     await page.goto(BASE + 'bench/');
     await waitReady(page);
     await runExample(page, 'A crash');

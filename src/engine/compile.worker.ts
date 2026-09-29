@@ -11,7 +11,7 @@ import { engineSupported } from "./support";
 import type { CompileResult, Diagnostic, SourceFile } from "./types";
 
 type Javac = {
-  compile(files: SourceFile[]): { success: boolean; crashed?: boolean; classes: { path: string; bytes: Uint8Array }[]; diagnostics: any[]; timeMs: number };
+  compile(files: SourceFile[]): { success: boolean; crashed?: boolean; classes: { path: string; bytes: Uint8Array }[]; diagnostics: any[]; output?: string; timeMs: number };
   recover(): Promise<void>;
   broken: boolean;
 };
@@ -102,7 +102,7 @@ self.onmessage = async (e: MessageEvent) => {
         // compile gets a fresh compiler.
         result = { ok: false, diagnostics: [], classes: [], ms: r.timeMs, internalError: r.diagnostics[0]?.message ?? "the compiler crashed" };
       } else {
-        result = { ok: r.success, diagnostics: r.diagnostics.map(toDiagnostic), classes: r.classes, ms: r.timeMs };
+        result = { ok: r.success, diagnostics: r.diagnostics.map(toDiagnostic), classes: r.classes, ms: r.timeMs, output: r.output ?? "" };
       }
     } catch (err: any) {
       result = { ok: false, diagnostics: [], classes: [], ms: performance.now() - t, internalError: String(err?.message ?? err) };

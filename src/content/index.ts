@@ -1,7 +1,7 @@
-// The course index (every page needs it) and each module's full lessons, loaded when needed.
+// The course index (every page needs it) and each step's lesson, loaded when needed.
 import { useEffect, useState } from "react";
 import raw from "../generated/course.json";
-import type { Challenge, CourseIndex, Module, ModuleSummary, PlannedModule, Step } from "./types";
+import type { Challenge, CourseIndex, ModuleSummary, PlannedModule, Step, StepSummary } from "./types";
 
 export const course = raw as unknown as CourseIndex;
 export const modules = course.modules;
@@ -20,50 +20,63 @@ export function challengesOf(step: Step): Challenge[] {
 export const totalSteps = modules.reduce((a, m) => a + m.steps.length, 0);
 export const totalChallenges = modules.reduce((a, m) => a + m.steps.reduce((b, s) => b + s.challenges, 0), 0);
 
-// ---------------------------------------------------------------- full modules
-const files = import.meta.glob<Module>("../generated/modules/*.json", { import: "default" });
-const loaded = new Map<string, Module>();
-const loading = new Map<string, Promise<Module | null>>();
+// ---------------------------------------------------------------- steps
+// Each step's lesson and challenges are a file of their own, fetched when the step is opened. The
+// hash in its name changes with its content, so a saved copy is never out of date.
+const loaded = new Map<string, Step>();
+const loading = new Map<string, Promise<Step | null>>();
+const stepSummary = (moduleId: string, slug: string) => moduleById.get(moduleId)?.steps.find((s) => s.slug === slug);
 
-/** Loads a module's lessons (cached). Resolves with null for an unknown module. */
-export function loadModule(id: string): Promise<Module | null> {
-  const have = loaded.get(id);
+/** The address of a step's lesson file. */
+export const lessonUrl = (moduleId: string, s: StepSummary) => `${import.meta.env.BASE_URL}lessons/${moduleId}/${s.slug}-${s.hash}.json`;
+
+/** Loads a step's lesson (cached). Resolves with null for an unknown step. */
+export function loadStep(moduleId: string, slug: string): Promise<Step | null> {
+  const summary = stepSummary(moduleId, slug);
+  if (!summary) return Promise.resolve(null);
+  const key = summary.id;
+  const have = loaded.get(key);
   if (have) return Promise.resolve(have);
-  let p = loading.get(id);
+  let p = loading.get(key);
   if (!p) {
-    const load = files[`../generated/modules/${id}.json`];
-    p = load
-      ? load().then((m) => {
-          loaded.set(id, m);
-          return m;
-        })
-      : Promise.resolve(null);
+    p = fetch(lessonUrl(moduleId, summary))
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<Step>;
+      })
+      .then((step) => {
+        loaded.set(key, step);
+        return step;
+      });
     // A failed load (offline, for example) is tried again next time.
-    p.catch(() => loading.delete(id));
-    loading.set(id, p);
+    p.catch(() => loading.delete(key));
+    loading.set(key, p);
   }
   return p;
 }
 
-/** A module's lessons: undefined while loading, null when there's no such module, "error" when loading failed. */
-export function useModule(id: string): Module | null | undefined | "error" {
-  const [state, setState] = useState<Module | null | undefined | "error">(() => loaded.get(id) ?? (moduleById.has(id) ? undefined : null));
+/** A step's lesson: undefined while loading, null when there's no such step, "error" when loading failed. */
+export function useStep(moduleId: string, slug: string): Step | null | undefined | "error" {
+  const summary = stepSummary(moduleId, slug);
+  const key = summary?.id ?? "";
+  const now = () => (summary ? loaded.get(key) : null);
+  const [state, setState] = useState<{ key: string; step: Step | null | undefined | "error" }>(() => ({ key, step: now() }));
   useEffect(() => {
     let live = true;
-    if (loaded.has(id)) setState(loaded.get(id));
-    else if (!moduleById.has(id)) setState(null);
-    else {
-      setState(undefined);
-      loadModule(id).then(
-        (m) => live && setState(m),
-        () => live && setState("error"),
+    const have = now();
+    setState({ key, step: have });
+    if (have === undefined)
+      loadStep(moduleId, slug).then(
+        (s) => live && setState({ key, step: s }),
+        () => live && setState({ key, step: "error" }),
       );
-    }
     return () => {
       live = false;
     };
-  }, [id]);
-  return state;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  // Right after a move to another step, before the effect runs: that step, if it's loaded already.
+  return state.key === key ? state.step : now();
 }
 
 export const COURSE_NAMES: Record<PlannedModule["course"], string> = {

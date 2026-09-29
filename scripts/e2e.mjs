@@ -152,6 +152,35 @@ await test('an unknown address shows "Page not found"', async () => {
   await ctx.close();
 });
 
+await test('a lesson page downloads only its own step and the steps next to it; the next step opens at once', async () => {
+  const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
+  const steps = course.modules.find((m) => m.id === 'printing').steps;
+  const file = (s) => `lessons/printing/${s.slug}-${s.hash}.json`;
+  const { ctx, page, errors } = await newPage();
+  requests.length = 0;
+  await page.goto(BASE + `learn/printing/${steps[2].slug}/`);
+  await page.locator('.challenge-tab').first().waitFor();
+  await page.waitForFunction((n) => performance.getEntriesByType('resource').filter((e) => e.name.includes('/lessons/')).length >= n, 3);
+  const lessons = requests.filter((p) => p.includes('/lessons/'));
+  // The pre-rendered page asks for its lesson file at once, and the app uses that same download.
+  expect(lessons.filter((p) => p.endsWith(file(steps[2]))).length === 1, `the step's own file once: ${lessons.join(', ')}`);
+  const wanted = new Set([1, 2, 3].map((i) => file(steps[i])));
+  expect(lessons.every((p) => [...wanted].some((w) => p.endsWith(w))) && lessons.length === 3, `only steps 2 to 4: ${lessons.join(', ')}`);
+  await page.getByRole('link', { name: 'Skip to the next step' }).click();
+  await page.locator('h1', { hasText: steps[3].title }).waitFor({ timeout: 2000 });
+  expect((await page.locator('#loading-h').count()) === 0, 'no loading message');
+  await page.waitForFunction((f) => performance.getEntriesByType('resource').some((e) => e.name.endsWith(f)), file(steps[4]));
+  // The module page fetches the step its main button opens.
+  requests.length = 0;
+  await page.goto(BASE + 'learn/printing/');
+  await page.locator('.steplist').waitFor();
+  await page.waitForFunction(() => performance.getEntriesByType('resource').some((e) => e.name.includes('/lessons/')));
+  const fromModule = requests.filter((p) => p.includes('/lessons/'));
+  expect(fromModule.length === 1 && fromModule[0].endsWith(file(steps[0])), `module page: ${fromModule.join(', ')}`);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 console.log('Lessons');
 const lessonSession = await newPage();
 {

@@ -21,6 +21,8 @@ const LICENSE = "https://creativecommons.org/licenses/by-nc-sa/4.0/";
 const GEN = path.join(ROOT, "src/generated");
 const index = JSON.parse(fs.readFileSync(path.join(GEN, "course.json"), "utf8"));
 const content = { ...index, modules: index.modules.map((m) => JSON.parse(fs.readFileSync(path.join(GEN, "modules", `${m.id}.json`), "utf8"))) };
+// A lesson page fetches its step's lesson file (src/content/index.ts): start that at once, with the page.
+const lessonFile = new Map(index.modules.flatMap((m) => m.steps.map((s) => [s.id, `${BASE}lessons/${m.id}/${s.slug}-${s.hash}.json`])));
 const template = fs.readFileSync(path.join(DIST, "index.html"), "utf8");
 if (!template.includes("<!--head-->") || !template.includes("<!--app-->")) throw new Error("prerender: dist/index.html has lost its <!--head--> or <!--app--> marker");
 
@@ -132,6 +134,7 @@ for (const m of content.modules) {
         license: LICENSE,
         url: canonical(stepPath(m, s)),
       },
+      preload: lessonFile.get(s.id),
       // The same layout as the app's lesson page, so nothing jumps when the app takes over.
       layout: true,
       body: `<div class="step-page"><nav class="crumbs" aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a> › <a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></nav>
@@ -207,6 +210,7 @@ function render(p) {
     `<meta property="og:url" content="${url}">`,
     `<meta name="twitter:card" content="summary">`,
     ...FONTS,
+    ...(p.preload ? [`<link rel="preload" href="${p.preload}" as="fetch" crossorigin>`] : []),
     ...(p.jsonld ? [`<script type="application/ld+json">${JSON.stringify(p.jsonld).replace(/</g, "\\u003c")}</script>`] : []),
   ]
     .filter(Boolean)

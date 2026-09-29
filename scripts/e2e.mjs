@@ -527,7 +527,7 @@ await test('Deathmatch: ranked play waits for 10 drills; Casual is open before t
   await page.locator('.lobby .modes').waitFor();
   expect(await page.locator('.mode-dm').isDisabled(), 'Deathmatch is closed');
   expect((await page.locator('.mode-dm').innerText()).includes(`(${open} so far)`), await page.locator('.mode-dm').innerText());
-  expect(!(await page.locator('.mode', { hasText: 'Casual' }).isDisabled()), 'Casual is open');
+  expect(!(await page.locator('.mode:has(.mode-name:text-is("Casual"))').isDisabled()), 'Casual is open');
   // Enter doesn't start a closed mode.
   await page.locator('h1').click();
   await page.keyboard.press('Enter');
@@ -595,7 +595,7 @@ await test('Casual: a miss costs a life and shows why; Continue goes on; a boss 
   await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ settings: { unlockAll: true, boss: true, topicsOff: [...new Set(DRILLS.drills.map((d) => d.topic))].filter((t) => t !== 'printing') } }));
   await page.goto(BASE + 'deathmatch/');
   await page.locator('.lobby .modes').waitFor();
-  await page.locator('.mode', { hasText: 'Casual' }).click();
+  await page.locator('.mode:has(.mode-name:text-is("Casual"))').click();
   await page.locator('.rep').waitFor();
   const d = await answerRep(page, false);
   expect(d.type !== 'boss', 'the first rep is a quick one');
@@ -629,7 +629,7 @@ await test('Deathmatch on a phone (360 px): reps of every type fit the screen', 
   await page.goto(BASE + 'deathmatch/');
   await page.locator('.lobby .modes').waitFor();
   await noOverflow(page, 'lobby 360');
-  await page.locator('.mode', { hasText: 'Casual' }).click();
+  await page.locator('.mode:has(.mode-name:text-is("Casual"))').click();
   const types = new Set();
   for (let i = 1; i <= 15; i++) {
     await page.locator('.rep').waitFor();

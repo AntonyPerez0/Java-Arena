@@ -427,6 +427,43 @@ const lessonSession = await newPage();
 await lessonSession.ctx.close();
 
 console.log('Playground');
+await test('playground: a class in a file of its own; errors and crashes name their file; the link carries both files', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, MAIN('        Greeter g = new Greeter("Hi");\n        g.greet("Ada");'));
+  await page.click('text=Add a class');
+  await page.fill('#new-class', 'Greeter');
+  await page.click('.file-add-form button[type=submit]');
+  expect((await page.locator('.file-tab').allInnerTexts()).join() === 'Main.java,Greeter.java', 'a tab per file');
+  expect((await page.locator('.file-tab-on').innerText()).includes('Greeter.java'), 'the new file is open');
+  // A mistake in Greeter.java: the message names the file, and its tab shows the count.
+  await setCode(page, 'public class Greeter {\n    private String word;\n\n    public Greeter(String word) {\n        this.word = word\n    }\n}\n');
+  await check(page);
+  let out = await page.locator('.results').innerText();
+  expect(/Greeter\.java, line 5/i.test(out), out);
+  expect((await page.locator('.file-tab-on .file-tab-errors').count()) === 1, 'the error count on the tab');
+  await setCode(page, 'public class Greeter {\n    private String word;\n\n    public Greeter(String word) {\n        this.word = word;\n    }\n\n    public void greet(String name) {\n        System.out.println(word + ", " + name.substring(5));\n    }\n}\n');
+  await check(page);
+  out = await page.locator('.results').innerText();
+  expect(out.includes('StringIndexOutOfBoundsException') && out.includes('Greeter.java'), out);
+  await setCode(page, 'public class Greeter {\n    private String word;\n\n    public Greeter(String word) {\n        this.word = word;\n    }\n\n    public void greet(String name) {\n        System.out.println(word + ", " + name + "!");\n    }\n}\n');
+  await check(page);
+  out = await page.locator('.results').innerText();
+  expect(out.includes('Hi, Ada!'), out);
+  await axe(page, 'playground with two files');
+  await page.click('text=Share');
+  await page.locator('#pg-link').waitFor();
+  const link = await page.inputValue('#pg-link');
+  const other = await newPage();
+  await other.page.goto(link);
+  await other.page.locator('.banner-info').waitFor();
+  expect((await other.page.locator('.file-tab').allInnerTexts()).join() === 'Main.java,Greeter.java', 'both files came with the link');
+  await other.ctx.close();
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('playground: run a program with input, share it, open the link elsewhere', async () => {
   const { ctx, page, errors } = await newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);

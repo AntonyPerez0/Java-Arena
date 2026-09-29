@@ -992,14 +992,25 @@ const index = {
   interviewDrills: drills.filter((d) => d.topic === "interview").length,
   placementQuestions: placement.length,
 };
+// The lesson files first and the index after them, so a running dev server never sees an index
+// that names files not written yet; then the lesson files no longer named are removed.
+const lessonFiles = new Set();
+for (const m of modules) {
+  fs.mkdirSync(path.join(LESSONS, m.id), { recursive: true });
+  for (const s of m.steps) {
+    const file = path.join(LESSONS, m.id, `${s.slug}-${lessonHash(s)}.json`);
+    lessonFiles.add(file);
+    fs.writeFileSync(file, lessonJson.get(s.id));
+  }
+}
 fs.rmSync(GENERATED, { recursive: true, force: true });
 fs.mkdirSync(path.join(GENERATED, "modules"), { recursive: true });
 fs.writeFileSync(path.join(GENERATED, "course.json"), JSON.stringify(index));
-fs.rmSync(LESSONS, { recursive: true, force: true });
-for (const m of modules) {
-  fs.writeFileSync(path.join(GENERATED, "modules", `${m.id}.json`), JSON.stringify(m));
-  fs.mkdirSync(path.join(LESSONS, m.id), { recursive: true });
-  for (const s of m.steps) fs.writeFileSync(path.join(LESSONS, m.id, `${s.slug}-${lessonHash(s)}.json`), lessonJson.get(s.id));
+for (const m of modules) fs.writeFileSync(path.join(GENERATED, "modules", `${m.id}.json`), JSON.stringify(m));
+for (const dir of fs.readdirSync(LESSONS)) {
+  const full = path.join(LESSONS, dir);
+  for (const f of fs.readdirSync(full)) if (!lessonFiles.has(path.join(full, f))) fs.rmSync(path.join(full, f));
+  if (!fs.readdirSync(full).length) fs.rmdirSync(full);
 }
 // Drills and placement questions load only on the practice pages.
 fs.writeFileSync(path.join(GENERATED, "drills.json"), JSON.stringify({ drills, placement }));

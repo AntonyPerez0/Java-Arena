@@ -30,6 +30,9 @@ const stepSummary = (moduleId: string, slug: string) => moduleById.get(moduleId)
 /** The address of a step's lesson file. */
 export const lessonUrl = (moduleId: string, s: StepSummary) => `${import.meta.env.BASE_URL}lessons/${moduleId}/${s.slug}-${s.hash}.json`;
 
+/** Thrown when a lesson file isn't on the site: the site was updated since this page was opened. */
+export class LessonGone extends Error {}
+
 /** Loads a step's lesson (cached). Resolves with null for an unknown step. */
 export function loadStep(moduleId: string, slug: string): Promise<Step | null> {
   const summary = stepSummary(moduleId, slug);
@@ -41,6 +44,7 @@ export function loadStep(moduleId: string, slug: string): Promise<Step | null> {
   if (!p) {
     p = fetch(lessonUrl(moduleId, summary))
       .then((res) => {
+        if (res.status === 404) throw new LessonGone(res.url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json() as Promise<Step>;
       })
@@ -55,28 +59,54 @@ export function loadStep(moduleId: string, slug: string): Promise<Step | null> {
   return p;
 }
 
-/** A step's lesson: undefined while loading, null when there's no such step, "error" when loading failed. */
-export function useStep(moduleId: string, slug: string): Step | null | undefined | "error" {
+/**
+ * Fetches a module's steps in the background, when the browser has nothing else to do, so moving
+ * to any of them is instant (the steps in `first` right away).
+ */
+export function prefetchModule(moduleId: string, first: string[] = []) {
+  const m = moduleById.get(moduleId);
+  if (!m) return () => {};
+  for (const slug of first) loadStep(moduleId, slug).catch(() => {});
+  const rest = () => {
+    for (const s of m.steps) loadStep(moduleId, s.slug).catch(() => {});
+  };
+  if ("requestIdleCallback" in window) {
+    const id = requestIdleCallback(rest, { timeout: 5000 });
+    return () => cancelIdleCallback(id);
+  }
+  const id = setTimeout(rest, 1500);
+  return () => clearTimeout(id);
+}
+
+/**
+ * A step's lesson: undefined while loading, null when there's no such step, "error" when loading
+ * failed, "gone" when the site was updated since this page was opened. `waited` is true when the
+ * lesson had to be fetched after the step was opened (a loading message was on screen).
+ */
+export function useStep(moduleId: string, slug: string): { step: Step | null | undefined | "error" | "gone"; waited: boolean } {
   const summary = stepSummary(moduleId, slug);
   const key = summary?.id ?? "";
   const now = () => (summary ? loaded.get(key) : null);
-  const [state, setState] = useState<{ key: string; step: Step | null | undefined | "error" }>(() => ({ key, step: now() }));
+  type State = { key: string; step: Step | null | undefined | "error" | "gone"; waited: boolean };
+  const [state, setState] = useState<State>(() => ({ key, step: now(), waited: false }));
   useEffect(() => {
     let live = true;
     const have = now();
-    setState({ key, step: have });
-    if (have === undefined)
+    if (have !== undefined) setState((s) => (s.key === key && s.step === have ? s : { key, step: have, waited: false }));
+    else {
+      setState((s) => (s.key === key && s.step === undefined ? s : { key, step: undefined, waited: true }));
       loadStep(moduleId, slug).then(
-        (s) => live && setState({ key, step: s }),
-        () => live && setState({ key, step: "error" }),
+        (step) => live && setState({ key, step, waited: true }),
+        (e) => live && setState({ key, step: e instanceof LessonGone ? "gone" : "error", waited: true }),
       );
+    }
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   // Right after a move to another step, before the effect runs: that step, if it's loaded already.
-  return state.key === key ? state.step : now();
+  return state.key === key ? state : { step: now(), waited: false };
 }
 
 export const COURSE_NAMES: Record<PlannedModule["course"], string> = {

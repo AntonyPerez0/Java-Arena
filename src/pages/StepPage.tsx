@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronRight } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { challengesOf, loadStep, moduleById, modulePath, stepPath, useStep } from "../content";
+import { challengesOf, moduleById, modulePath, prefetchModule, stepPath, useStep } from "../content";
 import type { ModuleSummary, Step } from "../content/types";
 import { getState, patchChallenge, patchStep, useStore } from "../state/store";
 import { challengeDone } from "../state/derived";
@@ -17,19 +17,20 @@ export default function StepPage() {
   const { moduleId = "", stepSlug = "" } = useParams();
   const summary = moduleById.get(moduleId);
   const stepSummary = summary?.steps.find((s) => s.slug === stepSlug);
-  const step = useStep(moduleId, stepSlug);
-  // Set while the "loading" heading is showing: if it had focus, the lesson's heading takes it over.
-  const wasLoading = useRef(false);
+  const { step, waited } = useStep(moduleId, stepSlug);
   useTitle(summary && stepSummary ? `${stepSummary.title} · ${summary.title}` : "Step not found");
   if (!summary || !stepSummary || step === null) return <NotFound />;
-  if (step === undefined || step === "error") {
-    wasLoading.current = true;
+  if (step === undefined || step === "error" || step === "gone") {
     return (
       <div className="narrow">
         <h1 id="loading-h" tabIndex={-1}>
           {stepSummary.title}
         </h1>
-        {step === "error" ? (
+        {step === "gone" ? (
+          <p role="alert">
+            Java Arena has been updated since this page was opened. <button type="button" className="linkish" onClick={() => location.reload()}>Reload the page</button> to get this lesson.
+          </p>
+        ) : step === "error" ? (
           <p role="alert">
             This lesson couldn't be loaded. Check the connection and <button type="button" className="linkish" onClick={() => location.reload()}>reload the page</button>.
           </p>
@@ -39,9 +40,8 @@ export default function StepPage() {
       </div>
     );
   }
-  const takeFocus = wasLoading.current;
-  wasLoading.current = false;
-  return <StepView key={step.id} m={summary} step={step} takeFocus={takeFocus} />;
+  // After a loading message, the lesson's heading takes over the focus it may have had.
+  return <StepView key={step.id} m={summary} step={step} takeFocus={waited} />;
 }
 
 function StepView({ m, step, takeFocus }: { m: ModuleSummary; step: Step; takeFocus: boolean }) {
@@ -53,10 +53,8 @@ function StepView({ m, step, takeFocus }: { m: ModuleSummary; step: Step; takeFo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const idx = m.steps.findIndex((st) => st.id === step.id);
-  // Fetch the steps before and after this one, so moving to them is instant.
-  useEffect(() => {
-    for (const st of [m.steps[idx + 1], m.steps[idx - 1]]) if (st) loadStep(m.id, st.slug).catch(() => {});
-  }, [m, idx]);
+  // Fetch the steps next to this one, then the rest of the module, so moving to them is instant.
+  useEffect(() => prefetchModule(m.id, [m.steps[idx + 1], m.steps[idx - 1]].filter(Boolean).map((st) => st.slug)), [m, idx]);
   const progress = useStore((s) => s.steps[step.id]);
   const doneSteps = useStore((s) => m.steps.map((st) => !!s.steps[st.id]?.done).join());
   const challenges = useMemo(() => challengesOf(step), [step]);

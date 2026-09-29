@@ -248,7 +248,7 @@ const KEYS = {
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
   test: ["name", "stdin", "call", "files", "expect", "hidden"],
   drillFile: ["topic", "drills"],
-  drill: ["id", "type", "prompt", "pre", "body", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
+  drill: ["id", "type", "prompt", "pre", "body", "classes", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
 };
 function checkKeys(where, obj, kind) {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
@@ -613,16 +613,19 @@ async function buildModules() {
 const DRILL_TYPES = ["predict", "fill", "bug", "compiles", "choice", "boss"];
 const indentBy = (s, n) => s.split("\n").map((l) => (l ? " ".repeat(n) + l : l)).join("\n");
 
-function drillProgram(pre, body) {
+/** A drill's complete program: `classes` (classes of its own) go after Main in the same file. */
+function drillProgram(pre, body, classes = "") {
   const parts = [];
   if (pre) parts.push(indentBy(pre, 4));
   parts.push(`    public static void main(String[] args) {\n${body ? indentBy(body, 8) + "\n" : ""}    }`);
-  return `${importsFor(`${pre}\n${body}`)}public class Main {\n${parts.join("\n\n")}\n}\n`;
+  return `${importsFor(`${pre}\n${body}\n${classes}`)}public class Main {\n${parts.join("\n\n")}\n}\n${classes ? `\n${classes}\n` : ""}`;
 }
 
-function drillDisplay(pre, body) {
-  if (pre && body) return `${pre}\n\n// inside main:\n${body}`;
-  return pre || body;
+/** What a drill shows: its classes, then Main's methods, then the statements run in main. */
+function drillDisplay(pre, body, classes = "") {
+  const top = [classes, pre].filter(Boolean).join("\n\n");
+  if (top && body) return `${top}\n\n// inside main:\n${body}`;
+  return top || body;
 }
 
 /** The first error javac printed, without the file and line (they're of the whole program). */
@@ -669,11 +672,14 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
   const base = { id, topic, type: d.type, why: d.why ?? "", ...(after ? { after } : {}) };
   const pre = d.pre ? String(d.pre).replace(/\s*$/, "") : "";
   const body = d.body ? String(d.body).replace(/\s*$/, "") : "";
+  // Classes of the drill's own, such as `class Counter { ... }`: not public, since they share Main.java.
+  const classes = d.classes ? String(d.classes).replace(/\s*$/, "") : "";
+  if (/^\s*public\s+(?:final\s+|abstract\s+)?class\b/m.test(classes)) errors.push(`${where}: classes share Main.java with Main, so they can't be public (write class Counter, not public class Counter)`);
   const stdin = d.stdin == null || d.stdin === "" ? "" : ensureNl(String(d.stdin));
-  const display = drillDisplay(pre, body);
+  const display = drillDisplay(pre, body, classes);
   switch (d.type) {
     case "predict": {
-      const answer = await runDrill(where, drillProgram(pre, body), stdin);
+      const answer = await runDrill(where, drillProgram(pre, body, classes), stdin);
       if (answer == null) return null;
       if (!answer) errors.push(`${where}: prints nothing`);
       if (answer.split("\n").length > 4) errors.push(`${where}: prints ${answer.split("\n").length} lines; keep predict drills to 4`);
@@ -686,7 +692,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
         errors.push(`${where}: a fill drill needs exactly one [[blank]] with an answer`);
         return null;
       }
-      const output = await runDrill(where, drillProgram(templateSolution(pre), templateSolution(body)), stdin);
+      const output = await runDrill(where, drillProgram(templateSolution(pre), templateSolution(body), templateSolution(classes)), stdin);
       if (output == null) return null;
       if (!output) errors.push(`${where}: the program prints nothing, so there's no output to aim for`);
       if (d.expect != null && normalizeOutput(String(d.expect)) !== output) errors.push(`${where}: expect says\n${d.expect}\nbut the program prints\n${output}`);
@@ -703,9 +709,9 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
       if (/^\s*[{}]\s*;?\s*\/\/\s*BUG\s*$/.test(lines[at])) errors.push(`${where}: the bug line can't be a lone brace`);
       const clean = (x) => x.split("\n").map((l) => l.replace(/\s*\/\/\s*BUG\s*$/, "")).join("\n");
       const fixed = (x) => x.split("\n").map((l) => (/\/\/\s*BUG\s*$/.test(l) ? l.match(/^\s*/)[0] + d.fix.trim() : l)).join("\n");
-      const output = await runDrill(`${where} (fixed)`, drillProgram(fixed(pre), fixed(body)), stdin);
+      const output = await runDrill(`${where} (fixed)`, drillProgram(fixed(pre), fixed(body), fixed(classes)), stdin);
       if (output == null) return null;
-      const bc = await compile(mainFile(drillProgram(clean(pre), clean(body))));
+      const bc = await compile(mainFile(drillProgram(clean(pre), clean(body), clean(classes))));
       if (bc.ok) {
         const br = await run(bc, stdin);
         if (!br.timedOut && br.exitCode === 0 && !br.stderr && normalizeOutput(br.stdout) === output) errors.push(`${where}: the buggy and the fixed program behave the same`);
@@ -713,7 +719,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
       return { ...base, prompt: d.prompt ?? "One line has a bug. Which one?", display: clean(display), answer: String(at + 1), fix: d.fix.trim(), output, ...(stdin ? { stdin } : {}) };
     }
     case "compiles": {
-      const program = drillProgram(pre, body);
+      const program = drillProgram(pre, body, classes);
       const c = await compile(mainFile(program));
       const answer = c.ok ? "yes" : "no";
       if (d.answer != null && String(d.answer) !== answer) errors.push(`${where}: the answer says ${d.answer}, but javac says ${answer}:\n${c.output}`);
@@ -730,7 +736,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
       if (!(answer >= 1 && answer <= choices.length)) return void errors.push(`${where}: answer must be the number of the right choice (1 to ${choices.length})`);
       if (typeof d.prompt !== "string" || !d.prompt) errors.push(`${where}: a choice drill needs a prompt`);
       if (display) {
-        const program = drillProgram(pre, body);
+        const program = drillProgram(pre, body, classes);
         const c = await compile(mainFile(program));
         if (d.compiles === false) {
           if (c.ok) errors.push(`${where}: marked compiles: false, but it compiles`);

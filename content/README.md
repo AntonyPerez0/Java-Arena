@@ -206,6 +206,6 @@ drills:
     hints: [...]
 ```
 
-Predict and fill drills may give the program input with `stdin`. `placement.yaml` holds the placement quiz: `questions:`, each a drill with a `module:`, one per module in course order.
+A drill can have classes of its own in `classes` (for example `class Counter { ... }`, not public: they're put after Main in the same file); the drill shows them first, then `pre`, then the statements of `body`. Predict and fill drills may give the program input with `stdin`. `placement.yaml` holds the placement quiz: `questions:`, each a drill with a `module:`, one per module in course order.
 
 To check one drill file while writing it, without changing any generated file: `node scripts/build-content.mjs --dry --drill-file loops.yaml`. To check one module and its drills: `node scripts/build-content.mjs --dry --module-file 13-lists.yaml`.

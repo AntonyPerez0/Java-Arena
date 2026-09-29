@@ -1,0 +1,202 @@
+topic: problem-patterns
+drills:
+  - type: predict
+    after: read-calculate-print
+    stdin: |
+      3
+      2
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int people = Integer.valueOf(scanner.nextLine());
+      int pizzas = Integer.valueOf(scanner.nextLine());
+      int slices = pizzas * 8 / people;
+      System.out.println("Slices each: " + slices);
+    why: "`pizzas * 8` is 16 slices, and `16 / 3` divides two `int`s, so the part after the decimal point is dropped: 5, not 5.33."
+
+  - type: predict
+    after: math-methods
+    body: |
+      int a = 9;
+      int b = 16;
+      System.out.println(Math.sqrt(a) + Math.sqrt(b));
+      System.out.println(Math.max(a, b) - Math.min(a, b));
+      System.out.println(Math.abs(a - b));
+    why: "`Math.sqrt` always gives a `double`, so 3.0 + 4.0 prints as `7.0`. `Math.max` and `Math.min` of two `int`s give `int`s, so 16 - 9 prints as `7`, and `Math.abs(-7)` is `7` too."
+
+  - type: predict
+    after: read-decide-print
+    body: |
+      int price = 80;
+      int discount = price / 4;
+      if (discount > 15) {
+          discount = 15;
+      }
+      System.out.println("You pay " + (price - discount));
+    why: "A quarter of 80 is 20, which is over the limit of 15, so the `if` lowers `discount` to 15. The print comes after the decision and uses the new value: 80 - 15 is 65."
+
+  - type: predict
+    after: combining-patterns
+    stdin: |
+      21
+      24
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int target = Integer.valueOf(scanner.nextLine());
+      int room = Integer.valueOf(scanner.nextLine());
+      int gap = Math.abs(target - room);
+      if (room < target) {
+          System.out.println("Heating up by " + gap + " degrees");
+      } else if (room > target) {
+          System.out.println("Cooling down by " + gap + " degrees");
+      } else {
+          System.out.println("Just right");
+      }
+    why: "`Math.abs(21 - 24)` is 3, worked out once before the decision. The room (24) is warmer than the target (21), so the `else if` branch runs and prints the gap."
+
+  - type: fill
+    after: read-calculate-print
+    stdin: "150"
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int seconds = Integer.valueOf(scanner.nextLine());
+      int minutes = seconds [[/]] 60;
+      System.out.println(minutes + " full minutes");
+    why: "`/` between two `int`s gives how many whole 60s fit in 150, which is 2. `%` would give what's left over, 30."
+
+  - type: fill
+    after: math-methods
+    body: |
+      int round1 = 42;
+      int round2 = 57;
+      int best = Math.[[max]](round1, round2);
+      System.out.println("Best round: " + best);
+    why: "`Math.max` gives the larger of its two values, 57. `Math.min` would give 42."
+
+  - type: bug
+    after: math-methods
+    prompt: The program should print the cheaper of the two offers. Which line is wrong?
+    body: |
+      int offerA = 45;
+      int offerB = 39;
+      int cheapest = Math.max(offerA, offerB); // BUG
+      System.out.println("Best price: " + cheapest);
+    fix: "int cheapest = Math.min(offerA, offerB);"
+    why: "The cheaper offer is the smaller number, so it needs `Math.min`. `Math.max` picks the larger one, 45."
+
+  - type: bug
+    after: read-decide-print
+    prompt: Bags over 23 kg pay 5 euros for every kilogram over 23, so a 25 kg bag pays 10. Which line is wrong?
+    stdin: "25"
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int weight = Integer.valueOf(scanner.nextLine());
+      int fee = 0;
+      if (weight > 23) {
+          fee = weight - 23 * 5; // BUG
+      }
+      System.out.println("Extra fee: " + fee);
+    fix: "fee = (weight - 23) * 5;"
+    why: "`*` is done before `-`, so the line works out `weight - 115`, which is -90 for 25 kg. Parentheses make the kilograms over 23 come first: `(weight - 23) * 5`."
+
+  - type: compiles
+    after: math-methods
+    body: |
+      int root = Math.sqrt(16);
+      System.out.println(root);
+    why: "No. `Math.sqrt` always gives a `double` (here `4.0`), and a `double` doesn't go into an `int` variable, because the decimals could be lost: `possible lossy conversion from double to int`. Store it in a `double` instead."
+
+  - type: compiles
+    after: combining-patterns
+    body: |
+      int a = 5;
+      int b = 9;
+      double gap = Math.abs(a - b);
+      if (gap > 3) {
+          System.out.println("Far apart: " + gap);
+      }
+    why: "Yes. `Math.abs(a - b)` gives the `int` 4, and an `int` fits in a `double` without losing anything, so `gap` holds `4.0`. `gap > 3` is then an ordinary comparison, which gives the `boolean` that `if` needs."
+
+  - type: choice
+    after: math-methods
+    prompt: What does `Math.pow(3, 2)` give?
+    choices:
+      - "`9`"
+      - "`9.0`"
+      - "`6.0`"
+    answer: 2
+    why: "`Math.pow` always gives a `double`, even when both numbers are whole, so 3 to the power 2 is `9.0`. `6.0` would be 3 times 2."
+
+  - type: choice
+    after: read-calculate-print
+    prompt: A bill of 17 euros is split between 4 people. Which expression, in place of `total / people`, prints the exact share `4.25`?
+    body: |
+      int total = 17;
+      int people = 4;
+      System.out.println(total / people);
+    choices:
+      - "`(double) (total / people)`"
+      - "`total / people * 1.0`"
+      - "`(double) total / people`"
+      - "`total % people`"
+    answer: 3
+    why: "`(double) total / people` turns `total` into `17.0` before dividing, so the division keeps its decimals. The first two divide the two `int`s first, which gives 4 and only then `4.0`, and `%` gives the remainder, 1."
+
+  - type: boss
+    after: combining-patterns
+    prompt: |
+      A small lift can carry 400 kg. Read the weights of three people (whole kilograms), then print their total and whether the lift can go. When the total is 400 or less, the second line is `OK to go`; otherwise it says how much too heavy they are. For the input `90`, `150` and `180` the program prints:
+
+      ```
+      Total: 420 kg
+      Overloaded by 20 kg
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int first = Integer.valueOf(scanner.nextLine());
+              int second = Integer.valueOf(scanner.nextLine());
+              int third = Integer.valueOf(scanner.nextLine());
+              int total = first + second + third;
+              System.out.println("Total: " + total + " kg");
+              if (total > 400) {
+                  System.out.println("Overloaded by " + (total - 400) + " kg");
+              } else {
+                  System.out.println("OK to go");
+              }
+          }
+      }
+    hints:
+      - Read the three weights and add them into a `total` variable first; the rest of the program uses it.
+      - "`if (total > 400)` prints `Overloaded by ` and `(total - 400)`; the `else` prints `OK to go`."
+    tests:
+      - stdin: |
+          90
+          150
+          180
+      - stdin: |
+          100
+          100
+          200
+        hidden: true
+      - stdin: |
+          60
+          70
+          80
+        hidden: true
+      - stdin: |
+          200
+          200
+          1
+        hidden: true

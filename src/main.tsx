@@ -1,7 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App, { loadPlayground, loadStepPage } from "./App";
+import App, { loadPlayground, loadPractice, loadStepPage } from "./App";
 import { loadModule } from "./content";
+import { loadDrills } from "./content/drills";
 import "./styles.css";
 
 // A lesson or the playground opened directly: load its code first, so the pre-rendered page stays
@@ -9,11 +10,14 @@ import "./styles.css";
 const base = import.meta.env.BASE_URL;
 const path = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : location.pathname;
 const lesson = /^learn\/([^/]+)\/[^/]+/.exec(path);
+const practice = loadPractice[path.replace(/\/$/, "")];
 const ready = lesson
   ? Promise.all([loadStepPage(), loadModule(lesson[1])]).catch(() => undefined)
   : /^playground\/?$/.test(path)
     ? loadPlayground().catch(() => undefined)
-    : Promise.resolve();
+    : practice
+      ? Promise.all([practice(), loadDrills()]).catch(() => undefined)
+      : Promise.resolve();
 
 ready.then(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(

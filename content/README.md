@@ -104,3 +104,52 @@ Every Java block in lesson text says what it is:
 - ` ```java main ` statements that are run inside a main method (imports such as `java.util.Scanner` are added when used); same checks.
 - ` ```java error ` code that must not compile. A ` ```javac ` block after it must be exactly what javac prints.
 - ` ```java fragment ` a piece of code that can't run on its own; shown only.
+
+## Drills (Deathmatch, daily challenge, interview prep)
+
+`drills/<module id>.yaml` holds the practice drills of a lesson module; `drills/interview-*.yaml` (with `topic: interview`) the interview questions, which are open to everyone. Each drill has a `type`, and most show a little Java: `pre` for methods, `body` for statements run in `main` (imports such as `java.util.Scanner` are added when used). The build puts them in a complete program and checks it on the reference JDK. Predict and compiles answers are taken from the JDK, not typed by hand; a bug's fix must run and change what the program does; a choice's `answer` is written by hand, so `verify: output` should be used whenever the right choice is what the code prints. Prompts, choices and explanations are Markdown: code, and anything with `<`, goes in backticks (the build rejects text that Markdown would read as HTML):
+
+```yaml
+topic: loops                  # the module id (the file is loops.yaml)
+drills:
+  - type: predict             # "What does this print?": the answer is the program's real output (1 to 4 lines)
+    after: counting           # the step (slug or id) that unlocks it; default: the module's last step
+    body: |
+      int count = 0;
+      count++;
+      System.out.println(count);
+    why: "`count++` adds one."  # Markdown, shown after a miss (required, except compiles)
+  - type: fill                # one [[blank]] (alternatives separated by ‖); the output of the filled-in program is shown
+    body: |
+      for (int i = 0; i < [[3]]; i++) {
+          System.out.println("Hi");
+      }
+    why: ...
+  - type: bug                 # one line ends with // BUG; `fix` is the whole corrected line
+    body: |
+      int total = 0;
+      total = 5; // BUG
+      System.out.println(total + 1);
+    fix: total += 5;          # the fixed program must run, and behave differently from the buggy one (or the buggy one doesn't compile)
+    why: ...
+  - type: compiles            # "Will it compile?": the answer is javac's verdict; why explains it
+    body: |
+      int x = "5";
+    why: ...
+  - type: choice              # 2 to 4 choices, answer = the number of the right one; code shown must compile
+    prompt: Which loop runs exactly 3 times?
+    choices: ["...", "...", "..."]
+    answer: 2
+    compiles: false           # optional: the code shown doesn't compile (on purpose)
+    verify: output            # optional: the right choice must be exactly what the code prints
+    why: ...
+  - type: boss                # a coding challenge: prompt (the task) plus seed, solution, hints, tests, require,
+    prompt: ...               # forbid, as in a lesson challenge; `call:` tests work too
+    seed: ...
+    solution: ...
+    hints: [...]
+```
+
+Predict and fill drills may give the program input with `stdin`. `placement.yaml` holds the placement quiz: `questions:`, each a drill with a `module:`, one per module in course order.
+
+To check one drill file while writing it, without changing any generated file: `node scripts/build-content.mjs --dry --drill-file loops.yaml`.

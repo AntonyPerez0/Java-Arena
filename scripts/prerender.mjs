@@ -86,7 +86,8 @@ page("/", {
   body: `<h1>Learn Java by writing real Java</h1>
 <p>Every exercise is compiled by the real javac 21 compiler and run by a Java virtual machine, both inside your browser, on your own device. The lessons follow the University of Helsinki's Java Programming MOOC, with their own explanations and exercises.</p>
 <p>Java Arena is new: ${content.modules.length} of ${content.plan.length} modules are online so far (${stepCount} steps, ${challengeCount} challenges). The rest of the course is added in batches.</p>
-<ul>${content.modules.map((m) => `<li><a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></li>`).join("")}<li><a href="${link("/learn")}">All modules</a></li></ul>`,
+<ul>${content.modules.map((m) => `<li><a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></li>`).join("")}<li><a href="${link("/learn")}">All modules</a></li></ul>
+<p>Practice: <a href="${link("/deathmatch")}">Deathmatch drills</a>, <a href="${link("/daily")}">the daily challenge</a> and <a href="${link("/placement")}">a placement quiz</a>.</p>`,
 });
 
 page("/learn", {
@@ -147,6 +148,26 @@ page("/playground", {
   body: `<div class="playground"><div class="page-head"><h1>Playground</h1><p class="muted">Write any Java program and run it with your own input. It runs on your device with the real javac 21, and it's saved in this browser.</p></div></div>`,
 });
 
+// Practice pages: the text that describes them, the same as the app's first view of each.
+page("/deathmatch", {
+  title: `Deathmatch: Java practice drills | ${NAME}`,
+  description: "Endless quick Java drills from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, and small programs to write. Spaced review and interview prep.",
+  layout: true,
+  body: `<div class="lobby practice-page"><div class="page-head"><h1>Deathmatch</h1><p class="muted">Endless quick reps from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, pick one. Every 8th rep is a boss rep, a small program you write and run for real. Drills you miss come back more often until you know them.</p></div></div>`,
+});
+page("/daily", {
+  title: `Daily Java challenge | ${NAME}`,
+  description: "One Java question a day, the same for everyone. Answer it to keep your streak going.",
+  layout: true,
+  body: `<div class="narrow practice-page"><div class="page-head"><h1>Daily challenge</h1><p class="muted">One question a day, the same for everyone. Answer it to keep your streak going; a new one comes at midnight.</p></div></div>`,
+});
+page("/placement", {
+  title: `Placement quiz: where to start with Java | ${NAME}`,
+  description: "Already know some Java? A short quiz, one question per module, shows where to start and which modules you can skip.",
+  layout: true,
+  body: `<div class="narrow"><div class="page-head"><h1>Placement quiz</h1><p>Already know some Java? Answer a few quick questions, one for each module so far, from printing to methods. The first one you miss shows where to start, and you can skip the modules before it.</p></div></div>`,
+});
+
 page("/settings", { title: `Settings | ${NAME}`, description: "Theme, text size, the Java engine download, and your progress on this device.", body: `<h1>Settings</h1><p>Theme, text size, the Java engine download, and your progress. Everything here is saved in this browser only.</p>` });
 page("/about", {
   title: `About and credits | ${NAME}`,
@@ -158,9 +179,9 @@ page("/about", {
 // The header and footer as the app draws them (src/App.tsx), so the page doesn't shift when it starts.
 const MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="ja-bm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fdba74"></stop><stop offset="0.55" stop-color="#f97316"></stop><stop offset="1" stop-color="#dc2626"></stop></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#ja-bm)"></rect><path d="M10 8.5c-2 0-2.6 1-2.6 2.8v2.2c0 1.4-.6 2.2-1.9 2.5 1.3.3 1.9 1.1 1.9 2.5v2.2c0 1.8.6 2.8 2.6 2.8M22 8.5c2 0 2.6 1 2.6 2.8v2.2c0 1.4.6 2.2 1.9 2.5-1.3.3-1.9 1.1-1.9 2.5v2.2c0 1.8-.6 2.8-2.6 2.8" fill="none" stroke="#1c0a02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18.2 10v7.6c0 2.2-1.1 3.4-3 3.4-1.3 0-2.2-.6-2.7-1.6" fill="none" stroke="#1c0a02" stroke-width="2.6" stroke-linecap="round"></path></svg>`;
 const BRAND = `<a href="${link("/")}" class="brand" aria-label="Java Arena home">${MARK}<span class="brand-name">Java <b>Arena</b></span></a>`;
-const HEADER = `<header class="topbar">${BRAND}<nav id="main-nav" class="nav" aria-label="Main"><a href="${link("/learn")}">Learn</a><a href="${link("/playground")}">Playground</a><a href="${link("/settings")}">Settings</a><a href="${link("/about")}">About</a></nav><div class="topbar-right"><a href="${link("/learn")}" class="btn btn-primary btn-sm topbar-cta">Start learning</a></div></header>`;
+const HEADER = `<header class="topbar">${BRAND}<nav id="main-nav" class="nav" aria-label="Main"><a href="${link("/learn")}">Learn</a><a href="${link("/deathmatch")}">Deathmatch</a><a href="${link("/daily")}">Daily</a><a href="${link("/playground")}">Playground</a><a href="${link("/settings")}">Settings</a><a href="${link("/about")}">About</a></nav><div class="topbar-right"><a href="${link("/learn")}" class="btn btn-primary btn-sm topbar-cta">Start learning</a></div></header>`;
 const REPO = "https://github.com/AntonyPerez0/Java-Arena";
-const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li><li><a href="${link("/playground")}">Playground</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
+const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li><li><a href="${link("/playground")}">Playground</a></li></ul></div><div class="footer-col"><h2>Practice</h2><ul><li><a href="${link("/deathmatch")}">Deathmatch</a></li><li><a href="${link("/daily")}">Daily challenge</a></li><li><a href="${link("/placement")}">Placement quiz</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
 // The fonts are needed for the first paint: fetch them right away instead of after the CSS.
 const FONTS = fs
   .readdirSync(path.join(DIST, "assets"))

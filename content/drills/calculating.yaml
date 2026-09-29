@@ -1,0 +1,187 @@
+topic: calculating
+drills:
+  - type: predict
+    after: arithmetic
+    body: |
+      System.out.println(10 - 4 - 3);
+      System.out.println(10 - (4 - 3));
+      System.out.println(1 + 2 * 3 - 4);
+    why: "Operators of the same level go from left to right, so `10 - 4 - 3` is `6 - 3`, while the parentheses make `4 - 3` come first. In the last line `2 * 3` is done first: `1 + 6 - 4`."
+
+  - type: predict
+    after: calculating-with-input
+    stdin: |
+      12
+      30
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      String first = scanner.nextLine();
+      int second = Integer.valueOf(scanner.nextLine());
+      System.out.println(first + second);
+      System.out.println(second + second);
+    why: "`first` was never converted, so it's the text `12`, and `+` joins `30` onto it. `second` is an `int`, so `second + second` adds: 60."
+
+  - type: predict
+    after: printing-formulas
+    body: |
+      int x = 2;
+      int y = 5;
+      System.out.println(x + y + "!" + x + y);
+    why: "`+` works from left to right: `x + y` adds two numbers and gives 7. Then `\"!\"` turns the result into text, so the last two `+` join `2` and `5` instead of adding them."
+
+  - type: predict
+    after: division
+    body: |
+      int cookies = 9;
+      int kids = 4;
+      System.out.println(cookies / kids);
+      System.out.println((double) cookies / kids);
+      System.out.println((double) (cookies / kids));
+    why: "`9 / 4` divides two `int` values and drops the decimal part: 2. Casting `cookies` first gives `9.0 / 4`, which is 2.25, while casting after the division only turns 2 into `2.0`."
+
+  - type: predict
+    after: tracing-values
+    body: |
+      int a = 3;
+      int b = a + 4;
+      a = a * b;
+      b = a - b;
+      System.out.println(a + " " + b);
+    why: "Trace it line by line: `b` starts at 7, then `a` becomes `3 * 7`, which is 21. `b = a - b` uses that new `a`: 21 - 7 is 14."
+
+  - type: fill
+    after: calculating-with-input
+    stdin: |
+      7
+      20
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int price = Integer.valueOf(scanner.nextLine());
+      int paid = Integer.valueOf(scanner.nextLine());
+      int change = paid [[-]] price;
+      System.out.println("Change: " + change);
+    why: "The change is what was paid minus the price: `20 - 7` is 13."
+
+  - type: fill
+    after: printing-formulas
+    prompt: Fill the blank with a calculation that uses both variables, so the program prints the output shown.
+    body: |
+      int apples = 3;
+      int pears = 4;
+      System.out.println("Fruit: " + [[(apples + pears)‖(pears + apples)]]);
+    why: "The parentheses make the addition happen first. Without them, `\"Fruit: \" + apples` is already text, and `pears` would be joined on: `Fruit: 34`."
+
+  - type: bug
+    after: arithmetic
+    body: |
+      int morning = 12;
+      int evening = 20;
+      int average = morning + evening / 2; // BUG
+      System.out.println("Average: " + average);
+    fix: int average = (morning + evening) / 2;
+    why: "`/` is done before `+`, so the buggy line calculates `12 + 10`, which is 22. Parentheses make the sum happen first: `32 / 2` is 16."
+
+  - type: bug
+    after: division
+    prompt: The counts are whole numbers and should stay `int` values, but the share should be 0.75. Which line is wrong?
+    body: |
+      int correct = 18;
+      int questions = 24;
+      double share = correct / questions; // BUG
+      System.out.println(share);
+    fix: double share = (double) correct / questions;
+    why: "`correct / questions` divides two `int` values, so the result is 0 before it's stored as `0.0`. Casting `correct` to `double` first keeps the decimal part: 0.75."
+
+  - type: compiles
+    after: printing-formulas
+    body: |
+      int hour = 9;
+      String time = hour + ":00";
+      System.out.println(time);
+    why: "One side of `+` is a String, so `hour + \":00\"` joins them into the String `9:00`, which fits in a String variable. It compiles."
+
+  - type: compiles
+    after: division
+    body: |
+      int half = 7 / 2.0;
+      System.out.println(half);
+    why: "With `2.0` in it, the division gives the `double` 3.5, and a `double` can't go into an `int` without losing its decimal part. javac says `possible lossy conversion from double to int`."
+
+  - type: choice
+    after: printing-formulas
+    prompt: "`big` holds 2147483647, the largest value an `int` can hold. What happens on `big = big + 1;`?"
+    choices:
+      - "`big` wraps around to -2147483648, the most negative `int`"
+      - "`big` becomes 2147483648"
+      - "The program stops with an error"
+      - "It doesn't compile"
+    answer: 1
+    why: "Going past the limit is called overflow: there's no error, and the value wraps around to the negative end of the range. 2147483648 doesn't fit in an `int` at all."
+
+  - type: choice
+    after: tracing-values
+    prompt: "`int b = a;` makes `b` a copy of `a`, and then `b` changes. What happens to `a`?"
+    body: |
+      int a = 5;
+      int b = a;
+      b = b * 3;
+      System.out.println(a);
+    choices:
+      - "`a` changes too, because `b` was made from `a`"
+      - "Nothing: `=` copied the value once, so `a` still holds 5"
+      - "`a` becomes 0, because its value was moved to `b`"
+    answer: 2
+    why: "`=` copies the value into `b` once, and the two variables aren't linked afterwards. `b` becomes 15, but `a` keeps 5."
+
+  - type: boss
+    after: calculator
+    prompt: |
+      Split a bill. Read the total and the number of people (both whole numbers), and print each person's share as a decimal number. For the input `50` and `4` the program prints:
+
+      ```
+      Total:
+      People:
+      Each of 4 people pays 12.5
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              System.out.println("Total:");
+              int total = Integer.valueOf(scanner.nextLine());
+              System.out.println("People:");
+              int people = Integer.valueOf(scanner.nextLine());
+              double share = (double) total / people;
+              System.out.println("Each of " + people + " people pays " + share);
+          }
+      }
+    hints:
+      - Dividing two `int` values drops the decimal part, so `50 / 4` alone gives 12.
+      - "Cast before dividing: `(double) total / people`. A share that comes out even still prints with `.0`, like `20.0`."
+    tests:
+      - stdin: |
+          50
+          4
+      - stdin: |
+          60
+          3
+        hidden: true
+      - stdin: |
+          7
+          2
+        hidden: true
+      - stdin: |
+          100
+          3
+        hidden: true

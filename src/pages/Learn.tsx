@@ -24,10 +24,15 @@ export default function Learn() {
         <h1>The course</h1>
         <p className="muted">Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises. The site is being built in batches: modules that aren't written yet are listed so you can see what's coming.</p>
         {next && (
-          <p>
+          <p className="actions">
             <Link className="btn btn-primary" to={stepPath(next.module, next.step)}>
               {started ? "Continue" : "Start"}: {next.step.title}
             </Link>
+            {!started && (
+              <Link className="btn" to="/placement/">
+                Already know some Java? Placement quiz
+              </Link>
+            )}
           </p>
         )}
       </div>
@@ -72,10 +77,10 @@ export default function Learn() {
                         </span>
                         <span className="module-count">
                           <span aria-hidden="true">
-                            {pr.done}/{pr.total} steps
+                            {pr.done}/{pr.total} steps{s.placed.includes(m.id) && !complete ? " · skipped" : ""}
                           </span>
                           <span className="visually-hidden">
-                            , {pr.done} of {pr.total} steps done
+                            , {pr.done} of {pr.total} steps done{s.placed.includes(m.id) && !complete ? ", skipped after the placement quiz" : ""}
                           </span>
                         </span>
                         <span className="bar module-bar" aria-hidden="true">

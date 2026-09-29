@@ -1,7 +1,7 @@
-import { ArrowRight, BookOpen, Check, Cpu, Lightbulb, ListChecks, Smartphone, WifiOff } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarCheck, Check, Compass, Cpu, Crosshair, Lightbulb, ListChecks, Smartphone, WifiOff } from "lucide-react";
 import { Link } from "react-router-dom";
-import { modules, plan, stepPath, totalChallenges, totalSteps, modulePath } from "../content";
-import { useStore } from "../state/store";
+import { course, modules, plan, stepPath, totalChallenges, totalSteps, modulePath } from "../content";
+import { localDay, useStore } from "../state/store";
 import { nextStep, stepsDone } from "../state/derived";
 import { useTitle } from "../lib/title";
 import { MOOC_URL } from "../lib/site";
@@ -23,6 +23,8 @@ export default function Home() {
   const next = nextStep(s);
   const done = stepsDone(s);
   const first = modules[0];
+  const drillCount = modules.reduce((a, m) => a + m.drills, 0) + course.interviewDrills;
+  const dailyDone = localDay() in s.daily;
   return (
     <div className="landing">
       <section className="hero">
@@ -92,7 +94,7 @@ export default function Home() {
           <div className="card card-callout status-card">
             <h2 className="h3">Being built</h2>
             <p>
-              Java Arena is new. {modules.length} of {plan.length} modules are online so far ({totalSteps} steps, {totalChallenges} challenges); the rest of the course is added in batches. <Link to="/learn/">The course page</Link> lists every planned module.
+              Java Arena is new. {modules.length} of {plan.length} modules are online so far ({totalSteps} steps, {totalChallenges} challenges, and {drillCount} practice drills); the rest of the course is added in batches. <Link to="/learn/">The course page</Link> lists every planned module.
             </p>
           </div>
         </div>
@@ -127,6 +129,38 @@ export default function Home() {
               <p>Compiler errors and crashes come with a plain-English explanation of what they mean. Hints unlock one at a time, and a solution after a few tries.</p>
             </li>
           </ol>
+        </div>
+      </section>
+
+      <section className="section section-practice">
+        <div className="container">
+          <div className="section-head">
+            <h2>Practice</h2>
+            <p className="section-lead">Quick drills unlock as you finish the lessons, and the ones you miss come back more often until you know them.</p>
+          </div>
+          <div className="features">
+            <Link className="feature" to="/deathmatch/">
+              <span className="feature-icon" aria-hidden="true">
+                <Crosshair className="icon" />
+              </span>
+              <h3>Deathmatch</h3>
+              <p>Endless reps: predict the output, fill the blank, spot the bug, will it compile, and small programs to write. One miss ends a run, or play with three lives. Interview prep is open to everyone.</p>
+            </Link>
+            <Link className="feature" to="/daily/">
+              <span className="feature-icon" aria-hidden="true">
+                <CalendarCheck className="icon" />
+              </span>
+              <h3>Daily challenge</h3>
+              <p>{dailyDone ? "Done for today. A new question comes at midnight." : "One question a day, the same for everyone. Answer it to keep your streak going."}</p>
+            </Link>
+            <Link className="feature" to="/placement/">
+              <span className="feature-icon" aria-hidden="true">
+                <Compass className="icon" />
+              </span>
+              <h3>Placement quiz</h3>
+              <p>Already know some Java? One question per module shows where to start, and which modules you can skip.</p>
+            </Link>
+          </div>
         </div>
       </section>
 

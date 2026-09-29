@@ -1,0 +1,259 @@
+topic: interview
+drills:
+  - type: choice
+    prompt: Which of these is not a primitive type in Java?
+    choices:
+      - "`int`"
+      - "`char`"
+      - "`String`"
+      - "`boolean`"
+    answer: 3
+    why: "Java has exactly eight primitive types: `byte`, `short`, `int`, `long`, `float`, `double`, `char` and `boolean`. `String` is a class, so a `String` variable holds a reference to an object."
+
+  - type: choice
+    prompt: How big is an `int` in Java?
+    choices:
+      - It depends on the computer, 32 or 64 bits
+      - Always 32 bits, from -2147483648 to 2147483647
+      - Always 16 bits, from -32768 to 32767
+      - Always 64 bits, so it has no practical limit
+    answer: 2
+    why: "Java fixes the size of every primitive type on every platform. An `int` is a signed 32-bit number, from `Integer.MIN_VALUE` (-2147483648) to `Integer.MAX_VALUE` (2147483647); a `long` has 64 bits for bigger whole numbers."
+
+  - type: compiles
+    body: |
+      long population = 8000000000;
+      System.out.println(population);
+    why: "A whole-number literal is an `int` unless it ends in `L`, and 8000000000 is too big for an `int`, so javac reports `integer number too large`. Writing `8000000000L` makes it a `long` literal, and then it compiles."
+
+  - type: predict
+    body: |
+      int big = Integer.MAX_VALUE;
+      big = big + 1;
+      System.out.println(big);
+      System.out.println(big == Integer.MIN_VALUE);
+    why: "`int` arithmetic wraps around silently: one past the largest `int` is the smallest one, and no error is raised. If overflow must be caught, `Math.addExact` throws an `ArithmeticException` instead."
+
+  - type: bug
+    prompt: This program should print the number of milliseconds in a year, 31536000000. `millisPerDay` fits in an `int` and should stay one. Which line is wrong?
+    body: |
+      int millisPerDay = 24 * 60 * 60 * 1000;
+      long millisPerYear = 365 * millisPerDay; // BUG
+      System.out.println(millisPerYear);
+    fix: long millisPerYear = 365L * millisPerDay;
+    why: "`365 * millisPerDay` multiplies two `int` values, so the product overflows before it is widened to `long`. Making one operand a `long` (`365L`) makes Java do the whole multiplication in 64 bits."
+
+  - type: predict
+    body: |
+      System.out.println(7 / 2);
+      System.out.println(-7 / 2);
+      System.out.println(-7 % 2);
+      System.out.println(7 / 2.0);
+    why: "When both operands are integers, `/` drops the fraction, rounding toward zero (so `-7 / 2` is `-3`), and `%` gives the remainder with the sign of the left operand. If either operand is a `double`, the division keeps the fraction."
+
+  - type: predict
+    body: |
+      System.out.println((int) 3.99);
+      System.out.println((int) -3.99);
+      System.out.println(Math.round(3.99));
+      System.out.println(Math.round(2.5));
+    why: "Casting a `double` to `int` cuts off the fraction, toward zero; it never rounds. `Math.round` rounds to the nearest whole number, and a value exactly halfway, like 2.5, rounds up toward positive infinity."
+
+  - type: predict
+    body: |
+      double sum = 0.1 + 0.2;
+      System.out.println(sum);
+      System.out.println(sum == 0.3);
+    why: "A `double` is stored in binary, and 0.1, 0.2 and 0.3 have no exact binary form, so the sum is a tiny bit off from the `double` closest to 0.3. That's why `double` values are compared with a small tolerance, and money is kept in whole cents or in `java.math.BigDecimal`."
+
+  - type: predict
+    body: |
+      char c = 'A';
+      c++;
+      System.out.println(c);
+      System.out.println('A' + 1);
+      System.out.println((char) ('a' + 2));
+    why: "A `char` is a 16-bit number (a UTF-16 code unit) shown as a character. `c++` keeps the type `char`, but `'A' + 1` is promoted to `int`, so it prints the number 66; casting back to `char` gives a character again."
+
+  - type: choice
+    prompt: "`a` and `b` are `String` variables. What is the difference between `a == b` and `a.equals(b)`?"
+    choices:
+      - "None, both compare the characters; `==` is just shorter"
+      - "`==` compares the characters; `equals` checks whether they are the same object"
+      - "`==` doesn't compile for `String` values"
+      - "`==` checks whether both refer to the same object; `equals` compares the characters"
+    answer: 4
+    why: "For objects, `==` compares references: it is `true` only when both variables point to the same object. Two separate `String` objects can hold the same text, so text is compared with `equals`."
+
+  - type: predict
+    body: |
+      String s = "java";
+      s.toUpperCase();
+      System.out.println(s);
+      String t = s.replace('a', 'o').toUpperCase();
+      System.out.println(t);
+      System.out.println(s);
+    why: "Strings are immutable: `toUpperCase` and `replace` return a new `String` and leave the original unchanged. The result of the first `s.toUpperCase()` is never stored, so it is simply lost."
+
+  - type: predict
+    body: |
+      StringBuilder sb = new StringBuilder("abc");
+      sb.append("de").insert(0, "x");
+      sb.reverse();
+      System.out.println(sb);
+      System.out.println(sb.length());
+    why: "Unlike a `String`, a `StringBuilder` is mutable: `append`, `insert` and `reverse` change the same object and return it, which is why the calls can be chained. That makes it the usual choice for building text piece by piece, for example in a loop."
+
+  - type: predict
+    body: |
+      System.out.println(1 + 2 + "3");
+      System.out.println("1" + 2 + 3);
+      System.out.println("1" + (2 + 3));
+    why: "`+` is worked out from left to right. `1 + 2` adds numbers because no `String` has appeared yet, but once the left side is a `String`, each `+` joins text, unless parentheses make the numbers add first."
+
+  - type: predict
+    body: |
+      int day = 2;
+      switch (day) {
+          case 1:
+              System.out.println("one");
+          case 2:
+              System.out.println("two");
+          case 3:
+              System.out.println("three");
+              break;
+          default:
+              System.out.println("other");
+      }
+    why: "In a `switch` with `case ...:` labels, execution jumps to the matching case and then falls through into the cases below it until a `break`. Arrow labels (`case 2 ->`) never fall through."
+
+  - type: compiles
+    body: |
+      String size = "M";
+      int price = switch (size) {
+          case "S" -> 5;
+          case "M" -> 7;
+          case "L" -> 9;
+      };
+      System.out.println(price);
+    why: "A `switch` expression must produce a value for every possible input. Three cases don't cover every `String`, so javac reports `the switch expression does not cover all possible input values`; a `default` case fixes it."
+
+  - type: predict
+    pre: |
+      static int calls = 0;
+
+      static boolean check(boolean result) {
+          calls++;
+          return result;
+      }
+    body: |
+      if (check(false) && check(true)) {
+          System.out.println("both");
+      }
+      System.out.println(calls);
+      if (check(false) & check(true)) {
+          System.out.println("both");
+      }
+      System.out.println(calls);
+    why: "`&&` short-circuits: once the left side is `false`, the result must be `false`, so the right side is never evaluated. `&` on two `boolean` values always evaluates both sides, so it calls `check` twice more."
+
+  - type: predict
+    body: |
+      int i = 5;
+      int a = i++;
+      int b = ++i;
+      System.out.println(a);
+      System.out.println(b);
+      System.out.println(i);
+    why: "`i++` increases `i` but gives the old value (5), while `++i` increases `i` first and gives the new value. Each adds one to `i`, so it ends at 7."
+
+  - type: predict
+    body: |
+      int[] counts = new int[3];
+      boolean[] flags = new boolean[2];
+      String[] names = new String[2];
+      System.out.println(counts[0]);
+      System.out.println(flags[1]);
+      System.out.println(names[0]);
+    why: "A new array is filled with default values: `0` for numbers, `false` for `boolean` and `null` for references such as `String`. Local variables get no default value and must be assigned before they are read."
+
+  - type: choice
+    prompt: What happens when this code runs?
+    body: |
+      int[] scores = {90, 85, 70};
+      System.out.println(scores[3]);
+    choices:
+      - "It throws an `ArrayIndexOutOfBoundsException`"
+      - "It prints `70`, the last element"
+      - "It prints `0`"
+      - "It doesn't compile"
+    answer: 1
+    why: "An array of length 3 has the indexes 0, 1 and 2. Java checks every array access while the program runs, so `scores[3]` throws an `ArrayIndexOutOfBoundsException`; the compiler doesn't check indexes."
+
+  - type: bug
+    prompt: This program should print the sum of the array, 27. Which line is wrong?
+    body: |
+      int[] nums = {4, 8, 15};
+      int sum = 0;
+      for (int i = 0; i <= nums.length; i++) { // BUG
+          sum += nums[i];
+      }
+      System.out.println(sum);
+    fix: "for (int i = 0; i < nums.length; i++) {"
+    why: "The last index is `nums.length - 1`, so the loop must run while `i < nums.length`. With `<=` it also reads `nums[3]`, which throws an `ArrayIndexOutOfBoundsException`."
+
+  - type: choice
+    prompt: What does this print?
+    body: |
+      final int[] values = {1, 2, 3};
+      values[0] = 99;
+      System.out.println(values[0]);
+    choices:
+      - "1"
+      - "Nothing, it doesn't compile because `values` is `final`"
+      - "99"
+    answer: 3
+    verify: output
+    why: "`final` means the variable can't be assigned again, so `values = new int[3];` would not compile. It doesn't freeze the array the variable refers to, whose elements can still change."
+
+  - type: boss
+    prompt: |
+      Write `reverse(String text)`, which returns the text backwards, without calling a `reverse()` method. For example, `reverse("java")` returns `"avaj"`, and `reverse("")` returns `""`.
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(reverse("java"));
+          }
+
+          public static String reverse(String text) {
+              return "";
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(reverse("java"));
+          }
+
+          public static String reverse(String text) {
+              StringBuilder result = new StringBuilder();
+              for (int i = text.length() - 1; i >= 0; i--) {
+                  result.append(text.charAt(i));
+              }
+              return result.toString();
+          }
+      }
+    hints:
+      - "Walk through the text from its last index, `text.length() - 1`, down to 0, and take each character with `charAt(i)`."
+      - "Collect the characters with a `StringBuilder` and `append`, then return `result.toString()`. It avoids making a new `String` for every character."
+    forbid:
+      - pattern: \.reverse\s*\(
+        message: "Build the reversed text yourself instead of calling `reverse()`."
+    tests:
+      - call: System.out.println(reverse("java"));
+      - call: System.out.println(reverse("a"));
+        hidden: true
+      - call: System.out.println("[" + reverse("") + "]");
+        hidden: true
+      - call: System.out.println(reverse("Hello, World 21!"));
+        hidden: true

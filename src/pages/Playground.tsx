@@ -199,7 +199,7 @@ export default function Playground() {
         </p>
       )}
       <div className="workbench" ref={boxRef} data-checks={runs}>
-        {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="Running programs" />}
+        {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="Running programs" now="write your program now" button="Run" />}
         {engine.state === "error" && !unsupported && <EngineErrorCard message={engine.message} />}
         <CodeEditor value={code} onChange={(v) => edit({ code: v })} onRun={run} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="16rem" label="Java code editor (Main.java)" runAction="runs the program" />
         <SymbolBar container={boxRef} />

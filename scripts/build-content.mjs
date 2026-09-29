@@ -9,7 +9,9 @@
 // It also writes fidelity/out/content-checks.json: every program with its inputs and the JDK's
 // results, which scripts/content-browser.mjs replays in the browser engine.
 //
-// Usage: node scripts/build-content.mjs [--no-cache]
+// Usage: node scripts/build-content.mjs [--no-cache] [--dry] [--drill-file <name>.yaml]
+//   --dry         check only: write nothing (no cache, no generated files), so several checks can run at once
+//   --drill-file  check only this file of content/drills, or placement.yaml (with --dry, for writing drills)
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,6 +43,8 @@ delete env._JAVA_OPTIONS;
 delete env.JDK_JAVA_OPTIONS;
 
 const useCache = !process.argv.includes("--no-cache");
+const dry = process.argv.includes("--dry");
+const drillFileArg = process.argv.includes("--drill-file") ? process.argv[process.argv.indexOf("--drill-file") + 1] : null;
 const CACHE_VERSION = 2;
 let cache = {};
 if (useCache && fs.existsSync(CACHE_FILE)) {
@@ -203,6 +207,8 @@ const KEYS = {
   challenge: ["task", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass"],
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
   test: ["name", "stdin", "call", "expect", "hidden"],
+  drillFile: ["topic", "drills"],
+  drill: ["id", "type", "prompt", "pre", "body", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
 };
 function checkKeys(where, obj, kind) {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
@@ -508,10 +514,235 @@ async function buildModules() {
   return out;
 }
 
-const modules = await buildModules();
+// ---------------------------------------------------------------- drills
+/**
+ * Deathmatch drills: content/drills/<module id>.yaml, and interview-*.yaml (topic: interview).
+ * `pre` holds methods, `body` the statements run in main; the learner sees only those two, and the
+ * build runs the whole program on the JDK:
+ *   predict   the answer is what the program really prints
+ *   fill      one [[blank]]; the program with the answer must run, and its output is shown
+ *   bug       one line marked // BUG and a `fix`; the fixed program must run and behave differently
+ *   compiles  the answer (yes or no) is what javac says
+ *   choice    2 to 4 choices; code shown must compile (unless `compiles: false`), and with
+ *             `verify: output` the right choice must be exactly what it prints
+ *   boss      a real coding challenge, checked like a lesson challenge
+ * A drill unlocks when the learner finishes the step `after` names (a slug or id in its module),
+ * or the module's last step when it names none. Interview drills are always open.
+ */
+const DRILL_TYPES = ["predict", "fill", "bug", "compiles", "choice", "boss"];
+const indentBy = (s, n) => s.split("\n").map((l) => (l ? " ".repeat(n) + l : l)).join("\n");
 
-fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
-fs.writeFileSync(CACHE_FILE, JSON.stringify({ version: CACHE_VERSION, jdk: jdkVersion, entries: cache }));
+function drillProgram(pre, body) {
+  const parts = [];
+  if (pre) parts.push(indentBy(pre, 4));
+  parts.push(`    public static void main(String[] args) {\n${body ? indentBy(body, 8) + "\n" : ""}    }`);
+  return `${importsFor(`${pre}\n${body}`)}public class Main {\n${parts.join("\n\n")}\n}\n`;
+}
+
+function drillDisplay(pre, body) {
+  if (pre && body) return `${pre}\n\n// inside main:\n${body}`;
+  return pre || body;
+}
+
+/** The first error javac printed, without the file and line (they're of the whole program). */
+const firstError = (output) => /error: (.*)/.exec(output ?? "")?.[1] ?? "";
+
+async function runDrill(where, program, stdin) {
+  for (const m of indentMessages(program)) errors.push(`${where}: indentation: ${m}`);
+  const c = await compile(mainFile(program));
+  if (!c.ok) {
+    errors.push(`${where}: does not compile:\n${c.output}`);
+    return null;
+  }
+  if (c.output) errors.push(`${where}: javac printed warnings:\n${c.output}`);
+  const r = await run(c, stdin);
+  if (r.timedOut || r.exitCode !== 0 || r.stderr) {
+    errors.push(`${where}: the program fails (exit ${r.exitCode}):\n${r.stderr}`);
+    return null;
+  }
+  checks.push({ where, kind: "run", files: mainFile(program), tests: [{ stdin, stdout: r.stdout, exitCode: 0 }] });
+  return normalizeOutput(r.stdout);
+}
+
+/** True when Markdown text has something that looks like an HTML tag or comment outside code. */
+const htmlLike = (text) => /<[a-zA-Z!\/?]/.test(text.replace(/```[\s\S]*?```/g, "").replace(/(`+)[\s\S]*?\1/g, ""));
+
+async function buildDrill(where, id, topic, d, moduleSteps) {
+  checkKeys(where, d, "drill");
+  if (!DRILL_TYPES.includes(d?.type)) {
+    errors.push(`${where}: type must be one of ${DRILL_TYPES.join(", ")}`);
+    return null;
+  }
+  // Which step unlocks it: named by slug or id, or the module's last step.
+  let after;
+  if (moduleSteps) {
+    const step = d.after == null ? moduleSteps[moduleSteps.length - 1] : moduleSteps.find((s) => s.slug === d.after || s.id === d.after);
+    if (!step) errors.push(`${where}: after: no step ${d.after} in module ${topic}`);
+    after = step?.id;
+  } else if (d.after != null) errors.push(`${where}: interview drills are always open, so they can't have after`);
+  if (d.why != null && typeof d.why !== "string") errors.push(`${where}: why must be text (quote it)`);
+  if (!d.why && d.type !== "compiles" && d.type !== "boss") errors.push(`${where}: needs an explanation (why)`);
+  // Drill text is Markdown, where <tag> or <!-- --> outside backticks would be read as HTML and vanish.
+  for (const [key, text] of [["prompt", d.prompt], ["why", d.why], ...(d.choices ?? []).map((c, i) => [`choice ${i + 1}`, c])])
+    if (typeof text === "string" && htmlLike(text)) errors.push(`${where}: ${key} has text that Markdown reads as HTML; put it in backticks: ${text}`);
+  const base = { id, topic, type: d.type, why: d.why ?? "", ...(after ? { after } : {}) };
+  const pre = d.pre ? String(d.pre).replace(/\s*$/, "") : "";
+  const body = d.body ? String(d.body).replace(/\s*$/, "") : "";
+  const stdin = d.stdin == null || d.stdin === "" ? "" : ensureNl(String(d.stdin));
+  const display = drillDisplay(pre, body);
+  switch (d.type) {
+    case "predict": {
+      const answer = await runDrill(where, drillProgram(pre, body), stdin);
+      if (answer == null) return null;
+      if (!answer) errors.push(`${where}: prints nothing`);
+      if (answer.split("\n").length > 4) errors.push(`${where}: prints ${answer.split("\n").length} lines; keep predict drills to 4`);
+      if (d.answer != null && normalizeOutput(String(d.answer)) !== answer) errors.push(`${where}: the answer says\n${d.answer}\nbut the program prints\n${answer}`);
+      return { ...base, prompt: d.prompt ?? "What does this print?", display, answer, ...(stdin ? { stdin } : {}) };
+    }
+    case "fill": {
+      const { blanks } = parseTemplate(display);
+      if (blanks.length !== 1 || !blanks[0].answer.trim()) {
+        errors.push(`${where}: a fill drill needs exactly one [[blank]] with an answer`);
+        return null;
+      }
+      const output = await runDrill(where, drillProgram(templateSolution(pre), templateSolution(body)), stdin);
+      if (output == null) return null;
+      if (!output) errors.push(`${where}: the program prints nothing, so there's no output to aim for`);
+      if (d.expect != null && normalizeOutput(String(d.expect)) !== output) errors.push(`${where}: expect says\n${d.expect}\nbut the program prints\n${output}`);
+      return { ...base, prompt: d.prompt ?? "Fill the blank so the program prints the output shown.", display, answer: blanks[0].answer, accept: blanks[0].accept, output, ...(stdin ? { stdin } : {}) };
+    }
+    case "bug": {
+      const lines = display.split("\n");
+      const at = lines.findIndex((l) => /\/\/\s*BUG\s*$/.test(l));
+      if (at < 0 || typeof d.fix !== "string" || !d.fix.trim()) {
+        errors.push(`${where}: mark the buggy line with // BUG and give its fix`);
+        return null;
+      }
+      if (lines.filter((l) => /\/\/\s*BUG\s*$/.test(l)).length > 1) errors.push(`${where}: only one line can be marked // BUG`);
+      if (/^\s*[{}]\s*;?\s*\/\/\s*BUG\s*$/.test(lines[at])) errors.push(`${where}: the bug line can't be a lone brace`);
+      const clean = (x) => x.split("\n").map((l) => l.replace(/\s*\/\/\s*BUG\s*$/, "")).join("\n");
+      const fixed = (x) => x.split("\n").map((l) => (/\/\/\s*BUG\s*$/.test(l) ? l.match(/^\s*/)[0] + d.fix.trim() : l)).join("\n");
+      const output = await runDrill(`${where} (fixed)`, drillProgram(fixed(pre), fixed(body)), stdin);
+      if (output == null) return null;
+      const bc = await compile(mainFile(drillProgram(clean(pre), clean(body))));
+      if (bc.ok) {
+        const br = await run(bc, stdin);
+        if (!br.timedOut && br.exitCode === 0 && !br.stderr && normalizeOutput(br.stdout) === output) errors.push(`${where}: the buggy and the fixed program behave the same`);
+      }
+      return { ...base, prompt: d.prompt ?? "One line has a bug. Which one?", display: clean(display), answer: String(at + 1), fix: d.fix.trim(), output, ...(stdin ? { stdin } : {}) };
+    }
+    case "compiles": {
+      const program = drillProgram(pre, body);
+      const c = await compile(mainFile(program));
+      const answer = c.ok ? "yes" : "no";
+      if (d.answer != null && String(d.answer) !== answer) errors.push(`${where}: the answer says ${d.answer}, but javac says ${answer}:\n${c.output}`);
+      checks.push(c.ok ? { where, kind: "compiles", files: mainFile(program) } : { where, kind: "error", files: mainFile(program), javac: c.output });
+      const why = d.why || (c.ok ? "" : `javac says: \`${firstError(c.output)}\``);
+      if (!why) errors.push(`${where}: needs an explanation (why)`);
+      return { ...base, why, prompt: d.prompt ?? "Does this compile?", display, answer };
+    }
+    case "choice": {
+      const choices = (d.choices ?? []).map(String);
+      const answer = Number(d.answer);
+      if (choices.length < 2 || choices.length > 4) return void errors.push(`${where}: a choice drill needs 2 to 4 choices`);
+      if (new Set(choices).size !== choices.length) errors.push(`${where}: two choices are the same`);
+      if (!(answer >= 1 && answer <= choices.length)) return void errors.push(`${where}: answer must be the number of the right choice (1 to ${choices.length})`);
+      if (typeof d.prompt !== "string" || !d.prompt) errors.push(`${where}: a choice drill needs a prompt`);
+      if (display) {
+        const program = drillProgram(pre, body);
+        const c = await compile(mainFile(program));
+        if (d.compiles === false) {
+          if (c.ok) errors.push(`${where}: marked compiles: false, but it compiles`);
+          else checks.push({ where, kind: "error", files: mainFile(program), javac: c.output });
+        } else if (!c.ok) return void errors.push(`${where}: the code doesn't compile:\n${c.output}`);
+        else if (d.verify === "output") {
+          const out = await runDrill(where, program, stdin);
+          if (out != null) {
+            // A choice may be in backticks (as code), which aren't part of the output.
+            const shown = (ch) => normalizeOutput(ch.replace(/^`([^`]*)`$/, "$1"));
+            if (shown(choices[answer - 1]) !== out) errors.push(`${where}: the right choice is "${choices[answer - 1]}", but the program prints "${out}"`);
+            choices.forEach((ch, i) => i !== answer - 1 && shown(ch) === out && errors.push(`${where}: choice ${i + 1} is also what it prints`));
+          }
+        } else checks.push({ where, kind: "compiles", files: mainFile(program) });
+      } else if (d.verify) errors.push(`${where}: verify needs code to run`);
+      return { ...base, prompt: d.prompt ?? "", display, answer: String(answer), choices };
+    }
+    case "boss": {
+      if (typeof d.prompt !== "string" || !d.prompt) errors.push(`${where}: a boss drill needs a prompt (the task)`);
+      const ex = await buildExercise(where, d);
+      if (!ex) return null;
+      checkTaskOutput(where, d.prompt, ex);
+      return { ...base, prompt: d.prompt ?? "", display: "", answer: "", exercise: ex };
+    }
+  }
+  return null;
+}
+
+async function buildDrills(modules) {
+  const dir = path.join(ROOT, "content", "drills");
+  const files = (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : []).filter((f) => !drillFileArg || f === drillFileArg);
+  const byId = new Map(modules.map((m) => [m.id, m]));
+  const seen = new Set();
+  const out = [];
+  await Promise.all(
+    files.map(async (name) => {
+      const file = `content/drills/${name}`;
+      const data = readYaml(path.join(dir, name));
+      if (!data) return;
+      checkKeys(file, data, "drillFile");
+      const topic = data.topic;
+      const interview = topic === "interview";
+      if (!interview && !byId.has(topic)) return void errors.push(`${file}: topic ${topic} is not a written module (or "interview")`);
+      if (!interview && name !== `${topic}.yaml`) errors.push(`${file}: the file should be named ${topic}.yaml`);
+      if (!Array.isArray(data.drills) || !data.drills.length) return void errors.push(`${file}: needs drills`);
+      const stem = name.replace(/\.ya?ml$/, "");
+      const built = await Promise.all(
+        data.drills.map((d, i) => {
+          const id = d?.id ?? `${stem}-${i + 1}`;
+          if (seen.has(id)) errors.push(`${file}: duplicate drill id ${id}`);
+          seen.add(id);
+          return buildDrill(`${file} drill ${i + 1} (${d?.type})`, id, topic, d, interview ? null : byId.get(topic).steps);
+        }),
+      );
+      out.push({ file: name, drills: built.filter(Boolean) });
+    }),
+  );
+  out.sort((a, b) => a.file.localeCompare(b.file));
+  return out.flatMap((f) => f.drills);
+}
+
+/** content/placement.yaml: one drill per question, each naming the module it tests, in course order. */
+async function buildPlacement(modules) {
+  const file = path.join(ROOT, "content", "placement.yaml");
+  if (!fs.existsSync(file)) return [];
+  const data = readYaml(file);
+  const order = modules.map((m) => m.id);
+  let last = -1;
+  const out = [];
+  for (const [i, q] of (data?.questions ?? []).entries()) {
+    const where = `content/placement.yaml question ${i + 1}`;
+    const at = order.indexOf(q?.module);
+    if (at < 0) {
+      errors.push(`${where}: module ${q?.module} is not a written module`);
+      continue;
+    }
+    if (at < last) errors.push(`${where}: the questions must follow the course order`);
+    last = at;
+    const { module, ...rest } = q;
+    const d = await buildDrill(where, `placement-${i + 1}`, module, { ...rest, after: undefined }, modules[at].steps);
+    if (d) out.push({ ...d, module });
+  }
+  return out;
+}
+
+const modules = await buildModules();
+const drills = await buildDrills(modules);
+const placement = drillFileArg && drillFileArg !== "placement.yaml" ? [] : await buildPlacement(modules);
+
+if (!dry) {
+  fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
+  fs.writeFileSync(CACHE_FILE, JSON.stringify({ version: CACHE_VERSION, jdk: jdkVersion, entries: cache }));
+}
 fs.rmSync(TMP, { recursive: true, force: true });
 
 for (const w of warnings) console.warn("warn:", w);
@@ -521,6 +752,11 @@ if (errors.length) {
   process.exit(1);
 }
 
+if (dry) {
+  console.log(`check ok (nothing written): ${modules.length} modules, ${drills.length} drills${drillFileArg ? ` in ${drillFileArg}` : ""}, ${placement.length} placement questions`);
+  process.exit(0);
+}
+
 // The app loads a small index (every page needs it) and each module's lessons only when needed.
 const live = new Set(modules.map((m) => m.id));
 const plan = course.modules.map((m, i) => ({ id: m.id, number: i + 1, title: m.title, course: m.course, part: m.part ?? null, mooc: m.mooc ?? [], steps: m.steps, live: live.has(m.id) }));
@@ -528,15 +764,19 @@ const index = {
   jdk: jdkVersion,
   moocUrl: course.moocUrl,
   plan,
-  modules: modules.map(({ steps, ...m }) => ({ ...m, steps: steps.map((s) => ({ id: s.id, slug: s.slug, title: s.title, challenges: 1 + s.more.length })) })),
+  modules: modules.map(({ steps, ...m }) => ({ ...m, drills: drills.filter((d) => d.topic === m.id).length, steps: steps.map((s) => ({ id: s.id, slug: s.slug, title: s.title, challenges: 1 + s.more.length, drills: drills.filter((d) => d.after === s.id).length })) })),
+  interviewDrills: drills.filter((d) => d.topic === "interview").length,
+  placementQuestions: placement.length,
 };
 fs.rmSync(GENERATED, { recursive: true, force: true });
 fs.mkdirSync(path.join(GENERATED, "modules"), { recursive: true });
 fs.writeFileSync(path.join(GENERATED, "course.json"), JSON.stringify(index));
 for (const m of modules) fs.writeFileSync(path.join(GENERATED, "modules", `${m.id}.json`), JSON.stringify(m));
+// Drills and placement questions load only on the practice pages.
+fs.writeFileSync(path.join(GENERATED, "drills.json"), JSON.stringify({ drills, placement }));
 fs.mkdirSync(path.dirname(CHECKS_JSON), { recursive: true });
 fs.writeFileSync(CHECKS_JSON, JSON.stringify({ jdk: jdkVersion, checks }, null, 1));
 const steps = modules.reduce((a, m) => a + m.steps.length, 0);
 const challenges = modules.reduce((a, m) => a + m.steps.reduce((b, s) => b + 1 + s.more.length, 0), 0);
 const runs = checks.reduce((a, c) => a + (c.tests?.length ?? 0), 0);
-console.log(`content ok: ${modules.length} modules, ${steps} steps, ${challenges} challenges; ${checks.length} programs and ${runs} runs checked on ${jdkVersion} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+console.log(`content ok: ${modules.length} modules, ${steps} steps, ${challenges} challenges, ${drills.length} drills, ${placement.length} placement questions; ${checks.length} programs and ${runs} runs checked on ${jdkVersion} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);

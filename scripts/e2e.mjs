@@ -5,7 +5,8 @@
 // on every page type in both themes and at phone widths.
 //
 // Usage: npm run build && node scripts/e2e.mjs [--shots dir]
-import { mkdirSync } from 'node:fs';
+// E2E_ONLY=<regular expression> runs only the tests whose names match (while working on something).
+import { mkdirSync, readFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { launchChromium } from './browser.mjs';
 import { serve } from './serve.mjs';
@@ -21,7 +22,9 @@ const browser = await launchChromium();
 const ENGINE_TIMEOUT = 180_000;
 
 let failures = 0;
+const ONLY = process.env.E2E_ONLY ? new RegExp(process.env.E2E_ONLY, 'i') : null;
 async function test(name, fn) {
+  if (ONLY && !ONLY.test(name)) return;
   const t = Date.now();
   try {
     await fn();
@@ -94,6 +97,9 @@ const PRERENDERED = {
   'learn/printing/first-program/': 'Your first Java program',
   'learn/reading-input/several-inputs/': 'Several inputs in order',
   'playground/': 'Playground',
+  'deathmatch/': 'Deathmatch',
+  'daily/': 'Daily challenge',
+  'placement/': 'Placement quiz',
   'settings/': 'Settings',
   'about/': 'About and credits',
 };
@@ -458,6 +464,250 @@ await test('playground: run a program with input, share it, open the link elsewh
   await ctx.close();
 });
 
+console.log('Practice');
+// The right answers come from the build's own drill file.
+const DRILLS = JSON.parse(readFileSync(new URL('../src/generated/drills.json', import.meta.url), 'utf8'));
+const drillById = new Map([...DRILLS.drills, ...DRILLS.placement].map((d) => [d.id, d]));
+/** Answers the rep on screen, right or wrong. Boss reps are answered right only. */
+async function answerRep(page, right = true) {
+  const id = await page.locator('.rep').getAttribute('data-drill');
+  const d = drillById.get(id);
+  expect(d, `unknown drill ${id}`);
+  switch (d.type) {
+    case 'predict':
+      await page.fill('#rep-input', right ? d.answer : d.answer + ' and more');
+      await page.keyboard.press('Enter');
+      break;
+    case 'fill':
+      await page.fill('input.blank', right ? d.answer : 'zzz');
+      await page.keyboard.press('Enter');
+      break;
+    case 'bug': {
+      const n = right ? Number(d.answer) : Number(d.answer) === 1 ? 2 : 1;
+      await page.locator(`button.bugline[aria-label^="Line ${n}:"]`).click();
+      break;
+    }
+    case 'compiles':
+      await page.click(right === (d.answer === 'yes') ? '.btn-yes' : '.btn-no');
+      break;
+    case 'choice': {
+      const n = right ? d.answer : d.answer === '1' ? '2' : '1';
+      await page.click(`.choice[data-choice="${n}"]`);
+      break;
+    }
+    case 'boss':
+      await setCode(page, d.exercise.solution);
+      await page.click('#check');
+      break;
+  }
+  return d;
+}
+const practiceState = (extra = {}) => ({ version: 1, steps: {}, settings: { mobileData: true, ...extra.settings }, ...extra.state });
+
+await test('Deathmatch: with nothing finished, the lobby offers lesson 1, the placement quiz and interview prep', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'deathmatch/');
+  // The pre-rendered page has a .lobby too: wait for what only the app draws.
+  await page.locator('.lobby .rank-card').waitFor();
+  const text = await page.locator('.lobby').innerText();
+  expect(text.includes('No drills unlocked yet') && text.includes('Placement quiz'), text);
+  expect((await page.locator('text=Try interview prep').count()) === (DRILLS.drills.some((d) => d.topic === 'interview') ? 1 : 0), 'interview prep offered when it has questions');
+  await axe(page, 'deathmatch lobby, nothing unlocked');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('Deathmatch: ranked play waits for 10 drills; Casual is open before that', async () => {
+  const first = 'printing-first-program';
+  const open = DRILLS.drills.filter((d) => d.after === first && d.type !== 'boss').length;
+  if (open >= 10) return;
+  const { ctx, page, errors } = await newPage();
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ state: { steps: { [first]: { done: true, challenges: {} } } } }));
+  await page.goto(BASE + 'deathmatch/');
+  await page.locator('.lobby .modes').waitFor();
+  expect(await page.locator('.mode-dm').isDisabled(), 'Deathmatch is closed');
+  expect((await page.locator('.mode-dm').innerText()).includes(`(${open} so far)`), await page.locator('.mode-dm').innerText());
+  expect(!(await page.locator('.mode:has(.mode-name:text-is("Casual"))').isDisabled()), 'Casual is open');
+  // Enter doesn't start a closed mode.
+  await page.locator('h1').click();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  expect((await page.locator('.rep').count()) === 0, 'no run started');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('Deathmatch: a finished step unlocks its drills; right answers of every type build the streak', async () => {
+  const { ctx, page, errors } = await newPage();
+  // The printing module finished (its drills are open); boss reps off for the instant types first.
+  const steps = Object.fromEntries(['printing-first-program', 'printing-several-lines', 'printing-print-and-println', 'printing-comments', 'printing-compiler-errors'].map((id) => [id, { done: true, challenges: {} }]));
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ state: { steps }, settings: { boss: false } }));
+  await page.goto(BASE + 'deathmatch/');
+  await page.locator('.lobby .modes').waitFor();
+  await axe(page, 'deathmatch lobby');
+  await page.click('.mode-dm');
+  const seen = new Set();
+  for (let i = 1; i <= 12; i++) {
+    await page.locator('.rep').waitFor();
+    const d = await answerRep(page, true);
+    seen.add(d.type);
+    await page.waitForFunction((n) => document.querySelector('.hud-n')?.textContent === String(n), i);
+    if (i === 3) await axe(page, 'deathmatch rep');
+  }
+  expect(seen.size >= 4, `only these drill types came up: ${[...seen]}`);
+  // A wrong answer ends a one-life run, with the answer, why, and a share button for the new best.
+  await page.locator('.rep').waitFor();
+  await answerRep(page, false);
+  await page.locator('.death').waitFor();
+  const death = await page.locator('.death').innerText();
+  expect(/eliminated/i.test(death) && death.includes('a new personal best') && death.includes('Share'), death);
+  await axe(page, 'eliminated');
+  expect(await page.evaluate(() => document.activeElement?.id === 'death-title'), 'focus moves to the verdict');
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('java-arena-v1')).dm);
+  await page.waitForTimeout(400);
+  let dm = await saved();
+  expect(dm.best.deathmatch === 12 && dm.runs.length === 1 && dm.runs[0].reps === 13 && dm.runs[0].kills === 12, `saved once, with its numbers: ${JSON.stringify(dm.runs)}`);
+  // Enter respawns.
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.querySelector('.hud-n')?.textContent === '0' && !!document.querySelector('.rep'));
+  // A run left by following a link is kept too.
+  await answerRep(page, true);
+  await page.waitForFunction(() => document.querySelector('.hud-n')?.textContent === '1');
+  await page.click('#main-nav a[href$="/learn/"]');
+  await page.locator('.module-live').first().waitFor();
+  await page.waitForTimeout(400);
+  dm = await saved();
+  expect(dm.runs.length === 2 && dm.runs[0].reps === 1 && dm.runs[0].streak === 1, `the left run is saved: ${JSON.stringify(dm.runs)}`);
+  await page.goBack();
+  await page.locator('.lobby .modes').waitFor();
+  expect((await page.locator('.runs').innerText()).includes('Deathmatch'), 'the run is listed');
+  await axe(page, 'deathmatch lobby with runs');
+  // Enter on the (scrollable, focusable) runs table doesn't start a run.
+  await page.locator('.table-scroll').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  expect((await page.locator('.rep').count()) === 0, 'Enter on the runs table started a run');
+  await page.locator('.mode-dm').click();
+  await page.locator('.rep').waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('.lobby .modes').waitFor();
+  expect((await saved()).runs.length === 2, 'a run with no answers is not saved');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('Casual: a miss costs a life and shows why; Continue goes on; a boss rep is a real program', async () => {
+  const { ctx, page, errors } = await newPage();
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ settings: { unlockAll: true, boss: true, topicsOff: [...new Set(DRILLS.drills.map((d) => d.topic))].filter((t) => t !== 'printing') } }));
+  await page.goto(BASE + 'deathmatch/');
+  await page.locator('.lobby .modes').waitFor();
+  await page.locator('.mode:has(.mode-name:text-is("Casual"))').click();
+  await page.locator('.rep').waitFor();
+  const d = await answerRep(page, false);
+  expect(d.type !== 'boss', 'the first rep is a quick one');
+  await page.locator('.death').waitFor();
+  const review = await page.locator('.death').innerText();
+  expect(review.includes('A life lost') && review.includes('2 lives left'), review);
+  if (d.why) expect(review.includes(d.why.replace(/`/g, '').slice(0, 20)), `why shown: ${review}`);
+  expect(await page.evaluate(() => document.activeElement?.id === 'death-title'), 'focus moves to the verdict');
+  await page.keyboard.press('Enter');
+  // Reps 2 to 7 right; the 8th is a boss rep, answered with its solution and checked by the engine.
+  for (let i = 2; i <= 8; i++) {
+    await page.locator('.rep').waitFor();
+    const r = await answerRep(page, true);
+    if (i === 8) expect(r.type === 'boss', `rep 8 is a ${r.type}`);
+    await page.waitForFunction((n) => document.querySelector('.hud-n')?.textContent === String(n), i - 1, { timeout: i === 8 ? ENGINE_TIMEOUT : 10_000 });
+  }
+  // The run's best streak is what counts, not the streak it ended on.
+  await page.locator('.rep').waitFor();
+  await answerRep(page, false);
+  await page.locator('.death').waitFor();
+  await page.waitForTimeout(400);
+  const dm = await page.evaluate(() => JSON.parse(localStorage.getItem('java-arena-v1')).dm);
+  expect(dm.best.casual === 7 && dm.runs[0].streak === 7 && dm.runs.length === 1, `casual best: ${JSON.stringify(dm)}`);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('Deathmatch on a phone (360 px): reps of every type fit the screen', async () => {
+  const { ctx, page } = await newPage({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ settings: { unlockAll: true, boss: false } }));
+  await page.goto(BASE + 'deathmatch/');
+  await page.locator('.lobby .modes').waitFor();
+  await noOverflow(page, 'lobby 360');
+  await page.locator('.mode:has(.mode-name:text-is("Casual"))').click();
+  const types = new Set();
+  for (let i = 1; i <= 15; i++) {
+    await page.locator('.rep').waitFor();
+    await noOverflow(page, `rep ${i} at 360`);
+    types.add((await answerRep(page, true)).type);
+    await page.waitForFunction((n) => document.querySelector('.hud-n')?.textContent === String(n), i);
+  }
+  await page.locator('.rep').waitFor();
+  await answerRep(page, false);
+  await page.locator('.death').waitFor();
+  await noOverflow(page, 'review at 360');
+  await axe(page, 'review at 360');
+  expect(types.size >= 3, `types: ${[...types]}`);
+  await ctx.close();
+});
+
+await test('Interview prep is open without any lesson done', async () => {
+  if (!DRILLS.drills.some((d) => d.topic === 'interview')) return;
+  const { ctx, page } = await newPage();
+  await page.goto(BASE + 'deathmatch/');
+  await page.click('text=Try interview prep');
+  await page.locator('.rep').waitFor();
+  const d = await answerRep(page, true);
+  expect(d.topic === 'interview', d.topic);
+  await page.waitForFunction(() => document.querySelector('.hud-n')?.textContent === '1');
+  await ctx.close();
+});
+
+await test('daily challenge: one answer a day, kept after a reload, with the streak', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'daily/');
+  await page.locator('.rep').waitFor();
+  await axe(page, 'daily');
+  await answerRep(page, true);
+  await page.locator('.death').waitFor();
+  expect((await page.locator('.death').innerText()).includes('Solved'), 'solved');
+  await page.reload();
+  await page.locator('.death').waitFor();
+  expect((await page.locator('.stat-n').innerText()) === '1', 'a 1-day streak');
+  expect((await page.locator('.dday-right').count()) === 1, 'today is marked');
+  await axe(page, 'daily done');
+  // The daily question is kept apart from Deathmatch: it doesn't unlock the drill there.
+  expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('java-arena-v1')).drills ?? {}).length === 0), 'no drill state from the daily question');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('placement quiz: the first miss sets the start; skipping unlocks drills and moves Continue', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'placement/');
+  await page.click('text=Start the quiz');
+  // Right, right, then "I don't know" for the rest: start at the third module.
+  for (let i = 0; i < DRILLS.placement.length; i++) {
+    await page.locator('.rep').waitFor();
+    if (i < 2) await answerRep(page, true);
+    else await page.click("text=I don't know this yet");
+  }
+  await page.locator('text=Your starting point').waitFor();
+  const third = DRILLS.placement[2].module;
+  const result = await page.locator('.narrow').innerText();
+  expect(result.includes('You got 2 of') && result.includes('skipping the 2 modules'), result);
+  await axe(page, 'placement result');
+  await page.click('text=Skip 2 modules and unlock their drills');
+  await page.locator('text=their drills are now in Deathmatch').waitFor();
+  await page.goto(BASE + 'learn/');
+  await page.locator('.module-live').first().waitFor();
+  expect((await page.locator('.learn').innerText()).includes('skipped'), 'skipped modules are marked');
+  expect((await page.locator('.page-head a.btn-primary').getAttribute('href')).includes(`/learn/${third}/`), 'Continue goes to the third module');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 console.log('Engine prototype');
 const { ctx: mainCtx, page, errors } = await newPage();
 await test('engine downloads and starts', async () => {
@@ -646,13 +896,15 @@ await test('offline: after one visit, pages and the engine work without a connec
 });
 
 console.log('Accessibility and layout');
-const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'learn/calculating/tracing-values/', 'playground/', 'settings/', 'about/', 'learn/nowhere/'];
+const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'learn/calculating/tracing-values/', 'playground/', 'deathmatch/', 'daily/', 'placement/', 'settings/', 'about/', 'learn/nowhere/'];
 for (const colorScheme of ['light', 'dark']) {
   await test(`axe, ${colorScheme} theme: every page type`, async () => {
     const { ctx, page } = await newPage({ colorScheme });
+    // Practice pages load their drills after the page appears: wait for them.
+    const READY = { 'deathmatch/': '.lobby .rank-card', 'daily/': '.rep, .death', 'placement/': 'text=Start the quiz' };
     for (const p of PAGES) {
       await page.goto(BASE + p);
-      await page.locator('#main h1').first().waitFor();
+      await page.locator(READY[p] ?? '#main h1').first().waitFor();
       await axe(page, `${p || 'home'} ${colorScheme}`);
     }
     await page.goto(BASE + 'bench/');

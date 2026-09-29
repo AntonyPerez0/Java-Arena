@@ -12,9 +12,16 @@ export function moduleProgress(s: State, m: ModuleSummary) {
   return { done, total: m.steps.length };
 }
 
-/** The first step (in course order) that isn't done, for "Continue" links. */
+/**
+ * The first step (in course order) that isn't done, for "Continue" links. Modules the placement quiz
+ * said the learner knows are passed over, unless every other step is done.
+ */
 export function nextStep(s: State): { module: ModuleSummary; step: StepSummary } | null {
-  for (const m of modules) for (const step of m.steps) if (!s.steps[step.id]?.done) return { module: m, step };
+  for (const skip of [true, false])
+    for (const m of modules) {
+      if (skip && s.placed.includes(m.id)) continue;
+      for (const step of m.steps) if (!s.steps[step.id]?.done) return { module: m, step };
+    }
   return null;
 }
 

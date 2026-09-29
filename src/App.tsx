@@ -47,8 +47,13 @@ function editorPage(load: () => Promise<{ default: ComponentType }>) {
 
 const stepPage = editorPage(() => import("./pages/StepPage"));
 const playgroundPage = editorPage(() => import("./pages/Playground"));
+const deathmatchPage = editorPage(() => import("./pages/Deathmatch"));
+const dailyPage = editorPage(() => import("./pages/Daily"));
+const placementPage = editorPage(() => import("./pages/Placement"));
 export const loadStepPage = stepPage.preload;
 export const loadPlayground = playgroundPage.preload;
+/** Practice pages, by their first address segment. */
+export const loadPractice: Record<string, () => Promise<void>> = { deathmatch: deathmatchPage.preload, daily: dailyPage.preload, placement: placementPage.preload };
 
 /** On navigation: scroll to the top and move keyboard and screen-reader focus to the new page. */
 function RouteChange() {
@@ -110,6 +115,20 @@ function Footer() {
             </ul>
           </div>
           <div className="footer-col">
+            <h2>Practice</h2>
+            <ul>
+              <li>
+                <Link to="/deathmatch/">Deathmatch</Link>
+              </li>
+              <li>
+                <Link to="/daily/">Daily challenge</Link>
+              </li>
+              <li>
+                <Link to="/placement/">Placement quiz</Link>
+              </li>
+            </ul>
+          </div>
+          <div className="footer-col">
             <h2>Site</h2>
             <ul>
               <li>
@@ -152,6 +171,8 @@ function Footer() {
 
 const NAV: [string, string][] = [
   ["/learn/", "Learn"],
+  ["/deathmatch/", "Deathmatch"],
+  ["/daily/", "Daily"],
   ["/playground/", "Playground"],
   ["/settings/", "Settings"],
   ["/about/", "About"],
@@ -241,6 +262,9 @@ export default function App() {
           <Route path="/learn/:moduleId" element={<ModulePage />} />
           <Route path="/learn/:moduleId/:stepSlug" element={<stepPage.Route />} />
           <Route path="/playground" element={<playgroundPage.Route />} />
+          <Route path="/deathmatch" element={<deathmatchPage.Route />} />
+          <Route path="/daily" element={<dailyPage.Route />} />
+          <Route path="/placement" element={<placementPage.Route />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/about" element={<About />} />
           <Route path="*" element={<NotFound />} />

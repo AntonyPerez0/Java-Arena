@@ -1,0 +1,264 @@
+topic: methods
+drills:
+  - type: predict
+    after: defining-methods
+    pre: |
+      public static void warn() {
+          System.out.println("Careful!");
+      }
+
+      public static void praise() {
+          System.out.println("Well done!");
+      }
+    body: |
+      praise();
+      System.out.println("Next level");
+      praise();
+    why: "Only a call runs a method. `praise` is called twice, but `warn` is defined and never called, so `Careful!` never appears."
+
+  - type: predict
+    after: calling-in-a-loop
+    pre: |
+      public static void knock() {
+          System.out.println("knock");
+      }
+    body: |
+      int count = 0;
+      while (count < 2) {
+          knock();
+          count++;
+      }
+      System.out.println("Who's there?");
+    why: "The loop runs twice, and each round's call prints `knock`. After the loop, `main` carries on with its own print line."
+
+  - type: predict
+    after: parameters
+    pre: |
+      public static void label(String item) {
+          System.out.println("[" + item + "]");
+      }
+    body: |
+      String fruit = "pear";
+      label(fruit);
+      label(fruit + "s");
+      label("fruit");
+    why: "The argument is worked out before the call, so `fruit + \"s\"` arrives as `\"pears\"`. In `label(\"fruit\")` the quotes make it the text `fruit`, not the variable."
+
+  - type: predict
+    after: several-parameters
+    pre: |
+      public static void split(int total, int people) {
+          System.out.println(total / people + " each, " + total % people + " left");
+      }
+    body: |
+      split(14, 4);
+      split(4, 14);
+    why: "Arguments go to the parameters by position, so in `split(4, 14)` the `total` is 4 and `people` is 14. Then `4 / 14` is 0 in integer division, and the remainder `4 % 14` is 4."
+
+  - type: predict
+    after: parameters-are-copies
+    pre: |
+      public static void drain(int level) {
+          while (level > 0) {
+              level -= 40;
+          }
+          System.out.println("inside: " + level);
+      }
+    body: |
+      int tank = 100;
+      drain(tank);
+      System.out.println("tank: " + tank);
+    why: "`drain` works on its own copy of 100: it goes 60, 20, -20, and the loop stops once it's no longer above 0. `main`'s `tank` is never changed, so it's still 100."
+
+  - type: fill
+    after: calling-in-a-loop
+    pre: |
+      public static [[void]] chime() {
+          System.out.println("ding dong");
+      }
+    body: |
+      for (int i = 0; i < 2; i++) {
+          chime();
+      }
+    why: "`chime` gives nothing back, so its header says `void`: `public static void chime()`."
+
+  - type: fill
+    after: several-parameters
+    pre: |
+      public static void printBill(String item, int count, [[int price]]) {
+          System.out.println(item + ": " + count * price);
+      }
+    body: |
+      printBill("Tea", 3, 2);
+      printBill("Cake", 2, 4);
+    why: "Every parameter needs its own type, even when the one before it has the same type: `int count, price` doesn't compile. With `double price` the totals would print as `6.0` and `8.0`."
+
+  - type: bug
+    after: parameters
+    prompt: "The program should print `Welcome, Ines!` and then `Welcome, Tom!`. Which line is wrong?"
+    pre: |
+      public static void welcome(String guest) {
+          System.out.println("Welcome, " + "guest" + "!"); // BUG
+      }
+    body: |
+      welcome("Ines");
+      welcome("Tom");
+    fix: System.out.println("Welcome, " + guest + "!");
+    why: "In quotes, `\"guest\"` is only the text guest, so every call prints `Welcome, guest!`. Without the quotes, `guest` is the parameter, which holds the name each call gives."
+
+  - type: bug
+    after: several-parameters
+    prompt: The program should print the first 2 multiples of 5 and then the first 3 multiples of 4 (5, 10, 4, 8, 12). Which line is wrong?
+    pre: |
+      public static void multiples(int number, int count) {
+          for (int i = 1; i <= count; i++) {
+              System.out.println(number * i);
+          }
+      }
+    body: |
+      multiples(5, 2);
+      multiples(3, 4); // BUG
+    fix: multiples(4, 3);
+    why: "Arguments go to the parameters in order, so `multiples(3, 4)` makes `number` 3 and `count` 4, and prints four multiples of 3. The first call shows the right order: the number first, then how many."
+
+  - type: compiles
+    after: several-parameters
+    pre: |
+      public static void printTime(int hours, int minutes) {
+          System.out.println(hours + ":" + minutes);
+      }
+    body: |
+      printTime(9, 30, 15);
+    why: "No. `printTime` has two parameters, so every call must give exactly two arguments. This call gives three, and javac says the argument lists differ in length."
+
+  - type: compiles
+    after: parameters-are-copies
+    pre: |
+      public static void bump(int count) {
+          count++;
+          System.out.println(count);
+      }
+    body: |
+      int count = 4;
+      bump(count);
+      bump(count);
+    why: "Yes. The parameter `count` and `main`'s `count` are two separate variables that happen to share a name, one in each method, and a method may change its own parameter. (It prints 5 twice.)"
+
+  - type: choice
+    after: defining-methods
+    prompt: Where do you write a new method of your own?
+    choices:
+      - "Inside `main`, before the lines that call it"
+      - "Inside the class, next to `main` but not inside it"
+      - "Outside the class, after its last `}`"
+    answer: 2
+    why: "A method is defined inside the class, beside `main`, never inside another method. The order of the methods doesn't matter: Java always starts at `main`."
+
+  - type: choice
+    after: several-parameters
+    prompt: "Which call fits the method `public static void book(String guest, int nights)`?"
+    choices:
+      - '`book(2, "Rosa");`'
+      - '`book("Rosa");`'
+      - '`book("Rosa", 2);`'
+      - '`book("Rosa", "2");`'
+    answer: 3
+    why: "The arguments go to the parameters in order, so the call needs a String first and then an int. `\"2\"` in quotes is a String, not an int, and leaving one out doesn't compile either."
+
+  - type: boss
+    after: parameters
+    prompt: |
+      Write a method `printDivisors(int number)` that prints every whole number from 1 to `number` that divides `number` evenly (with nothing left over), one per line. The check calls `printDivisors(12);` and expects:
+
+      ```
+      1
+      2
+      3
+      4
+      6
+      12
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              printDivisors(12);
+          }
+
+          // Write the printDivisors method here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              printDivisors(12);
+          }
+
+          public static void printDivisors(int number) {
+              for (int i = 1; i <= number; i++) {
+                  if (number % i == 0) {
+                      System.out.println(i);
+                  }
+              }
+          }
+      }
+    hints:
+      - "The method starts `public static void printDivisors(int number) {`, and inside it a loop takes `i` from 1 to `number`."
+      - "`number % i == 0` is true when `i` divides `number` with nothing left over: print `i` only then."
+    tests:
+      - call: printDivisors(12);
+      - call: printDivisors(7);
+        hidden: true
+      - call: printDivisors(1);
+        hidden: true
+      - call: printDivisors(30);
+        hidden: true
+
+  - type: boss
+    after: parameters-are-copies
+    prompt: |
+      Write a method `countFromTo(int from, int to)` that prints the whole numbers from `from` to `to`, one per line. When `from` is bigger than `to`, it counts down instead. The check calls `countFromTo(2, 5);` and expects:
+
+      ```
+      2
+      3
+      4
+      5
+      ```
+
+      and `countFromTo(5, 2);` prints 5, 4, 3 and 2.
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              countFromTo(2, 5);
+          }
+
+          // Write the countFromTo method here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              countFromTo(2, 5);
+          }
+
+          public static void countFromTo(int from, int to) {
+              if (from <= to) {
+                  for (int i = from; i <= to; i++) {
+                      System.out.println(i);
+                  }
+              } else {
+                  for (int i = from; i >= to; i--) {
+                      System.out.println(i);
+                  }
+              }
+          }
+      }
+    hints:
+      - "Two loops, one counting up and one counting down. An `if` on `from <= to` picks which one runs."
+      - "Counting down: `for (int i = from; i >= to; i--)`."
+    tests:
+      - call: countFromTo(2, 5);
+      - call: countFromTo(5, 2);
+        hidden: true
+      - call: countFromTo(4, 4);
+        hidden: true
+      - call: countFromTo(-1, 1);
+        hidden: true

@@ -58,8 +58,8 @@ export type PlannedModule = {
 };
 
 /** A module as the course index lists it: its steps' titles and addresses, without the lessons. */
-export type StepSummary = { id: string; slug: string; title: string; challenges: number };
-export type ModuleSummary = Omit<Module, "steps"> & { steps: StepSummary[] };
+export type StepSummary = { id: string; slug: string; title: string; challenges: number; /** Drills this step unlocks. */ drills: number };
+export type ModuleSummary = Omit<Module, "steps"> & { steps: StepSummary[]; drills: number };
 
 export type CourseIndex = {
   /** The reference JDK the expected outputs came from. */
@@ -67,4 +67,41 @@ export type CourseIndex = {
   moocUrl: string;
   plan: PlannedModule[];
   modules: ModuleSummary[];
+  interviewDrills: number;
+  placementQuestions: number;
 };
+
+export type DrillType = "predict" | "fill" | "bug" | "compiles" | "choice" | "boss";
+
+/**
+ * A Deathmatch drill (src/generated/drills.json). `display` is the code shown; `answer` is what's
+ * checked: the output (predict), the blank (fill), the 1-based line (bug), "yes" or "no"
+ * (compiles), or the 1-based choice (choice). A boss drill is a whole challenge in `exercise`.
+ */
+export type Drill = {
+  id: string;
+  /** The module it practises, or "interview". */
+  topic: string;
+  type: DrillType;
+  prompt: string;
+  display: string;
+  answer: string;
+  /** Markdown: why the answer is what it is. */
+  why: string;
+  /** Accepted answers for a fill drill. */
+  accept?: string[];
+  /** The corrected line of a bug drill. */
+  fix?: string;
+  /** What the (fixed or filled-in) program prints. */
+  output?: string;
+  /** Input the program reads. */
+  stdin?: string;
+  choices?: string[];
+  exercise?: Exercise;
+  /** The step that unlocks it (none for interview drills). */
+  after?: string;
+};
+
+export type PlacementQuestion = Drill & { module: string };
+
+export type DrillSet = { drills: Drill[]; placement: PlacementQuestion[] };

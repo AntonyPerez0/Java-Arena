@@ -11,8 +11,8 @@ const RULES: Rule[] = [
   { code: "compiler.err.expected", when: /^';' expected/, explain: () => "Java needs a semicolon ; at the end of this statement. Look at the end of the line the arrow points to (or the line before it)." },
   { code: "compiler.err.expected", explain: (d) => `Java expected ${quoted(d.message) ? `'${quoted(d.message)}'` : "something else"} here. Check for a missing bracket, parenthesis or semicolon just before the arrow.` },
   { code: "compiler.err.expected3", explain: () => "Java expected a different symbol here. Check for a missing bracket, parenthesis or semicolon just before the arrow." },
-  { code: "compiler.err.cant.resolve.location", when: /location: variable \w+ of type Object\b/, explain: (d) => objectHasNo(d.message) },
-  { code: "compiler.err.cant.resolve.location.args", when: /location: variable \w+ of type Object\b/, explain: (d) => objectHasNo(d.message) },
+  { code: "compiler.err.cant.resolve.location", when: /location: variable \w+ of type Object$/m, explain: (d) => objectHasNo(d.message) },
+  { code: "compiler.err.cant.resolve.location.args", when: /location: variable \w+ of type Object$/m, explain: (d) => objectHasNo(d.message) },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: () => "Java doesn't know a variable with this name here. Check the spelling (upper and lower case matter) and that the variable was created before this line, inside the same block { }." },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class (Scanner|ArrayList|HashMap|List|Map|Random|HashSet|Set|Arrays|Collections|LocalDate|Files|Paths|Path)\b/, explain: (d) => `To use ${/symbol:\s+class (\w+)/.exec(d.message)?.[1]}, import it at the top of the file, for example import java.util.Scanner;` },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: () => "Java doesn't know a class with this name. Check the spelling and capital letters, and whether it needs an import at the top of the file." },
@@ -24,10 +24,10 @@ const RULES: Rule[] = [
   { code: "compiler.err.prob.found.req", when: /possible lossy conversion/, explain: () => "This would squeeze a bigger or more precise number type into a smaller one and could lose information, for example a double into an int. Convert it on purpose with a cast such as (int), or use a variable of the bigger type." },
   {
     code: "compiler.err.prob.found.req",
-    when: /incompatible types: Object cannot be converted to \w+/,
+    when: /incompatible types: Object cannot be converted to [A-Z][\w$]*$/m,
     explain: (d) => {
-      const t = /Object cannot be converted to (\w+)/.exec(d.message)?.[1];
-      return `A value of type Object could be any object, so Java won't put it in a ${t} variable by itself. When you know it is a ${t} (check with instanceof first, as equals does), cast it by putting (${t}) in front of it.`;
+      const t = /Object cannot be converted to ([A-Z][\w$]*)$/m.exec(d.message)?.[1];
+      return `A value of type Object could be any object, so Java won't put it in a ${t} variable by itself. If it comes from a list declared without a type in angle brackets, such as ArrayList list, give the list its type: ArrayList<${t}>. If you know the value is a ${t} (check with instanceof first, as equals does), cast it by putting (${t}) in front of it.`;
     },
   },
   {
@@ -113,7 +113,7 @@ const RULES: Rule[] = [
 
 /** A name looked up on a variable of type Object, such as equals' parameter used before its cast. */
 function objectHasNo(m: string): string {
-  const v = /location: variable (\w+) of type Object/.exec(m)?.[1] ?? "it";
+  const v = /location: variable (\w+) of type Object$/m.exec(m)?.[1] ?? "it";
   const what = /symbol:\s+(variable|method) (\w+)/.exec(m);
   const member = what ? (what[1] === "method" ? `${what[2]}()` : what[2]) : "";
   return `${v} has the type Object, and Object has no ${what?.[1] ?? "member"} ${member}. Java goes by the variable's type, even when the object in it is one of yours. Cast it to your own class first, for example Parcel other = (Parcel) ${v}; with your class's name instead of Parcel, and then use other.${member}.`;

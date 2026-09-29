@@ -30,6 +30,7 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
   useEffect(() => {
     if (value === lastOut.current) return;
     lastOut.current = value;
+    fromOutside.current = true;
     const next = splitFiles(value) as SourceFile[];
     setFiles(next);
     setActive((a) => Math.min(a, next.length - 1));
@@ -38,6 +39,14 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   // Each file's editor state (cursor and undo history), kept while another file is open.
   const saved = useRef(new Map<string, SavedEditor>());
+  const fromOutside = useRef(false);
+  // States of removed files, and all of them after a new program from outside (Reset, a share link),
+  // are dropped. This runs after the closing editor has saved its own state.
+  useEffect(() => {
+    if (fromOutside.current) saved.current.clear();
+    else for (const p of [...saved.current.keys()]) if (!files.some((f) => f.path === p)) saved.current.delete(p);
+    fromOutside.current = false;
+  }, [files]);
   const errorsIn = (f: SourceFile) => diagnostics.filter((d) => d.kind === "error" && base(d.file) === f.path).length;
 
   // After a check with errors, show a file that has them.
@@ -73,7 +82,6 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
   };
   const removeFile = (i: number) => {
     if (!confirm(`Remove ${files[i].path}? Its code will be lost.`)) return;
-    saved.current.delete(files[i].path);
     emit(files.filter((_, j) => j !== i));
     setActive(0);
     requestAnimationFrame(() => (tabs.current[0] ?? document.querySelector<HTMLElement>(".editor .cm-content"))?.focus());

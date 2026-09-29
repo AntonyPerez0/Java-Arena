@@ -512,6 +512,15 @@ await test('part 5 mistakes are explained: a missing cast in equals, and an inst
   await setCode(page, 'public class Pot {\n    private String plant;\n\n    public void water() {\n        System.out.println(this.plant.length());\n    }\n}\n');
   out = await check(page);
   expect(out.includes('NullPointerException') && out.includes('the instance variable plant holds no object') && out.includes('for example in the constructor'), out);
+  // A removed class leaves nothing behind: added again, it starts empty and undo can't bring the old code back.
+  page.once('dialog', (d) => d.accept());
+  await page.click('text=Remove Pot.java');
+  await page.click('text=Add a class');
+  await page.fill('#new-class', 'Pot');
+  await page.click('.file-add-form button[type=submit]');
+  await page.click('.cm-content');
+  await page.keyboard.press('ControlOrMeta+Z');
+  expect(!(await editorText(page)).includes('plant'), 'the removed code came back');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });

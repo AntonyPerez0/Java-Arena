@@ -16,7 +16,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import YAML from "yaml";
-import { checkRules, mainProgram, normalizeOutput, parseTemplate, templateSolution } from "../src/grader/assemble.js";
+import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, mainProgram, normalizeOutput, parseTemplate, templateSolution } from "../src/grader/assemble.js";
 import { indentMessages } from "../src/grader/style.js";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome } from "./fidelity/suite.mjs";
 
@@ -41,7 +41,7 @@ delete env._JAVA_OPTIONS;
 delete env.JDK_JAVA_OPTIONS;
 
 const useCache = !process.argv.includes("--no-cache");
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 let cache = {};
 if (useCache && fs.existsSync(CACHE_FILE)) {
   const c = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
@@ -133,16 +133,19 @@ function limit(fn) {
   });
 }
 
-/** Runs a compiled program on one input with the reference JVM flags. Cached by program and input. */
-async function run(compiled, stdin) {
-  const id = sha(["run", compiled.files, stdin, REFERENCE_JVM_FLAGS]);
+/**
+ * Runs a compiled program on one input with the reference JVM flags. Cached by program and input.
+ * `mainClass` and `args` are for the check program of tests that call methods.
+ */
+async function run(compiled, stdin, { mainClass = "Main", args = [] } = {}) {
+  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS]);
   if (cache[id]) return cache[id];
   const { classes } = await javacBatch(compiled.files);
   return limit(
     () =>
       new Promise((resolve) => {
         const cwd = fs.mkdtempSync(path.join(TMP, "run-"));
-        const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, "-cp", classes, "Main"], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+        const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, "-cp", classes, mainClass, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
         let timedOut = false;
@@ -199,7 +202,7 @@ const KEYS = {
   step: ["id", "slug", "title", "text", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass", "more"],
   challenge: ["task", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass"],
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
-  test: ["name", "stdin", "expect", "hidden"],
+  test: ["name", "stdin", "call", "expect", "hidden"],
 };
 function checkKeys(where, obj, kind) {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
@@ -354,8 +357,14 @@ async function buildExercise(where, raw) {
   for (const t of testsRaw) checkKeys(`${where} test`, t, "test");
   if (testsRaw.every((t) => t.hidden)) errors.push(`${where}: at least one test must be visible`);
   if (testsRaw.some((t) => t.stdin) && !testsRaw.some((t) => t.hidden)) warnings.push(`${where}: reads input but has no hidden test`);
+  for (const t of testsRaw) if (t.call != null && (typeof t.call !== "string" || !t.call.trim())) errors.push(`${where}: a test's call must be Java code (as text)`);
+  // Tests with a `call` run the check program (ArenaCheck), which calls the learner's methods.
+  const calls = testsRaw.map((t) => (t.call == null ? undefined : ensureNl(String(t.call))));
+  const check = calls.some((x) => x != null) ? checkSource(calls.map((call) => ({ call }))) : null;
+  const filesFor = (text) => (check ? [...mainFile(text), { path: CHECK_FILE, text: check.text }] : mainFile(text));
+  const how = (i) => (check ? { mainClass: CHECK_CLASS, args: [String(i)] } : {});
 
-  const c = await compile(mainFile(solution));
+  const c = await compile(filesFor(solution));
   if (!c.ok) {
     errors.push(`${where}: the solution does not compile:\n${c.output}`);
     return null;
@@ -363,7 +372,7 @@ async function buildExercise(where, raw) {
   if (c.output) errors.push(`${where}: javac printed warnings for the solution:\n${c.output}`);
   // Typed input ends with Enter, so every input line ends with a line break.
   const stdins = testsRaw.map((t) => (t.stdin == null || t.stdin === "" ? "" : ensureNl(String(t.stdin))));
-  const runs = await Promise.all(stdins.map((stdin) => run(c, stdin)));
+  const runs = await Promise.all(stdins.map((stdin, i) => run(c, stdin, how(i))));
   const tests = testsRaw.map((t, i) => {
     const r = runs[i];
     const n = `${where} test ${i + 1}`;
@@ -373,15 +382,17 @@ async function buildExercise(where, raw) {
     const actual = normalizeOutput(r.stdout);
     if (t.expect != null && normalizeOutput(String(t.expect)) !== actual) errors.push(`${n}: expected\n${t.expect}\nbut the solution prints\n${actual}`);
     if (!actual) errors.push(`${n}: the solution prints nothing`);
-    return { name: t.name ?? (testsRaw.length > 1 ? `Test ${i + 1}` : "Output"), stdin: stdins[i], expect: actual, hidden: !!t.hidden };
+    const call = calls[i];
+    const name = t.name ?? (call && !call.trim().includes("\n") ? call.trim() : testsRaw.length > 1 ? `Test ${i + 1}` : "Output");
+    return { name, stdin: stdins[i], ...(call ? { call } : {}), expect: actual, hidden: !!t.hidden };
   });
-  checks.push({ where, kind: "run", files: mainFile(solution), tests: tests.map((t, i) => ({ stdin: t.stdin, stdout: runs[i].stdout, exitCode: 0 })) });
+  checks.push({ where, kind: "run", files: filesFor(solution), ...(check ? { mainClass: CHECK_CLASS } : {}), tests: tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : {}), stdout: runs[i].stdout, exitCode: 0 })) });
 
   // Starter code must not already pass, or the challenge would be free.
   if (kind === "code" && seed && !raw.seedMayPass) {
-    const sc = await compile(mainFile(seed));
+    const sc = await compile(filesFor(seed));
     if (sc.ok) {
-      const sr = await Promise.all(tests.map((t) => run(sc, t.stdin)));
+      const sr = await Promise.all(tests.map((t, i) => run(sc, t.stdin, how(i))));
       const passes = tests.every((t, i) => sr[i].exitCode === 0 && !sr[i].timedOut && normalizeOutput(sr[i].stdout) === t.expect);
       const styleOk = style !== "indent" || indentMessages(seed).length === 0;
       if (passes && styleOk && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: the starter code already passes`);
@@ -390,13 +401,28 @@ async function buildExercise(where, raw) {
   // A fill-in with all its blanks empty must not pass either.
   if (kind === "fill") {
     const empty = templateEmpty(raw.fill);
-    const ec = await compile(mainFile(empty));
+    const ec = await compile(filesFor(empty));
     if (ec.ok) {
-      const er = await Promise.all(tests.map((t) => run(ec, t.stdin)));
+      const er = await Promise.all(tests.map((t, i) => run(ec, t.stdin, how(i))));
       if (tests.every((t, i) => er[i].exitCode === 0 && normalizeOutput(er[i].stdout) === t.expect) && checkRules(empty, require, forbid).length === 0) errors.push(`${where}: the program passes with every blank left empty`);
     }
   }
   return { kind, seed, solution, hints, tests, require, forbid, ...(style ? { style } : {}) };
+}
+
+/**
+ * A task shows the expected output in its last plain ``` block. It must be what the first visible
+ * test really prints (the task card shows that test's output too, and drops the task's copy only
+ * when the two are the same).
+ */
+function checkTaskOutput(where, task, ex) {
+  if (!ex || ex.kind === "predict" || typeof task !== "string") return;
+  const blocks = [...task.matchAll(/^```[ \t]*\n([\s\S]*?)^```[ \t]*$/gm)];
+  const shown = ex.tests.find((t) => !t.hidden && t.expect);
+  if (!blocks.length || !shown) return;
+  const block = blocks[blocks.length - 1][1];
+  const norm = (x) => normalizeOutput(x).trim();
+  if (norm(block) !== norm(shown.expect)) errors.push(`${where}: the task shows the output\n${block}but the first visible test prints\n${shown.expect}`);
 }
 
 function templateEmpty(template) {
@@ -435,12 +461,14 @@ async function buildStep(file, m, s, i, slugs, ids) {
   const more = s.more ?? [];
   if (more.length + 1 !== CHALLENGES_PER_STEP) errors.push(`${where}: has ${more.length + 1} challenges; every step has ${CHALLENGES_PER_STEP} (the step's own plus ${CHALLENGES_PER_STEP - 1} under "more")`);
   const ex = await buildExercise(`${where} challenge 1`, s);
+  checkTaskOutput(`${where} challenge 1`, task, ex);
   const extra = await Promise.all(
     more.map(async (c, k) => {
       const w = `${where} challenge ${k + 2}`;
       checkKeys(w, c, "challenge");
       if (typeof c?.task !== "string" || !c.task) errors.push(`${w}: needs a task (as text)`);
       const cx = await buildExercise(w, c);
+      checkTaskOutput(w, c.task, cx);
       return cx && { task: await checkExamples(w, String(c.task ?? "").trim() + "\n"), ...cx };
     }),
   );

@@ -26,12 +26,12 @@ let failures = 0;
 let runs = 0;
 const t0 = Date.now();
 for (const c of checks) {
-  const got = await page.evaluate(async ({ files, inputs }) => {
+  const got = await page.evaluate(async ({ files, mainClass, inputs }) => {
     const r = await window.javaArena.compile(files);
     if (!r.ok || !inputs) return { compile: { ok: r.ok, output: r.output, internalError: r.internalError }, runs: [] };
-    const runs = await window.javaArena.runClasses(r.classes, "Main", inputs, 30_000);
+    const runs = await window.javaArena.runClasses(r.classes, mainClass, inputs, 30_000);
     return { compile: { ok: r.ok, output: r.output }, runs: runs.map((x) => ({ stdout: x.stdout, stderr: x.stderr, exitCode: x.exitCode, timedOut: x.timedOut, internalError: x.internalError })) };
-  }, { files: c.files, inputs: c.kind === "run" ? c.tests.map((t) => ({ stdin: t.stdin })) : null });
+  }, { files: c.files, mainClass: c.mainClass ?? "Main", inputs: c.kind === "run" ? c.tests.map((t) => ({ stdin: t.stdin, ...(t.args ? { args: t.args } : {}) })) : null });
   const problems = [];
   if (got.compile.internalError) problems.push(`engine error: ${got.compile.internalError}`);
   else if (c.kind === "error") {

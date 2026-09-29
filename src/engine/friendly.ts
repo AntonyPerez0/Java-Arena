@@ -24,6 +24,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.prob.found.req", when: /unexpected return value/, explain: () => "This method is void, so it can't return a value. Change void to the value's type, or remove the value after return." },
   { code: "compiler.err.prob.found.req", when: /missing return value/, explain: () => "This method must return a value: write return followed by the value." },
   { code: "compiler.err.prob.found.req", explain: () => "The types here don't match what Java expects." },
+  { code: "compiler.err.void.not.allowed.here", explain: () => "This uses the value of a method that is void, so there is no value to print or store. Give the method a return type (such as int) and a return statement, or call it on a line of its own." },
   { code: "compiler.err.missing.ret.stmt", explain: () => "This method promises to return a value, but some path through it reaches the end without a return statement. Make sure every possible path ends with return." },
   { code: "compiler.err.unreachable.stmt", explain: () => "This line can never run, because the code before it always leaves first (for example an endless loop, a return, or a break)." },
   { code: "compiler.err.class.public.should.be.in.file", explain: () => "A public class must be in a file with exactly the same name. Rename the class to match the file (here the file is Main.java, so the class should be Main)." },

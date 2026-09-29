@@ -1,9 +1,10 @@
-import { useId, useMemo } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { keymap, EditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
+import { historyField } from "@codemirror/commands";
 import { indentUnit } from "@codemirror/language";
 import { linter, lintGutter, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
 import type { FriendlyDiagnostic } from "../grader/grade";
@@ -22,11 +23,25 @@ type Props = {
   runAction?: string;
   /** The file this editor shows: only javac's messages about it are marked. */
   file?: string;
+  /** A state saved by onLeave (text, cursor and undo history) to start from, if its text is still `value`. */
+  saved?: SavedEditor;
+  /** Called with the editor's state when it closes, so switching back to this file can restore it. */
+  onLeave?: (state: SavedEditor) => void;
 };
 
+/** An editor's state as JSON, with its undo history. */
+export type SavedEditor = { doc: string; [key: string]: unknown };
+const savedFields = { history: historyField };
+
 /** The Java code editor (CodeMirror), with javac's errors marked on their lines. */
-export default function CodeEditor({ value, onChange, onRun, diagnostics = [], minHeight = "10rem", label = "Java code editor", runAction = "checks your code", file = "Main.java" }: Props) {
+export default function CodeEditor({ value, onChange, onRun, diagnostics = [], minHeight = "10rem", label = "Java code editor", runAction = "checks your code", file = "Main.java", saved, onLeave }: Props) {
   const helpId = useId();
+  // Only the state this editor started with matters; a saved state for other text is ignored.
+  const [initialState] = useState(() => (saved && saved.doc === value ? { json: saved, fields: savedFields } : undefined));
+  const view = useRef<EditorView | null>(null);
+  const leave = useRef(onLeave);
+  leave.current = onLeave;
+  useEffect(() => () => void (view.current && leave.current?.(view.current.state.toJSON(savedFields) as SavedEditor)), []);
   const theme = useResolvedTheme();
   const extensions = useMemo(() => {
     const marks = diagnostics.filter((d) => d.line > 0 && d.kind !== "note" && d.file.split("/").pop() === file);
@@ -76,6 +91,8 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
         minHeight={minHeight}
         basicSetup={{ tabSize: 4, foldGutter: false, highlightActiveLine: true, autocompletion: false }}
         indentWithTab
+        initialState={initialState}
+        onCreateEditor={(v) => (view.current = v)}
       />
     </div>
   );

@@ -391,6 +391,16 @@ const lessonSession = await newPage();
     expect((await page.locator('.file-tab-on').innerText()).includes('Main.java') && (await page.locator('.file-tab-on .file-tab-errors').count()) === 1, 'the file with the error is shown, with its count');
     await axe(page, 'a challenge of two files, with an error');
     await page.click('#file-tab-0');
+    // Each file keeps its undo history: a change in Parcel.java can be undone after a visit to Main.java.
+    await page.click('.cm-content');
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.insertText('// a note\n');
+    await page.click('#file-tab-1');
+    await page.locator('.file-tab-on', { hasText: 'Main.java' }).waitFor();
+    await page.click('#file-tab-0');
+    await page.click('.cm-content');
+    await page.keyboard.press('ControlOrMeta+Z');
+    expect(!(await editorText(page)).includes('// a note'), 'the change was undone after switching files');
     await setCode(page, 'public class Parcel {\n    private String recipient;\n    private int grams;\n\n    public Parcel(String recipient, int grams) {\n        this.recipient = recipient;\n        this.grams = grams;\n    }\n\n    public void printInfo() {\n        System.out.println("Parcel for " + this.recipient + ", " + this.grams + " g");\n    }\n}\n');
     await check(page);
     const passed = await page.locator('.results').innerText();

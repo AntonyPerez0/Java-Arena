@@ -1,0 +1,282 @@
+topic: return-values
+drills:
+  - type: predict
+    after: returning-a-value
+    pre: |
+      public static int dozen() {
+          System.out.println("counting...");
+          return 12;
+      }
+    body: |
+      dozen();
+      int eggs = dozen() * 2;
+      System.out.println(eggs);
+    why: "Every call runs the method, so both calls print `counting...`, even the first one, whose returned 12 is thrown away. The second call's 12 is doubled to 24."
+
+  - type: predict
+    after: computing-return-values
+    pre: |
+      public static double halfOf(int n) {
+          return n / 2;
+      }
+    body: |
+      System.out.println(halfOf(7));
+      System.out.println(halfOf(7) * 2);
+    why: "`n / 2` divides two `int`s, so `7 / 2` is 3 and the half is lost. Only then is 3 turned into the `double` 3.0 that's returned, and doubling it gives 6.0, not 7.0."
+
+  - type: predict
+    after: returning-from-branches
+    pre: |
+      public static String weather(int temp) {
+          if (temp > 25) {
+              return "hot";
+          }
+          if (temp > 15) {
+              return "mild";
+          }
+          return "cold";
+      }
+    body: |
+      System.out.println(weather(30));
+      System.out.println(weather(20));
+      System.out.println(weather(15));
+    why: "The first `return` that runs ends the method. 30 returns `hot` before the second check is reached, 20 fails the first check and passes the second, and 15 isn't above 15, so it gets to `return \"cold\";`."
+
+  - type: predict
+    after: the-call-stack
+    pre: |
+      public static int shipping(int weight) {
+          System.out.println("weighing " + weight);
+          return weight * 2;
+      }
+
+      public static int total(int price, int weight) {
+          int cost = price + shipping(weight);
+          System.out.println("total " + cost);
+          return cost;
+      }
+    body: |
+      System.out.println("pay " + total(10, 3));
+    why: "`main`'s print line can't print until `total(10, 3)` has returned. `total` first calls `shipping(3)`, which prints and returns 6, then prints its own line and returns 16, and only then does `main` print."
+
+  - type: predict
+    after: returning-text
+    pre: |
+      public static String launch(int from) {
+          String text = "";
+          for (int i = from; i >= 1; i--) {
+              text += i + "-";
+          }
+          return text + "go";
+      }
+    body: |
+      System.out.println(launch(3));
+      System.out.println(launch(0));
+    why: "The loop adds `3-`, `2-` and `1-` to the empty String, and `go` is added to the end when it's returned. For 0 the loop never runs, so only `go` is returned."
+
+  - type: fill
+    after: computing-return-values
+    pre: |
+      public static [[double]] perPerson(int bill, int people) {
+          return bill / (double) people;
+      }
+    body: |
+      System.out.println(perPerson(25, 2));
+    why: "`bill / (double) people` is a `double`, 12.5, so the method's return type must be `double`. With `int` it wouldn't compile, because returning 12.5 as an `int` would lose the decimals."
+
+  - type: fill
+    after: methods-calling-methods
+    prompt: Fill the blank with a call to `toMinutes`, so the program prints the output shown.
+    pre: |
+      public static int toMinutes(int hours) {
+          return hours * 60;
+      }
+
+      public static int toSeconds(int hours) {
+          return [[toMinutes(hours)]] * 60;
+      }
+    body: |
+      System.out.println(toSeconds(2));
+      System.out.println(toSeconds(1));
+    why: "`toMinutes(hours)` returns the hours in minutes, and 60 times that is seconds. The argument is the parameter `hours`, so the method works for any number of hours, not only 2."
+
+  - type: bug
+    after: computing-return-values
+    prompt: "The program should print `Days: 730`. Which line is wrong?"
+    pre: |
+      public static int yearsToDays(int years) {
+          System.out.println(years * 365); // BUG
+      }
+    body: |
+      int days = yearsToDays(2);
+      System.out.println("Days: " + days);
+    fix: return years * 365;
+    why: "An `int` method has to hand its value back with `return`; printing it doesn't give `main` anything to store. Without a `return`, the method doesn't even compile (`missing return statement`)."
+
+  - type: bug
+    after: variables-inside-methods
+    prompt: "The program should print `Score: 150` and then `Bonus level!`. Which line is wrong?"
+    pre: |
+      public static int addBonus(int score) {
+          score = score + 50;
+          return score;
+      }
+    body: |
+      int score = 100;
+      addBonus(score); // BUG
+      System.out.println("Score: " + score);
+      if (score > 120) {
+          System.out.println("Bonus level!");
+      }
+    fix: score = addBonus(score);
+    why: "`addBonus` changes only its own copy of `score`, and the call throws away the value it returns, so `main`'s `score` stays 100. `score = addBonus(score);` stores the returned 150."
+
+  - type: compiles
+    after: returning-a-value
+    pre: |
+      public static void showTotal(int a, int b) {
+          System.out.println(a + b);
+      }
+    body: |
+      int total = showTotal(2, 3);
+      System.out.println(total);
+    why: "No. `showTotal` is `void`: it prints the sum but gives nothing back, so there's no value to store in `total`. javac says `void cannot be converted to int`."
+
+  - type: compiles
+    after: returning-from-branches
+    pre: |
+      public static String parity(int n) {
+          if (n % 2 == 0) {
+              return "even";
+          } else {
+              return "odd";
+          }
+      }
+    body: |
+      System.out.println(parity(7));
+    why: "Yes. The `if` and the `else` both end in a `return`, and one of the two always runs, so every way through the method gives back a String."
+
+  - type: choice
+    after: returning-from-branches
+    prompt: This program doesn't compile. Why?
+    pre: |
+      public static String frost(int celsius) {
+          if (celsius <= 0) {
+              return "freezing";
+          }
+          if (celsius > 0) {
+              return "thawing";
+          }
+      }
+    body: |
+      System.out.println(frost(-3));
+    compiles: false
+    choices:
+      - "A method can have only one `return`"
+      - "`return` can't be used inside an `if`"
+      - "javac doesn't work out that one of the two conditions is always true, so it sees a way to reach the end without a `return`"
+      - "The String has to be stored in a variable before it's returned"
+    answer: 3
+    why: "javac doesn't reason about what the conditions mean: as far as it knows, both `if`s could be skipped, and the method would then end with nothing to return (`missing return statement`). Replacing the second `if` with a plain `return \"thawing\";` fixes it."
+
+  - type: choice
+    after: drawing-shapes
+    prompt: A shape of height 4 has 7, 5, 3 and 1 symbols in rows 1 to 4. Which expression gives the number of symbols in row `r`?
+    choices:
+      - "`2 * r - 1`"
+      - "`2 * (4 - r) + 1`"
+      - "`8 - r`"
+      - "`7 - 2 * r`"
+    answer: 2
+    why: "Row 1 has 7 and each row has 2 fewer, and `2 * (4 - r) + 1` gives 7, 5, 3 and 1. The others give 1, 3, 5, 7 (`2 * r - 1`), 7, 6, 5, 4 (`8 - r`) and 5, 3, 1, -1 (`7 - 2 * r`)."
+
+  - type: boss
+    after: returning-from-branches
+    prompt: |
+      Write a method `middle(int a, int b, int c)` that returns the middle one of its three numbers: the one that would be in the middle if the three were put in order. The check runs `System.out.println(middle(1, 5, 2));` and expects:
+
+      ```
+      2
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(middle(1, 5, 2));
+          }
+
+          // Write the middle method here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(middle(1, 5, 2));
+          }
+
+          public static int middle(int a, int b, int c) {
+              if ((a >= b && a <= c) || (a <= b && a >= c)) {
+                  return a;
+              }
+              if ((b >= a && b <= c) || (b <= a && b >= c)) {
+                  return b;
+              }
+              return c;
+          }
+      }
+    hints:
+      - "`a` is the middle one when it lies between the other two: at least `b` and at most `c`, or at most `b` and at least `c`."
+      - "Check `a`, then `b`, each with an `if` and a `return`. If neither is in the middle, `c` is, so `return c;` comes last."
+    tests:
+      - call: System.out.println(middle(1, 5, 2));
+      - call: System.out.println(middle(9, 3, 6));
+        hidden: true
+      - call: System.out.println(middle(7, 8, 9));
+        hidden: true
+      - call: System.out.println(middle(4, 4, 1));
+        hidden: true
+      - call: System.out.println(middle(-2, -9, -5));
+        hidden: true
+
+  - type: boss
+    after: returning-text
+    prompt: |
+      Write a method `numberList(int from, int to)` that returns the whole numbers from `from` to `to` as one String, with a comma between each two and no spaces. When `from` is bigger than `to`, it returns the empty String `""`. The check runs `System.out.println(numberList(3, 7));` and expects:
+
+      ```
+      3,4,5,6,7
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(numberList(3, 7));
+          }
+
+          // Write the numberList method here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(numberList(3, 7));
+          }
+
+          public static String numberList(int from, int to) {
+              String text = "";
+              for (int i = from; i <= to; i++) {
+                  if (i > from) {
+                      text += ",";
+                  }
+                  text += i;
+              }
+              return text;
+          }
+      }
+    hints:
+      - "Start with `String text = \"\";` and add one number in each round of a loop from `from` to `to`. Return `text` after the loop."
+      - "Every number but the first gets a comma in front of it: `if (i > from) { text += \",\"; }` before adding `i`."
+    tests:
+      - call: System.out.println(numberList(3, 7));
+      - call: System.out.println(numberList(5, 5));
+        hidden: true
+      - call: System.out.println(numberList(-2, 1));
+        hidden: true
+      - call: System.out.println("[" + numberList(4, 2) + "]");
+        hidden: true

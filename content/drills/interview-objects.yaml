@@ -1,0 +1,342 @@
+topic: interview
+drills:
+  - type: choice
+    prompt: How does Java pass arguments to a method?
+    choices:
+      - Primitives by value, objects by reference
+      - Always by value; for an object, the value that is copied is the reference to it
+      - Always by reference
+      - Objects are copied in full, so the method gets its own copy of the object
+    answer: 2
+    why: "Java always passes a copy of the value. For an object variable that value is a reference, so the method can change the object it points to, but it can't make the caller's variable point to a different object."
+
+  - type: predict
+    pre: |
+      static class Box {
+          int value;
+      }
+
+      static void addTen(int n) {
+          n = n + 10;
+      }
+
+      static void update(Box b) {
+          b.value = 10;
+          b = new Box();
+          b.value = 20;
+      }
+    body: |
+      int x = 5;
+      addTen(x);
+      Box box = new Box();
+      update(box);
+      System.out.println(x);
+      System.out.println(box.value);
+    why: "`addTen` gets a copy of `x`, so changing `n` leaves `x` alone. `b` starts as a copy of the reference in `box`, so `b.value = 10` changes the caller's object, but `b = new Box()` only points the method's own copy at a new object."
+
+  - type: predict
+    pre: |
+      static class Counter {
+          static int total = 0;
+          int mine = 0;
+
+          void hit() {
+              total++;
+              mine++;
+          }
+      }
+    body: |
+      Counter a = new Counter();
+      Counter b = new Counter();
+      a.hit();
+      a.hit();
+      b.hit();
+      System.out.println(a.mine);
+      System.out.println(b.mine);
+      System.out.println(Counter.total);
+    why: "A `static` field belongs to the class, so there is one `total` shared by every `Counter`. Each object has its own `mine`, which counts only that object's calls."
+
+  - type: bug
+    prompt: "Each new ticket should get the next number, so the program should print 1 and then 2. Which line is wrong?"
+    pre: |
+      static class Ticket {
+          static int nextId = 1;
+          int id;
+
+          Ticket() {
+              id = nextId; // BUG
+          }
+      }
+    body: |
+      Ticket first = new Ticket();
+      Ticket second = new Ticket();
+      System.out.println(first.id);
+      System.out.println(second.id);
+    fix: id = nextId++;
+    why: "`nextId` is `static`, so all tickets share one counter, but nothing ever increases it, so every ticket gets 1. `id = nextId++;` stores the current number and then moves the shared counter on."
+
+  - type: predict
+    pre: |
+      static class Pizza {
+          String size;
+          int slices;
+
+          Pizza() {
+              this("medium");
+              System.out.println("no-arg");
+          }
+
+          Pizza(String size) {
+              this.size = size;
+              slices = 8;
+              System.out.println("size " + size);
+          }
+      }
+    body: |
+      Pizza p = new Pizza();
+      System.out.println(p.size + " " + p.slices);
+    why: "`new Pizza()` runs the no-argument constructor, whose first statement, `this(\"medium\")`, calls the other constructor, so that one prints first. Inside it, `this.size` is the field and `size` is the parameter."
+
+  - type: bug
+    prompt: The account should start with a balance of 50. Which line is wrong?
+    pre: |
+      static class Account {
+          String owner;
+          int balance;
+
+          Account(String owner, int balance) {
+              this.owner = owner;
+              balance = balance; // BUG
+          }
+      }
+    body: |
+      Account acc = new Account("Ada", 50);
+      System.out.println(acc.owner);
+      System.out.println(acc.balance);
+    fix: this.balance = balance;
+    why: "Inside the constructor, the parameter `balance` hides the field with the same name, so `balance = balance` assigns the parameter to itself and the field stays 0. `this.balance` names the field of the object being built."
+
+  - type: predict
+    pre: |
+      static class Animal {
+          String sound() {
+              return "...";
+          }
+      }
+
+      static class Dog extends Animal {
+          @Override
+          String sound() {
+              return "Woof";
+          }
+      }
+
+      static String describe(Animal a) {
+          return "animal " + a.sound();
+      }
+
+      static String describe(Dog d) {
+          return "dog " + d.sound();
+      }
+    body: |
+      Animal pet = new Dog();
+      System.out.println(pet.sound());
+      System.out.println(describe(pet));
+      System.out.println(describe(new Dog()));
+    why: "An overridden method is chosen while the program runs, from the object's actual class, so `pet.sound()` runs `Dog`'s version. An overloaded method is chosen by the compiler from the declared type of the argument, and `pet` is declared as `Animal`, so `describe(pet)` calls `describe(Animal)`."
+
+  - type: compiles
+    pre: |
+      static int parse(String text) {
+          return Integer.parseInt(text);
+      }
+
+      static double parse(String text) {
+          return Double.parseDouble(text);
+      }
+    body: |
+      System.out.println(parse("5"));
+    why: "Overloads must differ in their parameter lists; a different return type alone isn't enough, because a call like `parse(\"5\")` couldn't tell them apart. javac reports that `parse(String)` is already defined."
+
+  - type: choice
+    prompt: A class overrides `equals` so that two objects with the same fields are equal, but it doesn't override `hashCode`. What can go wrong?
+    choices:
+      - Nothing, `hashCode` is only used when an object is printed
+      - The class no longer compiles
+      - Two equal objects will usually get different hash codes, so a `HashSet` or `HashMap` may not find an equal object that is already in it
+      - "`equals` is ignored and `==` is used instead"
+    answer: 3
+    why: "The contract says that equal objects must have equal hash codes, because hash-based collections use `hashCode` to pick where to look before they call `equals`. The `hashCode` inherited from `Object` usually differs between two separate objects, even equal ones."
+
+  - type: predict
+    pre: |
+      static class Coin {
+          int value;
+
+          Coin(int value) {
+              this.value = value;
+          }
+      }
+
+      record Point(int x, int y) {}
+    body: |
+      System.out.println(new Coin(5).equals(new Coin(5)));
+      System.out.println(new Point(1, 2).equals(new Point(1, 2)));
+      java.util.Set<Point> points = new java.util.HashSet<>();
+      points.add(new Point(1, 2));
+      points.add(new Point(1, 2));
+      System.out.println(points.size());
+    why: "`Coin` inherits `equals` from `Object`, which is `true` only for the very same object. A record automatically gets `equals` and `hashCode` that compare its components, so the two points are equal and the set keeps only one."
+
+  - type: choice
+    prompt: Which statement about interfaces and abstract classes is true in Java 21?
+    choices:
+      - A class can implement several interfaces, but it can extend only one class
+      - An interface can't contain any method with a body
+      - An abstract class can't have a constructor
+      - An interface can declare instance fields, and each object that implements it gets its own copy
+    answer: 1
+    why: "A class extends at most one class but may implement any number of interfaces. Since Java 8, interfaces can have `default` and `static` methods with bodies, but their fields are always `public static final` constants, while an abstract class can have constructors and instance fields."
+
+  - type: compiles
+    pre: |
+      interface Shape {
+          double area();
+      }
+
+      static class Square implements Shape {
+          double side = 2;
+
+          double area() {
+              return side * side;
+          }
+      }
+    body: |
+      System.out.println(new Square().area());
+    why: "Methods declared in an interface are implicitly `public`, and an implementing method can't be less visible. Without `public`, `area()` in `Square` is package-private, so javac reports `attempting to assign weaker access privileges; was public`."
+
+  - type: choice
+    prompt: "A field is declared with no access modifier at all: `int count;`. Which code can use it?"
+    choices:
+      - Code anywhere in the program
+      - Only code inside its own class
+      - Only code in its own class and its subclasses
+      - Code in any class in the same package
+    answer: 4
+    why: "No modifier means package-private access: every class in the same package can use the field, but no class in another package can, not even a subclass. From most to least restrictive, the levels are `private`, package-private, `protected` and `public`."
+
+  - type: choice
+    prompt: "`Team` has only `private final` fields and no setters. Is it immutable?"
+    pre: |
+      static final class Team {
+          private final java.util.List<String> members;
+
+          Team(java.util.List<String> members) {
+              this.members = members;
+          }
+
+          java.util.List<String> getMembers() {
+              return members;
+          }
+      }
+    choices:
+      - "Yes, a `final` field can never change"
+      - "No, the list it holds can still be changed through the caller's reference, or through the one `getMembers()` returns"
+      - "Yes, because the class itself is `final`"
+      - "No, a class with a `List` field can never be immutable"
+    answer: 2
+    why: "`final` stops `members` from pointing at another list, but not that list from changing, and the caller and `getMembers()` both share it. Storing an unmodifiable copy, for example `java.util.List.copyOf(members)`, makes `Team` immutable."
+
+  - type: choice
+    prompt: Which of these is a checked exception, one that a method must either catch or declare with `throws`?
+    choices:
+      - "`NullPointerException`"
+      - "`ArithmeticException`"
+      - "`java.io.IOException`"
+      - "`IllegalArgumentException`"
+    answer: 3
+    why: "Checked exceptions are subclasses of `Exception` that are not subclasses of `RuntimeException`, like `IOException`, and the compiler makes you handle them. `RuntimeException`, `Error` and their subclasses are unchecked."
+
+  - type: compiles
+    pre: |
+      static int parseAge(String text) {
+          if (text.isEmpty()) {
+              throw new Exception("no age given");
+          }
+          return Integer.parseInt(text);
+      }
+    body: |
+      System.out.println(parseAge("42"));
+    why: "`Exception` is a checked exception, so a method that throws it must declare `throws Exception` or catch it, and javac reports `unreported exception Exception; must be caught or declared to be thrown`. Throwing an unchecked one, such as `IllegalArgumentException`, would compile."
+
+  - type: predict
+    pre: |
+      static int divide(int a, int b) {
+          try {
+              System.out.println("try");
+              return a / b;
+          } catch (ArithmeticException e) {
+              System.out.println("catch");
+              return -1;
+          } finally {
+              System.out.println("finally");
+          }
+      }
+    body: |
+      System.out.println(divide(6, 0));
+    why: "Dividing an `int` by zero throws an `ArithmeticException`, so the `return` in `try` never finishes and the matching `catch` runs. The `finally` block runs before the method actually returns, whether or not an exception was thrown, and only then is -1 printed."
+
+  - type: predict
+    body: |
+      Integer a = 127;
+      Integer b = 127;
+      Integer c = 1000;
+      Integer d = 1000;
+      System.out.println(a == b);
+      System.out.println(c.equals(d));
+    why: "The language guarantees that autoboxing a value from -128 to 127 always gives the same cached `Integer` object, so `a == b` is `true`. For other values `==` is not guaranteed to be `true`, which is why `Integer` values are compared with `equals`."
+
+  - type: choice
+    prompt: What happens when this code runs?
+    body: |
+      Integer count = null;
+      int total = count + 1;
+      System.out.println(total);
+    choices:
+      - "It throws a `NullPointerException`"
+      - "It prints `1`"
+      - "It prints `null1`"
+      - "It doesn't compile"
+    answer: 1
+    why: "To do the addition, Java unboxes `count` to an `int`, and unboxing `null` throws a `NullPointerException`. It compiles, because an `Integer` variable is allowed to hold `null`."
+
+  - type: predict
+    body: |
+      ArrayList<Integer> list = new ArrayList<>();
+      list.add(10);
+      list.add(20);
+      list.add(30);
+      list.remove(1);
+      list.remove(Integer.valueOf(10));
+      System.out.println(list);
+    why: "`ArrayList` has two `remove` methods: `remove(1)`, with an `int`, removes the element at index 1 (the 20), while `remove(Integer.valueOf(10))` removes the first element equal to 10. Only 30 is left."
+
+  - type: choice
+    prompt: Which is true about arrays and `ArrayList`?
+    choices:
+      - "An `ArrayList<int>` can hold `int` values directly"
+      - Arrays can only hold primitive values
+      - "`array.length` and `list.length` both give the number of elements"
+      - "An array's length is fixed when it is created, while an `ArrayList` grows and shrinks as elements are added and removed"
+    answer: 4
+    why: "An array has a fixed length (`arr.length`) and can hold primitives or references. An `ArrayList` resizes itself and reports its `size()`, but it holds only objects, so `int` values go in as `Integer` through autoboxing."
+
+  - type: choice
+    prompt: When can the garbage collector reclaim an object?
+    choices:
+      - As soon as the method that created it returns
+      - Once the program can no longer reach it through any chain of references
+      - Only after the program calls `System.gc()`
+      - Never, the program must free it with `delete`
+    answer: 2
+    why: "An object becomes eligible for garbage collection once it is unreachable. The JVM decides when, or whether, to actually reclaim it, `System.gc()` is only a request, and Java has no `delete`."

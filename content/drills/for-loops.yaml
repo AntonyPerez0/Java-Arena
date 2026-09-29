@@ -1,0 +1,225 @@
+topic: for-loops
+drills:
+  - type: predict
+    after: loop-conditions
+    body: |
+      int n = 1;
+      while (n < 50) {
+          System.out.println(n);
+          n *= 3;
+      }
+    why: "`n` goes 1, 3, 9, 27, 81. The first four pass the check `n < 50` and are printed; at 81 the check fails and the loop ends."
+
+  - type: predict
+    after: for-loops
+    body: |
+      for (int i = 10; i > 0; i -= 3) {
+          System.out.print(i + " ");
+      }
+      System.out.println("liftoff");
+    why: "`i` starts at 10 and drops by 3 at the end of each round: 10, 7, 4, 1. The next value, -2, fails `i > 0`, and `print` keeps everything on one line."
+
+  - type: predict
+    after: bounds-from-input
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int start = Integer.valueOf(scanner.nextLine());
+      int end = Integer.valueOf(scanner.nextLine());
+      for (int i = start; i >= end; i--) {
+          System.out.println(i);
+      }
+      System.out.println("Countdown over");
+    stdin: |
+      2
+      5
+    why: "The loop counts down from 2 and runs while `i >= 5`. That's already false before the first round, so the block never runs and only the last line is printed."
+
+  - type: predict
+    after: when-the-condition-is-checked
+    body: |
+      int money = 20;
+      while (money > 0) {
+          money -= 8;
+          System.out.println("Left: " + money);
+      }
+    why: "The check `money > 0` happens only before each round. With 4 left it still passes, so that round takes 8 more and prints -4; only then does the check fail."
+
+  - type: predict
+    after: repeating-a-calculation
+    body: |
+      int sum = 0;
+      for (int i = 2; i <= 8; i += 3) {
+          sum += i;
+          System.out.println(i + ": " + sum);
+      }
+    why: "`i` takes the values 2, 5 and 8, since 11 fails `i <= 8`. The sum grows by each one: 2, then 7, then 15."
+
+  - type: fill
+    after: for-loops
+    prompt: Fill in the change part of the `for` line so the program prints the output shown.
+    body: |
+      for (int i = 1; i <= 100; [[i *= 2‖i = i * 2‖i = 2 * i‖i += i‖i = i + i]]) {
+          System.out.println(i);
+      }
+    why: "Each round doubles `i`: 1, 2, 4 and so on up to 64. The next value, 128, fails `i <= 100`, so the loop ends."
+
+  - type: fill
+    after: building-a-loop-program
+    prompt: The program finds the cheapest price. Fill in the condition.
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int cheapest = 1000;
+      while (true) {
+          int price = Integer.valueOf(scanner.nextLine());
+          if (price == 0) {
+              break;
+          }
+          if ([[price < cheapest‖cheapest > price‖price <= cheapest‖cheapest >= price]]) {
+              cheapest = price;
+          }
+      }
+      System.out.println("Cheapest: " + cheapest);
+    stdin: |
+      45
+      30
+      60
+      0
+    why: "A price replaces `cheapest` only when it's lower. 45 replaces 1000, 30 replaces 45, and 60 isn't lower, so 30 is left."
+
+  - type: bug
+    after: loop-conditions
+    body: |
+      int balance = 100;
+      int months = 0;
+      while (balance > 0) {
+          balance - 30; // BUG
+          months++;
+      }
+      System.out.println("Paid off after " + months + " months");
+    fix: balance -= 30;
+    why: "`balance - 30;` calculates a value but stores it nowhere, so javac rejects it as `not a statement`. The loop needs a change that moves `balance` toward 0, such as `balance -= 30;`."
+
+  - type: bug
+    after: bounds-from-input
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int tickets = Integer.valueOf(scanner.nextLine());
+      for (int i = 1; i < tickets; i++) { // BUG
+          System.out.println("Ticket " + i);
+      }
+    stdin: "3"
+    fix: "for (int i = 1; i <= tickets; i++) {"
+    why: "With `i < tickets` the loop stops before `i` reaches 3, so the last ticket is missing. `i <= tickets` also runs the round where `i` equals the number read."
+
+  - type: compiles
+    after: for-loops
+    body: |
+      for (int i = 1; i <= 3; i++) {
+          System.out.println(i);
+      }
+      System.out.println("Last: " + i);
+    why: "No. `i` is made in the `for` line, so it only exists inside the loop. After the loop's closing `}` javac no longer knows it and reports `cannot find symbol`."
+
+  - type: compiles
+    after: repeating-a-calculation
+    body: |
+      int sum = 0;
+      for (int i = 1; i <= 3; i++) {
+          sum += i;
+      }
+      for (int i = 1; i <= 3; i++) {
+          sum += i * i;
+      }
+      System.out.println(sum);
+    why: "Yes. Each `i` only exists inside its own loop, so the second loop may make a new one. `sum` is made before both loops, so both can use it."
+
+  - type: choice
+    after: when-the-condition-is-checked
+    prompt: When does Java check the condition of a `while` loop?
+    choices:
+      - "Before each round, the first round included"
+      - "After every line of the loop's block"
+      - "Only once, before the first round"
+      - "After each round, so the block always runs at least once"
+    answer: 1
+    why: "The condition is checked before every round, the first included, and not during a round. So a loop whose condition is false at the start never runs its block."
+
+  - type: choice
+    after: multiplying
+    prompt: This loop should multiply 3, 4 and 5 and print 60, but it prints 0. Why?
+    body: |
+      int product = 0;
+      for (int i = 3; i <= 5; i++) {
+          product *= i;
+      }
+      System.out.println(product);
+    choices:
+      - "The loop never runs, because `i <= 5` is false from the start"
+      - "`product *= i` adds `i` instead of multiplying"
+      - "The loop stops one round too early"
+      - "`product` starts at 0, and 0 times any number is 0"
+    answer: 4
+    why: "A product has to start at 1. Starting at 0, every `product *= i` gives 0 again, whatever `i` is."
+
+  - type: boss
+    after: building-a-loop-program
+    prompt: |
+      Read the number of days, and then that many rainfall amounts in millimetres, one per line (never negative). Read the amounts with a `for` loop. Print the total and the wettest day. For the input `4`, `5`, `0`, `12` and `6` the program prints:
+
+      ```
+      Total: 23 mm
+      Wettest day: 12 mm
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int days = Integer.valueOf(scanner.nextLine());
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int days = Integer.valueOf(scanner.nextLine());
+              int total = 0;
+              int wettest = 0;
+              for (int i = 0; i < days; i++) {
+                  int rain = Integer.valueOf(scanner.nextLine());
+                  total += rain;
+                  if (rain > wettest) {
+                      wettest = rain;
+                  }
+              }
+              System.out.println("Total: " + total + " mm");
+              System.out.println("Wettest day: " + wettest + " mm");
+          }
+      }
+    hints:
+      - "A loop with `days` rounds, `for (int i = 0; i < days; i++)`, reads one amount per round."
+      - "Before the loop, `int total = 0;` and `int wettest = 0;`. In the loop, add the amount to the total, and replace `wettest` when the amount is bigger."
+    require:
+      - pattern: \bfor\s*\(
+        message: "Read the amounts with a `for` loop."
+    tests:
+      - stdin: |
+          4
+          5
+          0
+          12
+          6
+      - stdin: |
+          1
+          0
+        hidden: true
+      - stdin: |
+          3
+          7
+          7
+          2
+        hidden: true

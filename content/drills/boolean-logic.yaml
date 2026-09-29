@@ -1,0 +1,203 @@
+topic: boolean-logic
+drills:
+  - type: predict
+    after: boolean-conditions
+    body: |
+      int battery = 35;
+      boolean low = battery < 20;
+      System.out.println("Low: " + low);
+      battery = 10;
+      System.out.println("Low: " + low);
+    why: "`low` stores the value `battery < 20` had when that line ran, `false`. It isn't a formula, so changing `battery` later doesn't change `low`; it would take another `low = battery < 20;`."
+
+  - type: predict
+    after: remainder
+    body: |
+      int eggs = 20;
+      System.out.println("Full boxes: " + eggs / 6);
+      System.out.println("Left over: " + eggs % 6);
+    why: "Like `*`, the operators `/` and `%` are done before the `+` that joins the text. 20 is three sixes (18) with 2 left over, so `20 / 6` is 3 and `20 % 6` is 2."
+
+  - type: predict
+    after: comparing-strings
+    body: |
+      String city = "Oslo";
+      System.out.println(city.equals("oslo"));
+      System.out.println(city.equalsIgnoreCase("OSLO"));
+      System.out.println("Oslo".equals(city));
+    why: "`equals` compares the characters, and capitals count, so `Oslo` and `oslo` differ. `equalsIgnoreCase` ignores capitals, and `\"Oslo\".equals(city)` works the other way round just as well."
+
+  - type: predict
+    after: and-or-not
+    body: |
+      int count = 0;
+      int total = 25;
+      if (count != 0 && total / count > 2) {
+          System.out.println("Average above 2");
+      } else {
+          System.out.println("No data yet");
+      }
+    why: "`count != 0` is false, so `&&` stops there and `total / count` is never worked out. Without that shortcut, dividing an `int` by 0 would stop the program with an `ArithmeticException`."
+
+  - type: predict
+    after: price-brackets
+    body: |
+      int units = 250;
+      int bill;
+      if (units <= 100) {
+          bill = units * 2;
+      } else {
+          bill = 200 + (units - 100) * 3;
+      }
+      System.out.println("Bill: " + bill);
+    why: "250 is over 100, so the `else` branch runs: the first 100 units cost 200, and the other 150 cost 3 each, 450. 200 + 450 is 650."
+
+  - type: fill
+    after: remainder
+    prompt: Fill the blank so every third customer (3, 6, 9 and so on) gets a gift.
+    body: |
+      int customer = 12;
+      if (customer [[%]] 3 == 0) {
+          System.out.println("Customer " + customer + " gets a gift");
+      }
+    why: "`customer % 3` is the remainder after dividing by 3, and it's 0 exactly for multiples of 3. `customer / 3` would be 4 here, not 0."
+
+  - type: fill
+    after: and-or-not
+    prompt: Days are numbered 1 to 7, and 6 and 7 are the weekend. Fill the blank so the program prints the output shown.
+    body: |
+      int day = 7;
+      if (day == 6 [[||‖|]] day == 7) {
+          System.out.println("Weekend");
+      } else {
+          System.out.println("Workday");
+      }
+    why: "`||` is true when at least one side is true, and day 7 makes the second side true. With `&&` both sides would have to be true, which no day can be, so it would always print `Workday`."
+
+  - type: bug
+    after: remainder
+    prompt: The program should print `Odd` for every odd number, negative ones too. Which line is wrong?
+    body: |
+      int number = -9;
+      if (number % 2 == 1) { // BUG
+          System.out.println("Odd");
+      } else {
+          System.out.println("Even");
+      }
+    fix: "if (number % 2 != 0) {"
+    why: "In Java the remainder keeps the sign of the number being divided, so `-9 % 2` is `-1`, not `1`, and the program calls -9 even. `number % 2 != 0` is true for every odd number."
+
+  - type: bug
+    after: and-or-not
+    prompt: The shop is open from 9 to 17, that is, at 9 or later and before 17. Which line is wrong?
+    body: |
+      int hour = 22;
+      if (hour >= 9 || hour < 17) { // BUG
+          System.out.println("Open");
+      } else {
+          System.out.println("Closed");
+      }
+    fix: "if (hour >= 9 && hour < 17) {"
+    why: "With `||` one true side is enough, and every hour is either at least 9 or below 17, so the shop never closes. A range needs both checks to hold, which is `&&`."
+
+  - type: compiles
+    after: boolean-conditions
+    body: |
+      boolean done = false;
+      if (done = true) {
+          System.out.println("Finished");
+      }
+    why: "Yes. `done = true` is an assignment, and its value is the `boolean` it stores, which is what `if` needs. But it overwrites `done`, so the block always runs; to test the variable, write `if (done)`."
+
+  - type: compiles
+    after: price-brackets
+    body: |
+      int distance = 7;
+      int fare;
+      if (distance <= 5) {
+          fare = 4;
+      } else if (distance > 5) {
+          fare = 9;
+      }
+      System.out.println("Fare: " + fare);
+    why: "No. javac doesn't work out that the two conditions cover every number, so without a final `else` it assumes no branch might run and `fare` might have no value: `variable fare might not have been initialized`. Making the last branch a plain `else` fixes it."
+
+  - type: choice
+    after: comparing-strings
+    prompt: The user types `yes`, but this program prints `Maybe next time`. Why?
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      String answer = scanner.nextLine();
+      if (answer == "yes") {
+          System.out.println("Great!");
+      } else {
+          System.out.println("Maybe next time");
+      }
+    choices:
+      - "`nextLine()` keeps the line break, so `answer` is `yes` followed by a new line"
+      - "An `if` can compare numbers, but not Strings"
+      - "`\"yes\"` written in quotes has a different type from text read with `nextLine()`"
+      - "For Strings, `==` checks whether both sides are the same String object, not whether they hold the same text; `answer.equals(\"yes\")` compares the text"
+    answer: 4
+    why: "`nextLine()` makes a new String object for the line it reads, so it isn't the same object as the `\"yes\"` written in the program, even though the characters match. `equals` compares the characters. (`nextLine()` does drop the line break, and both sides are Strings.)"
+
+  - type: choice
+    after: specific-first
+    prompt: A chain prints `Both` for numbers that divide by 4 and by 10, `Four` for the other multiples of 4, and `Ten` for the other multiples of 10. Which condition must it check first?
+    choices:
+      - "`n % 4 == 0 && n % 10 == 0`"
+      - "`n % 4 == 0`"
+      - "`n % 10 == 0`"
+      - "Any of them: every true condition in a chain runs its block"
+    answer: 1
+    why: "A number like 20 passes all three checks, and a chain runs only the first true one. With the combined check first, 20 gets `Both`, and the later branches can assume it failed."
+
+  - type: boss
+    after: price-brackets
+    prompt: |
+      A car park charges by the hour (an invented price list): the first 2 hours are free, hours 3 to 10 cost 2 euros each, and every hour after the 10th costs 1 euro. Read the number of hours (a whole number) and print the fee. For the input `12` the program prints:
+
+      ```
+      Fee: 18 euros
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int hours = Integer.valueOf(scanner.nextLine());
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int hours = Integer.valueOf(scanner.nextLine());
+              int fee;
+              if (hours <= 2) {
+                  fee = 0;
+              } else if (hours <= 10) {
+                  fee = (hours - 2) * 2;
+              } else {
+                  fee = 16 + (hours - 10);
+              }
+              System.out.println("Fee: " + fee + " euros");
+          }
+      }
+    hints:
+      - "Three brackets: `hours <= 2`, `hours <= 10`, and everything else. Set `fee` in each branch and print it once, after the chain."
+      - "Past 10 hours, the first 10 cost 16 euros (8 paid hours at 2 each), plus 1 for each hour over 10: `16 + (hours - 10)`."
+    tests:
+      - stdin: "12"
+      - stdin: "2"
+        hidden: true
+      - stdin: "3"
+        hidden: true
+      - stdin: "10"
+        hidden: true
+      - stdin: "0"
+        hidden: true

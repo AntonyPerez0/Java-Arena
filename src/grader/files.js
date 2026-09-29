@@ -1,11 +1,13 @@
 // A program of several source files, kept as one string so that saving, grading and sharing work
-// the same as for one file. Each file after the first starts with a marker line naming it:
+// the same as for one file. Each file starts with a marker line naming it:
 //
-//   public class Main { ... }        <- Main.java (no marker needed when it comes first)
+//   // ==== Main.java ====
+//   public class Main { ... }
 //   // ==== Person.java ====
 //   public class Person { ... }
 //
-// A program without markers is a single Main.java. The editor shows each file in its own tab, so a
+// A program without markers is a single Main.java (text before the first marker also belongs to
+// Main.java, as lesson examples write it). The editor shows each file in its own tab, so a
 // learner never types a marker; lesson examples show them as file headings.
 
 /** A file marker line: `// ==== Name.java ====`. */
@@ -31,10 +33,11 @@ export function splitFiles(code) {
   return files.map((f) => ({ path: f.path, text: f.lines.join("\n").replace(/\n*$/, "\n") }));
 }
 
-/** The one string for a set of files (the reverse of splitFiles). */
+/** The one string for a set of files (the reverse of splitFiles). With several files every one,
+ * the first too, gets its marker, so even an empty file keeps its place. */
 export function joinFiles(files) {
   if (files.length === 1 && files[0].path === "Main.java") return files[0].text;
-  return files.map((f, i) => (i === 0 && f.path === "Main.java" ? "" : `// ==== ${f.path} ====\n`) + String(f.text).replace(/\n*$/, "\n")).join("\n");
+  return files.map((f) => `// ==== ${f.path} ====\n` + String(f.text).replace(/\n*$/, "\n")).join("\n");
 }
 
 /** True when the program has more than one file. */

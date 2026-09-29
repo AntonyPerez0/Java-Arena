@@ -197,7 +197,7 @@ function readYaml(file) {
 
 // Text ends with exactly one line break, except that an empty last line typed on purpose (input that
 // ends with an empty line, written with YAML's |+ or a quoted "\n\n") is kept.
-const ensureNl = (s) => (s == null ? s : String(s).replace(/[ \t]+$/, "").replace(/\n*$/, (m) => (m.length >= 2 ? "\n\n" : "\n")));
+const ensureNl = (s) => (s == null ? s : String(s).replace(/\s*$/, "") + (/\n[ \t]*\n\s*$/.test(String(s)) ? "\n\n" : "\n"));
 const slugify = (s) =>
   s
     .toLowerCase()

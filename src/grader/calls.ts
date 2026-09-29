@@ -61,8 +61,11 @@ function reason(d: Diagnostic, source: string): string {
       if (name && req && found) return `your ${code(name)} takes ${req === "no arguments" ? "no parameters" : code(req)}, and the check gives it ${found === "no arguments" ? "none" : code(found)}. Check the method's parameters.`;
       break;
     }
-    case "compiler.err.cant.apply.symbols":
+    case "compiler.err.cant.apply.symbols": {
+      const ctor = /no suitable constructor found for (\w+)\(/.exec(msg)?.[1];
+      if (ctor) return `none of the constructors of ${code(ctor)} takes these arguments. Check the constructor's parameters against the task.`;
       return `none of your methods with that name takes these arguments. Check the parameters the task asks for.`;
+    }
     case "compiler.err.prob.found.req": {
       const m = /incompatible types: (.*)/.exec(msg);
       if (m) return `the types don't fit (${m[1]}). Check the method's parameter types and its return type.`;

@@ -1,6 +1,6 @@
 // The placement quiz: one question per module, in course order. The first question missed shows
 // where to start; the modules before it can be skipped, which also unlocks their drills.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, X } from "lucide-react";
 import { moduleById, modules, modulePath, stepPath } from "../content";
@@ -31,12 +31,15 @@ export default function Placement() {
   const first = modules[0];
   const i = answers.length;
 
-  const record = (a: Answer) => {
-    const next = [...answers, a];
-    setAnswers(next);
-    if (next.length === questions.length) setPhase("done");
+  // An answer counts for the question it was given on: a second tap before the next question
+  // shows is ignored instead of replacing an answer.
+  const record = (index: number, a: Answer) => {
+    setAnswers((prev) => (prev.length === index ? [...prev, a] : prev));
     requestAnimationFrame(() => document.getElementById("quiz-h")?.focus());
   };
+  useEffect(() => {
+    if (phase === "quiz" && questions.length && answers.length >= questions.length) setPhase("done");
+  }, [answers.length, questions.length, phase]);
 
   if (set === undefined) return <Intro loading />;
   if (set === "error" || !questions.length)
@@ -84,9 +87,9 @@ export default function Placement() {
           <div style={{ width: `${(i / questions.length) * 100}%` }} />
         </div>
         <p className="muted small">Topic: {moduleById.get(q.module)?.title}</p>
-        <Rep key={q.id} drill={q} onAnswer={(given, ok) => record({ ok, given })} />
+        <Rep key={q.id} drill={q} onAnswer={(given, ok) => record(i, { ok, given })} />
         <div className="actions">
-          <button type="button" className="btn btn-ghost" onClick={() => record({ ok: false, given: "(skipped)" })}>
+          <button type="button" className="btn btn-ghost" onClick={() => record(i, { ok: false, given: "(skipped)" })}>
             I don't know this yet
           </button>
         </div>

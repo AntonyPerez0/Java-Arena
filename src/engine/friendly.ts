@@ -32,7 +32,9 @@ const RULES: Rule[] = [
     explain: (d) => {
       const m = /class (\w+) is public, should be declared in a file named (\w+\.java)/.exec(d.message);
       const here = d.file.split("/").pop();
-      return m ? `A public class must be in a file with exactly its name: class ${m[1]} belongs in ${m[2]}, but it's in ${here}. Rename the class to ${here?.replace(/\.java$/, "")}, or put it in its own file.` : "A public class must be in a file with exactly the same name as the class.";
+      return m
+        ? `A public class must be in a file with exactly its name: class ${m[1]} belongs in ${m[2]}, but it's in ${here}. If it's meant to be this file's class, rename it ${here?.replace(/\.java$/, "")}. If it's an extra class, remove the word public (a class without public can share a file), or give it a file of its own.`
+        : "A public class must be in a file with exactly the same name as the class.";
     },
   },
   { code: "compiler.err.unclosed.str.lit", explain: () => "This text is missing its closing quote \". Every string starts and ends with a double quote on the same line." },

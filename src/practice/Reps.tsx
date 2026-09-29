@@ -285,7 +285,7 @@ function BossRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
       <Markdown text={drill.prompt} className="rep-task" />
       {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="A boss rep" now="read the task now" button="Fire" />}
       {engine.state === "error" && !unsupported && <EngineErrorCard message={engine.message} />}
-      <FilesEditor value={code} onChange={setCode} onRun={fire} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="12rem" label="Java code editor (Main.java)" />
+      <FilesEditor value={code} onChange={setCode} onRun={fire} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="12rem" label="Java code editor" />
       <div className="actions">
         <button type="button" id="check" className="btn btn-primary" onClick={fire} disabled={unsupported} aria-busy={busy || undefined}>
           {busy ? (engine.state === "ready" ? "Checking…" : "Starting Java…") : <>Fire <kbd aria-hidden="true">Ctrl ↵</kbd></>}

@@ -21,6 +21,9 @@ marked.use({
       const file = lang ? /^file\s+(\S+)$/.exec(lang) : null;
       if (file) return `<figure class="io io-file"><figcaption>The file ${esc(file[1])}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       const label = lang ? LABELS[lang] : undefined;
+      // Input that ends with an empty line (the program reads until one) shows it.
+      if (lang === "input" && /\n$/.test(text))
+        return `<figure class="io io-input"><figcaption>${label}</figcaption><pre><code>${esc(text.replace(/\n$/, ""))}\n<span class="input-empty">(an empty line)</span></code></pre></figure>\n`;
       if (label) return `<figure class="io io-${lang}"><figcaption>${label}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       return false;
     },

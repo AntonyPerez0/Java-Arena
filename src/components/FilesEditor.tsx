@@ -30,7 +30,9 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
   useEffect(() => {
     if (value === lastOut.current) return;
     lastOut.current = value;
-    setFiles(splitFiles(value) as SourceFile[]);
+    const next = splitFiles(value) as SourceFile[];
+    setFiles(next);
+    setActive((a) => Math.min(a, next.length - 1));
   }, [value]);
   const [active, setActive] = useState(0);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -65,11 +67,13 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
     setAdding(false);
     setNewName("");
     setNameError("");
+    requestAnimationFrame(() => tabs.current[files.length]?.focus());
   };
   const removeFile = (i: number) => {
     if (!confirm(`Remove ${files[i].path}? Its code will be lost.`)) return;
     emit(files.filter((_, j) => j !== i));
     setActive(0);
+    requestAnimationFrame(() => (tabs.current[0] ?? document.querySelector<HTMLElement>(".editor .cm-content"))?.focus());
   };
   const addRow = canAddFiles && (
     <div className="file-add">

@@ -1,0 +1,330 @@
+topic: sorting-searching
+drills:
+  - type: predict
+    after: smallest-value
+    body: |
+      int[] stock = {6, 2, 9, 2, 4};
+      int low = 0;
+      for (int i = 1; i < stock.length; i++) {
+          if (stock[i] <= stock[low]) {
+              low = i;
+          }
+      }
+      System.out.println(low + " " + stock[low]);
+    why: "The smallest value is 2, at indexes 1 and 3. With `<=`, a value equal to the smallest so far takes its place, so the later 2 wins: index 3. With `<`, it would be the first one, at index 1."
+
+  - type: predict
+    after: swapping
+    body: |
+      int[] cups = {3, 8, 5};
+      cups[0] = cups[2];
+      cups[2] = cups[0];
+      System.out.println(Arrays.toString(cups));
+    why: "The first line copies the 5 over the 3, so the 3 is lost. The second line copies that same 5 back to index 2. A swap needs a third variable to keep one of the values: `int temp = cups[0];`."
+
+  - type: predict
+    after: selection-sort
+    body: |
+      int[] a = {9, 6, 7, 1, 5};
+      for (int i = 0; i < 2; i++) {
+          int lowest = i;
+          for (int j = i + 1; j < a.length; j++) {
+              if (a[j] < a[lowest]) {
+                  lowest = j;
+              }
+          }
+          int temp = a[i];
+          a[i] = a[lowest];
+          a[lowest] = temp;
+      }
+      System.out.println(Arrays.toString(a));
+    why: "Only two rounds of selection sort run. The first swaps the smallest value, 1, to index 0: `[1, 6, 7, 9, 5]`. The second finds the smallest from index 1 on, the 5 at index 4, and swaps it with the 6. The rest isn't sorted yet."
+
+  - type: predict
+    after: ready-made-sorting
+    body: |
+      ArrayList<String> names = new ArrayList<>();
+      names.add("bea");
+      names.add("Zed");
+      names.add("adam");
+      names.add("Cleo");
+      Collections.sort(names);
+      System.out.println(names);
+    why: "Strings are sorted by character codes, and capital letters come before small ones. So both names with a capital come first, even `Zed`, and then the others. Within each group, the order is alphabetical."
+
+  - type: predict
+    after: ready-made-sorting
+    body: |
+      int[] scores = {30, 10, 20};
+      int[] backup = scores;
+      Arrays.sort(backup);
+      System.out.println(scores[0] + " " + backup[0]);
+    why: "`int[] backup = scores;` copies the reference, not the array, so both names lead to the one array. `Arrays.sort` sorts that array in place, and `scores` shows the sorted order too."
+
+  - type: predict
+    after: binary-search
+    pre: |
+      public static int find(int[] values, int wanted) {
+          int low = 0;
+          int high = values.length - 1;
+          while (low <= high) {
+              int middle = (low + high) / 2;
+              if (values[middle] == wanted) {
+                  return middle;
+              }
+              if (values[middle] < wanted) {
+                  low = middle + 1;
+              } else {
+                  high = middle - 1;
+              }
+          }
+          return -1;
+      }
+    body: |
+      int[] codes = {40, 10, 30, 20, 50};
+      System.out.println(find(codes, 10));
+      System.out.println(find(codes, 50));
+    why: "Binary search needs sorted data, and this array isn't sorted. For 10, the middle is 30, which is larger, so the search keeps only the left part, `40, 10`. Its middle is 40, larger again, so the range becomes empty: -1, though 10 is at index 1. 50 is found only because the values it passed on the way happened to be smaller."
+
+  - type: fill
+    after: selection-sort
+    prompt: "Fill in the expression where the inner loop starts, so that the program prints the sorted array."
+    body: |
+      int[] values = {8, 3, 6, 1};
+      for (int i = 0; i < values.length - 1; i++) {
+          int lowest = i;
+          for (int j = [[i + 1‖i]]; j < values.length; j++) {
+              if (values[j] < values[lowest]) {
+                  lowest = j;
+              }
+          }
+          int temp = values[i];
+          values[i] = values[lowest];
+          values[lowest] = temp;
+      }
+      System.out.println(Arrays.toString(values));
+    why: "Each round looks for the smallest value from index `i` on. `lowest` starts at `i`, so the inner loop can start at the next index, `i + 1`. Starting at 0 would also look at the sorted front part, and pull values that are already in place back out."
+
+  - type: fill
+    after: binary-search
+    prompt: "Fill in the expression for the index in the middle of the range."
+    pre: |
+      public static int find(int[] sorted, int wanted) {
+          int low = 0;
+          int high = sorted.length - 1;
+          while (low <= high) {
+              int middle = [[(low + high) / 2‖(high + low) / 2‖low + (high - low) / 2]];
+              if (sorted[middle] == wanted) {
+                  return middle;
+              }
+              if (sorted[middle] < wanted) {
+                  low = middle + 1;
+              } else {
+                  high = middle - 1;
+              }
+          }
+          return -1;
+      }
+    body: |
+      int[] sorted = {4, 9, 15, 22, 31, 40, 58};
+      System.out.println(find(sorted, 40) + " " + find(sorted, 5));
+    why: "The range runs from `low` to `high`, and its middle is `(low + high) / 2`. Integer division keeps it a whole index. `sorted.length / 2` is the middle only in the first round: after that, the range has moved."
+
+  - type: bug
+    after: selection-sort
+    prompt: "The program should print `[1, 3, 6, 8]`. Which line is wrong?"
+    pre: |
+      public static void selectionSort(int[] values) {
+          for (int i = 0; i < values.length - 1; i++) {
+              int lowest = 0; // BUG
+              for (int j = i + 1; j < values.length; j++) {
+                  if (values[j] < values[lowest]) {
+                      lowest = j;
+                  }
+              }
+              int temp = values[i];
+              values[i] = values[lowest];
+              values[lowest] = temp;
+          }
+      }
+    body: |
+      int[] values = {8, 3, 6, 1};
+      selectionSort(values);
+      System.out.println(Arrays.toString(values));
+    fix: int lowest = i;
+    why: "Each round searches from index `i` on, so the smallest so far must start there. Starting at 0, every round after the first compares with the value at index 0, which is already the smallest of all, and then swaps it out of its place."
+
+  - type: bug
+    after: linear-search
+    prompt: "The program should print `2` and then `-1`, but it crashes. Which line is wrong?"
+    pre: |
+      public static int indexOf(int[] values, int wanted) {
+          for (int i = 0; i <= values.length; i++) { // BUG
+              if (values[i] == wanted) {
+                  return i;
+              }
+          }
+          return -1;
+      }
+    body: |
+      int[] seats = {14, 3, 27};
+      System.out.println(indexOf(seats, 27));
+      System.out.println(indexOf(seats, 8));
+    fix: for (int i = 0; i < values.length; i++) {
+    why: "The last index is `values.length - 1`. With `<=`, a search for a value that isn't there goes on to index 3, and `values[3]` crashes with an ArrayIndexOutOfBoundsException. A value that is there returns before that, which is why the first search works."
+
+  - type: bug
+    after: binary-search
+    prompt: "The program should print `1` and then `-1`, but the second search crashes. The loop condition and the middle are right. Which line is wrong?"
+    pre: |
+      public static int find(int[] sorted, int wanted) {
+          int low = 0;
+          int high = sorted.length; // BUG
+          while (low <= high) {
+              int middle = (low + high) / 2;
+              if (sorted[middle] == wanted) {
+                  return middle;
+              }
+              if (sorted[middle] < wanted) {
+                  low = middle + 1;
+              } else {
+                  high = middle - 1;
+              }
+          }
+          return -1;
+      }
+    body: |
+      int[] sorted = {3, 6, 9};
+      System.out.println(find(sorted, 6));
+      System.out.println(find(sorted, 12));
+    fix: int high = sorted.length - 1;
+    why: "`high` is the last index of the range, and the last index of the array is `sorted.length - 1`. Starting from `sorted.length`, a search for a value larger than all of them moves right until the middle is index 3, which doesn't exist, and `sorted[middle]` crashes."
+
+  - type: compiles
+    after: ready-made-sorting
+    body: |
+      int[] prices = {5, 2, 9};
+      int[] sorted = Arrays.sort(prices);
+      System.out.println(Arrays.toString(sorted));
+    why: "No. `Arrays.sort` returns nothing (it's `void`): it sorts the array it's given, in place, so there's no value to put in `sorted`. Call `Arrays.sort(prices);` on a line of its own, and then print `prices`."
+
+  - type: compiles
+    after: ready-made-sorting
+    body: |
+      String[] rivers = {"Nile", "Amazon", "Danube"};
+      Arrays.sort(rivers);
+      System.out.println(rivers[0]);
+    why: "Yes. `Arrays.sort` sorts arrays of Strings too, in the same character-code order as `Collections.sort` uses for lists. It prints `Amazon`."
+
+  - type: choice
+    after: selection-sort
+    prompt: "Selection sort sorts an array of 10,000 values. About how many comparisons does it make for an array of 20,000 values, compared with that?"
+    choices:
+      - "The same number"
+      - "Twice as many"
+      - "Four times as many"
+      - "Only one more"
+    answer: 3
+    why: "The comparisons add up to `n * (n - 1) / 2`: about 50 million for 10,000 values, and about 200 million for 20,000. Twice the values means twice as many rounds, each about twice as long. Only one more is what binary search needs when its data doubles."
+
+  - type: choice
+    after: binary-search
+    prompt: "A sorted array holds 1,000,000 numbers. At most how many values does binary search look at, to find a number or to learn that it isn't there?"
+    choices:
+      - "20"
+      - "1,000"
+      - "500,000"
+      - "1,000,000"
+    answer: 1
+    why: "Each look halves the range, and 2 to the 20th power is 1,048,576, more than a million, so 20 halvings always leave nothing. A linear search could need all 1,000,000 comparisons."
+
+  - type: boss
+    after: linear-search
+    prompt: |
+      A race's results keep the finish times, in seconds, in a list sorted from the fastest. Write the method `insertInOrder(ArrayList<Integer> times, int time)`, which adds a new time to the list in its right place, so that the list stays sorted: in front of the first time that's larger, or at the end if no time is larger. `add(index, value)` (module 14) puts a value at an index, and moves the ones after it along. Don't sort the whole list again. The check runs:
+
+      ```java fragment
+      ArrayList<Integer> times = new ArrayList<>();
+      insertInOrder(times, 250);
+      insertInOrder(times, 190);
+      insertInOrder(times, 310);
+      insertInOrder(times, 240);
+      System.out.println(times);
+      ```
+
+      and expects:
+
+      ```
+      [190, 240, 250, 310]
+      ```
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> times = new ArrayList<>();
+              insertInOrder(times, 250);
+              insertInOrder(times, 190);
+              insertInOrder(times, 310);
+              insertInOrder(times, 240);
+              System.out.println(times);
+          }
+
+          // Write the method insertInOrder here.
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> times = new ArrayList<>();
+              insertInOrder(times, 250);
+              insertInOrder(times, 190);
+              insertInOrder(times, 310);
+              insertInOrder(times, 240);
+              System.out.println(times);
+          }
+
+          public static void insertInOrder(ArrayList<Integer> times, int time) {
+              int index = 0;
+              while (index < times.size() && times.get(index) <= time) {
+                  index++;
+              }
+              times.add(index, time);
+          }
+      }
+    hints:
+      - "First find the index: move on from 0 while the time there is not larger than the new one, `times.get(index) <= time`, but stop at `times.size()`."
+      - "Then `times.add(index, time);` puts the new time there. When no time is larger, the index ends up at `times.size()`, and `add` at that index puts it at the end."
+    require:
+      - pattern: \bpublic\s+static\s+void\s+insertInOrder\s*\(\s*ArrayList<Integer>\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the method as `public static void insertInOrder(ArrayList<Integer> times, int time)`."
+    forbid:
+      - pattern: \bCollections\b|\bArrays\b
+        message: "Put the new time in its place yourself, without sorting the whole list."
+    tests:
+      - call: |
+          ArrayList<Integer> times = new ArrayList<>();
+          insertInOrder(times, 250);
+          insertInOrder(times, 190);
+          insertInOrder(times, 310);
+          insertInOrder(times, 240);
+          System.out.println(times);
+      - call: |
+          ArrayList<Integer> times = new ArrayList<>();
+          times.add(100);
+          times.add(200);
+          times.add(300);
+          insertInOrder(times, 50);
+          insertInOrder(times, 200);
+          insertInOrder(times, 400);
+          insertInOrder(times, 150);
+          System.out.println(times + " " + times.size());
+        hidden: true
+      - call: |
+          ArrayList<Integer> times = new ArrayList<>();
+          for (int i = 10; i >= 1; i--) {
+              insertInOrder(times, i * 3 % 11);
+          }
+          System.out.println(times);
+        hidden: true

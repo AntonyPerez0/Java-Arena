@@ -763,6 +763,8 @@ await test('placement quiz: the first miss sets the start; skipping unlocks dril
   await page.click('text=Start the quiz');
   // Right, right, then "I don't know" for the rest: start at the third module.
   for (let i = 0; i < DRILLS.placement.length; i++) {
+    // Wait for this question, not the previous one still on screen: a second tap there counts for it again.
+    await page.locator('#quiz-h', { hasText: `Question ${i + 1} of ${DRILLS.placement.length}` }).waitFor();
     await page.locator('.rep').waitFor();
     if (i < 2) await answerRep(page, true);
     else await page.click("text=I don't know this yet");

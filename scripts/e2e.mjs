@@ -375,6 +375,30 @@ const lessonSession = await newPage();
     const list = await check(page);
     expect(list.includes('IndexOutOfBoundsException (line 11)') && list.includes('asked for index 3 of a list with 3 values'), list);
   });
+  await test('a class in its own file: a tab per file, errors marked in the right file, and a pass', async () => {
+    await page.goto(BASE + 'learn/classes/constructors/');
+    await lessonReady(page);
+    expect((await page.locator('.file-tab').allInnerTexts()).join() === 'Parcel.java,Main.java', 'a tab per file, the class first');
+    // The editor sits below the tabs, not over them (the desktop column shrinks the editor, never the tabs).
+    const gap = await page.evaluate(() => document.querySelector('[role=tabpanel]').getBoundingClientRect().top - document.querySelector('.file-tab').getBoundingClientRect().bottom);
+    expect(gap >= -1, `the editor covers the tabs by ${-gap} px`);
+    // The starter Parcel has no constructor yet, so Main's new Parcel("Amir", 1200) doesn't compile.
+    await check(page);
+    const res = await page.locator('.results').innerText();
+    expect(/didn't compile/i.test(res) && res.includes('constructor Parcel'), res);
+    // The message names the file, Main.java too, and explains the missing constructor.
+    expect(/Main\.java, line 3/i.test(res) && res.includes('Parcel has no constructor that takes any'), res);
+    expect((await page.locator('.file-tab-on').innerText()).includes('Main.java') && (await page.locator('.file-tab-on .file-tab-errors').count()) === 1, 'the file with the error is shown, with its count');
+    await axe(page, 'a challenge of two files, with an error');
+    await page.click('#file-tab-0');
+    await setCode(page, 'public class Parcel {\n    private String recipient;\n    private int grams;\n\n    public Parcel(String recipient, int grams) {\n        this.recipient = recipient;\n        this.grams = grams;\n    }\n\n    public void printInfo() {\n        System.out.println("Parcel for " + this.recipient + ", " + this.grams + " g");\n    }\n}\n');
+    await check(page);
+    const passed = await page.locator('.results').innerText();
+    expect(passed.includes('All tests passed'), passed);
+    // The code of both files is saved.
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('java-arena-v1')).steps['classes-constructor']?.challenges?.[0]?.code ?? '');
+    expect(saved.includes('// ==== Main.java ====') && saved.includes('this.grams = grams;'), saved.slice(0, 300));
+  });
   await test('the indentation check accepts switch, multi-line headers, lambdas and other brace styles', async () => {
     const ok = {
       'classic switch': 'class A {\n    void f(int x) {\n        switch (x) {\n            case 1:\n                g();\n                break;\n            case 2: {\n                h();\n                break;\n            }\n            default:\n                k();\n        }\n    }\n}',
@@ -427,6 +451,43 @@ const lessonSession = await newPage();
 await lessonSession.ctx.close();
 
 console.log('Playground');
+await test('playground: a class in a file of its own; errors and crashes name their file; the link carries both files', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, MAIN('        Greeter g = new Greeter("Hi");\n        g.greet("Ada");'));
+  await page.click('text=Add a class');
+  await page.fill('#new-class', 'Greeter');
+  await page.click('.file-add-form button[type=submit]');
+  expect((await page.locator('.file-tab').allInnerTexts()).join() === 'Main.java,Greeter.java', 'a tab per file');
+  expect((await page.locator('.file-tab-on').innerText()).includes('Greeter.java'), 'the new file is open');
+  // A mistake in Greeter.java: the message names the file, and its tab shows the count.
+  await setCode(page, 'public class Greeter {\n    private String word;\n\n    public Greeter(String word) {\n        this.word = word\n    }\n}\n');
+  await check(page);
+  let out = await page.locator('.results').innerText();
+  expect(/Greeter\.java, line 5/i.test(out), out);
+  expect((await page.locator('.file-tab-on .file-tab-errors').count()) === 1, 'the error count on the tab');
+  await setCode(page, 'public class Greeter {\n    private String word;\n\n    public Greeter(String word) {\n        this.word = word;\n    }\n\n    public void greet(String name) {\n        System.out.println(word + ", " + name.substring(5));\n    }\n}\n');
+  await check(page);
+  out = await page.locator('.results').innerText();
+  expect(out.includes('StringIndexOutOfBoundsException') && out.includes('Greeter.java'), out);
+  await setCode(page, 'public class Greeter {\n    private String word;\n\n    public Greeter(String word) {\n        this.word = word;\n    }\n\n    public void greet(String name) {\n        System.out.println(word + ", " + name + "!");\n    }\n}\n');
+  await check(page);
+  out = await page.locator('.results').innerText();
+  expect(out.includes('Hi, Ada!'), out);
+  await axe(page, 'playground with two files');
+  await page.click('text=Share');
+  await page.locator('#pg-link').waitFor();
+  const link = await page.inputValue('#pg-link');
+  const other = await newPage();
+  await other.page.goto(link);
+  await other.page.locator('.banner-info').waitFor();
+  expect((await other.page.locator('.file-tab').allInnerTexts()).join() === 'Main.java,Greeter.java', 'both files came with the link');
+  await other.ctx.close();
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('playground: run a program with input, share it, open the link elsewhere', async () => {
   const { ctx, page, errors } = await newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -702,6 +763,8 @@ await test('placement quiz: the first miss sets the start; skipping unlocks dril
   await page.click('text=Start the quiz');
   // Right, right, then "I don't know" for the rest: start at the third module.
   for (let i = 0; i < DRILLS.placement.length; i++) {
+    // Wait for this question, not the previous one still on screen: a second tap there counts for it again.
+    await page.locator('#quiz-h', { hasText: `Question ${i + 1} of ${DRILLS.placement.length}` }).waitFor();
     await page.locator('.rep').waitFor();
     if (i < 2) await answerRep(page, true);
     else await page.click("text=I don't know this yet");

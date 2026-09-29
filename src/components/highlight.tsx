@@ -1,5 +1,8 @@
 // A small regex-based Java highlighter for read-only code (lesson examples, fill-in challenges).
 import type { ReactNode } from "react";
+import { splitFiles } from "../grader/files.js";
+
+const FILE_MARK_ANY = /^\/\/ ={4} [A-Za-z_$][\w$]*\.java ={4}[ \t]*$/m;
 
 const KEYWORDS = new Set(
   "abstract assert break case catch class const continue default do else enum extends final finally for goto if implements import instanceof interface native new package private protected public return static strictfp super switch synchronized this throw throws transient try volatile while var record yield sealed permits non-sealed true false null".split(
@@ -46,6 +49,20 @@ export function highlight(code: string, keyPrefix = ""): ReactNode[] {
 }
 
 export function CodeView({ code, className = "", label }: { code: string; className?: string; label?: string }) {
+  // A program of several files shows each one under its name.
+  if (FILE_MARK_ANY.test(code))
+    return (
+      <div className="code-files">
+        {(splitFiles(code) as { path: string; text: string }[]).map((f) => (
+          <figure className="code-file" key={f.path}>
+            <figcaption>{f.path}</figcaption>
+            <pre tabIndex={0} className={"codeview " + className} aria-label={label ? `${label}, ${f.path}` : f.path}>
+              {highlight(f.text)}
+            </pre>
+          </figure>
+        ))}
+      </div>
+    );
   return (
     <pre tabIndex={0} className={"codeview " + className} aria-label={label}>
       {highlight(code)}

@@ -96,7 +96,62 @@ A test can call the learner's methods instead of running `main`:
       - stdin: "5"                   # a test without `call` still runs main
 ```
 
-The site compiles a hidden class, `ArenaCheck extends Main`, whose `main` runs the test's code (so a call reads exactly as it would inside `Main`), and grades what it prints. An exception from the learner's code, checked or not, comes out unchanged, as it would from `Main` itself. The build does the same on the JDK. When the learner's own code compiles but the check can't call it (a misspelled name, other parameter types, a `private` or non-`static` method, a `void` method whose value is used, a class not called `Main` or in a package), the learner gets a plain explanation that names the call instead of the check program's javac errors. A test named after a one-line call shows that call as its name.
+### Programs of several files (classes)
+
+When a challenge needs a class of its own next to `Main`, give `seed` and `solution` as a map of file names to code. The editor shows a tab for each file, in this order, and the check compiles them together (Main.java is required, and a public class must be in the file of its name):
+
+```yaml
+    seed:
+      Book.java: |
+        public class Book {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Book book = new Book("Dune", 412);
+                System.out.println(book);
+            }
+        }
+    solution:
+      Book.java: |
+        public class Book {
+            ...
+        }
+      Main.java: |
+        ...
+    tests:
+      - call: |                  # tests can create objects and call their methods
+          Book b = new Book("Emma", 474);
+          System.out.println(b.getPages());
+```
+
+A `java run` example (and a `predict` program) can hold several files too: each file after the first starts with a line such as `// ==== Book.java ====`, and the page shows each file under its name.
+
+### Files a program reads
+
+A test can give the program files to read, in its working folder:
+
+```yaml
+    tests:
+      - files:
+          scores.txt: |
+            7
+            9
+      - files:
+          scores.txt: "10\n"
+        hidden: true
+```
+
+In lesson text, a ` ```file scores.txt ` block before a ` ```java run ` example is a file that example reads (shown with its name).
+
+### Input that ends with an empty line
+
+Input normally ends with one line break. To end it with an empty line on purpose (for a program that reads until an empty line), keep the blank line with YAML's `|+`, or write it quoted: `stdin: "Ada\nBen\n\n"`. The page shows it as "(an empty line)".
+
+### Tests that call methods
+
+The site compiles a hidden class, `ArenaCheck extends Main`, whose `main` runs the test's code (so a call reads exactly as it would inside `Main`), and grades what it prints. It imports `java.util.*`, so a test can build an `ArrayList` by its short name. An exception from the learner's code, checked or not, comes out unchanged, as it would from `Main` itself. The build does the same on the JDK. When the learner's own code compiles but the check can't call it (a misspelled name, other parameter types, a `private` or non-`static` method, a `void` method whose value is used, a class not called `Main` or in a package), the learner gets a plain explanation that names the call instead of the check program's javac errors. A test named after a one-line call shows that call as its name.
 
 Every Java block in lesson text says what it is:
 
@@ -151,6 +206,6 @@ drills:
     hints: [...]
 ```
 
-Predict and fill drills may give the program input with `stdin`. `placement.yaml` holds the placement quiz: `questions:`, each a drill with a `module:`, one per module in course order.
+A drill can have classes of its own in `classes` (for example `class Counter { ... }`, not public: they're put after Main in the same file); the drill shows them first, then `pre`, then the statements of `body`. Predict and fill drills may give the program input with `stdin`. `placement.yaml` holds the placement quiz: `questions:`, each a drill with a `module:`, one per module in course order.
 
 To check one drill file while writing it, without changing any generated file: `node scripts/build-content.mjs --dry --drill-file loops.yaml`. To check one module and its drills: `node scripts/build-content.mjs --dry --module-file 13-lists.yaml`.

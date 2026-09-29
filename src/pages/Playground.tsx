@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Link2, Play, RotateCcw } from "lucide-react";
-import CodeEditor from "../components/CodeEditor";
+import FilesEditor from "../components/FilesEditor";
 import SymbolBar from "../components/SymbolBar";
 import { DiagnosticList } from "../components/Results";
 import { DownloadCard, EngineErrorCard, UnsupportedCard, useEngineAutoload, useEngineStatus } from "../components/Engine";
@@ -201,7 +201,7 @@ export default function Playground() {
       <div className="workbench" ref={boxRef} data-checks={runs}>
         {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="Running programs" now="write your program now" button="Run" />}
         {engine.state === "error" && !unsupported && <EngineErrorCard message={engine.message} />}
-        <CodeEditor value={code} onChange={(v) => edit({ code: v })} onRun={run} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="16rem" label="Java code editor (Main.java)" runAction="runs the program" />
+        <FilesEditor value={code} onChange={(v) => edit({ code: v })} onRun={run} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="16rem" label="Java code editor" runAction="runs the program" canAddFiles />
         <SymbolBar container={boxRef} />
         <label className="lbl" htmlFor="pg-stdin">
           Input (what the program reads)
@@ -257,7 +257,7 @@ export default function Playground() {
                 <div className="banner banner-fail">
                   <span>It didn't compile</span>
                 </div>
-                <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} />
+                <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} multiFile={result.multiFile} />
               </>
             ) : (
               <>

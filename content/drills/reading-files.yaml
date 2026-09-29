@@ -1,0 +1,287 @@
+topic: reading-files
+drills:
+  - type: predict
+    after: reading-until-end
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int count = 0;
+      while (scanner.hasNextLine()) {
+          String line = scanner.nextLine();
+          if (line.equalsIgnoreCase("stop")) {
+              break;
+          }
+          count++;
+      }
+      System.out.println(count);
+    stdin: "go\nSTOP\nwait\nstop\n"
+    why: "`equalsIgnoreCase` doesn't care about capitals, so `STOP` on the second line already ends the loop. Only `go` was counted, and the lines after `STOP` are never read."
+
+  - type: choice
+    after: files-and-folders
+    prompt: "A program opens a file with `Paths.get(\"data.txt\")`, the name alone. Where does Java look for it?"
+    choices:
+      - "In the program's working folder, the folder it runs in"
+      - "In the `src` folder, next to `Main.java`"
+      - "Everywhere on the computer, until it finds a file with that name"
+      - "In the folder the user chooses when the program starts"
+    answer: 1
+    why: "A name without folders is looked for in the working folder. When a project runs from an editor, that's usually the project's main folder, the one that holds `src`, so data files go next to `src`, not inside it."
+
+  - type: predict
+    after: reading-a-file
+    body: |
+      Scanner reader = new Scanner("one\n\nthree\n");
+      int lines = 0;
+      while (reader.hasNextLine()) {
+          reader.nextLine();
+          lines++;
+      }
+      System.out.println("Lines: " + lines);
+    why: "`\\n\\n` leaves an empty line between `one` and `three`, and an empty line is a line too. The last `\\n` only ends `three`: no fourth line comes after it."
+
+  - type: fill
+    after: reading-a-file
+    prompt: Fill the blank with a method name, so the loop counts every line, the empty last one too.
+    body: |
+      Scanner reader = new Scanner("red\ngreen\n\n");
+      int lines = 0;
+      while (reader.[[hasNextLine]]()) {
+          reader.nextLine();
+          lines++;
+      }
+      System.out.println("Lines: " + lines);
+    why: "`hasNextLine()` is `true` while any line is left, even an empty one, so the loop counts `red`, `green` and the empty line. `hasNext()` looks for a word instead: nothing but a line break is left after `green`, so it would stop there and print `Lines: 2`."
+
+  - type: choice
+    after: reading-a-file
+    prompt: "Which import does a program need to use `Paths.get(...)`?"
+    choices:
+      - "`import java.nio.file.Paths;`"
+      - "`import java.util.Paths;`"
+      - "`import java.io.Paths;`"
+      - "None: `Paths` can be used without an import"
+    answer: 1
+    why: "`Paths` is in the package `java.nio.file`. The `Scanner` that reads the file still comes from `java.util`, so a program that reads a file has both imports."
+
+  - type: choice
+    after: reading-a-file
+    prompt: What happens when this code runs?
+    body: |
+      Scanner reader = new Scanner("a\nb");
+      int count = 0;
+      while (reader.hasNextLine()) {
+          count++;
+      }
+      System.out.println(count);
+    choices:
+      - "It prints 2"
+      - "The loop never ends"
+      - "It crashes in the second round"
+      - "It prints 0, because the loop never runs"
+    answer: 2
+    why: "`hasNextLine()` only checks whether a line is waiting; it doesn't read it. Nothing calls `nextLine()`, so the first line stays waiting and the condition stays `true` forever."
+
+  - type: predict
+    after: when-the-file-is-missing
+    body: |
+      try {
+          System.out.println("Start");
+          int number = Integer.valueOf("4o");
+          System.out.println("Number: " + number);
+      } catch (Exception e) {
+          System.out.println("Caught: " + e.getMessage());
+      }
+      System.out.println("End");
+    why: "`\"4o\"` has the letter o, not a zero, so `Integer.valueOf` throws. The rest of the `try` block is skipped, the `catch` block prints the message, and the program goes on after it."
+
+  - type: compiles
+    after: when-the-file-is-missing
+    body: |
+      try {
+          int number = Integer.valueOf("42");
+          System.out.println("Read " + number);
+      } catch (Exception e) {
+          System.out.println("Error: " + e.getMessage());
+      }
+      System.out.println(number + 1);
+    why: "No. A variable made inside the `try` block's braces exists only there, so javac says `cannot find symbol` for `number` on the last line. A value that's needed after the `try` is declared before it."
+
+  - type: compiles
+    after: when-the-file-is-missing
+    prompt: "Does this compile? (`java.nio.file.Paths` is `Paths` written with its full name, so it needs no import here.)"
+    body: |
+      Scanner reader = new Scanner(java.nio.file.Paths.get("notes.txt"));
+      while (reader.hasNextLine()) {
+          System.out.println(reader.nextLine());
+      }
+    why: "No. Opening a file can throw an `IOException`, and Java insists that code which opens a file says what to do then. javac says `unreported exception IOException; must be caught or declared to be thrown`. The fix is the `try (...) { ... } catch (Exception e) { ... }` of this module."
+
+  - type: bug
+    after: a-file-chosen-by-the-user
+    prompt: "The program should count the lines of `text` that are exactly the word typed on the keyboard (here `moon`, so it should print 1). Which line is wrong?"
+    body: |
+      Scanner keyboard = new Scanner(System.in);
+      String word = keyboard.nextLine();
+      Scanner text = new Scanner("sun\nmoon\nstar");
+      int count = 0;
+      while (text.hasNextLine()) {
+          String line = keyboard.nextLine(); // BUG
+          if (line.equals(word)) {
+              count++;
+          }
+      }
+      System.out.println(count);
+    stdin: moon
+    fix: String line = text.nextLine();
+    why: "The loop asks `text` whether it has lines, but reads from `keyboard`. The keyboard input has already run out, so `keyboard.nextLine()` crashes. The line must come from the same Scanner the loop asks: `text.nextLine()`."
+
+  - type: fill
+    after: searching-a-file
+    prompt: Fill the blank with a String method, so the program counts the lines that mention ERROR.
+    body: |
+      Scanner reader = new Scanner("08:15 ERROR disk\n09:30 backup\n10:05 ERROR network");
+      int errors = 0;
+      while (reader.hasNextLine()) {
+          String line = reader.nextLine();
+          if (line.[[contains]]("ERROR")) {
+              errors++;
+          }
+      }
+      System.out.println("Errors: " + errors);
+    why: "The lines start with a time, so ERROR is in the middle of them. `contains` finds text anywhere in the line; `equals` would compare the whole line, and `startsWith` only its beginning."
+
+  - type: predict
+    after: numbers-from-a-file
+    body: |
+      Scanner reader = new Scanner("10\n20\n\n30");
+      int sum = 0;
+      try {
+          while (reader.hasNextLine()) {
+              sum += Integer.valueOf(reader.nextLine());
+          }
+      } catch (Exception e) {
+          System.out.println("Stopped");
+      }
+      System.out.println(sum);
+    why: "10 and 20 are added. Then `Integer.valueOf(\"\")` throws for the empty line, the `catch` block prints `Stopped`, and the 30 is never read. The sum printed after it is 30: 10 plus 20."
+
+  - type: bug
+    after: numbers-from-a-file
+    prompt: "The empty line should be skipped, so the program prints `Total: 60`. Which line is wrong?"
+    body: |
+      Scanner reader = new Scanner("10\n\n20\n30\n");
+      int total = 0;
+      while (reader.hasNextLine()) {
+          String line = reader.nextLine();
+          if (line.isEmpty()) {
+              break; // BUG
+          }
+          total += Integer.valueOf(line);
+      }
+      System.out.println("Total: " + total);
+    fix: continue;
+    why: "`break` leaves the loop at the first empty line, so 20 and 30 are never added and it prints `Total: 10`. `continue` skips only the empty line and goes on with the next one."
+
+  - type: bug
+    after: records-in-a-file
+    prompt: "Each line is `name,year,points`. The program should add up the points and print `Points: 15`. Which line is wrong?"
+    body: |
+      Scanner reader = new Scanner("Aada,2019,6\nEino,2021,9");
+      int points = 0;
+      while (reader.hasNextLine()) {
+          String[] parts = reader.nextLine().split(",");
+          points += Integer.valueOf(parts[1]); // BUG
+      }
+      System.out.println("Points: " + points);
+    fix: points += Integer.valueOf(parts[2]);
+    why: "Indexes start at 0: `parts[0]` is the name, `parts[1]` the year and `parts[2]` the points. Adding `parts[1]` adds up the years and prints `Points: 4040`."
+
+  - type: predict
+    after: objects-from-a-file
+    classes: |
+      class Planet {
+          private String name;
+          private int moons;
+
+          public Planet(String name, int moons) {
+              this.name = name;
+              this.moons = moons;
+          }
+
+          public int getMoons() {
+              return this.moons;
+          }
+
+          public String toString() {
+              return this.name + " (" + this.moons + ")";
+          }
+      }
+    body: |
+      ArrayList<Planet> planets = new ArrayList<>();
+      Scanner reader = new Scanner("Earth,1\nMars,2\nVenus,0");
+      while (reader.hasNextLine()) {
+          String[] parts = reader.nextLine().split(",");
+          planets.add(new Planet(parts[0], Integer.valueOf(parts[1])));
+      }
+      System.out.println(planets.size());
+      System.out.println(planets.get(1));
+    why: "Each of the three lines becomes one `Planet`, in the order of the lines. Index 1 is the second one, Mars, and printing it prints what its `toString` returns."
+
+  - type: boss
+    after: records-in-a-file
+    prompt: |
+      Read lines in the form `name,score` until an empty line. Some lines are broken and have no comma: skip them, but count them. Then print the name with the highest score, and how many lines were broken. There's at least one good line, the scores are 0 or more, and if two share the highest score, print the first of them. For the input `Iida,40`, `Jonas 55`, `Kerttu,72`, `Leo,15` and an empty line, the program prints:
+
+      ```
+      Best: Kerttu (72)
+      Broken lines: 1
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String best = "";
+              int bestScore = -1;
+              int broken = 0;
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.isEmpty()) {
+                      break;
+                  }
+                  String[] parts = line.split(",");
+                  if (parts.length < 2) {
+                      broken++;
+                      continue;
+                  }
+                  int score = Integer.valueOf(parts[1]);
+                  if (score > bestScore) {
+                      bestScore = score;
+                      best = parts[0];
+                  }
+              }
+              System.out.println("Best: " + best + " (" + bestScore + ")");
+              System.out.println("Broken lines: " + broken);
+          }
+      }
+    hints:
+      - "A line without a comma splits into one part only, so `parts.length < 2` finds the broken lines. Count them and `continue`."
+      - "Start the best score at -1, below every real score, so that even a score of 0 is kept. Use `>`, not `>=`, so the first of two equal scores stays."
+    tests:
+      - stdin: "Iida,40\nJonas 55\nKerttu,72\nLeo,15\n\n"
+      - stdin: "Ada,0\n\n"
+        hidden: true
+      - stdin: "Mia,30\nNoah,30\nbroken\nalso broken\n\n"
+        hidden: true
+      - stdin: "Olga,12\nPetra,99\nRami,98\n\n"
+        hidden: true

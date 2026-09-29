@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { marked } from "marked";
 import { highlightHtml } from "./highlight";
+import { splitFiles } from "../grader/files.js";
 
 const LABELS: Record<string, string> = { output: "Output", input: "Input", javac: "What javac prints", crash: "The program crashes with" };
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -10,8 +11,19 @@ marked.use({
   renderer: {
     code({ text, lang }) {
       // Java gets the site's colors; output, input and javac blocks get a label.
-      if (lang === "java") return `<pre class="code-java"><code>${highlightHtml(text)}</code></pre>\n`;
+      if (lang === "java") {
+        const files = splitFiles(text) as { path: string; text: string }[];
+        // A program of several files: each one under its name.
+        if (files.length > 1 || files[0].path !== "Main.java" || text !== files[0].text)
+          return files.map((f) => `<figure class="code-file"><figcaption>${esc(f.path)}</figcaption><pre class="code-java"><code>${highlightHtml(f.text.replace(/\n$/, ""))}</code></pre></figure>\n`).join("");
+        return `<pre class="code-java"><code>${highlightHtml(text)}</code></pre>\n`;
+      }
+      const file = lang ? /^file\s+(\S+)$/.exec(lang) : null;
+      if (file) return `<figure class="io io-file"><figcaption>The file ${esc(file[1])}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       const label = lang ? LABELS[lang] : undefined;
+      // Input that ends with an empty line (the program reads until one) shows it.
+      if (lang === "input" && /\n$/.test(text))
+        return `<figure class="io io-input"><figcaption>${label}</figcaption><pre><code>${esc(text.replace(/\n$/, ""))}\n<span class="input-empty">(an empty line)</span></code></pre></figure>\n`;
       if (label) return `<figure class="io io-${lang}"><figcaption>${label}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       return false;
     },

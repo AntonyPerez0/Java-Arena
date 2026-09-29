@@ -1,0 +1,429 @@
+topic: object-methods
+drills:
+  - type: predict
+    after: returning-values
+    classes: |
+      class Shelf {
+          private int books;
+          private int capacity;
+
+          public Shelf(int capacity) {
+              this.books = 0;
+              this.capacity = capacity;
+          }
+
+          public void add(int count) {
+              this.books = this.books + count;
+          }
+
+          public int freeSpace() {
+              return this.capacity - this.books;
+          }
+      }
+    body: |
+      Shelf shelf = new Shelf(20);
+      shelf.add(8);
+      shelf.freeSpace();
+      shelf.add(5);
+      System.out.println(shelf.freeSpace());
+    why: "`shelf.freeSpace();` on a line of its own returns 12, but nothing uses the value, so nothing is printed. The print line asks again after 13 books: 20 - 13 is 7."
+
+  - type: predict
+    after: getters
+    classes: |
+      class Runner {
+          private String name;
+          private int laps;
+
+          public Runner(String name) {
+              this.name = name;
+              this.laps = 0;
+          }
+
+          public void lap() {
+              this.laps++;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public int getLaps() {
+              return this.laps;
+          }
+      }
+    body: |
+      Runner ana = new Runner("Ana");
+      Runner ben = new Runner("Ben");
+      ana.lap();
+      ben.lap();
+      ana.lap();
+      System.out.println(ana.getName() + " " + ana.getLaps());
+      System.out.println(ben.getLaps() + ana.getLaps());
+    why: "Each runner has its own `laps`: Ana ran 2 and Ben 1. On the last line both getters return an `int` and there's no String before them, so `+` adds them: 1 + 2 is 3."
+
+  - type: predict
+    after: tostring
+    classes: |
+      class Clock {
+          private int hours;
+          private int minutes;
+
+          public Clock(int hours, int minutes) {
+              this.hours = hours;
+              this.minutes = minutes;
+          }
+
+          public void advance(int minutes) {
+              this.minutes = this.minutes + minutes;
+              if (this.minutes >= 60) {
+                  this.hours++;
+                  this.minutes = this.minutes - 60;
+              }
+          }
+
+          public String toString() {
+              if (this.minutes < 10) {
+                  return this.hours + ":0" + this.minutes;
+              }
+              return this.hours + ":" + this.minutes;
+          }
+      }
+    body: |
+      Clock clock = new Clock(9, 55);
+      System.out.println(clock);
+      clock.advance(10);
+      System.out.println("Now " + clock);
+    why: "`println(clock)` and `\"Now \" + clock` both call `toString`. After `advance(10)` the minutes are 65, so the clock rolls over to 10:05: one more hour, 5 minutes. `toString` puts a 0 in front of minutes below 10."
+
+  - type: predict
+    after: this-and-parameters
+    classes: |
+      class Ticket {
+          private String event;
+          private int price;
+
+          public Ticket(String event, int price) {
+              this.event = event;
+              price = price;
+          }
+
+          public String toString() {
+              return this.event + ": " + this.price + " euros";
+          }
+      }
+    body: |
+      Ticket ticket = new Ticket("Concert", 35);
+      System.out.println(ticket);
+    why: "`this.event = event;` sets the ticket's event, but in `price = price;` both names mean the parameter, so the ticket's own `price` is never set. It keeps the starting value of an `int` instance variable, 0."
+
+  - type: predict
+    after: a-class-that-remembers
+    classes: |
+      class Grades {
+          private int count;
+          private int sum;
+
+          public Grades() {
+              this.count = 0;
+              this.sum = 0;
+          }
+
+          public void add(int grade) {
+              this.count++;
+              this.sum = this.sum + grade;
+          }
+
+          public double average() {
+              return this.sum / this.count;
+          }
+      }
+    body: |
+      Grades grades = new Grades();
+      grades.add(4);
+      grades.add(5);
+      System.out.println(grades.average());
+    why: "`this.sum / this.count` divides two `int`s, so 9 / 2 is 4, and only then is 4 turned into the `double` 4.0 that's returned. `(double) this.sum / this.count` would give 4.5."
+
+  - type: fill
+    after: getters
+    classes: |
+      class Album {
+          private String title;
+          private int tracks;
+
+          public Album(String title, int tracks) {
+              this.title = title;
+              this.tracks = tracks;
+          }
+
+          public [[String]] getTitle() {
+              return this.title;
+          }
+      }
+    body: |
+      Album album = new Album("Blue Hours", 10);
+      System.out.println(album.getTitle().toUpperCase());
+    why: "A getter's return type is the type of the variable it returns. `title` is a String, so the header is `public String getTitle()`, and the String it returns has the method `toUpperCase()`."
+
+  - type: fill
+    after: tostring
+    classes: |
+      class Coin {
+          private int value;
+
+          public Coin(int value) {
+              this.value = value;
+          }
+
+          public String [[toString]]() {
+              return this.value + " cents";
+          }
+      }
+    body: |
+      Coin coin = new Coin(20);
+      System.out.println(coin);
+      System.out.println("Found " + coin);
+    why: "`println` and `+` look for a method called exactly `toString`. With any other name, printing the coin would show the class name and a code instead of `20 cents`."
+
+  - type: bug
+    after: this-and-parameters
+    prompt: "The program should print `Station 5`. Which line is wrong?"
+    classes: |
+      class Radio {
+          private int station;
+
+          public Radio() {
+              this.station = 1;
+          }
+
+          public void setStation(int station) {
+              station = station; // BUG
+          }
+
+          public String toString() {
+              return "Station " + this.station;
+          }
+      }
+    body: |
+      Radio radio = new Radio();
+      radio.setStation(5);
+      System.out.println(radio);
+    fix: this.station = station;
+    why: "Inside `setStation`, a plain `station` means the parameter, so `station = station;` copies the parameter into itself, and the radio stays on station 1. `this.station` is the object's own variable."
+
+  - type: bug
+    after: calling-own-methods
+    prompt: "`isFull()` is right: the canoe seats 3 people. The program should print `3`. Which line is wrong?"
+    classes: |
+      class Canoe {
+          private int people;
+
+          public Canoe() {
+              this.people = 0;
+          }
+
+          public boolean isFull() {
+              return this.people == 3;
+          }
+
+          public void board() {
+              if (this.isFull()) { // BUG
+                  this.people++;
+              }
+          }
+
+          public int getPeople() {
+              return this.people;
+          }
+      }
+    body: |
+      Canoe canoe = new Canoe();
+      for (int i = 0; i < 4; i++) {
+          canoe.board();
+      }
+      System.out.println(canoe.getPeople());
+    fix: if (!this.isFull()) {
+    why: "Someone can get in only when the canoe is *not* full. As written, the empty canoe is never full, so nobody ever gets in and it prints 0. With `!this.isFull()` people board until the canoe has 3, and the fourth is turned away."
+
+  - type: compiles
+    after: getters
+    classes: |
+      class Pilot {
+          private String name;
+
+          public Pilot(String name) {
+              this.name = name;
+          }
+
+          public int getName() {
+              return this.name;
+          }
+      }
+    body: |
+      Pilot pilot = new Pilot("Sam");
+      System.out.println(pilot.getName());
+    why: "No. The header promises an `int`, but `this.name` is a String, and javac says it can't convert a String to an int. A getter's return type must match the variable it returns: `public String getName()`."
+
+  - type: compiles
+    after: tostring
+    classes: |
+      class Kite {
+          private String color;
+
+          public Kite(String color) {
+              this.color = color;
+          }
+
+          public String toString() {
+              System.out.println("A " + this.color + " kite");
+          }
+      }
+    body: |
+      Kite kite = new Kite("red");
+      System.out.println(kite);
+    why: "No. `toString` promises to return a String, but it only prints one and never returns anything, so javac reports `missing return statement`. The fix is `return \"A \" + this.color + \" kite\";`, and printing is left to the caller."
+
+  - type: choice
+    after: getters
+    prompt: "A class `Plant` has `private int height;` and a getter `public int getHeight()`. Which line in `main` compiles?"
+    choices:
+      - "`int h = plant.height;`"
+      - "`plant.height = 5;`"
+      - "`int h = plant.getHeight();`"
+      - "`plant.getHeight() = 5;`"
+    answer: 3
+    why: "`height` is private, so code outside the class can't read or set it directly. The getter is public and returns the value, so `plant.getHeight()` can be stored in a variable. A method call isn't a variable, so nothing can be assigned to it."
+
+  - type: choice
+    after: this-and-parameters
+    prompt: "In the constructor line `this.name = name;`, what is `this.name`?"
+    choices:
+      - The constructor's parameter
+      - The instance variable of the object being created
+      - A new local variable of the constructor
+    answer: 2
+    why: "`this` is the object itself, so `this.name` is its instance variable. The plain `name` on the right is the parameter, and the line copies its value into the object."
+
+  - type: choice
+    after: money-and-rounding
+    prompt: What does this print?
+    body: |
+      double a = 0.1 + 0.2;
+      int b = 10 + 20;
+      System.out.println((a == 0.3) + " " + (b == 30));
+    choices:
+      - "`true true`"
+      - "`false true`"
+      - "`true false`"
+      - "`false false`"
+    answer: 2
+    verify: output
+    why: "A `double` can't hold 0.1 or 0.2 exactly, so their sum is 0.30000000000000004, which isn't equal to the double closest to 0.3. Whole numbers in an `int` are exact, which is why money is best kept in whole cents."
+
+  - type: choice
+    after: money-and-rounding
+    prompt: A class keeps the price 4.35 euros. Which instance variable suits it best?
+    choices:
+      - "`private double euros;` holding 4.35"
+      - "`private int cents;` holding 435"
+      - "`private int euros;` holding 4"
+    answer: 2
+    why: "Whole cents in an `int` are exact, and adding or subtracting them never goes a fraction of a cent off. A `double` can't store 4.35 exactly, and whole euros lose the cents altogether."
+
+  - type: boss
+    after: a-class-that-remembers
+    prompt: |
+      Write a class `TemperatureLog` for a day's temperature readings, in whole degrees (they can be below zero). It has a constructor without parameters, and the methods `add(int degrees)`, `lowest()` and `highest()`, which return the lowest and the highest reading so far, and `spread()`, which returns the difference between the highest and the lowest (let it call the other two). With no readings, all three return 0. The check adds -3, 4 and 1 and prints the three answers:
+
+      ```
+      -3 4 7
+      ```
+    seed:
+      TemperatureLog.java: |
+        public class TemperatureLog {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                TemperatureLog log = new TemperatureLog();
+                log.add(-3);
+                log.add(4);
+                log.add(1);
+                System.out.println(log.lowest() + " " + log.highest() + " " + log.spread());
+            }
+        }
+    solution:
+      TemperatureLog.java: |
+        public class TemperatureLog {
+            private int count;
+            private int lowest;
+            private int highest;
+
+            public TemperatureLog() {
+                this.count = 0;
+                this.lowest = 0;
+                this.highest = 0;
+            }
+
+            public void add(int degrees) {
+                if (this.count == 0 || degrees < this.lowest) {
+                    this.lowest = degrees;
+                }
+                if (this.count == 0 || degrees > this.highest) {
+                    this.highest = degrees;
+                }
+                this.count++;
+            }
+
+            public int lowest() {
+                return this.lowest;
+            }
+
+            public int highest() {
+                return this.highest;
+            }
+
+            public int spread() {
+                return this.highest() - this.lowest();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                TemperatureLog log = new TemperatureLog();
+                log.add(-3);
+                log.add(4);
+                log.add(1);
+                System.out.println(log.lowest() + " " + log.highest() + " " + log.spread());
+            }
+        }
+    hints:
+      - "Keep three instance variables: how many readings there have been, the lowest and the highest. The first reading is both the lowest and the highest so far, whatever it is."
+      - "In `add`: `if (this.count == 0 || degrees < this.lowest) { this.lowest = degrees; }`, the same for the highest, then `this.count++;`. `spread()` returns `this.highest() - this.lowest()`."
+    tests:
+      - call: |
+          TemperatureLog log = new TemperatureLog();
+          log.add(-3);
+          log.add(4);
+          log.add(1);
+          System.out.println(log.lowest() + " " + log.highest() + " " + log.spread());
+      - call: |
+          TemperatureLog log = new TemperatureLog();
+          System.out.println(log.lowest() + " " + log.highest() + " " + log.spread());
+        hidden: true
+      - call: |
+          TemperatureLog log = new TemperatureLog();
+          log.add(-5);
+          log.add(-2);
+          log.add(-9);
+          System.out.println(log.lowest() + " " + log.highest() + " " + log.spread());
+        hidden: true
+      - call: |
+          TemperatureLog log = new TemperatureLog();
+          log.add(12);
+          System.out.println(log.lowest() + " " + log.highest() + " " + log.spread());
+          log.add(20);
+          System.out.println(log.spread());
+        hidden: true

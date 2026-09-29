@@ -1,6 +1,7 @@
 import { Target } from "lucide-react";
 import type { Exercise } from "../content/types";
 import Markdown from "./Markdown";
+import InputText from "./InputText";
 
 /**
  * What the challenge asks for, set apart from the lesson so it's obvious: the task, then the exact
@@ -13,9 +14,10 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
   const moreTests = others.length;
   const hiddenCount = others.filter((t) => t.hidden).length;
   const calls = others.filter((t) => t.call).length;
-  const what = calls === 0 ? "input" : calls === others.length ? "calls" : "input or calls";
-  // The expected output gets its own box below, so a copy of it in the task text is dropped.
-  const text = shown ? withoutBlock(task, shown.expect) : task;
+  const files = others.filter((t) => t.files).length;
+  const what = calls === 0 ? (files ? "input or files" : "input") : calls === others.length ? "calls" : "input or calls";
+  // The expected output (and the check's code) get boxes of their own below, so copies in the task text are dropped.
+  const text = shown ? withoutBlock(task, shown.expect, shown.call) : task;
   return (
     <section className="task-card" aria-labelledby="task-h">
       <div className="task-head">
@@ -33,7 +35,7 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
       {ex.kind === "predict" && <p className="task-note">Read the program below and type each line it prints. The answers are what Java really prints for it.</p>}
       {shown && (
         <div className="task-expect">
-          <div className={"task-io" + (shown.stdin || shown.call ? " two" : "")}>
+          <div className={"task-io" + (shown.stdin || shown.call || shown.files ? " two" : "")}>
             {shown.call ? (
               <div>
                 <div className="lbl">The check runs</div>
@@ -46,10 +48,18 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
               <div>
                 <div className="lbl">Input</div>
                 <pre className="console tiny" tabIndex={0}>
-                  {shown.stdin.replace(/\n$/, "")}
+                  <InputText text={shown.stdin} />
                 </pre>
               </div>
             ) : null}
+            {Object.entries(shown.files ?? {}).map(([name, text]) => (
+              <div key={name}>
+                <div className="lbl">The file {name}</div>
+                <pre className="console tiny" tabIndex={0}>
+                  {text.replace(/\n$/, "")}
+                </pre>
+              </div>
+            ))}
             <div>
               <div className="lbl">Expected output</div>
               <pre className="console task-output" tabIndex={0}>
@@ -72,8 +82,15 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
 
 const norm = (s: string) => s.replace(/[ \t]+$/gm, "").trim();
 
-/** The task without a fenced block that only repeats the expected output, which the box below shows. */
-function withoutBlock(task: string, expect: string): string {
+/** The task without fenced blocks that only repeat the expected output or the check's code, which the boxes below show. */
+function withoutBlock(task: string, expect: string, call?: string): string {
+  if (call) {
+    // "The check runs: <code> and expects: <output>", both shown again below.
+    const both = task.replace(/The check runs:\s*\n^```[^\n]*\n([\s\S]*?)^```[ \t]*\n\s*and expects:\s*\n^```[^\n]*\n([\s\S]*?)^```[ \t]*$/m, (m, code: string, body: string) =>
+      norm(code) === norm(call) && norm(body) === norm(expect) ? "The code the check runs and the output it expects are shown below." : m,
+    );
+    if (both !== task) return both.trimEnd() + "\n";
+  }
   const out = task.replace(/(:?)\s*\n^```[^\n]*\n([\s\S]*?)^```[ \t]*$/gm, (m, colon: string, body: string) => (norm(body) === norm(expect) ? (colon ? ": see the expected output below." : "") : m));
   return out === task ? task : out.trimEnd() + "\n";
 }

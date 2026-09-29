@@ -27,11 +27,34 @@ const RULES: Rule[] = [
   { code: "compiler.err.void.not.allowed.here", explain: () => "This uses the value of a method that is void, so there is no value to print or store. Give the method a return type (such as int) and a return statement, or call it on a line of its own." },
   { code: "compiler.err.missing.ret.stmt", explain: () => "This method promises to return a value, but some path through it reaches the end without a return statement. Make sure every possible path ends with return." },
   { code: "compiler.err.unreachable.stmt", explain: () => "This line can never run, because the code before it always leaves first (for example an endless loop, a return, or a break)." },
-  { code: "compiler.err.class.public.should.be.in.file", explain: () => "A public class must be in a file with exactly the same name. Rename the class to match the file (here the file is Main.java, so the class should be Main)." },
+  {
+    code: "compiler.err.class.public.should.be.in.file",
+    explain: (d) => {
+      const m = /class (\w+) is public, should be declared in a file named (\w+\.java)/.exec(d.message);
+      const here = d.file.split("/").pop();
+      return m
+        ? `A public class must be in a file with exactly its name: class ${m[1]} belongs in ${m[2]}, but it's in ${here}. If it's meant to be this file's class, rename it ${here?.replace(/\.java$/, "")}. If it's an extra class, remove the word public (a class without public can share a file), or give it a file of its own.`
+        : "A public class must be in a file with exactly the same name as the class.";
+    },
+  },
   { code: "compiler.err.unclosed.str.lit", explain: () => "This text is missing its closing quote \". Every string starts and ends with a double quote on the same line." },
   { code: "compiler.err.unclosed.char.lit", explain: () => "A char is one character between single quotes, like 'a'. Use double quotes for longer text." },
   { code: "compiler.err.empty.char.lit", explain: () => "'' is empty: a char needs exactly one character between the single quotes." },
+  {
+    code: "compiler.err.cant.apply.symbol",
+    when: /^constructor \w+ in class \w+ cannot be applied[\s\S]*required: no arguments/,
+    explain: (d) => {
+      const c = /^constructor (\w+)/.exec(d.message)?.[1];
+      return `The object is created with values, but ${c} has no constructor that takes any. A class without a constructor of its own gets an empty one, so only new ${c}() works. Write a constructor with these parameters in ${c}.`;
+    },
+  },
+  {
+    code: "compiler.err.cant.apply.symbol",
+    when: /^constructor /,
+    explain: (d) => `The values in new ${/^constructor (\w+)/.exec(d.message)?.[1]}(...) don't match the constructor's parameters. Compare their number, order and types (Java lists what it required and what it found).`,
+  },
   { code: "compiler.err.cant.apply.symbol", explain: () => "The method was called with the wrong number or types of arguments. Compare the call with the method's parameter list (Java lists what it required and what it found)." },
+  { code: "compiler.err.cant.apply.symbols", when: /^no suitable constructor found for (\w+)/, explain: (d) => `None of the constructors of ${/^no suitable constructor found for (\w+)/.exec(d.message)?.[1]} takes these values. Check the number, order and types of the values in the parentheses.` },
   { code: "compiler.err.cant.apply.symbols", explain: () => "None of the versions of this method accepts these arguments. Check the number and types of values in the parentheses." },
   { code: "compiler.err.non-static.cant.be.ref", explain: () => "main is static, so it can't use this object's methods or variables directly. Create an object first (new ...) and call the method on it, or make the method static if it doesn't need an object." },
   { code: "compiler.err.var.might.not.have.been.initialized", explain: () => "This variable is used before it has a value. Give it a starting value where you create it, for example int sum = 0;" },
@@ -73,6 +96,8 @@ export function explainDiagnostic(d: Diagnostic): string | null {
 export type Crash = {
   exception: string;
   message: string;
+  /** The learner's file the reported line is in. */
+  file?: string;
   line: number | null;
   method: string | null;
   explanation: string;
@@ -213,16 +238,18 @@ export function explainCrash(stderr: string, sourceFiles: string[] = ["Main.java
   const files = sourceFiles.map((f) => f.split("/").pop());
   let line: number | null = null;
   let method: string | null = null;
+  let file: string | undefined;
   for (const l of lines.slice(headIndex + 1)) {
     if (l.startsWith("Caused by: ")) break;
     const m = /^\s+at (?:[\w.$]+\/)?[\w.$]+\.([\w$<>]+)\(([\w$]+\.java):(\d+)\)/.exec(l);
     if (!m || !files.includes(m[2])) continue;
     line = Number(m[3]);
+    file = m[2];
     method = m[1].startsWith("lambda$") ? m[1].split("$")[1] : m[1];
     break;
   }
   const short = exception.split(".").pop()!;
   const rule = EXCEPTIONS.find(([re]) => re.test(exception));
   const explanation = rule ? rule[1](message) : `The program stopped with ${short}${message ? ": " + message : ""}.`;
-  return { exception: short, message, line, method, explanation };
+  return { exception: short, message, file, line, method, explanation };
 }

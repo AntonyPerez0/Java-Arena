@@ -7,7 +7,8 @@ import { getState, useStore } from "../state/store";
 import { checkAnswer, TYPE_LABEL, topicTitle } from "./engine";
 import { CodeView, highlight } from "../components/highlight";
 import FillCode from "../components/FillCode";
-import CodeEditor from "../components/CodeEditor";
+import FilesEditor from "../components/FilesEditor";
+import InputText from "../components/InputText";
 import Results from "../components/Results";
 import Markdown, { InlineMd } from "../components/Markdown";
 import SymbolBar from "../components/SymbolBar";
@@ -39,7 +40,7 @@ function InputBlock({ stdin }: { stdin?: string }) {
     <div className="rep-io">
       <span className="lbl">input</span>
       <pre tabIndex={0} className="console tiny">
-        {stdin.replace(/\n$/, "")}
+        <InputText text={stdin} />
       </pre>
     </div>
   );
@@ -284,7 +285,7 @@ function BossRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
       <Markdown text={drill.prompt} className="rep-task" />
       {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="A boss rep" now="read the task now" button="Fire" />}
       {engine.state === "error" && !unsupported && <EngineErrorCard message={engine.message} />}
-      <CodeEditor value={code} onChange={setCode} onRun={fire} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="12rem" label="Java code editor (Main.java)" />
+      <FilesEditor value={code} onChange={setCode} onRun={fire} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="12rem" label="Java code editor" />
       <div className="actions">
         <button type="button" id="check" className="btn btn-primary" onClick={fire} disabled={unsupported} aria-busy={busy || undefined}>
           {busy ? (engine.state === "ready" ? "Checking…" : "Starting Java…") : <>Fire <kbd aria-hidden="true">Ctrl ↵</kbd></>}

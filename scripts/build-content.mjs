@@ -21,6 +21,7 @@ import { spawn, spawnSync } from "node:child_process";
 import YAML from "yaml";
 import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, mainProgram, normalizeOutput, parseTemplate, templateSolution } from "../src/grader/assemble.js";
 import { indentMessages } from "../src/grader/style.js";
+import { FILE_MARK, joinFiles, splitFiles } from "../src/grader/files.js";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/suite.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -151,14 +152,16 @@ function limit(fn) {
  * Runs a compiled program on one input with the reference JVM flags. Cached by program and input.
  * `mainClass` and `args` are for the check program of tests that call methods.
  */
-async function run(compiled, stdin, { mainClass = "Main", args = [] } = {}) {
-  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS]);
+async function run(compiled, stdin, { mainClass = "Main", args = [], files = null } = {}) {
+  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS, ...(files ? [files] : [])]);
   if (cache[id]) return cache[id];
   const { classes } = await javacBatch(compiled.files);
   return limit(
     () =>
       new Promise((resolve) => {
         const cwd = fs.mkdtempSync(path.join(TMP, "run-"));
+        // Files the program reads sit in its working folder, as they would next to a real program.
+        for (const [name, text] of Object.entries(files ?? {})) fs.writeFileSync(path.join(cwd, name), text);
         const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, "-cp", classes, mainClass, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
@@ -192,14 +195,41 @@ function readYaml(file) {
   }
 }
 
-const ensureNl = (s) => (s == null ? s : String(s).replace(/\s*$/, "\n"));
+// Text ends with exactly one line break, except that an empty last line typed on purpose (input that
+// ends with an empty line, written with YAML's |+ or a quoted "\n\n") is kept.
+const ensureNl = (s) => (s == null ? s : String(s).replace(/\s*$/, "") + (/\n[ \t]*\n\s*$/.test(String(s)) ? "\n\n" : "\n"));
 const slugify = (s) =>
   s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 const KEBAB = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-const mainFile = (text) => [{ path: "Main.java", text }];
+/** The source files of a program (one Main.java, or several files joined with file markers). */
+const mainFile = (text) => splitFiles(text);
+/** Indentation problems in every file of a program, named by file when there are several. */
+const indentProblems = (text) => {
+  const files = splitFiles(text);
+  return files.flatMap((f) => indentMessages(f.text).map((m) => (files.length > 1 ? `${f.path}: ${m}` : m)));
+};
+/**
+ * A program given in YAML: text (Main.java), or a map of file names to their text, such as
+ * { Person.java: ..., Main.java: ... }, which becomes one string with file markers.
+ */
+function codeOf(where, value) {
+  if (value == null || typeof value === "string") return ensureNl(value ?? "");
+  if (typeof value !== "object" || Array.isArray(value)) {
+    errors.push(`${where}: code must be text, or a map of file names to text`);
+    return "";
+  }
+  const files = Object.entries(value).map(([p, text]) => ({ path: p, text: ensureNl(String(text ?? "")) }));
+  for (const f of files) {
+    if (!/^[A-Z][A-Za-z0-9]*\.java$/.test(f.path)) errors.push(`${where}: "${f.path}" isn't a Java file name (like Person.java)`);
+    const cls = /^\s*public\s+(?:final\s+|abstract\s+)?(?:class|interface|record|enum)\s+(\w+)/m.exec(f.text)?.[1];
+    if (cls && `${cls}.java` !== f.path) errors.push(`${where}: ${f.path} holds public class ${cls}, which must be in ${cls}.java`);
+  }
+  if (!files.some((f) => f.path === "Main.java")) errors.push(`${where}: a program of several files needs a Main.java`);
+  return joinFiles(files);
+}
 
 /** Imports a ```java main example gets automatically, when it uses these classes. */
 const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", HashMap: "java.util.HashMap", Random: "java.util.Random" };
@@ -216,9 +246,9 @@ const KEYS = {
   step: ["id", "slug", "title", "text", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass", "more"],
   challenge: ["task", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass"],
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
-  test: ["name", "stdin", "call", "expect", "hidden"],
+  test: ["name", "stdin", "call", "files", "expect", "hidden"],
   drillFile: ["topic", "drills"],
-  drill: ["id", "type", "prompt", "pre", "body", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
+  drill: ["id", "type", "prompt", "pre", "body", "classes", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
 };
 function checkKeys(where, obj, kind) {
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
@@ -259,6 +289,10 @@ function checkRuleShape(where, list, kind) {
  *   ```java run crash a complete program that must stop with an uncaught exception. After its
  *                     ```input and ```output blocks (both optional), a ```crash block must be what
  *                     Java prints: the exception line and the program's own "at" lines.
+ *   ```file data.txt  a file that the next ```java run example reads (shown with its name). Several
+ *                     can come before one example.
+ * A ```java run example can hold several files: each one after the first starts with a line such as
+ * `// ==== Person.java ====` (the page shows it as the file's name).
  * Returns the text with plain ```java info strings.
  */
 async function checkExamples(where, text) {
@@ -295,10 +329,16 @@ async function checkExamples(where, text) {
       continue;
     }
     if (c.output) errors.push(`${w}: javac printed warnings:\n${c.output}`);
-    for (const m of indentMessages(source)) errors.push(`${w}: indentation: ${m}`);
+    for (const m of indentProblems(source)) errors.push(`${w}: indentation: ${m}`);
     const hasInput = blocks[i + 1]?.[1].trim() === "input";
     const stdin = hasInput ? blocks[i + 1][2] : "";
-    const r = await run(c, stdin);
+    // The ```file blocks since the previous java block are files this example reads.
+    let files = null;
+    for (let j = i - 1; j >= 0 && !/^java\b/.test(blocks[j][1].trim()); j--) {
+      const f = /^file\s+([\w.-]+)$/.exec(blocks[j][1].trim());
+      if (f) (files ??= {})[f[1]] = blocks[j][2];
+    }
+    const r = await run(c, stdin, files ? { files } : {});
     let key = null;
     if (crash) {
       key = stderrKey(r.stderr);
@@ -319,7 +359,7 @@ async function checkExamples(where, text) {
       if (!shown || shown[1].trim() !== "crash") errors.push(`${w}: a "java run crash" block needs a crash block after it (and after its output block), with what Java prints:\n${key}`);
       else if (normalizeOutput(shown[2]) !== normalizeOutput(key)) errors.push(`${w}: the crash block says\n${shown[2]}\nbut Java prints\n${key}`);
     }
-    checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, stdout: r.stdout, exitCode: r.exitCode, ...(crash ? { stderrKey: key } : {}) }] });
+    checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, ...(files ? { files } : {}), stdout: r.stdout, exitCode: r.exitCode, ...(crash ? { stderrKey: key } : {}) }] });
   }
   return text.replace(/^```java[ \t]+(run|main|error|fragment)([ \t]+crash)?[ \t]*$/gm, "```java");
 }
@@ -334,9 +374,9 @@ async function checkExamples(where, text) {
  * line it prints. The answers are the program's real output.
  */
 async function buildPredict(where, raw, hints) {
-  const program = ensureNl(raw.predict);
+  const program = codeOf(where, raw.predict);
   for (const k of ["seed", "solution", "fill", "tests", "require", "forbid", "style"]) if (raw[k] != null) errors.push(`${where}: a predict challenge can't have ${k}`);
-  for (const m of indentMessages(program)) errors.push(`${where}: the program's indentation: ${m}`);
+  for (const m of indentProblems(program)) errors.push(`${where}: the program's indentation: ${m}`);
   const c = await compile(mainFile(program));
   if (!c.ok) {
     errors.push(`${where}: the program does not compile:\n${c.output}`);
@@ -363,8 +403,10 @@ async function buildExercise(where, raw) {
   if (kind === "code" && raw.seed == null) errors.push(`${where}: needs fill, or seed and solution`);
   const style = raw.style;
   if (style != null && style !== "indent") errors.push(`${where}: style can only be "indent"`);
-  const seed = ensureNl(kind === "fill" ? raw.fill : raw.seed ?? "");
-  const solution = ensureNl(kind === "fill" ? templateSolution(raw.fill) : raw.solution);
+  if (kind === "fill" && typeof raw.fill !== "string") errors.push(`${where}: a fill challenge is one file of text`);
+  const seed = kind === "fill" ? ensureNl(raw.fill) : codeOf(`${where} seed`, raw.seed);
+  const solution = kind === "fill" ? ensureNl(templateSolution(raw.fill)) : raw.solution == null ? "" : codeOf(`${where} solution`, raw.solution);
+  if (kind === "code" && raw.seed != null && splitFiles(seed).map((f) => f.path).join() !== splitFiles(solution).map((f) => f.path).join()) errors.push(`${where}: the seed and the solution must have the same files, in the same order`);
   if (!solution) {
     errors.push(`${where}: missing solution`);
     return null;
@@ -385,18 +427,27 @@ async function buildExercise(where, raw) {
   const ruleProblems = checkRules(solution, require, forbid);
   if (ruleProblems.length) errors.push(`${where}: the solution breaks its own rules: ${ruleProblems.join("; ")}`);
   // Solutions show good style: every line indented to match its braces.
-  for (const m of indentMessages(solution)) errors.push(`${where}: the solution's indentation: ${m}`);
+  for (const m of indentProblems(solution)) errors.push(`${where}: the solution's indentation: ${m}`);
 
   const testsRaw = raw.tests?.length ? raw.tests : [{}];
   for (const t of testsRaw) checkKeys(`${where} test`, t, "test");
   if (testsRaw.every((t) => t.hidden)) errors.push(`${where}: at least one test must be visible`);
   if (testsRaw.some((t) => t.stdin) && !testsRaw.some((t) => t.hidden)) warnings.push(`${where}: reads input but has no hidden test`);
   for (const t of testsRaw) if (t.call != null && (typeof t.call !== "string" || !t.call.trim())) errors.push(`${where}: a test's call must be Java code (as text)`);
+  // Files a test's program reads: a map of file names to their text.
+  const inputFiles = testsRaw.map((t, i) => {
+    if (t.files == null) return null;
+    if (typeof t.files !== "object" || Array.isArray(t.files) || Object.keys(t.files).some((n) => !/^[\w.-]+$/.test(n))) {
+      errors.push(`${where} test ${i + 1}: files must be a map of plain file names (like scores.txt) to their text`);
+      return null;
+    }
+    return Object.fromEntries(Object.entries(t.files).map(([n, text]) => [n, ensureNl(String(text ?? ""))]));
+  });
   // Tests with a `call` run the check program (ArenaCheck), which calls the learner's methods.
   const calls = testsRaw.map((t) => (t.call == null ? undefined : ensureNl(String(t.call))));
   const check = calls.some((x) => x != null) ? checkSource(calls.map((call) => ({ call }))) : null;
   const filesFor = (text) => (check ? [...mainFile(text), { path: CHECK_FILE, text: check.text }] : mainFile(text));
-  const how = (i) => (check ? { mainClass: CHECK_CLASS, args: [String(i)] } : {});
+  const how = (i) => ({ ...(check ? { mainClass: CHECK_CLASS, args: [String(i)] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}) });
 
   const c = await compile(filesFor(solution));
   if (!c.ok) {
@@ -418,9 +469,9 @@ async function buildExercise(where, raw) {
     if (!actual) errors.push(`${n}: the solution prints nothing`);
     const call = calls[i];
     const name = t.name ?? (call && !call.trim().includes("\n") ? call.trim() : testsRaw.length > 1 ? `Test ${i + 1}` : "Output");
-    return { name, stdin: stdins[i], ...(call ? { call } : {}), expect: actual, hidden: !!t.hidden };
+    return { name, stdin: stdins[i], ...(call ? { call } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), expect: actual, hidden: !!t.hidden };
   });
-  checks.push({ where, kind: "run", files: filesFor(solution), ...(check ? { mainClass: CHECK_CLASS } : {}), tests: tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : {}), stdout: runs[i].stdout, exitCode: 0 })) });
+  checks.push({ where, kind: "run", files: filesFor(solution), ...(check ? { mainClass: CHECK_CLASS } : {}), tests: tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), stdout: runs[i].stdout, exitCode: 0 })) });
 
   // Starter code must not already pass, or the challenge would be free.
   if (kind === "code" && seed && !raw.seedMayPass) {
@@ -428,7 +479,7 @@ async function buildExercise(where, raw) {
     if (sc.ok) {
       const sr = await Promise.all(tests.map((t, i) => run(sc, t.stdin, how(i))));
       const passes = tests.every((t, i) => sr[i].exitCode === 0 && !sr[i].timedOut && normalizeOutput(sr[i].stdout) === t.expect);
-      const styleOk = style !== "indent" || indentMessages(seed).length === 0;
+      const styleOk = style !== "indent" || indentProblems(seed).length === 0;
       if (passes && styleOk && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: the starter code already passes`);
     }
   }
@@ -562,23 +613,26 @@ async function buildModules() {
 const DRILL_TYPES = ["predict", "fill", "bug", "compiles", "choice", "boss"];
 const indentBy = (s, n) => s.split("\n").map((l) => (l ? " ".repeat(n) + l : l)).join("\n");
 
-function drillProgram(pre, body) {
+/** A drill's complete program: `classes` (classes of its own) go after Main in the same file. */
+function drillProgram(pre, body, classes = "") {
   const parts = [];
   if (pre) parts.push(indentBy(pre, 4));
   parts.push(`    public static void main(String[] args) {\n${body ? indentBy(body, 8) + "\n" : ""}    }`);
-  return `${importsFor(`${pre}\n${body}`)}public class Main {\n${parts.join("\n\n")}\n}\n`;
+  return `${importsFor(`${pre}\n${body}\n${classes}`)}public class Main {\n${parts.join("\n\n")}\n}\n${classes ? `\n${classes}\n` : ""}`;
 }
 
-function drillDisplay(pre, body) {
-  if (pre && body) return `${pre}\n\n// inside main:\n${body}`;
-  return pre || body;
+/** What a drill shows: its classes, then Main's methods, then the statements run in main. */
+function drillDisplay(pre, body, classes = "") {
+  const top = [classes, pre].filter(Boolean).join("\n\n");
+  if (top && body) return `${top}\n\n// inside main:\n${body}`;
+  return top || body;
 }
 
 /** The first error javac printed, without the file and line (they're of the whole program). */
 const firstError = (output) => /error: (.*)/.exec(output ?? "")?.[1] ?? "";
 
 async function runDrill(where, program, stdin) {
-  for (const m of indentMessages(program)) errors.push(`${where}: indentation: ${m}`);
+  for (const m of indentProblems(program)) errors.push(`${where}: indentation: ${m}`);
   const c = await compile(mainFile(program));
   if (!c.ok) {
     errors.push(`${where}: does not compile:\n${c.output}`);
@@ -618,11 +672,14 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
   const base = { id, topic, type: d.type, why: d.why ?? "", ...(after ? { after } : {}) };
   const pre = d.pre ? String(d.pre).replace(/\s*$/, "") : "";
   const body = d.body ? String(d.body).replace(/\s*$/, "") : "";
+  // Classes of the drill's own, such as `class Counter { ... }`: not public, since they share Main.java.
+  const classes = d.classes ? String(d.classes).replace(/\s*$/, "") : "";
+  if (/^\s*public\s+(?:final\s+|abstract\s+)?class\b/m.test(classes)) errors.push(`${where}: classes share Main.java with Main, so they can't be public (write class Counter, not public class Counter)`);
   const stdin = d.stdin == null || d.stdin === "" ? "" : ensureNl(String(d.stdin));
-  const display = drillDisplay(pre, body);
+  const display = drillDisplay(pre, body, classes);
   switch (d.type) {
     case "predict": {
-      const answer = await runDrill(where, drillProgram(pre, body), stdin);
+      const answer = await runDrill(where, drillProgram(pre, body, classes), stdin);
       if (answer == null) return null;
       if (!answer) errors.push(`${where}: prints nothing`);
       if (answer.split("\n").length > 4) errors.push(`${where}: prints ${answer.split("\n").length} lines; keep predict drills to 4`);
@@ -635,7 +692,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
         errors.push(`${where}: a fill drill needs exactly one [[blank]] with an answer`);
         return null;
       }
-      const output = await runDrill(where, drillProgram(templateSolution(pre), templateSolution(body)), stdin);
+      const output = await runDrill(where, drillProgram(templateSolution(pre), templateSolution(body), templateSolution(classes)), stdin);
       if (output == null) return null;
       if (!output) errors.push(`${where}: the program prints nothing, so there's no output to aim for`);
       if (d.expect != null && normalizeOutput(String(d.expect)) !== output) errors.push(`${where}: expect says\n${d.expect}\nbut the program prints\n${output}`);
@@ -652,9 +709,9 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
       if (/^\s*[{}]\s*;?\s*\/\/\s*BUG\s*$/.test(lines[at])) errors.push(`${where}: the bug line can't be a lone brace`);
       const clean = (x) => x.split("\n").map((l) => l.replace(/\s*\/\/\s*BUG\s*$/, "")).join("\n");
       const fixed = (x) => x.split("\n").map((l) => (/\/\/\s*BUG\s*$/.test(l) ? l.match(/^\s*/)[0] + d.fix.trim() : l)).join("\n");
-      const output = await runDrill(`${where} (fixed)`, drillProgram(fixed(pre), fixed(body)), stdin);
+      const output = await runDrill(`${where} (fixed)`, drillProgram(fixed(pre), fixed(body), fixed(classes)), stdin);
       if (output == null) return null;
-      const bc = await compile(mainFile(drillProgram(clean(pre), clean(body))));
+      const bc = await compile(mainFile(drillProgram(clean(pre), clean(body), clean(classes))));
       if (bc.ok) {
         const br = await run(bc, stdin);
         if (!br.timedOut && br.exitCode === 0 && !br.stderr && normalizeOutput(br.stdout) === output) errors.push(`${where}: the buggy and the fixed program behave the same`);
@@ -662,7 +719,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
       return { ...base, prompt: d.prompt ?? "One line has a bug. Which one?", display: clean(display), answer: String(at + 1), fix: d.fix.trim(), output, ...(stdin ? { stdin } : {}) };
     }
     case "compiles": {
-      const program = drillProgram(pre, body);
+      const program = drillProgram(pre, body, classes);
       const c = await compile(mainFile(program));
       const answer = c.ok ? "yes" : "no";
       if (d.answer != null && String(d.answer) !== answer) errors.push(`${where}: the answer says ${d.answer}, but javac says ${answer}:\n${c.output}`);
@@ -679,7 +736,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
       if (!(answer >= 1 && answer <= choices.length)) return void errors.push(`${where}: answer must be the number of the right choice (1 to ${choices.length})`);
       if (typeof d.prompt !== "string" || !d.prompt) errors.push(`${where}: a choice drill needs a prompt`);
       if (display) {
-        const program = drillProgram(pre, body);
+        const program = drillProgram(pre, body, classes);
         const c = await compile(mainFile(program));
         if (d.compiles === false) {
           if (c.ok) errors.push(`${where}: marked compiles: false, but it compiles`);

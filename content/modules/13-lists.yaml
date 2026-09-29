@@ -1,0 +1,1823 @@
+id: lists
+summary: Keeping many values in one list. Creating an ArrayList, adding values and getting them by index, the IndexOutOfBoundsException, a list's size, looping over the indexes, and finding the largest value or where a value is.
+steps:
+  - id: lists-creating
+    slug: creating-a-list
+    title: Creating a list
+    text: |
+      Say a program reads the names of everyone coming to a party. With one variable per name, you'd need `name1`, `name2`, `name3` and so on, and you'd have to know in advance how many guests there will be. A **list** solves both problems: it's one variable that holds any number of values, in order.
+
+      Java's list is called `ArrayList`:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> planets = new ArrayList<>();
+              planets.add("Mercury");
+              planets.add("Venus");
+              planets.add("Earth");
+              System.out.println(planets);
+          }
+      }
+      ```
+
+      ```output
+      [Mercury, Venus, Earth]
+      ```
+
+      - `import java.util.ArrayList;` goes at the very top, like the import for `Scanner`. Without it, Java doesn't know the name `ArrayList`.
+      - `ArrayList<String> planets` declares a variable for a list of Strings. The type between `<` and `>` says what kind of values the list holds.
+      - `new ArrayList<>()` creates a new, empty list, and `=` stores it in the variable.
+      - `planets.add("Mercury")` adds a value at the end of the list. The list grows by one each time; there's no size to set in advance.
+      - Printing a list prints all its values in square brackets, separated by commas, in the order they were added. An empty list prints `[]`.
+
+      A list can hold the same value more than once. And `+` joins a list to text, just as it does a number: `"Planets: " + planets` gives `Planets: [Mercury, Venus, Earth]`.
+
+      **Your turn:** fill in the blanks so the program creates a list, adds three drinks to it, and prints:
+
+      ```
+      [tea, coffee, cocoa]
+      ```
+    fill: |
+      import java.util.[[ArrayList]];
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> drinks = [[new ArrayList<>()‖new ArrayList<String>()]];
+              drinks.[[add]]("tea");
+              drinks.add("coffee");
+              drinks.add("cocoa");
+              System.out.println(drinks);
+          }
+      }
+    hints:
+      - "The import is `import java.util.ArrayList;`, and `new ArrayList<>()` creates the empty list."
+      - "`drinks.add(\"tea\")` puts `tea` at the end of the list."
+    more:
+      - task: |
+          What does this program print? Type each line.
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> queue = new ArrayList<>();
+                  System.out.println(queue);
+                  queue.add("Ana");
+                  queue.add("Ben");
+                  System.out.println(queue);
+                  queue.add("Ana");
+                  System.out.println("Queue: " + queue);
+              }
+          }
+        hints:
+          - "A new list is empty, and an empty list prints as `[]`."
+          - "`add` always puts the value at the end, even when the list already holds it: the last line shows `Ana` twice."
+      - task: |
+          Read the titles of books you'd like to read, one per line, until the line `stop`. Add each title to the list `books` (but not `stop` itself). After the loop, print `Reading list: ` followed by the list. For the input `Dune`, `Emma`, `Beloved` and `stop` the program prints:
+
+          ```
+          Reading list: [Dune, Emma, Beloved]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> books = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> books = new ArrayList<>();
+                  while (true) {
+                      String title = scanner.nextLine();
+                      if (title.equals("stop")) {
+                          break;
+                      }
+                      books.add(title);
+                  }
+                  System.out.println("Reading list: " + books);
+              }
+          }
+        hints:
+          - "A `while (true)` loop reads one line per round. When the line is `stop`, `break` ends the loop; otherwise `books.add(title);` adds it."
+          - "After the loop, `System.out.println(\"Reading list: \" + books);` prints the whole list."
+        require:
+          - pattern: \bbooks\.add\s*\(
+            message: "Add each title to the list with `books.add(...)`."
+        tests:
+          - stdin: |
+              Dune
+              Emma
+              Beloved
+              stop
+          - stdin: |
+              The Hobbit
+              stop
+            hidden: true
+          - stdin: stop
+            hidden: true
+          - stdin: |
+              Walden
+              Walden
+              Ulysses
+              Middlemarch
+              stop
+            hidden: true
+
+  - id: lists-types
+    slug: what-a-list-holds
+    title: What a list holds
+    text: |
+      The type between `<` and `>` says what goes into the list. A list of whole numbers is an `ArrayList<Integer>`, a list of decimal numbers an `ArrayList<Double>`, and a list of true and false values an `ArrayList<Boolean>`:
+
+      ```java main
+      ArrayList<Integer> scores = new ArrayList<>();
+      scores.add(12);
+      scores.add(7);
+      scores.add(12);
+      System.out.println(scores);
+
+      ArrayList<Double> prices = new ArrayList<>();
+      prices.add(4.5);
+      prices.add(3.0);
+      System.out.println(prices);
+      ```
+
+      ```output
+      [12, 7, 12]
+      [4.5, 3.0]
+      ```
+
+      Only values of that type fit: `scores.add("twelve")` doesn't compile, because `"twelve"` is a String, not a whole number.
+
+      ### Integer, not int
+
+      Why `Integer` and not `int`? A list can only hold **objects**, and `int`, `double` and `boolean` aren't objects: they're **primitive** types, plain values built into the language. Each of them has an object partner, written with a capital letter: `Integer` for `int`, `Double` for `double` and `Boolean` for `boolean`. A primitive type in a list doesn't compile:
+
+      ```java error
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<int> scores = new ArrayList<>();
+              scores.add(12);
+              System.out.println(scores);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:5: error: unexpected type
+              ArrayList<int> scores = new ArrayList<>();
+                        ^
+        required: reference
+        found:    int
+      1 error
+      ```
+
+      `required: reference` means javac wants an object type there. Write `ArrayList<Integer>` instead.
+
+      Otherwise you rarely notice the difference, because Java converts between the two by itself. `scores.add(12)` turns the `int` 12 into an `Integer`, and a value you take out of the list can go straight into an `int` variable (the next step shows how).
+
+      One catch: Java turns an `int` into an `Integer`, but never into a `Double`. In an `ArrayList<Double>`, write whole numbers with a decimal point: `prices.add(3.0)` works, `prices.add(3)` doesn't compile.
+
+      Strings are objects already, so a list of text is simply an `ArrayList<String>`.
+
+      **Your turn:** fill in the two list types so the program compiles and prints:
+
+      ```
+      [14, 3]
+      [true, false]
+      ```
+    fill: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<[[Integer]]> seats = new ArrayList<>();
+              seats.add(14);
+              seats.add(3);
+              ArrayList<[[Boolean]]> booked = new ArrayList<>();
+              booked.add(true);
+              booked.add(false);
+              System.out.println(seats);
+              System.out.println(booked);
+          }
+      }
+    hints:
+      - The types in a list are object types, written with a capital letter.
+      - "`14` and `3` are whole numbers, so the first list is an `ArrayList<Integer>`. `true` and `false` go in an `ArrayList<Boolean>`."
+    more:
+      - task: |
+          Read how many days of rain were measured, and then each day's rainfall in millimeters, as a decimal number, one per line. Add each day's rainfall to an `ArrayList<Double>`, and print `Rainfall: ` followed by the list. For the input `3`, `2.5`, `4` and `0.75` the program prints:
+
+          ```
+          Rainfall: [2.5, 4.0, 0.75]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int days = Integer.valueOf(scanner.nextLine());
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int days = Integer.valueOf(scanner.nextLine());
+                  ArrayList<Double> rainfall = new ArrayList<>();
+                  for (int i = 0; i < days; i++) {
+                      double millimeters = Double.valueOf(scanner.nextLine());
+                      rainfall.add(millimeters);
+                  }
+                  System.out.println("Rainfall: " + rainfall);
+              }
+          }
+        hints:
+          - "Create the list with `ArrayList<Double> rainfall = new ArrayList<>();`, then read the values in a `for` loop that runs `days` times."
+          - "Read each value with `Double.valueOf(scanner.nextLine())` and add it to the list. A `4` read this way becomes `4.0`."
+        require:
+          - pattern: ArrayList\s*<\s*Double\s*>
+            message: "Keep the rainfall in an `ArrayList<Double>`."
+          - pattern: \.add\s*\(
+            message: "Add each value to the list with `add`."
+        tests:
+          - stdin: |
+              3
+              2.5
+              4
+              0.75
+          - stdin: |
+              1
+              12
+            hidden: true
+          - stdin: |
+              4
+              0
+              1.5
+              3.25
+              10
+            hidden: true
+          - stdin: "0"
+            hidden: true
+      - task: |
+          This program doesn't compile: javac finds two errors, one for each list. Fix them so the program prints:
+
+          ```
+          [31, 8]
+          [1.82, 1.0]
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<int> ages = new ArrayList<>();
+                  ages.add(31);
+                  ages.add(8);
+                  ArrayList<Double> heights = new ArrayList<>();
+                  heights.add(1.82);
+                  heights.add(1);
+                  System.out.println(ages);
+                  System.out.println(heights);
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> ages = new ArrayList<>();
+                  ages.add(31);
+                  ages.add(8);
+                  ArrayList<Double> heights = new ArrayList<>();
+                  heights.add(1.82);
+                  heights.add(1.0);
+                  System.out.println(ages);
+                  System.out.println(heights);
+              }
+          }
+        hints:
+          - "A list holds objects: the type for whole numbers is `Integer`, not `int`."
+          - "Java won't turn the `int` 1 into a `Double`. Write it as a decimal number: `heights.add(1.0);`"
+        require:
+          - pattern: ArrayList\s*<\s*Integer\s*>
+            message: "Make `ages` an `ArrayList<Integer>`."
+        forbid:
+          - pattern: '"\s*\['
+            raw: true
+            message: "Print the lists themselves, not text that looks like them."
+        tests:
+          - name: The program
+
+  - id: lists-get
+    slug: getting-values
+    title: Getting values by index
+    text: |
+      Every value in a list has an **index**: its position, counting from 0. The first value is at index 0, the second at index 1, and so on. `get(index)` gives back the value at that index:
+
+      ```java main
+      ArrayList<String> colors = new ArrayList<>();
+      colors.add("red");
+      colors.add("green");
+      colors.add("blue");
+      System.out.println(colors.get(0));
+      System.out.println(colors.get(2));
+      System.out.println(colors.get(1));
+      ```
+
+      ```output
+      red
+      blue
+      green
+      ```
+
+      | index | 0 | 1 | 2 |
+      |---|---|---|---|
+      | value | red | green | blue |
+
+      So the third value is at index 2: the index is always one less than the place as people count it. `get` only reads the value, and the list stays as it was.
+
+      The index can be any `int` expression: a variable, as in `colors.get(i)`, or a calculation, as in `colors.get(i + 1)`.
+
+      ### Using the values
+
+      A value from an `ArrayList<Integer>` works like any `int`. Store it in a variable, or use it in a calculation:
+
+      ```java main
+      ArrayList<Integer> points = new ArrayList<>();
+      points.add(8);
+      points.add(5);
+      points.add(10);
+      int first = points.get(0);
+      int total = points.get(0) + points.get(1) + points.get(2);
+      System.out.println("First round: " + first);
+      System.out.println("Total: " + total);
+      System.out.println("Last two: " + (points.get(1) + points.get(2)));
+      ```
+
+      ```output
+      First round: 8
+      Total: 23
+      Last two: 15
+      ```
+
+      Mind the parentheses in the last line. Without them, Java joins `"Last two: "` and 5 into text first, and then adds 10 to that text: `Last two: 510`.
+
+      **Your turn:** the list holds the runners of a race, in the order they crossed the finish line. Fill in the blanks so the program prints the top three:
+
+      ```
+      Gold: Kofi
+      Silver: Mei
+      Bronze: Lars
+      ```
+    fill: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> finishers = new ArrayList<>();
+              finishers.add("Kofi");
+              finishers.add("Mei");
+              finishers.add("Lars");
+              finishers.add("Ines");
+              System.out.println("Gold: " + finishers.[[get(0)]]);
+              System.out.println("Silver: " + finishers.get(1));
+              System.out.println("Bronze: " + finishers.get([[2]]));
+          }
+      }
+    hints:
+      - "`get` takes the index in parentheses, and the first runner is at index 0."
+      - The third runner is at index 2.
+    more:
+      - task: |
+          What does this program print? Watch the index calculations, and the `+` signs in the last line.
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> numbers = new ArrayList<>();
+                  numbers.add(4);
+                  numbers.add(9);
+                  numbers.add(2);
+                  int i = 1;
+                  System.out.println(numbers.get(i));
+                  System.out.println(numbers.get(i + 1));
+                  System.out.println(numbers.get(0) + numbers.get(2));
+                  System.out.println("Sum: " + numbers.get(0) + numbers.get(2));
+              }
+          }
+        hints:
+          - "Index 1 holds 9 and index 2 holds 2. Two numbers added together give a number: 4 + 2 is 6."
+          - "In the last line the text comes first, so each `+` joins text: `Sum: `, then `4`, then `2`."
+      - task: |
+          Four people stand in a queue. Read their names, one per line, into a list (the starter code does this). Then read a place in the queue, counted the way people count it (1 is the front), and print who stands there. For the input `Ada`, `Ben`, `Cai`, `Dev` and `2` the program prints:
+
+          ```
+          Place 2: Ben
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> queue = new ArrayList<>();
+                  for (int i = 0; i < 4; i++) {
+                      queue.add(scanner.nextLine());
+                  }
+                  int place = Integer.valueOf(scanner.nextLine());
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> queue = new ArrayList<>();
+                  for (int i = 0; i < 4; i++) {
+                      queue.add(scanner.nextLine());
+                  }
+                  int place = Integer.valueOf(scanner.nextLine());
+                  System.out.println("Place " + place + ": " + queue.get(place - 1));
+              }
+          }
+        hints:
+          - "Place 1 is index 0, and place 2 is index 1: the index is one less than the place."
+          - "`queue.get(place - 1)` is the person at that place."
+        require:
+          - pattern: \bqueue\.get\s*\(
+            message: "Get the name from the list with `queue.get(...)`."
+        tests:
+          - stdin: |
+              Ada
+              Ben
+              Cai
+              Dev
+              2
+          - stdin: |
+              Ada
+              Ben
+              Cai
+              Dev
+              1
+            hidden: true
+          - stdin: |
+              Wen
+              Xavi
+              Yara
+              Zoe
+              4
+            hidden: true
+          - stdin: |
+              Wen
+              Xavi
+              Yara
+              Zoe
+              3
+            hidden: true
+
+  - id: lists-index-errors
+    slug: index-out-of-bounds
+    title: When the index doesn't exist
+    text: |
+      A list with three values has the indexes 0, 1 and 2, and no others. Asking for any other index stops the program with an error:
+
+      ```java run crash
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> chores = new ArrayList<>();
+              chores.add("wash up");
+              chores.add("water plants");
+              chores.add("take out bins");
+              System.out.println(chores.get(0));
+              System.out.println(chores.get(3));
+              System.out.println("All done");
+          }
+      }
+      ```
+
+      ```output
+      wash up
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.IndexOutOfBoundsException: Index 3 out of bounds for length 3
+      	at Main.main(Main.java:10)
+      ```
+
+      The program compiled without a complaint: javac can't know how many values a list will hold when the program runs. The error comes while it runs, as an **exception**, and the program stops on the spot. That's why `All done` is never printed. Java's message says what went wrong and where:
+
+      - `IndexOutOfBoundsException` is the kind of error: an index outside the list.
+      - `Index 3 out of bounds for length 3` gives the index that was asked for, and how many values the list had.
+      - `at Main.main(Main.java:10)` is where it happened: line 10, in the method `main`.
+
+      In a real run, Java also prints a few `at` lines from inside its own classes, where the index was checked. The one to look for is the `at Main` line: that's your code.
+
+      A negative index crashes the same way (`Index -1 out of bounds for length 3`), and so does every index on an empty list (`Index 0 out of bounds for length 0`).
+
+      ### Avoiding it
+
+      The largest index is always one less than the number of values. The most common cause of this crash is counting from 1, as people do, instead of from 0: `get(3)` for the third value, or a loop that runs one round too far. When the index in the message equals the length, as in `Index 3 out of bounds for length 3`, look for exactly that mistake.
+
+      The next step shows how to ask a list how many values it holds, so a program can check an index before it uses it.
+
+      **Your turn:** this program crashes. Run it, read the message, and fix the mistake, so the program prints:
+
+      ```
+      First stop: Station
+      Second stop: Library
+      Last stop: Harbor
+      ```
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> stops = new ArrayList<>();
+              stops.add("Station");
+              stops.add("Library");
+              stops.add("Harbor");
+              System.out.println("First stop: " + stops.get(1));
+              System.out.println("Second stop: " + stops.get(2));
+              System.out.println("Last stop: " + stops.get(3));
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> stops = new ArrayList<>();
+              stops.add("Station");
+              stops.add("Library");
+              stops.add("Harbor");
+              System.out.println("First stop: " + stops.get(0));
+              System.out.println("Second stop: " + stops.get(1));
+              System.out.println("Last stop: " + stops.get(2));
+          }
+      }
+    hints:
+      - "The message says index 3, for a list of length 3: its indexes only go up to 2."
+      - "All three indexes are one too big. The first stop is at index 0."
+    require:
+      - pattern: \bstops\.get\s*\(
+        min: 3
+        message: "Keep getting each stop from the list with `stops.get(...)`."
+    tests:
+      - name: The program
+    more:
+      - task: |
+          The canteen's menu has a dish for each index from 0 to 4. The program reads an index and prints that dish, but it crashes for an index outside the menu. Add a check: for an index from 0 to 4, print the dish as before; for any other index, print `No dish at index` and the index. For the input `7` the program prints:
+
+          ```
+          No dish at index 7
+          ```
+
+          For the input `2` it prints `Dish: curry`.
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> menu = new ArrayList<>();
+                  menu.add("soup");
+                  menu.add("pasta");
+                  menu.add("curry");
+                  menu.add("tacos");
+                  menu.add("salad");
+                  int index = Integer.valueOf(scanner.nextLine());
+                  System.out.println("Dish: " + menu.get(index));
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> menu = new ArrayList<>();
+                  menu.add("soup");
+                  menu.add("pasta");
+                  menu.add("curry");
+                  menu.add("tacos");
+                  menu.add("salad");
+                  int index = Integer.valueOf(scanner.nextLine());
+                  if (index >= 0 && index <= 4) {
+                      System.out.println("Dish: " + menu.get(index));
+                  } else {
+                      System.out.println("No dish at index " + index);
+                  }
+              }
+          }
+        hints:
+          - "An index works when it's at least 0 and at most 4: `index >= 0 && index <= 4`."
+          - "Put the `get` line inside the `if`, and the `No dish` line in the `else`."
+        require:
+          - pattern: \bmenu\.get\s*\(\s*index\s*\)
+            message: "Keep printing the dish with `menu.get(index)`."
+        tests:
+          - stdin: "7"
+          - stdin: "2"
+          - stdin: "0"
+            hidden: true
+          - stdin: "4"
+            hidden: true
+          - stdin: "5"
+            hidden: true
+          - stdin: "-1"
+            hidden: true
+      - task: |
+          This program prints four lap times and then crashes before `Race over`. Read the message to find the cause, and fix it, so the program prints:
+
+          ```
+          Lap 1: 62 s
+          Lap 2: 58 s
+          Lap 3: 60 s
+          Lap 4: 57 s
+          Race over
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> laps = new ArrayList<>();
+                  laps.add(62);
+                  laps.add(58);
+                  laps.add(60);
+                  laps.add(57);
+                  for (int i = 0; i <= 4; i++) {
+                      System.out.println("Lap " + (i + 1) + ": " + laps.get(i) + " s");
+                  }
+                  System.out.println("Race over");
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> laps = new ArrayList<>();
+                  laps.add(62);
+                  laps.add(58);
+                  laps.add(60);
+                  laps.add(57);
+                  for (int i = 0; i < 4; i++) {
+                      System.out.println("Lap " + (i + 1) + ": " + laps.get(i) + " s");
+                  }
+                  System.out.println("Race over");
+              }
+          }
+        hints:
+          - "The message says `Index 4 out of bounds for length 4`: in its last round, the loop asks for index 4, one past the end."
+          - "The loop must stop after index 3: `i < 4` instead of `i <= 4`."
+        require:
+          - pattern: \bfor\s*\(
+            message: Keep the loop.
+          - pattern: \blaps\.get\s*\(\s*i\s*\)
+            message: "Keep getting each lap time with `laps.get(i)`."
+        tests:
+          - name: The program
+
+  - id: lists-size
+    slug: size
+    title: The size of a list
+    text: |
+      `size()` tells how many values a list holds right now. A new list has size 0, and every `add` makes it one bigger:
+
+      ```java main
+      ArrayList<String> guests = new ArrayList<>();
+      System.out.println(guests.size());
+      guests.add("Rosa");
+      guests.add("Tariq");
+      guests.add("Yuki");
+      System.out.println(guests.size());
+      System.out.println("Last to arrive: " + guests.get(guests.size() - 1));
+      ```
+
+      ```output
+      0
+      3
+      Last to arrive: Yuki
+      ```
+
+      Since indexes start at 0, the last index is always `size() - 1`. So `guests.get(guests.size() - 1)` is the last value, however long the list is. (On an empty list, that's `get(-1)`, which crashes: check that the size is above 0 first.)
+
+      ### Reading an unknown number of values
+
+      `size()` is what makes lists so handy for input: the program reads as many values as it's given, and counts them afterwards.
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> trees = new ArrayList<>();
+              while (true) {
+                  String tree = scanner.nextLine();
+                  if (tree.equals("end")) {
+                      break;
+                  }
+                  trees.add(tree);
+              }
+              System.out.println("Trees seen: " + trees.size());
+              if (trees.size() > 0) {
+                  System.out.println("First: " + trees.get(0));
+                  System.out.println("Last: " + trees.get(trees.size() - 1));
+              }
+          }
+      }
+      ```
+
+      ```input
+      maple
+      oak
+      birch
+      end
+      ```
+
+      ```output
+      Trees seen: 3
+      First: maple
+      Last: birch
+      ```
+
+      ### Checking an index
+
+      With `size()`, a program can check an index before it uses it. An index is valid when it's at least 0 and less than the size:
+
+      ```java fragment
+      if (index >= 0 && index < trees.size()) {
+          System.out.println(trees.get(index));
+      } else {
+          System.out.println("No tree at index " + index);
+      }
+      ```
+
+      **Your turn:** fill in the blanks so the program prints how many photos there are, and which one was added last:
+
+      ```
+      Photos: 4
+      Newest: pier.jpg
+      ```
+    fill: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> photos = new ArrayList<>();
+              photos.add("beach.jpg");
+              photos.add("dunes.jpg");
+              photos.add("sunset.jpg");
+              photos.add("pier.jpg");
+              System.out.println("Photos: " + photos.[[size()]]);
+              System.out.println("Newest: " + photos.get([[photos.size() - 1‖(photos.size() - 1)]]));
+          }
+      }
+    hints:
+      - "`photos.size()` is the number of values in the list."
+      - "The last index is one less than the size: `photos.size() - 1`."
+    require:
+      - pattern: \bphotos\.size\s*\(\s*\)
+        min: 2
+        message: "Use `photos.size()` in both lines, so the program works for any number of photos."
+    more:
+      - task: |
+          Read the points scored in each round of a game, one number per line, until `-1`. Keep the points in a list (without the `-1`). Then print `Rounds: ` and how many rounds were played, and on the next line `Last round: ` and the points of the last round. When no rounds were played, print `Rounds: 0` and then `No rounds played`. For the input `8`, `3`, `11`, `5` and `-1` the program prints:
+
+          ```
+          Rounds: 4
+          Last round: 5
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> points = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> points = new ArrayList<>();
+                  while (true) {
+                      int score = Integer.valueOf(scanner.nextLine());
+                      if (score == -1) {
+                          break;
+                      }
+                      points.add(score);
+                  }
+                  System.out.println("Rounds: " + points.size());
+                  if (points.size() > 0) {
+                      System.out.println("Last round: " + points.get(points.size() - 1));
+                  } else {
+                      System.out.println("No rounds played");
+                  }
+              }
+          }
+        hints:
+          - "Read and add the points in a `while (true)` loop that stops at -1. After the loop, `points.size()` is the number of rounds."
+          - "The last round is `points.get(points.size() - 1)`, but only when `points.size() > 0`."
+        require:
+          - pattern: \bpoints\.size\s*\(\s*\)
+            min: 2
+            message: "Use `points.size()` for the number of rounds, and to find the last one."
+        forbid:
+          - pattern: \+\+|\+=
+            message: "Let the list do the counting: use `size()` instead of a counter of your own."
+        tests:
+          - stdin: |
+              8
+              3
+              11
+              5
+              -1
+          - stdin: "-1"
+            hidden: true
+          - stdin: |
+              0
+              -1
+            hidden: true
+          - stdin: |
+              7
+              7
+              2
+              -1
+            hidden: true
+      - task: |
+          A coat check hands out numbered tickets: the first coat gets ticket 1, the second ticket 2, and so on. Read the coats handed in, one per line, until `end`. Then read a ticket number, and print the coat for that ticket. When there's no coat for the ticket (0, a negative number, or a number past the last coat), print `No coat for ticket` and the number. For the input `green scarf`, `black coat`, `red hat`, `end` and `3` the program prints:
+
+          ```
+          Ticket 3: red hat
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> coats = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> coats = new ArrayList<>();
+                  while (true) {
+                      String coat = scanner.nextLine();
+                      if (coat.equals("end")) {
+                          break;
+                      }
+                      coats.add(coat);
+                  }
+                  int ticket = Integer.valueOf(scanner.nextLine());
+                  if (ticket >= 1 && ticket <= coats.size()) {
+                      System.out.println("Ticket " + ticket + ": " + coats.get(ticket - 1));
+                  } else {
+                      System.out.println("No coat for ticket " + ticket);
+                  }
+              }
+          }
+        hints:
+          - "Ticket 1 is index 0, so the coat for a ticket is `coats.get(ticket - 1)`."
+          - "A ticket is valid when `ticket >= 1 && ticket <= coats.size()`."
+        require:
+          - pattern: \bcoats\.size\s*\(\s*\)
+            message: "Check the ticket against `coats.size()`, so the program works for any number of coats."
+        tests:
+          - stdin: |
+              green scarf
+              black coat
+              red hat
+              end
+              3
+          - stdin: |
+              green scarf
+              black coat
+              red hat
+              end
+              4
+            hidden: true
+          - stdin: |
+              green scarf
+              black coat
+              end
+              1
+            hidden: true
+          - stdin: |
+              umbrella
+              end
+              0
+            hidden: true
+          - stdin: |
+              end
+              1
+            hidden: true
+          - stdin: |
+              umbrella
+              end
+              -2
+            hidden: true
+
+  - id: lists-looping
+    slug: looping-over-a-list
+    title: Looping over a list
+    text: |
+      To go through every value in a list, loop over the indexes, from 0 to the last one. With a `while` loop:
+
+      ```java main
+      ArrayList<String> chores = new ArrayList<>();
+      chores.add("sweep");
+      chores.add("dust");
+      chores.add("mop");
+
+      int index = 0;
+      while (index < chores.size()) {
+          System.out.println(chores.get(index));
+          index++;
+      }
+      ```
+
+      ```output
+      sweep
+      dust
+      mop
+      ```
+
+      A `for` loop does the same with the counter in one line, and it's the usual way to write it:
+
+      ```java main
+      ArrayList<String> chores = new ArrayList<>();
+      chores.add("sweep");
+      chores.add("dust");
+      chores.add("mop");
+
+      for (int i = 0; i < chores.size(); i++) {
+          System.out.println((i + 1) + ". " + chores.get(i));
+      }
+      ```
+
+      ```output
+      1. sweep
+      2. dust
+      3. mop
+      ```
+
+      - The condition is `i < chores.size()`, with `<`, because the last index is `size() - 1`. With `<=`, the loop would ask for one index too many and crash.
+      - With `size()` instead of a fixed number, the loop works for a list of any length. For an empty list it doesn't run at all.
+      - `i` is the index, so `chores.get(i)` is this round's value, and `i + 1` its place as people count it.
+
+      ### Other ranges
+
+      The loop's three parts can pick any part of the list. Starting at 1 skips the first value, `i += 2` takes every second one, and starting at the last index and counting down goes through the list backwards:
+
+      ```java main
+      ArrayList<Integer> numbers = new ArrayList<>();
+      numbers.add(10);
+      numbers.add(20);
+      numbers.add(30);
+      numbers.add(40);
+      numbers.add(50);
+
+      for (int i = 1; i < numbers.size(); i += 2) {
+          System.out.print(numbers.get(i) + " ");
+      }
+      System.out.println();
+
+      for (int i = numbers.size() - 1; i >= 0; i--) {
+          System.out.print(numbers.get(i) + " ");
+      }
+      System.out.println();
+      ```
+
+      ```output
+      20 40
+      50 40 30 20 10
+      ```
+
+      Going backwards, the loop starts at `size() - 1`, the last index, and runs as long as `i >= 0`, so index 0 is included.
+
+      The next module shows the for-each loop: a shorter way to visit every value, for when you don't need the index.
+
+      **Your turn:** read names, one per line, until `end`. Then print them numbered, one per line, in the order they were read. For the input `Ada`, `Grace`, `Linus` and `end` the program prints:
+
+      ```
+      1. Ada
+      2. Grace
+      3. Linus
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> names = new ArrayList<>();
+
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> names = new ArrayList<>();
+              while (true) {
+                  String name = scanner.nextLine();
+                  if (name.equals("end")) {
+                      break;
+                  }
+                  names.add(name);
+              }
+              for (int i = 0; i < names.size(); i++) {
+                  System.out.println((i + 1) + ". " + names.get(i));
+              }
+          }
+      }
+    hints:
+      - "First read all the names into the list. Then a second loop, `for (int i = 0; i < names.size(); i++)`, prints them."
+      - "The number in front is `i + 1`: put it in parentheses, `(i + 1) + \". \" + names.get(i)`."
+    require:
+      - pattern: \bnames\.size\s*\(\s*\)
+        message: "Loop over the list's indexes, up to `names.size()`."
+      - pattern: \bnames\.get\s*\(
+        message: "Print each name with `names.get(i)`."
+    tests:
+      - stdin: |
+          Ada
+          Grace
+          Linus
+          end
+      - stdin: |
+          Margaret
+          end
+        hidden: true
+      - stdin: |
+          Ken
+          Dennis
+          Bjarne
+          James
+          Guido
+          end
+        hidden: true
+    more:
+      - task: |
+          An editor keeps a history of your actions. Read the actions, one per line, until `end`. Then undo them all: print `Undo: ` and each action, starting from the last one and ending with the first. For the input `type`, `bold`, `paste` and `end` the program prints:
+
+          ```
+          Undo: paste
+          Undo: bold
+          Undo: type
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> actions = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> actions = new ArrayList<>();
+                  while (true) {
+                      String action = scanner.nextLine();
+                      if (action.equals("end")) {
+                          break;
+                      }
+                      actions.add(action);
+                  }
+                  for (int i = actions.size() - 1; i >= 0; i--) {
+                      System.out.println("Undo: " + actions.get(i));
+                  }
+              }
+          }
+        hints:
+          - "Start the loop at the last index, `actions.size() - 1`, and count down with `i--`."
+          - "Keep going while `i >= 0`, so the action at index 0 is undone too."
+        require:
+          - pattern: \bactions\.size\s*\(\s*\)
+            message: "Start from the last index, `actions.size() - 1`."
+          - pattern: \bactions\.get\s*\(
+            message: "Print each action with `actions.get(i)`."
+        tests:
+          - stdin: |
+              type
+              bold
+              paste
+              end
+          - stdin: |
+              delete
+              end
+            hidden: true
+          - stdin: |
+              type
+              type
+              italic
+              cut
+              paste
+              end
+            hidden: true
+      - task: |
+          What does this program print? Work out which indexes each loop visits.
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> letters = new ArrayList<>();
+                  letters.add("a");
+                  letters.add("b");
+                  letters.add("c");
+                  letters.add("d");
+                  letters.add("e");
+                  letters.add("f");
+                  for (int i = 2; i < letters.size(); i += 3) {
+                      System.out.println(letters.get(i));
+                  }
+                  for (int i = letters.size() - 2; i > 0; i -= 2) {
+                      System.out.println(letters.get(i));
+                  }
+              }
+          }
+        hints:
+          - "The list has 6 values, at indexes 0 to 5. The first loop visits indexes 2 and 5."
+          - "The second loop starts at index 4 and visits 4 and 2. At 0 the condition `i > 0` is false, so index 0 is left out."
+
+  - id: lists-largest
+    slug: largest-and-smallest
+    title: Sums, averages and the largest value
+    text: |
+      A loop over the indexes can combine all the values into one result. For a sum, start from 0 and add each value:
+
+      ```java main
+      ArrayList<Integer> minutes = new ArrayList<>();
+      minutes.add(25);
+      minutes.add(40);
+      minutes.add(15);
+      minutes.add(30);
+
+      int total = 0;
+      for (int i = 0; i < minutes.size(); i++) {
+          total += minutes.get(i);
+      }
+      System.out.println("Total: " + total);
+      System.out.println("Average: " + (double) total / minutes.size());
+      ```
+
+      ```output
+      Total: 110
+      Average: 27.5
+      ```
+
+      The average divides the sum by `size()`, and `(double)` keeps the decimals. (On an empty list, that divides by 0, and the average comes out as `NaN`, "not a number". Check the size first when the list may be empty.)
+
+      ### The largest value
+
+      To find the largest value, keep the largest one seen so far in a variable, and compare every value with it. Start with the **first value in the list**, not with 0:
+
+      ```java main
+      ArrayList<Integer> temperatures = new ArrayList<>();
+      temperatures.add(-3);
+      temperatures.add(-8);
+      temperatures.add(-1);
+      temperatures.add(-5);
+
+      int highest = temperatures.get(0);
+      for (int i = 1; i < temperatures.size(); i++) {
+          if (temperatures.get(i) > highest) {
+              highest = temperatures.get(i);
+          }
+      }
+      System.out.println("Highest: " + highest);
+      ```
+
+      ```output
+      Highest: -1
+      ```
+
+      Starting with 0 would give the wrong answer here: no temperature is above 0, so the program would print `Highest: 0`, a value that isn't even in the list. The first value is always a real candidate. The loop can then start at index 1, since index 0 has been counted already. (`get(0)` needs a list with at least one value in it.)
+
+      For the smallest value, turn the comparison around, to `<`. And `highest = Math.max(highest, temperatures.get(i));` does the same as the whole `if`.
+
+      ### Where the largest value is
+
+      Sometimes the place matters more than the value: which day was the warmest? Then keep the **index** of the best value so far, and read the value with `get` when you need it:
+
+      ```java main
+      ArrayList<Integer> temperatures = new ArrayList<>();
+      temperatures.add(-3);
+      temperatures.add(-8);
+      temperatures.add(-1);
+      temperatures.add(-5);
+
+      int warmest = 0;
+      for (int i = 1; i < temperatures.size(); i++) {
+          if (temperatures.get(i) > temperatures.get(warmest)) {
+              warmest = i;
+          }
+      }
+      System.out.println("Warmest: day " + (warmest + 1) + ", " + temperatures.get(warmest) + " degrees");
+      ```
+
+      ```output
+      Warmest: day 3, -1 degrees
+      ```
+
+      With `>`, a tie keeps the earlier index; with `>=`, the later one would win.
+
+      **Your turn:** read the heights of a high jumper's jumps in centimeters, one per line, until `0`, and keep them in a list. Then go through the list and print the best (highest) and the worst (lowest) jump. There's always at least one jump. For the input `175`, `182`, `150`, `178` and `0` the program prints:
+
+      ```
+      Best: 182
+      Worst: 150
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<Integer> jumps = new ArrayList<>();
+
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<Integer> jumps = new ArrayList<>();
+              while (true) {
+                  int jump = Integer.valueOf(scanner.nextLine());
+                  if (jump == 0) {
+                      break;
+                  }
+                  jumps.add(jump);
+              }
+              int best = jumps.get(0);
+              int worst = jumps.get(0);
+              for (int i = 1; i < jumps.size(); i++) {
+                  if (jumps.get(i) > best) {
+                      best = jumps.get(i);
+                  }
+                  if (jumps.get(i) < worst) {
+                      worst = jumps.get(i);
+                  }
+              }
+              System.out.println("Best: " + best);
+              System.out.println("Worst: " + worst);
+          }
+      }
+    hints:
+      - "After reading, start both `best` and `worst` at `jumps.get(0)`, and loop over the rest of the indexes."
+      - "In the loop, `if (jumps.get(i) > best)` updates `best`, and a second `if` with `<` updates `worst`."
+    require:
+      - pattern: \bjumps\.size\s*\(\s*\)
+        message: "Loop over the list's indexes, up to `jumps.size()`."
+      - pattern: \bjumps\.get\s*\(
+        message: "Compare the jumps from the list with `jumps.get(i)`."
+    tests:
+      - stdin: |
+          175
+          182
+          150
+          178
+          0
+      - stdin: |
+          160
+          0
+        hidden: true
+      - stdin: |
+          140
+          141
+          139
+          0
+        hidden: true
+      - stdin: |
+          190
+          185
+          170
+          195
+          0
+        hidden: true
+    more:
+      - task: |
+          Fill in the blanks so the program adds up the ratings and prints their average:
+
+          ```
+          Average rating: 3.8
+          ```
+        fill: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> ratings = new ArrayList<>();
+                  ratings.add(4);
+                  ratings.add(5);
+                  ratings.add(3);
+                  ratings.add(2);
+                  ratings.add(5);
+                  int sum = 0;
+                  for (int i = 0; i < [[ratings.size()]]; i++) {
+                      sum [[+= ratings.get(i)‖= sum + ratings.get(i)]];
+                  }
+                  System.out.println("Average rating: " + (double) sum / ratings.size());
+              }
+          }
+        hints:
+          - "The loop runs over every index, as long as `i < ratings.size()`."
+          - "Each round adds this round's rating to the sum: `sum += ratings.get(i)`."
+      - task: |
+          Read the number of visitors on each day of a festival, one number per line, until `-1`. Then print the busiest day, counting days from 1, and its number of visitors. When two days tie, the earlier one counts. There's always at least one day. For the input `420`, `515`, `610`, `380` and `-1` the program prints:
+
+          ```
+          Busiest: day 3 with 610 visitors
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> visitors = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> visitors = new ArrayList<>();
+                  while (true) {
+                      int count = Integer.valueOf(scanner.nextLine());
+                      if (count == -1) {
+                          break;
+                      }
+                      visitors.add(count);
+                  }
+                  int busiest = 0;
+                  for (int i = 1; i < visitors.size(); i++) {
+                      if (visitors.get(i) > visitors.get(busiest)) {
+                          busiest = i;
+                      }
+                  }
+                  System.out.println("Busiest: day " + (busiest + 1) + " with " + visitors.get(busiest) + " visitors");
+              }
+          }
+        hints:
+          - "Keep the index of the busiest day so far, starting at 0, and compare `visitors.get(i)` with `visitors.get(busiest)`."
+          - "Use `>`, not `>=`, so a tie keeps the earlier day. The day's number is `busiest + 1`."
+        require:
+          - pattern: \bvisitors\.get\s*\(
+            message: "Read the numbers from the list with `visitors.get(...)`."
+        tests:
+          - stdin: |
+              420
+              515
+              610
+              380
+              -1
+          - stdin: |
+              500
+              700
+              700
+              -1
+            hidden: true
+          - stdin: |
+              900
+              100
+              -1
+            hidden: true
+          - stdin: |
+              75
+              -1
+            hidden: true
+          - stdin: |
+              10
+              20
+              30
+              40
+              -1
+            hidden: true
+
+  - id: lists-searching
+    slug: searching
+    title: Searching a list
+    text: |
+      Is a value in the list, and where? Go through the indexes and compare each value with the one you're looking for. Keep the index of the match in a variable that starts at -1: no real index is -1, so it means "not found yet".
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> shelf = new ArrayList<>();
+              shelf.add("atlas");
+              shelf.add("cookbook");
+              shelf.add("diary");
+              shelf.add("novel");
+
+              String wanted = scanner.nextLine();
+              int found = -1;
+              for (int i = 0; i < shelf.size(); i++) {
+                  if (shelf.get(i).equals(wanted)) {
+                      found = i;
+                      break;
+                  }
+              }
+
+              if (found == -1) {
+                  System.out.println("No " + wanted + " on the shelf");
+              } else {
+                  System.out.println("The " + wanted + " is at index " + found);
+              }
+          }
+      }
+      ```
+
+      ```input
+      diary
+      ```
+
+      ```output
+      The diary is at index 2
+      ```
+
+      - `shelf.get(i)` is a String, so it's compared with `equals`, as always for Strings.
+      - `break` stops the search at the first match. Without it, the loop would go on, and `found` would end up as the index of the last match.
+      - Only after the loop is it certain that the value isn't there: `found` is still -1.
+
+      For numbers, keep the value you're looking for in an `int` variable, and `numbers.get(i) == wanted` compares the numbers.
+
+      ### Every match
+
+      To find all the places a value appears, leave out the `break`, and act on each match inside the loop. Here each six is printed and counted:
+
+      ```java main
+      ArrayList<Integer> rolls = new ArrayList<>();
+      rolls.add(3);
+      rolls.add(6);
+      rolls.add(2);
+      rolls.add(6);
+      rolls.add(6);
+      rolls.add(1);
+
+      int sixes = 0;
+      for (int i = 0; i < rolls.size(); i++) {
+          if (rolls.get(i) == 6) {
+              System.out.println("Six on roll " + (i + 1));
+              sixes++;
+          }
+      }
+      System.out.println("Sixes: " + sixes);
+      ```
+
+      ```output
+      Six on roll 2
+      Six on roll 4
+      Six on roll 5
+      Sixes: 3
+      ```
+
+      Lists have ready-made methods for some searches, such as `indexOf` and `contains`, and the next module introduces them. Writing the loop yourself shows how they work, and a loop can do more than they can, like finding every match.
+
+      **Your turn:** read song titles, one per line, until `end`. Then read one more title: the song to look for. Print its track number (its place in the playlist, counting from 1) as `Track 3`, or `Not in the playlist` when it isn't there. When the song is in the playlist twice, print its first track. For the input `Night Drive`, `Low Tide`, `Glass Garden`, `end` and `Glass Garden` the program prints:
+
+      ```
+      Track 3
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> playlist = new ArrayList<>();
+
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> playlist = new ArrayList<>();
+              while (true) {
+                  String title = scanner.nextLine();
+                  if (title.equals("end")) {
+                      break;
+                  }
+                  playlist.add(title);
+              }
+              String wanted = scanner.nextLine();
+              int found = -1;
+              for (int i = 0; i < playlist.size(); i++) {
+                  if (playlist.get(i).equals(wanted)) {
+                      found = i;
+                      break;
+                  }
+              }
+              if (found == -1) {
+                  System.out.println("Not in the playlist");
+              } else {
+                  System.out.println("Track " + (found + 1));
+              }
+          }
+      }
+    hints:
+      - "After reading the playlist, read the wanted title. Then search with `int found = -1;` and a loop that sets `found = i` and breaks at the first match."
+      - "Compare with `playlist.get(i).equals(wanted)`. The track number is `found + 1`."
+    require:
+      - pattern: \bplaylist\.get\s*\(
+        message: "Look through the list with `playlist.get(i)`."
+      - pattern: \.equals\s*\(
+        message: "Compare the titles with `equals`."
+    tests:
+      - stdin: |
+          Night Drive
+          Low Tide
+          Glass Garden
+          end
+          Glass Garden
+      - stdin: |
+          Night Drive
+          Low Tide
+          Glass Garden
+          end
+          Morning Rain
+        hidden: true
+      - stdin: |
+          Low Tide
+          Night Drive
+          Low Tide
+          end
+          Low Tide
+        hidden: true
+      - stdin: |
+          end
+          Low Tide
+        hidden: true
+      - stdin: |
+          Night Drive
+          Low Tide
+          end
+          Low Tide
+        hidden: true
+    more:
+      - task: |
+          Read the weather of each day, one word per line (`sun`, `rain` or `cloud`), until `end`. Keep the days in a list. Then print `Rain on day` and the day's number (counting from 1) for every rainy day, and after them `Rainy days: ` and how many there were. For the input `sun`, `rain`, `cloud`, `sun`, `rain` and `end` the program prints:
+
+          ```
+          Rain on day 2
+          Rain on day 5
+          Rainy days: 2
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> days = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> days = new ArrayList<>();
+                  while (true) {
+                      String weather = scanner.nextLine();
+                      if (weather.equals("end")) {
+                          break;
+                      }
+                      days.add(weather);
+                  }
+                  int rainy = 0;
+                  for (int i = 0; i < days.size(); i++) {
+                      if (days.get(i).equals("rain")) {
+                          System.out.println("Rain on day " + (i + 1));
+                          rainy++;
+                      }
+                  }
+                  System.out.println("Rainy days: " + rainy);
+              }
+          }
+        hints:
+          - "Loop over every index without `break`, and check `days.get(i).equals(\"rain\")`."
+          - "On a match, print the day (`i + 1`) and add one to a counter that starts at 0 before the loop."
+        require:
+          - pattern: \bdays\.get\s*\(
+            message: "Go through the list with `days.get(i)`."
+        tests:
+          - stdin: |
+              sun
+              rain
+              cloud
+              sun
+              rain
+              end
+          - stdin: |
+              sun
+              cloud
+              end
+            hidden: true
+          - stdin: |
+              rain
+              rain
+              rain
+              end
+            hidden: true
+          - stdin: |
+              cloud
+              sun
+              sun
+              rain
+              end
+            hidden: true
+      - task: |
+          Time to put the module together. Read a runner's lap times in whole seconds, one per line, until `0`. There's at least one lap. Then print:
+
+          - `Laps: ` and the number of laps,
+          - `Average: ` and the average lap time, as a decimal number,
+          - `Fastest: lap ` and the number of the fastest lap, counting from 1 (on a tie, the earlier lap),
+          - `Slower than average:`, and after it `lap ` and the number of every lap whose time is above the average, one per line.
+
+          For the input `64`, `61`, `58`, `60`, `63` and `0` the program prints:
+
+          ```
+          Laps: 5
+          Average: 61.2
+          Fastest: lap 3
+          Slower than average:
+          lap 1
+          lap 5
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> laps = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> laps = new ArrayList<>();
+                  while (true) {
+                      int time = Integer.valueOf(scanner.nextLine());
+                      if (time == 0) {
+                          break;
+                      }
+                      laps.add(time);
+                  }
+
+                  int total = 0;
+                  for (int i = 0; i < laps.size(); i++) {
+                      total += laps.get(i);
+                  }
+                  double average = (double) total / laps.size();
+
+                  int fastest = 0;
+                  for (int i = 1; i < laps.size(); i++) {
+                      if (laps.get(i) < laps.get(fastest)) {
+                          fastest = i;
+                      }
+                  }
+
+                  System.out.println("Laps: " + laps.size());
+                  System.out.println("Average: " + average);
+                  System.out.println("Fastest: lap " + (fastest + 1));
+                  System.out.println("Slower than average:");
+                  for (int i = 0; i < laps.size(); i++) {
+                      if (laps.get(i) > average) {
+                          System.out.println("lap " + (i + 1));
+                      }
+                  }
+              }
+          }
+        hints:
+          - "Work in parts, after reading the list: a loop for the sum (then the average with `(double) total / laps.size()`), a loop for the index of the fastest lap, and a loop that prints the slow laps."
+          - "The fastest lap is the smallest time: keep its index, and compare with `laps.get(i) < laps.get(fastest)`. A lap is slow when `laps.get(i) > average`."
+        require:
+          - pattern: \blaps\.size\s*\(\s*\)
+            message: "Use `laps.size()` for the number of laps and in the loops."
+          - pattern: \blaps\.get\s*\(
+            message: "Read the lap times from the list with `laps.get(i)`."
+        tests:
+          - stdin: |
+              64
+              61
+              58
+              60
+              63
+              0
+          - stdin: |
+              70
+              0
+            hidden: true
+          - stdin: |
+              60
+              60
+              60
+              0
+            hidden: true
+          - stdin: |
+              55
+              70
+              52
+              66
+              0
+            hidden: true
+          - stdin: |
+              48
+              50
+              48
+              53
+              0
+            hidden: true

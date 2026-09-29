@@ -198,7 +198,7 @@ const KEBAB = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const mainFile = (text) => [{ path: "Main.java", text }];
 
 /** Imports a ```java main example gets automatically, when it uses these classes. */
-const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", HashMap: "java.util.HashMap", Random: "java.util.Random" };
+const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", HashMap: "java.util.HashMap", Random: "java.util.Random" };
 function importsFor(code) {
   const lines = Object.entries(AUTO_IMPORTS)
     .filter(([name]) => new RegExp(`\\b${name}\\b`).test(code))
@@ -446,10 +446,11 @@ async function buildExercise(where, raw) {
  */
 function checkTaskOutput(where, task, ex) {
   if (!ex || ex.kind === "predict" || typeof task !== "string") return;
-  const blocks = [...task.matchAll(/^```[ \t]*\n([\s\S]*?)^```[ \t]*$/gm)];
+  // Fences are read in order (an info string such as "java" opens a block too), then the plain ones kept.
+  const blocks = [...task.matchAll(/^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm)].filter((b) => !b[1].trim());
   const shown = ex.tests.find((t) => !t.hidden && t.expect);
   if (!blocks.length || !shown) return;
-  const block = blocks[blocks.length - 1][1];
+  const block = blocks[blocks.length - 1][2];
   const norm = (x) => normalizeOutput(x).trim();
   if (norm(block) !== norm(shown.expect)) errors.push(`${where}: the task shows the output\n${block}but the first visible test prints\n${shown.expect}`);
 }

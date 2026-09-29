@@ -1,0 +1,251 @@
+topic: arrays
+drills:
+  - type: predict
+    after: creating-an-array
+    body: |
+      int[] boxes = new int[4];
+      boxes[1] = 6;
+      boxes[3] = boxes[1] + boxes[0];
+      boxes[1]--;
+      System.out.println(boxes[1] + boxes[3]);
+    why: "`boxes[0]` was never assigned, so it holds the default 0, and `boxes[3]` becomes 6. Then `boxes[1]` goes down to 5. Both are ints, so `+` adds them: 5 + 6 is 11."
+
+  - type: predict
+    after: length-and-loops
+    body: |
+      int[] levels = new int[3];
+      for (int level : levels) {
+          level = 5;
+      }
+      System.out.println(levels[0] + levels[2]);
+    why: "The for-each variable `level` is a copy of each element, so assigning 5 to it changes only the copy. The array still holds its default 0s. Changing the elements takes an index loop: `levels[i] = 5;`"
+
+  - type: predict
+    after: other-element-types
+    body: |
+      String[] slots = new String[2];
+      slots[0] = "tea";
+      slots[1] = "cake";
+      slots[0] = slots[1];
+      slots[1] = slots[0];
+      System.out.println(slots[0] + " " + slots[1]);
+    why: "The first assignment writes `cake` over `tea`, so by the second one `slots[0]` already holds `cake`. A swap needs a temporary variable that keeps the first value aside."
+
+  - type: predict
+    after: searching-an-array
+    body: |
+      int[] depths = new int[3];
+      depths[0] = -40;
+      depths[1] = -15;
+      depths[2] = -70;
+      int highest = 0;
+      for (int depth : depths) {
+          if (depth > highest) {
+              highest = depth;
+          }
+      }
+      System.out.println(highest);
+    why: "The search starts from 0, and every depth is below 0, so none of them is bigger and 0 is never replaced. Starting from the first element, `int highest = depths[0];`, gives the right answer, -15."
+
+  - type: predict
+    after: arrays-and-methods
+    pre: |
+      public static void addOne(int[] values, int extra) {
+          values[0]++;
+          extra++;
+      }
+    body: |
+      int[] points = {5, 5};
+      int bonus = 5;
+      addOne(points, bonus);
+      System.out.println(points[0] + " " + points[1] + " " + bonus);
+    why: "`values` leads to the same array as `points`, so `values[0]++` changes `main`'s array. `extra` is only a copy of `bonus`, so `bonus` stays 5."
+
+  - type: fill
+    after: length-and-loops
+    prompt: "The blank is an expression: the index the loop starts from. Fill it so the program prints the elements from the last to the first."
+    body: |
+      int[] steps = new int[3];
+      steps[0] = 10;
+      steps[1] = 20;
+      steps[2] = 30;
+      for (int i = [[steps.length - 1‖2]]; i >= 0; i--) {
+          System.out.println(steps[i]);
+      }
+    why: "The last index is one less than the length: `steps.length - 1`, which is 2 here. Starting at `steps.length` would crash, because index 3 doesn't exist."
+
+  - type: fill
+    after: arrays-and-methods
+    prompt: "`doubled` should leave the array it gets as it was. Fill the blank so the program prints the output shown."
+    pre: |
+      public static int[] doubled(int[] values) {
+          int[] result = new int[values.length];
+          for (int i = 0; i < values.length; i++) {
+              result[i] = values[i] * 2;
+          }
+          return [[result]];
+      }
+    body: |
+      int[] prices = {4, 7};
+      int[] twice = doubled(prices);
+      System.out.println(prices[0] + " " + twice[0] + " " + twice[1]);
+    why: "The method fills its own new array, `result`, and must return that one. Returning `values` would hand back the original array, whose elements were never doubled."
+
+  - type: bug
+    after: length-and-loops
+    prompt: The program should print the total of the three scores, but it crashes. Which line is wrong?
+    body: |
+      int[] scores = new int[3];
+      scores[0] = 7;
+      scores[1] = 4;
+      scores[2] = 9;
+      int total = 0;
+      for (int i = 0; i <= scores.length; i++) { // BUG
+          total += scores[i];
+      }
+      System.out.println(total);
+    fix: "for (int i = 0; i < scores.length; i++) {"
+    why: "With `<=`, the loop also runs for `i` equal to 3, and an array of length 3 has only the indexes 0 to 2: `ArrayIndexOutOfBoundsException`. The loop over every index uses `i < scores.length`."
+
+  - type: bug
+    after: searching-an-array
+    prompt: "The program should print the lane of the fastest swimmer (the smallest time) and the time. Which line is wrong?"
+    body: |
+      int[] times = new int[4];
+      times[0] = 58;
+      times[1] = 61;
+      times[2] = 55;
+      times[3] = 57;
+      int fastest = times[0];
+      int fastestLane = 0;
+      for (int i = 1; i < times.length; i++) {
+          if (times[i] < fastest) {
+              fastest = times[i];
+              fastestLane = fastest; // BUG
+          }
+      }
+      System.out.println("Lane " + fastestLane + ": " + fastest);
+    fix: fastestLane = i;
+    why: "The lane is the index, `i`, not the time. As written, the program prints `Lane 55: 55`."
+
+  - type: bug
+    after: arrays-and-methods
+    prompt: "`doubled` should return a new array and leave the one it's given as it was. Which line is wrong?"
+    pre: |
+      public static int[] doubled(int[] values) {
+          int[] result = values; // BUG
+          for (int i = 0; i < result.length; i++) {
+              result[i] = values[i] * 2;
+          }
+          return result;
+      }
+    body: |
+      int[] small = {1, 2, 3};
+      int[] big = doubled(small);
+      System.out.println(small[0] + " " + big[0]);
+    fix: int[] result = new int[values.length];
+    why: "`int[] result = values;` doesn't copy the array: both names lead to the same one, so the loop doubles `small` itself. A new array needs `new int[values.length]`."
+
+  - type: compiles
+    after: other-element-types
+    body: |
+      double[] prices = new double[2];
+      prices[0] = 5;
+      System.out.println(prices[0]);
+    why: "Yes. A whole number fits in a `double` element, just as it fits in a `double` variable, and it prints as `5.0`. The other way round, a `double` into an `int[]`, doesn't compile."
+
+  - type: compiles
+    after: the-short-way
+    body: |
+      int[] values;
+      values = {1, 2, 3};
+      System.out.println(values.length);
+    why: "No. Values in braces alone work only in the line that declares the array. On a later line, it takes `values = new int[] {1, 2, 3};`."
+
+  - type: choice
+    after: length-and-loops
+    prompt: "`numbers` is an `int[]`, `words` is an `ArrayList<String>` and `name` is a `String`. Which line gets all three sizes right?"
+    choices:
+      - "`numbers.length`, `words.size()`, `name.length()`"
+      - "`numbers.length()`, `words.size()`, `name.length`"
+      - "`numbers.size()`, `words.length`, `name.length()`"
+      - "`numbers.length`, `words.length()`, `name.size()`"
+    answer: 1
+    why: "An array's `length` is a field, with no parentheses. A list's size comes from the method `size()`, and a String's from the method `length()`."
+
+  - type: choice
+    after: the-short-way
+    prompt: Which of these jobs is a better fit for an array than for a list?
+    choices:
+      - "Reading names until the user types an empty line"
+      - "Counting how many times each of the numbers 1 to 10 appears"
+      - "A to-do list that items are added to and removed from"
+    answer: 2
+    why: "Ten counters is a fixed, known size, and each number can be its own index: `counts[number]++`. In the other two, the number of values isn't known in advance or keeps changing, which is what lists are for."
+
+  - type: boss
+    after: arrays-and-methods
+    prompt: |
+      Write a method `capAt(int[] values, int max)` that changes the array it's given: every element greater than `max` becomes `max`. It returns nothing. The check passes the array `{30, 120, 80, 200}` with the max `100`, then prints the array's elements one per line:
+
+      ```
+      30
+      100
+      80
+      100
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              int[] volumes = {30, 120, 80, 200};
+              capAt(volumes, 100);
+              for (int volume : volumes) {
+                  System.out.println(volume);
+              }
+          }
+
+          // Write the capAt method here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              int[] volumes = {30, 120, 80, 200};
+              capAt(volumes, 100);
+              for (int volume : volumes) {
+                  System.out.println(volume);
+              }
+          }
+
+          public static void capAt(int[] values, int max) {
+              for (int i = 0; i < values.length; i++) {
+                  if (values[i] > max) {
+                      values[i] = max;
+                  }
+              }
+          }
+      }
+    hints:
+      - "The method starts `public static void capAt(int[] values, int max) {`. It changes the caller's array, so it doesn't need to return anything."
+      - "Changing elements takes a loop over the indexes: `if (values[i] > max) { values[i] = max; }`"
+    tests:
+      - call: |
+          int[] values = {30, 120, 80, 200};
+          capAt(values, 100);
+          for (int value : values) {
+              System.out.println(value);
+          }
+      - call: |
+          int[] values = {5, 6, 7};
+          capAt(values, 6);
+          System.out.println(values[0] + " " + values[1] + " " + values[2]);
+        hidden: true
+      - call: |
+          int[] values = {1, 2};
+          capAt(values, 50);
+          System.out.println(values[0] + " " + values[1]);
+        hidden: true
+      - call: |
+          int[] values = {-3, 9, -8};
+          capAt(values, -5);
+          System.out.println(values[0] + " " + values[1] + " " + values[2]);
+        hidden: true

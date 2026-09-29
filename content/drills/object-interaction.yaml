@@ -1,0 +1,513 @@
+topic: object-interaction
+drills:
+  - type: predict
+    after: object-as-parameter
+    classes: |
+      class Plant {
+          private int height;
+
+          public Plant(int height) {
+              this.height = height;
+          }
+
+          public void grow(int cm) {
+              this.height = this.height + cm;
+          }
+
+          public int getHeight() {
+              return this.height;
+          }
+      }
+
+      class Gardener {
+          private int watered;
+
+          public Gardener() {
+              this.watered = 0;
+          }
+
+          public void water(Plant plant) {
+              plant.grow(2);
+              this.watered++;
+          }
+
+          public int getWatered() {
+              return this.watered;
+          }
+      }
+    body: |
+      Plant fern = new Plant(10);
+      Plant ivy = new Plant(10);
+      Gardener sam = new Gardener();
+      sam.water(fern);
+      sam.water(fern);
+      sam.water(ivy);
+      System.out.println(fern.getHeight() + " " + ivy.getHeight() + " " + sam.getWatered());
+    why: "`water` gets a reference to the plant itself, not a copy, so `plant.grow(2)` changes the plant in `main`. The fern was watered twice (10 + 2 + 2 is 14), the ivy once (12), and the gardener counted all three waterings."
+
+  - type: predict
+    after: object-inside-object
+    classes: |
+      class Coach {
+          private String name;
+          private int years;
+
+          public Coach(String name, int years) {
+              this.name = name;
+              this.years = years;
+          }
+
+          public void addYear() {
+              this.years++;
+          }
+
+          public String toString() {
+              return this.name + " (" + this.years + " years)";
+          }
+      }
+
+      class Team {
+          private String name;
+          private Coach coach;
+
+          public Team(String name, Coach coach) {
+              this.name = name;
+              this.coach = coach;
+          }
+
+          public String toString() {
+              return this.name + ", coached by " + this.coach;
+          }
+      }
+    body: |
+      Coach rosa = new Coach("Rosa", 12);
+      Team hawks = new Team("Hawks", rosa);
+      Team kites = new Team("Kites", rosa);
+      rosa.addYear();
+      System.out.println(hawks);
+      System.out.println(kites);
+    why: "Both teams hold a reference to the same Coach object, the one `rosa` refers to. `rosa.addYear()` changes that one coach, and each team's `toString` asks the coach for its text when it's called, so both show 13 years."
+
+  - type: predict
+    after: same-class-parameter
+    classes: |
+      class Rope {
+          private int meters;
+
+          public Rope(int meters) {
+              this.meters = meters;
+          }
+
+          public boolean isLongerThan(Rope other) {
+              return this.meters > other.meters;
+          }
+      }
+    body: |
+      Rope a = new Rope(12);
+      Rope b = new Rope(12);
+      Rope c = new Rope(5);
+      System.out.println(a.isLongerThan(b) + " " + b.isLongerThan(a) + " " + a.isLongerThan(c));
+    why: "`a` and `b` are both 12 meters, and `>` is false for equal lengths, so neither is longer than the other. `a` is longer than `c`: 12 > 5."
+
+  - type: predict
+    after: equals
+    classes: |
+      class Key {
+          private int number;
+
+          public Key(int number) {
+              this.number = number;
+          }
+      }
+    body: |
+      Key a = new Key(5);
+      Key b = new Key(5);
+      System.out.println(a.equals(b) + " " + a.equals(a));
+    why: "Key has no `equals` of its own, so it uses the one every class gets, which does the same as `==`. `a` and `b` are two objects, so they aren't equal, even though both hold 5. An object is always equal to itself."
+
+  - type: predict
+    after: equals-and-lists
+    classes: |
+      class Tag {
+          private String name;
+
+          public Tag(String name) {
+              this.name = name;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Tag)) {
+                  return false;
+              }
+              Tag other = (Tag) compared;
+              return this.name.equals(other.name);
+          }
+      }
+    body: |
+      ArrayList<Tag> tags = new ArrayList<>();
+      tags.add(new Tag("home"));
+      tags.add(new Tag("work"));
+      tags.add(new Tag("home"));
+      tags.remove(new Tag("home"));
+      System.out.println(tags.size() + " " + tags.indexOf(new Tag("home")));
+    why: "`remove` with an object removes the first equal one, the `home` tag at index 0. The list is then `work`, `home`, so the size is 2 and the equal `home` tag is at index 1."
+
+  - type: predict
+    after: returning-objects
+    classes: |
+      class Word {
+          private String text;
+
+          public Word(String text) {
+              this.text = text;
+          }
+
+          public Word plural() {
+              return new Word(this.text + "s");
+          }
+
+          public String toString() {
+              return this.text;
+          }
+      }
+    body: |
+      Word cat = new Word("cat");
+      cat.plural();
+      Word cats = cat.plural();
+      System.out.println(cat + " " + cats + " " + cats.plural());
+    why: "`plural()` returns a new Word and never changes the one it's called on. The first call's result isn't stored, so it's lost, and `cat` stays `cat`. `cats.plural()` adds another `s` to `cats`."
+
+  - type: fill
+    after: equals
+    classes: |
+      class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared [[instanceof]] Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+      }
+    body: |
+      Seat seat = new Seat("A", 1);
+      System.out.println(seat.equals(new Seat("A", 1)) + " " + seat.equals("A1"));
+    why: "`compared instanceof Seat` is true when `compared` is a Seat object. Anything else, like the String `\"A1\"`, isn't a seat, so `equals` returns false before the cast is ever tried."
+
+  - type: fill
+    after: returning-objects
+    prompt: Fill in the return type, so the program prints the output shown.
+    classes: |
+      class Photo {
+          private int width;
+          private int height;
+
+          public Photo(int width, int height) {
+              this.width = width;
+              this.height = height;
+          }
+
+          public [[Photo]] rotated() {
+              return new Photo(this.height, this.width);
+          }
+
+          public String toString() {
+              return this.width + " x " + this.height;
+          }
+      }
+    body: |
+      Photo photo = new Photo(4, 3);
+      System.out.println(photo.rotated() + ", " + photo);
+    why: "The method returns a new Photo object, so its return type is the class, `Photo`, just as a method that returns a number has `int`. The original photo is left as it was."
+
+  - type: bug
+    after: same-class-parameter
+    prompt: "The program should print `true`: the oak is older than the birch. Which line is wrong?"
+    classes: |
+      class Tree {
+          private String name;
+          private int age;
+
+          public Tree(String name, int age) {
+              this.name = name;
+              this.age = age;
+          }
+
+          public boolean isOlderThan(Tree other) {
+              return this.age > this.age; // BUG
+          }
+      }
+    body: |
+      Tree oak = new Tree("oak", 80);
+      Tree birch = new Tree("birch", 30);
+      System.out.println(oak.isOlderThan(birch));
+    fix: return this.age > other.age;
+    why: "The method compares the tree's age with itself, which is never greater, so it always returns false. It should compare with the other tree's age: `other.age`, which the method may read because it's in the Tree class."
+
+  - type: bug
+    after: equals
+    prompt: "Two guests with the same name are equal, so the program should print `true`. Which line is wrong?"
+    classes: |
+      class Guest {
+          private String name;
+
+          public Guest(String name) {
+              this.name = name;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Guest)) {
+                  return false;
+              }
+              Guest other = (Guest) compared;
+              return this.name == other.name; // BUG
+          }
+      }
+    body: |
+      String start = "Mi";
+      Guest a = new Guest(start + "ra");
+      Guest b = new Guest("Mira");
+      System.out.println(a.equals(b));
+    fix: return this.name.equals(other.name);
+    why: "The names are Strings, and `==` asks whether they're the same String object. `start + \"ra\"` makes a new String while the program runs, so it's a different object from `\"Mira\"`, although the letters are the same. Strings are compared with `equals`."
+
+  - type: bug
+    after: returning-objects
+    prompt: "The program should print `3 min, 5 min`. Which line is wrong?"
+    classes: |
+      class Timer {
+          private int minutes;
+
+          public Timer(int minutes) {
+              this.minutes = minutes;
+          }
+
+          public Timer plus(int more) {
+              return new Timer(more); // BUG
+          }
+
+          public String toString() {
+              return this.minutes + " min";
+          }
+      }
+    body: |
+      Timer tea = new Timer(3);
+      Timer longer = tea.plus(2);
+      System.out.println(tea + ", " + longer);
+    fix: return new Timer(this.minutes + more);
+    why: "The new timer should have this timer's minutes plus the extra ones. `new Timer(more)` forgets `this.minutes`, so it prints `2 min`. The original stays at 3 minutes either way, because `plus` makes a new Timer."
+
+  - type: compiles
+    after: same-class-parameter
+    classes: |
+      class Parcel {
+          private int grams;
+
+          public Parcel(int grams) {
+              this.grams = grams;
+          }
+
+          public boolean isHeavierThan(Parcel other) {
+              return this.grams > other.grams;
+          }
+      }
+    body: |
+      Parcel small = new Parcel(400);
+      Parcel big = new Parcel(2500);
+      System.out.println(big.isHeavierThan(small));
+    why: "Yes. `private` means only the code of the Parcel class may use `grams`, and `isHeavierThan` is written in Parcel, so it may read `other.grams` of another Parcel too. Only code outside the class, such as `main`, can't."
+
+  - type: compiles
+    after: equals
+    classes: |
+      class Seat {
+          private int number;
+
+          public Seat(int number) {
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = compared;
+              return this.number == other.number;
+          }
+      }
+    body: |
+      System.out.println(new Seat(4).equals(new Seat(4)));
+    why: "No. `compared` has the type `Object`, and javac won't put an Object into a Seat variable, even after the `instanceof` check: `incompatible types: Object cannot be converted to Seat`. The cast says it: `Seat other = (Seat) compared;`."
+
+  - type: choice
+    after: equals
+    prompt: "Which header makes a list's `contains` use your class's `equals`?"
+    choices:
+      - "`public boolean equals(Seat other)`"
+      - "`public boolean equals(Object compared)`"
+      - "`public boolean equals()`"
+      - "`public String equals(Object compared)`"
+    answer: 2
+    why: "`contains`, `indexOf` and `remove` call `equals` with an `Object` parameter, since a list can be asked about any object. A method that takes a Seat is a different method, and they never call it. And `equals` answers yes or no, so it returns a `boolean`."
+
+  - type: choice
+    after: equals-and-lists
+    prompt: "`Sticker` has no `equals` of its own. What does this print?"
+    classes: |
+      class Sticker {
+          private String series;
+          private int number;
+
+          public Sticker(String series, int number) {
+              this.series = series;
+              this.number = number;
+          }
+      }
+    body: |
+      ArrayList<Sticker> album = new ArrayList<>();
+      Sticker first = new Sticker("space", 3);
+      album.add(first);
+      System.out.println(album.contains(new Sticker("space", 3)) + " " + album.contains(first));
+    choices:
+      - "`true true`"
+      - "`false true`"
+      - "`false false`"
+      - "`true false`"
+    answer: 2
+    verify: output
+    why: "`contains` compares with `equals`, and without its own, Sticker's `equals` only finds the very same object. The new sticker is a different object, so it isn't found, while `first` is the object in the list. With an `equals` that compares the series and the number, both would be true."
+
+  - type: boss
+    after: end-of-part-5
+    prompt: |
+      A domino has two numbers, one on each half, and it can be turned around: `[2|5]` and `[5|2]` are the same domino. `Domino.java` has a constructor and `toString`. Write two methods:
+
+      - `flipped()` returns a new Domino with the two numbers swapped. The domino it's called on doesn't change.
+      - `equals(Object compared)`, in the classic way: two dominoes are equal when they have the same two numbers, either way around.
+
+      The check runs:
+
+      ```java fragment
+      Domino a = new Domino(2, 5);
+      Domino b = new Domino(5, 2);
+      System.out.println(a.flipped() + " " + a);
+      System.out.println(a.equals(b) + " " + a.equals(new Domino(2, 6)));
+      ```
+
+      and expects:
+
+      ```
+      [5|2] [2|5]
+      true false
+      ```
+    seed:
+      Domino.java: |
+        public class Domino {
+            private int left;
+            private int right;
+
+            public Domino(int left, int right) {
+                this.left = left;
+                this.right = right;
+            }
+
+            public String toString() {
+                return "[" + this.left + "|" + this.right + "]";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Domino a = new Domino(2, 5);
+                Domino b = new Domino(5, 2);
+                System.out.println(a.flipped() + " " + a);
+                System.out.println(a.equals(b) + " " + a.equals(new Domino(2, 6)));
+            }
+        }
+    solution:
+      Domino.java: |
+        public class Domino {
+            private int left;
+            private int right;
+
+            public Domino(int left, int right) {
+                this.left = left;
+                this.right = right;
+            }
+
+            public Domino flipped() {
+                return new Domino(this.right, this.left);
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Domino)) {
+                    return false;
+                }
+                Domino other = (Domino) compared;
+                if (this.left == other.left && this.right == other.right) {
+                    return true;
+                }
+                return this.left == other.right && this.right == other.left;
+            }
+
+            public String toString() {
+                return "[" + this.left + "|" + this.right + "]";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Domino a = new Domino(2, 5);
+                Domino b = new Domino(5, 2);
+                System.out.println(a.flipped() + " " + a);
+                System.out.println(a.equals(b) + " " + a.equals(new Domino(2, 6)));
+            }
+        }
+    hints:
+      - "`flipped` makes the new domino with the numbers the other way around: `return new Domino(this.right, this.left);`."
+      - "In `equals`, after the `this ==` check, `instanceof Domino` and the cast, the dominoes are equal if the numbers match as they are, or match crosswise: `this.left == other.right && this.right == other.left`."
+    require:
+      - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+        message: "Write the header exactly as `public boolean equals(Object compared)`."
+      - pattern: \binstanceof\s+Domino\b
+        message: "Check with `instanceof Domino` before the cast."
+    tests:
+      - call: |
+          Domino a = new Domino(2, 5);
+          Domino b = new Domino(5, 2);
+          System.out.println(a.flipped() + " " + a);
+          System.out.println(a.equals(b) + " " + a.equals(new Domino(2, 6)));
+      - call: |
+          Domino double6 = new Domino(6, 6);
+          System.out.println(double6.flipped());
+          System.out.println(double6.equals(new Domino(6, 6)) + " " + double6.equals(new Domino(6, 1)));
+          System.out.println(double6.equals("[6|6]") + " " + double6.equals(double6));
+        hidden: true
+      - call: |
+          Domino d = new Domino(0, 3);
+          System.out.println(d.equals(new Domino(0, 3)) + " " + d.equals(new Domino(3, 0)) + " " + d.equals(new Domino(3, 3)));
+          System.out.println(d.flipped().flipped().equals(d) + " " + (d.flipped() == d));
+          ArrayList<Domino> box = new ArrayList<>();
+          box.add(new Domino(4, 1));
+          System.out.println(box.contains(new Domino(1, 4)));
+        hidden: true

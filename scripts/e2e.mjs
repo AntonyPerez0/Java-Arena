@@ -206,7 +206,8 @@ const lessonSession = await newPage();
     await page.locator('.module-live').first().waitFor();
     expect((await page.locator('.module-live').first().innerText()).includes('1/5'), 'course page shows 1 of 5 steps');
     await page.goto(BASE + 'learn/printing/first-program/');
-    await page.locator('.challenges').waitFor();
+    // The pre-rendered page has the challenge tabs too; the workbench only exists once the app runs.
+    await page.locator('.workbench').waitFor();
     expect((await page.locator('.challenge-done').count()) === 3, 'all three challenges marked done');
     expect((await page.locator('.dot-done').count()) === 1, 'step dot done');
   });

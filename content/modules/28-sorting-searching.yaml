@@ -7,7 +7,7 @@ steps:
     text: |
       An **algorithm** is a precise, step-by-step way to solve a problem: precise enough that a computer can follow it without guessing, and correct for every input of the right kind, not only for the example you tried first. You've written many algorithms already: adding up the numbers of a list, finding the largest value of an array (module 15), counting the words on a line.
 
-      This module is about two problems that come up in almost every kind of program. **Sorting** puts values in order: a contact list by name, prices from the cheapest up. **Searching** finds where a value is. Both have several algorithms, and some do far less work than others, so the module also counts the steps each one takes.
+      This module is about two problems that come up in almost every kind of program. **Sorting** puts values in order: a contact list by name, prices from the cheapest up. **Searching** finds where a value is. Both have several algorithms, and some do far less work than others, so the module also counts how much work each one does.
 
       It starts with a small algorithm that sorting builds on.
 
@@ -589,7 +589,7 @@ steps:
 
       ### How much work is it?
 
-      Count the comparisons `values[j] < values[lowest]`. With 5 values, the first round compares the first value with the 4 others, the next round makes 3 comparisons, then 2, then 1: 10 in all. With `n` values, it's `(n - 1) + (n - 2) + ... + 1` comparisons, which adds up to `n * (n - 1) / 2`:
+      Count the comparisons `values[j] < values[lowest]`. With 5 values, the first round compares each of the other 4 values with the smallest so far, the next round makes 3 comparisons, then 2, then 1: 10 in all. With `n` values, it's `(n - 1) + (n - 2) + ... + 1` comparisons, which adds up to `n * (n - 1) / 2`:
 
       | Values | Comparisons |
       | --- | --- |
@@ -1010,19 +1010,19 @@ steps:
     text: |
       The second problem of this module is searching: where in the array is a given value, if it's there at all? The simplest algorithm looks at the elements one at a time, from the first to the last, and stops at the first match. It's called **linear search**, since it goes through the elements in a line. You've written it before (module 15). Here it is as a method that returns the index of the value, or -1 when the value isn't there. -1 is never an index, so the caller can tell the two answers apart.
 
-      A lost-and-found desk gives every item a tag number, and keeps the tags in an array:
+      A raffle keeps the numbers of the tickets it has sold in an array:
 
       ```java run
       public class Main {
           public static void main(String[] args) {
-              int[] tags = {512, 87, 340, 19, 777, 203};
-              System.out.println(positionOf(tags, 340));
-              System.out.println(positionOf(tags, 5));
+              int[] tickets = {512, 87, 340, 19, 777, 203};
+              System.out.println(positionOf(tickets, 340));
+              System.out.println(positionOf(tickets, 5));
           }
 
-          public static int positionOf(int[] tags, int wanted) {
-              for (int i = 0; i < tags.length; i++) {
-                  if (tags[i] == wanted) {
+          public static int positionOf(int[] tickets, int wanted) {
+              for (int i = 0; i < tickets.length; i++) {
+                  if (tickets[i] == wanted) {
                       return i;
                   }
               }
@@ -1042,15 +1042,15 @@ steps:
 
       ### How much work is it?
 
-      Count the comparisons `tags[i] == wanted`. Finding 340 at index 2 took 3 of them, at indexes 0, 1 and 2. A value at index `i` takes `i + 1` comparisons. A value that isn't there takes one for every element, since the search can't stop early.
+      Count the values the search looks at. Each look is one comparison, `tickets[i] == wanted`. Finding 340 at index 2 took 3 looks, at indexes 0, 1 and 2. A value at index `i` takes `i + 1` looks. A value that isn't there takes a look at every element, since the search can't stop early.
 
-      | Array size | Comparisons at most |
+      | Array size | Values looked at, at most |
       | --- | --- |
       | 6 | 6 |
       | 1,000 | 1,000 |
       | 1,000,000 | 1,000,000 |
 
-      The work grows in step with the array: twice the values, twice the comparisons at worst. A value that is there is found, on average, about halfway through. That's fine for most programs, but one that searches a million values over and over has a lot to do. The next step shows how sorted data makes searching much faster.
+      The work grows in step with the array: twice the values, twice the looks at worst. A value that is there is found, on average, about halfway through. That's fine for most programs, but one that searches a million values over and over has a lot to do. The next step shows how sorted data makes searching much faster.
 
       The list methods `indexOf` and `contains` (module 14) do a linear search for you: they go through the list from the start, and compare each element with the value using `equals`.
 
@@ -1157,8 +1157,8 @@ steps:
           }
       }
     hints:
-      - "The method starts `public static int berthOf(int[] berths, int boat) {`. Go through the indexes with `for (int i = 0; i < berths.length; i++)`, and when `berths[i] == boat`, return `i`."
-      - "`return -1;` goes after the loop, when every berth has been checked."
+      - "It's `positionOf` from above with new names: go through the berths in order, and return as soon as you find the boat."
+      - "Loop over the indexes, `for (int i = 0; i < berths.length; i++)`, and compare `berths[i]` with `boat`. The -1 comes after the loop, once every berth has been checked."
     require:
       - pattern: \bpublic\s+static\s+int\s+berthOf\s*\(\s*int\s*\[\s*\]\s*\w+\s*,\s*int\s+\w+\s*\)
         message: "Write the method as `public static int berthOf(int[] berths, int boat)`."
@@ -1168,8 +1168,8 @@ steps:
           System.out.println(berthOf(berths, 442));
           System.out.println(berthOf(berths, 500));
       - call: |
-          int[] berths = {7, 7, 3};
-          System.out.println(berthOf(berths, 7));
+          int[] berths = {7, 12, 3};
+          System.out.println(berthOf(berths, 12));
           System.out.println(berthOf(berths, 3));
           System.out.println(berthOf(berths, 0));
         hidden: true
@@ -1187,15 +1187,15 @@ steps:
         predict: |
           public class Main {
               public static void main(String[] args) {
-                  int[] tags = {40, 15, 72, 15};
-                  System.out.println(find(tags, 40));
-                  System.out.println(find(tags, 72));
-                  System.out.println(find(tags, 15));
+                  int[] codes = {40, 15, 72, 15};
+                  System.out.println(find(codes, 40));
+                  System.out.println(find(codes, 72));
+                  System.out.println(find(codes, 15));
               }
 
-              public static int find(int[] tags, int wanted) {
-                  for (int i = 0; i < tags.length; i++) {
-                      if (tags[i] == wanted) {
+              public static int find(int[] codes, int wanted) {
+                  for (int i = 0; i < codes.length; i++) {
+                      if (codes[i] == wanted) {
                           return i;
                       } else {
                           return -1;
@@ -1205,8 +1205,8 @@ steps:
               }
           }
         hints:
-          - "In the first round of the loop, `i` is 0. The `if` compares the first tag with the wanted one, and both of its branches end the method with `return`."
-          - "So the method only ever looks at `tags[0]`. It returns 0 when the first tag matches, and -1 for anything else, even for tags that are in the array."
+          - "In the first round of the loop, `i` is 0. The `if` compares the first code with the wanted one, and both of its branches end the method with `return`."
+          - "So the method only ever looks at `codes[0]`. It returns 0 when the first code matches, and -1 for anything else, even for codes that are in the array."
       - task: |
           `Departure.java` is ready: a bus departure has a line, such as `"14"`, and a time, such as `"08:05"`, with the getters `getLine()` and `getTime()`. The departures are in a list, in time order. In `Main.java`, write the method `firstOnLine(ArrayList<Departure> departures, String line)`, which returns the index of the first departure of the given line, or -1 if no bus of that line leaves. The check runs:
 
@@ -1421,22 +1421,22 @@ steps:
 
       ### It needs sorted data
 
-      Binary search throws away half of the range at every step, trusting that everything to the left of the middle is smaller and everything to the right is larger. In an array that isn't sorted, that isn't true, and the search can miss a value that's there. So sort the data first (with `Arrays.sort` or `Collections.sort`), or keep it sorted as values are added. Sorting takes time too, so binary search pays off best when the same data is searched many times.
+      Binary search throws away half of the range at every look, trusting that everything to the left of the middle is smaller and everything to the right is larger. In an array that isn't sorted, that isn't true, and the search can miss a value that's there. So sort the data first (with `Arrays.sort` or `Collections.sort`), or keep it sorted as values are added. Sorting takes time too, so binary search pays off best when the same data is searched many times.
 
       Java has binary search ready as well, in `Arrays.binarySearch` and `Collections.binarySearch`, for sorted arrays and lists. In this module you write your own, to see how it works.
 
-      ### How many steps?
+      ### How much work is it?
 
-      Each step halves the range, so the range runs out fast:
+      Each look at a middle value halves the range, so the range runs out fast:
 
-      | Values | Linear search, at most | Binary search, at most |
+      | Values | Values looked at, linear search | Values looked at, binary search |
       | --- | --- | --- |
       | 100 | 100 | 7 |
       | 1,000 | 1,000 | 10 |
       | 1,000,000 | 1,000,000 | 20 |
       | 1,000,000,000 | 1,000,000,000 | 30 |
 
-      A sorted array of a million values needs at most 20 steps, because 2 to the 20th power is 1,048,576, more than a million: halving the range 20 times always gets it down to nothing. Twice as many values take only one step more.
+      A sorted array of a million values needs at most 20 looks, because 2 to the 20th power is 1,048,576, more than a million: halving the range 20 times always gets it down to nothing. Each look compares the middle value with the wanted one up to twice (`==`, then `<`), so that's at most 40 comparisons, where linear search may need a million. Twice as many values take only one look more.
 
       **Your turn:** a mail carrier has a sorted array of the house numbers that get mail today. Fill in the blanks of `findHouse`, a binary search that returns the index of a house number, or -1 if the house gets no mail. The check runs:
 
@@ -1534,18 +1534,18 @@ steps:
           - "The first middle is `(0 + 6) / 2`, index 3, which holds 12. For 23, the search goes on to the right: `low` becomes 4, and the next middle is `(4 + 6) / 2`, index 5."
           - "The method prints its lines before `main` prints the index it returns. For 3, the range shrinks toward the start of the array, and is empty after three looks, so `main` prints -1."
       - task: |
-          How many values does binary search look at? Write the method `stepsNeeded(int[] sorted, int wanted)`. It does the binary search of this step, with the middle at `(low + high) / 2`, but instead of an index it returns how many middle values it looked at, whether it found the wanted value or not.
+          How many values does binary search look at? Write the method `looksNeeded(int[] sorted, int wanted)`. It does the binary search of this step, with the middle at `(low + high) / 2`, but instead of an index it returns how many middle values it looked at, whether it found the wanted value or not.
 
-          The check makes a sorted array of the 1,000 even numbers from 0 to 1998, and looks for 998, 1998 and 7. A linear search would need 500, 1,000 and 1,000 comparisons for them. (998 happens to sit right in the middle of the array.) The check runs:
+          The check makes a sorted array of the 1,000 even numbers from 0 to 1998, and looks for 998, 1998 and 7. A linear search would look at 500, 1,000 and 1,000 values for them. (998 happens to sit right in the middle of the array.) The check runs:
 
           ```java fragment
           int[] evens = new int[1000];
           for (int i = 0; i < evens.length; i++) {
               evens[i] = i * 2;
           }
-          System.out.println(stepsNeeded(evens, 998));
-          System.out.println(stepsNeeded(evens, 1998));
-          System.out.println(stepsNeeded(evens, 7));
+          System.out.println(looksNeeded(evens, 998));
+          System.out.println(looksNeeded(evens, 1998));
+          System.out.println(looksNeeded(evens, 7));
           ```
 
           and expects:
@@ -1562,12 +1562,12 @@ steps:
                   for (int i = 0; i < evens.length; i++) {
                       evens[i] = i * 2;
                   }
-                  System.out.println(stepsNeeded(evens, 998));
-                  System.out.println(stepsNeeded(evens, 1998));
-                  System.out.println(stepsNeeded(evens, 7));
+                  System.out.println(looksNeeded(evens, 998));
+                  System.out.println(looksNeeded(evens, 1998));
+                  System.out.println(looksNeeded(evens, 7));
               }
 
-              // Write the method stepsNeeded here.
+              // Write the method looksNeeded here.
           }
         solution: |
           public class Main {
@@ -1576,20 +1576,20 @@ steps:
                   for (int i = 0; i < evens.length; i++) {
                       evens[i] = i * 2;
                   }
-                  System.out.println(stepsNeeded(evens, 998));
-                  System.out.println(stepsNeeded(evens, 1998));
-                  System.out.println(stepsNeeded(evens, 7));
+                  System.out.println(looksNeeded(evens, 998));
+                  System.out.println(looksNeeded(evens, 1998));
+                  System.out.println(looksNeeded(evens, 7));
               }
 
-              public static int stepsNeeded(int[] sorted, int wanted) {
+              public static int looksNeeded(int[] sorted, int wanted) {
                   int low = 0;
                   int high = sorted.length - 1;
-                  int steps = 0;
+                  int looks = 0;
                   while (low <= high) {
                       int middle = (low + high) / 2;
-                      steps++;
+                      looks++;
                       if (sorted[middle] == wanted) {
-                          return steps;
+                          return looks;
                       }
                       if (sorted[middle] < wanted) {
                           low = middle + 1;
@@ -1597,15 +1597,15 @@ steps:
                           high = middle - 1;
                       }
                   }
-                  return steps;
+                  return looks;
               }
           }
         hints:
-          - "Start from the binary search of this step, and add a counter, `int steps = 0;`. Each round of the loop looks at one middle value, so it adds one to `steps`."
-          - "Return `steps` where the search would return `middle`, and also after the loop, where it would return -1."
+          - "Start from the binary search of this step, and add a counter, `int looks = 0;`. Each round of the loop looks at one middle value, so it adds one to `looks`."
+          - "Return `looks` where the search would return `middle`, and also after the loop, where it would return -1."
         require:
-          - pattern: \bpublic\s+static\s+int\s+stepsNeeded\s*\(\s*int\s*\[\s*\]\s*\w+\s*,\s*int\s+\w+\s*\)
-            message: "Write the method as `public static int stepsNeeded(int[] sorted, int wanted)`."
+          - pattern: \bpublic\s+static\s+int\s+looksNeeded\s*\(\s*int\s*\[\s*\]\s*\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static int looksNeeded(int[] sorted, int wanted)`."
           - pattern: \bwhile\s*\(
             message: "Do the binary search with a `while` loop, as in this step."
         tests:
@@ -1614,25 +1614,25 @@ steps:
               for (int i = 0; i < evens.length; i++) {
                   evens[i] = i * 2;
               }
-              System.out.println(stepsNeeded(evens, 998));
-              System.out.println(stepsNeeded(evens, 1998));
-              System.out.println(stepsNeeded(evens, 7));
+              System.out.println(looksNeeded(evens, 998));
+              System.out.println(looksNeeded(evens, 1998));
+              System.out.println(looksNeeded(evens, 7));
           - call: |
               int[] sorted = {3, 8, 12, 15, 21, 27, 30, 34, 41};
-              System.out.println(stepsNeeded(sorted, 21));
-              System.out.println(stepsNeeded(sorted, 27));
-              System.out.println(stepsNeeded(sorted, 13));
-              System.out.println(stepsNeeded(sorted, 3));
-              System.out.println(stepsNeeded(sorted, 50));
+              System.out.println(looksNeeded(sorted, 21));
+              System.out.println(looksNeeded(sorted, 27));
+              System.out.println(looksNeeded(sorted, 13));
+              System.out.println(looksNeeded(sorted, 3));
+              System.out.println(looksNeeded(sorted, 50));
             hidden: true
           - call: |
               int[] none = new int[0];
-              System.out.println(stepsNeeded(none, 5));
+              System.out.println(looksNeeded(none, 5));
               int[] one = {5};
-              System.out.println(stepsNeeded(one, 5) + " " + stepsNeeded(one, 6));
+              System.out.println(looksNeeded(one, 5) + " " + looksNeeded(one, 6));
               int[] big = new int[100000];
               for (int i = 0; i < big.length; i++) {
                   big[i] = i;
               }
-              System.out.println(stepsNeeded(big, 99999) + " " + stepsNeeded(big, -1));
+              System.out.println(looksNeeded(big, 99999) + " " + looksNeeded(big, -1));
             hidden: true

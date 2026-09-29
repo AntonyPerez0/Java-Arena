@@ -327,7 +327,7 @@ const lessonSession = await newPage();
     const card = await page.locator('.task-card').innerText();
     expect(/the check runs/i.test(card) && card.includes('countdown(3);') && card.includes('Liftoff!'), card);
     // Code shows the characters to type: >= stays two characters, not one ligature.
-    const ligatures = await page.evaluate(() => ['.editor .cm-scroller', '.codeview', '.task-card code'].map((q) => getComputedStyle(document.querySelector(q)).fontVariantLigatures));
+    const ligatures = await page.evaluate(() => ['.editor .cm-scroller', 'article pre', '.task-card code'].map((q) => getComputedStyle(document.querySelector(q)).fontVariantLigatures));
     expect(ligatures.every((l) => l === 'none'), `ligatures: ${ligatures}`);
     const withMethod = (m) => `public class Main {\n    public static void main(String[] args) {\n        countdown(3);\n    }\n\n${m}\n}\n`;
     // A private method compiles (main is inside Main) but the check can't call it: one plain reason.

@@ -663,6 +663,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
       if (typeof d.prompt !== "string" || !d.prompt) errors.push(`${where}: a boss drill needs a prompt (the task)`);
       const ex = await buildExercise(where, d);
       if (!ex) return null;
+      checkTaskOutput(where, d.prompt, ex);
       return { ...base, prompt: d.prompt ?? "", display: "", answer: "", exercise: ex };
     }
   }

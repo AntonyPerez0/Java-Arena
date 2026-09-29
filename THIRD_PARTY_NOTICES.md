@@ -18,6 +18,22 @@ Java Arena's own code is MIT licensed (see [LICENSE](LICENSE) for its scope). Th
 
 The source code of the GPL-licensed parts, and how to rebuild everything, is described in [engine/SOURCES.md](engine/SOURCES.md).
 
+## Libraries and fonts in the site's pages
+
+The site's pages are built with these npm packages (and their small dependencies). The build writes every package's license text to `licenses/npm-packages.txt`, which is published with the site.
+
+| Component | License |
+|---|---|
+| [React](https://react.dev) and React DOM 18 | MIT |
+| [React Router](https://reactrouter.com) 6 | MIT |
+| [CodeMirror](https://codemirror.net) 6 (the code editor, with its Java mode and the One Dark theme) and [Lezer](https://lezer.codemirror.net) | MIT |
+| [@uiw/react-codemirror](https://github.com/uiwjs/react-codemirror) | MIT |
+| [marked](https://marked.js.org) (lesson Markdown) | MIT |
+| [Lucide](https://lucide.dev) icons (`lucide-react`) | ISC |
+| [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) fonts, from [Fontsource](https://fontsource.org) | SIL Open Font License 1.1 |
+
+The site's design and parts of its page code are adapted from [C/C++ Arena](https://cpparena.com), by the same author.
+
 ## Build and test tools
 
-Vite (MIT) bundles the site and may add small runtime helpers to the published scripts, such as its module preload helper. TypeScript, Playwright and axe-core are used to build and test the site and are not part of the published pages.
+Vite (MIT) bundles the site and may add small runtime helpers to the published scripts, such as its module preload helper. TypeScript, the Vite React plugin, the `yaml` package, Playwright and axe-core are used to build and test the site and are not part of the published pages.

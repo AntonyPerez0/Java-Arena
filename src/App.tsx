@@ -1,5 +1,5 @@
 import { BrowserRouter, NavLink, Route, Routes, Link, useLocation } from "react-router-dom";
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import { BrandMark } from "./components/Brand";
 import { EngineBadge } from "./components/Engine";
@@ -13,10 +13,34 @@ import { patchSettings } from "./state/store";
 import { useAppearance, useResolvedTheme } from "./lib/appearance";
 import { MOOC_LICENSE_URL, MOOC_URL, REPO_URL } from "./lib/site";
 
-// The lesson page carries the code editor, so it loads separately (main.tsx preloads it when a
-// lesson is the first page opened, so the pre-rendered page doesn't flash).
-export const loadStepPage = () => import("./pages/StepPage");
-const StepPage = lazy(loadStepPage);
+// The lesson page carries the code editor, so it loads separately. main.tsx loads it before the
+// app starts when a lesson is the first page opened; then it renders at once (React.lazy would
+// show a loading message for a moment, and the pre-rendered page would jump).
+let StepPageComponent: ComponentType | null = null;
+export const loadStepPage = () =>
+  import("./pages/StepPage").then((m) => {
+    StepPageComponent = m.default;
+  });
+
+function StepRoute() {
+  const [, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!StepPageComponent) loadStepPage().then(() => setLoaded(true), () => setFailed(true));
+  }, []);
+  if (StepPageComponent) return <StepPageComponent />;
+  return failed ? (
+    <p role="alert">
+      The lesson page couldn't be loaded. Check the connection and{" "}
+      <button type="button" className="linkish" onClick={() => location.reload()}>
+        reload the page
+      </button>
+      .
+    </p>
+  ) : (
+    <p className="muted">Loading the lesson…</p>
+  );
+}
 
 /** On navigation: scroll to the top and move keyboard and screen-reader focus to the new page. */
 function RouteChange() {
@@ -190,17 +214,15 @@ export default function App() {
       </a>
       <Header />
       <Main>
-        <Suspense fallback={<p className="muted">Loading…</p>}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/learn" element={<Learn />} />
-            <Route path="/learn/:moduleId" element={<ModulePage />} />
-            <Route path="/learn/:moduleId/:stepSlug" element={<StepPage />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/about" element={<About />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/learn" element={<Learn />} />
+          <Route path="/learn/:moduleId" element={<ModulePage />} />
+          <Route path="/learn/:moduleId/:stepSlug" element={<StepRoute />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/about" element={<About />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </Main>
       <Footer />
     </BrowserRouter>

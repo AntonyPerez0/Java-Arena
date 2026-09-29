@@ -35,9 +35,18 @@ export function EngineBadge() {
   );
 }
 
+/** Resolves once the page has loaded and the browser is idle, so the engine download doesn't slow the page down. */
+function afterLoad(): Promise<void> {
+  return new Promise((resolve) => {
+    const idle = () => ("requestIdleCallback" in window ? requestIdleCallback(() => resolve(), { timeout: 2000 }) : setTimeout(resolve, 200));
+    if (document.readyState === "complete") idle();
+    else window.addEventListener("load", idle, { once: true });
+  });
+}
+
 /**
- * Starts the engine download when that can't cost mobile data (or the learner allowed it). Returns
- * true while the page should ask first instead.
+ * Starts the engine download, after the page has loaded, when that can't cost mobile data (or the
+ * learner allowed it). Returns true while the page should ask first instead.
  */
 export function useEngineAutoload(): boolean {
   const allow = useStore((s) => s.settings.mobileData);
@@ -49,11 +58,13 @@ export function useEngineAutoload(): boolean {
       return;
     }
     let live = true;
-    mayAutoDownload(allow).then((ok) => {
-      if (!live) return;
-      if (ok) ensureEngine();
-      else setAsk(engineSupported());
-    });
+    afterLoad()
+      .then(() => mayAutoDownload(allow))
+      .then((ok) => {
+        if (!live) return;
+        if (ok) ensureEngine();
+        else setAsk(engineSupported());
+      });
     return () => {
       live = false;
     };

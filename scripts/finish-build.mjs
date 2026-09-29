@@ -3,9 +3,13 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { writeNpmLicenses } from './npm-licenses.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const dist = join(root, 'dist');
+
+const licenses = writeNpmLicenses(root, join(dist, 'licenses', 'npm-packages.txt'));
+console.log(`finish-build: licenses of ${licenses.count} npm packages in licenses/npm-packages.txt`);
 
 function walk(dir) {
   const out = [];
@@ -20,8 +24,10 @@ function walk(dir) {
 const files = walk(dist)
   .map((f) => relative(dist, f).split('\\').join('/'))
   .filter((f) => !f.startsWith('engine/') && f !== 'sw.js' && !f.endsWith('.map'));
+// Pages and their files are saved for offline use; license texts are not needed offline.
+const offline = (f) => !f.startsWith('licenses/') && f !== 'robots.txt' && f !== 'sitemap.xml';
 const assets = files
-  .filter((f) => f !== 'robots.txt' && f !== 'sitemap.xml')
+  .filter(offline)
   .map((f) => (f.endsWith('index.html') ? f.slice(0, -'index.html'.length) : f));
 const hash = createHash('sha256');
 for (const f of files.sort()) hash.update(f).update(readFileSync(join(dist, f)));

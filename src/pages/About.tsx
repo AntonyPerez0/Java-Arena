@@ -43,7 +43,7 @@ export default function About() {
       <ul>
         <li>Lesson content (the files in <code>content/</code>): CC BY-NC-SA 4.0.</li>
         <li>
-          The site's own code: MIT (<A href={`${REPO_URL}/blob/main/LICENSE`}>LICENSE</A>).
+          The site's own code: MIT (<A href={`${REPO_URL}/blob/main/LICENSE`}>LICENSE</A>). It uses React, React Router, CodeMirror, marked and Lucide icons (MIT and ISC licenses) and the Inter and JetBrains Mono fonts (SIL Open Font License); <a href={import.meta.env.BASE_URL + "licenses/npm-packages.txt"}>their license texts</a>.
         </li>
         <li>
           The Java engine includes OpenJDK code under GPL 2.0 with the Classpath Exception, and other open-source parts under their own licenses. Details, sources and the written offer: <A href={`${REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md`}>third-party notices</A> and <A href={`${REPO_URL}/blob/main/engine/SOURCES.md`}>engine sources</A>. The license texts are also published with the engine files, for example <a href={import.meta.env.BASE_URL + "engine/licenses/compiler/OpenJDK-LICENSE.txt"}>OpenJDK's license</a> and <a href={import.meta.env.BASE_URL + "engine/licenses/runner/THIRD_PARTY_LICENSES.txt"}>the runner's third-party licenses</a>.

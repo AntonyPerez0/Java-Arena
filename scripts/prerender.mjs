@@ -65,9 +65,9 @@ const stepCount = content.modules.reduce((n, m) => n + m.steps.length, 0);
 const challengeCount = content.modules.reduce((n, m) => n + m.steps.reduce((k, s) => k + 1 + s.more.length, 0), 0);
 
 function credit(m) {
-  if (!m.mooc?.length) return `<p class="credit">An extra module, not part of the University of Helsinki's course. Lesson text: <a href="${LICENSE}">CC BY-NC-SA 4.0</a>.</p>`;
+  if (!m.mooc?.length) return `<p>An extra module, not part of the University of Helsinki's course. Lesson text: <a href="${LICENSE}">CC BY-NC-SA 4.0</a>.</p>`;
   const secs = m.mooc.map((s) => `<a href="${MOOC}${s.path}">${esc(s.section)} ${esc(s.title)}</a>`).join(", ");
-  return `<p class="credit">This module follows ${m.mooc.length > 1 ? "sections" : "section"} ${secs} of <a href="${MOOC}">Java Programming</a> by the University of Helsinki (Agile Education Research group), licensed under <a href="${LICENSE}">CC BY-NC-SA 4.0</a>. The explanations and exercises here are written for Java Arena and shared under the same license. Java Arena is not affiliated with the University of Helsinki.</p>`;
+  return `<p>This module follows ${m.mooc.length > 1 ? "sections" : "section"} ${secs} of <a href="${MOOC}">Java Programming</a> by the University of Helsinki (Agile Education Research group), licensed under <a href="${LICENSE}">CC BY-NC-SA 4.0</a>. The explanations and exercises here are written for Java Arena and shared under the same license. Java Arena is not affiliated with the University of Helsinki.</p>`;
 }
 
 const pages = [];
@@ -101,7 +101,7 @@ for (const m of content.modules) {
   page(modulePath(m), {
     title: `Module ${m.number}: ${m.title} | ${NAME}`,
     description: summary(m.summary),
-    body: `<nav aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a></nav><h1>${esc(m.title)}</h1><p>${esc(m.summary)}</p><h2>Steps</h2><ol>${m.steps.map((s) => `<li><a href="${link(stepPath(m, s))}">${esc(s.title)}</a></li>`).join("")}</ol>${credit(m)}`,
+    body: `<nav aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a></nav><h1>${esc(m.title)}</h1><p>${esc(m.summary)}</p><h2>Steps</h2><ol>${m.steps.map((s) => `<li><a href="${link(stepPath(m, s))}">${esc(s.title)}</a></li>`).join("")}</ol><aside class="credit">${credit(m)}</aside>`,
   });
   m.steps.forEach((s, i) => {
     const prev = i > 0 ? `<a href="${link(stepPath(m, m.steps[i - 1]))}">Previous: ${esc(m.steps[i - 1].title)}</a>` : "";
@@ -123,15 +123,18 @@ for (const m of content.modules) {
         license: LICENSE,
         url: canonical(stepPath(m, s)),
       },
-      body: `<nav aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a> › <a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></nav>
-<p>Step ${i + 1} of ${m.steps.length}</p>
+      // The same layout as the app's lesson page, so nothing jumps when the app takes over.
+      layout: true,
+      body: `<div class="step-page"><nav class="crumbs" aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a> › <a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></nav>
+<div class="step-grid"><article class="step-text"><div class="step-count">Step ${i + 1} of ${m.steps.length}</div>
 <h1>${esc(s.title)}</h1>
-${md(s.text, 2)}
-<h2>Your task</h2>
-${md(s.task, 3)}
-${s.more.map((c, k) => `<h3>Challenge ${k + 2}</h3>\n${md(c.task, 4)}`).join("\n")}
-<p>${prev} ${next}</p>
-${credit(m)}`,
+<div class="md">${md(s.text, 2)}</div>
+<nav class="step-dots" aria-label="Steps in this module">${m.steps.map((st, k) => `<a class="dot${k === i ? " dot-cur" : ""}" href="${link(stepPath(m, st))}" aria-label="Step ${k + 1}: ${esc(st.title)}"></a>`).join("")}</nav>
+<aside class="credit credit-compact">${credit(m)}</aside></article>
+<section class="step-work" aria-label="Exercise"><nav class="challenges" aria-label="Challenges in this step">${[0, 1, 2].map((k) => `<span class="challenge-tab${k === 0 ? " challenge-cur" : ""}"><span class="challenge-n" aria-hidden="true">${k + 1}</span>Challenge ${k + 1}</span>`).join("")}</nav>
+<section class="task-card"><div class="task-head"><h2 class="task-title">Your task</h2><span class="task-count">Challenge 1 of 3</span></div><div class="md task-body">${md(s.task, 3)}</div></section>
+${s.more.map((c, k) => `<section class="task-card"><div class="task-head"><h2 class="task-title">Challenge ${k + 2}</h2></div><div class="md task-body">${md(c.task, 3)}</div></section>`).join("\n")}
+<div class="step-nav">${prev} ${next}</div></section></div></div>`,
     });
   });
 }
@@ -144,8 +147,17 @@ page("/about", {
 });
 
 // ---------------------------------------------------------------- write
-const FOOTER = `<footer class="footer"><div class="footer-inner"><p class="muted small">The lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}">CC BY-NC-SA 4.0</a>. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p></div></footer>`;
-const HEADER = `<header class="topbar"><a href="${link("/")}" class="brand" aria-label="Java Arena home"><img class="brand-mark" src="${link("/favicon.svg")}" alt="" width="30" height="30"><span class="brand-name">Java <b>Arena</b></span></a><nav class="nav" aria-label="Main"><a href="${link("/learn")}">Learn</a><a href="${link("/settings")}">Settings</a><a href="${link("/about")}">About</a></nav></header>`;
+// The header and footer as the app draws them (src/App.tsx), so the page doesn't shift when it starts.
+const MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="ja-bm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fdba74"></stop><stop offset="0.55" stop-color="#f97316"></stop><stop offset="1" stop-color="#dc2626"></stop></linearGradient></defs><rect width="32" height="32" rx="8" fill="url(#ja-bm)"></rect><path d="M10 8.5c-2 0-2.6 1-2.6 2.8v2.2c0 1.4-.6 2.2-1.9 2.5 1.3.3 1.9 1.1 1.9 2.5v2.2c0 1.8.6 2.8 2.6 2.8M22 8.5c2 0 2.6 1 2.6 2.8v2.2c0 1.4.6 2.2 1.9 2.5-1.3.3-1.9 1.1-1.9 2.5v2.2c0 1.8-.6 2.8-2.6 2.8" fill="none" stroke="#1c0a02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M18.2 10v7.6c0 2.2-1.1 3.4-3 3.4-1.3 0-2.2-.6-2.7-1.6" fill="none" stroke="#1c0a02" stroke-width="2.6" stroke-linecap="round"></path></svg>`;
+const BRAND = `<a href="${link("/")}" class="brand" aria-label="Java Arena home">${MARK}<span class="brand-name">Java <b>Arena</b></span></a>`;
+const HEADER = `<header class="topbar">${BRAND}<nav id="main-nav" class="nav" aria-label="Main"><a href="${link("/learn")}">Learn</a><a href="${link("/settings")}">Settings</a><a href="${link("/about")}">About</a></nav><div class="topbar-right"><a href="${link("/learn")}" class="btn btn-primary btn-sm topbar-cta">Start learning</a></div></header>`;
+const REPO = "https://github.com/AntonyPerez0/Java-Arena";
+const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
+// The fonts are needed for the first paint: fetch them right away instead of after the CSS.
+const FONTS = fs
+  .readdirSync(path.join(DIST, "assets"))
+  .filter((f) => f.endsWith(".woff2"))
+  .map((f) => `<link rel="preload" href="${link("/assets/" + f)}" as="font" type="font/woff2" crossorigin>`);
 
 function render(p) {
   const url = canonical(p.route);
@@ -158,6 +170,7 @@ function render(p) {
     `<meta property="og:description" content="${esc(p.description)}">`,
     `<meta property="og:url" content="${url}">`,
     `<meta name="twitter:card" content="summary">`,
+    ...FONTS,
     ...(p.jsonld ? [`<script type="application/ld+json">${JSON.stringify(p.jsonld).replace(/</g, "\\u003c")}</script>`] : []),
   ]
     .filter(Boolean)
@@ -166,7 +179,7 @@ function render(p) {
     .replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(p.title)}</title>`)
     .replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${esc(p.description)}" />`)
     .replace("<!--head-->", head)
-    .replace("<!--app-->", `${HEADER}<main class="main${p.route === "/" ? " main-full" : ""}" id="main"><div class="prerendered${p.route === "/" ? " container" : " narrow"} md">${p.body}</div></main>${FOOTER}`);
+    .replace("<!--app-->", `${HEADER}<main class="main${p.route === "/" ? " main-full" : ""}" id="main">${p.layout ? p.body : `<div class="prerendered${p.route === "/" ? " container" : " narrow"} md">${p.body}</div>`}</main>${FOOTER}`);
 }
 
 for (const p of pages) {

@@ -1,0 +1,481 @@
+topic: text-ui
+drills:
+  - type: predict
+    after: command-loop
+    stdin: |
+      go
+      wait
+      stop
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      while (true) {
+          System.out.print("> ");
+          String command = scanner.nextLine();
+          if (command.equals("stop")) {
+              System.out.println("done");
+              break;
+          }
+          System.out.println(command.length());
+      }
+    why: "The prompt is printed with `print`, so each answer follows its `> ` on the same line, and the typed commands aren't part of the output. `go` has 2 characters and `wait` has 4. `stop` prints `done` and ends the loop."
+
+  - type: predict
+    after: command-loop
+    stdin: |
+      one
+      two
+      quit
+      four
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int rounds = 0;
+      while (true) {
+          rounds++;
+          if (scanner.nextLine().equals("quit")) {
+              break;
+          }
+          System.out.println(scanner.nextLine());
+      }
+      System.out.println(rounds);
+    why: "Every `nextLine()` reads a new line. The first round reads `one` for the check, and prints the line after it, `two`. The second round's check reads `quit`, so the loop ends after 2 rounds, and `four` is never read. Reading the command once into a variable avoids this."
+
+  - type: predict
+    after: remembering
+    stdin: |
+      a
+      b
+      c
+      end
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int total = 0;
+      while (true) {
+          int count = 0;
+          String command = scanner.nextLine();
+          if (command.equals("end")) {
+              break;
+          }
+          count++;
+          total++;
+          System.out.println(count + " " + total);
+      }
+    why: "`count` is created inside the loop, so every round makes it again, starting from 0, and it never gets past 1. `total` is created before the loop, so it lasts from round to round and counts all three commands."
+
+  - type: predict
+    after: user-interface-class
+    classes: |
+      class Counter {
+          private int value;
+
+          public Counter() {
+              this.value = 0;
+          }
+
+          public void add() {
+              this.value++;
+          }
+
+          public int getValue() {
+              return this.value;
+          }
+      }
+
+      class CounterUi {
+          private Scanner scanner;
+          private Counter counter;
+
+          public CounterUi(Scanner scanner, Counter counter) {
+              this.scanner = scanner;
+              this.counter = counter;
+          }
+
+          public void start() {
+              while (true) {
+                  String command = this.scanner.nextLine();
+                  if (command.equals("quit")) {
+                      break;
+                  }
+                  if (command.equals("add")) {
+                      this.counter.add();
+                  }
+              }
+          }
+      }
+    body: |
+      Counter counter = new Counter();
+      CounterUi ui = new CounterUi(new Scanner("add\nadd\nquit\nadd\n"), counter);
+      ui.start();
+      counter.add();
+      System.out.println(counter.getValue());
+    why: "The user interface reads until `quit`, so it adds twice and never reads the last `add`. `counter` in `main` and `this.counter` in the user interface refer to the same Counter object, so `main`'s own `add()` after `start()` makes it 3."
+
+  - type: predict
+    after: changing-the-inside
+    classes: |
+      class Readings {
+          private int lowest;
+
+          public Readings() {
+              this.lowest = 0;
+          }
+
+          public void add(int value) {
+              if (value < this.lowest) {
+                  this.lowest = value;
+              }
+          }
+
+          public int lowest() {
+              return this.lowest;
+          }
+      }
+    body: |
+      Readings readings = new Readings();
+      readings.add(7);
+      readings.add(4);
+      System.out.println(readings.lowest());
+      readings.add(-2);
+      System.out.println(readings.lowest());
+    why: "`lowest` starts at 0, and neither 7 nor 4 is lower than 0, so the lowest reading stays 0, although no reading was 0. Only -2 is lower. The first reading should set the lowest, whatever it is."
+
+  - type: fill
+    after: command-loop
+    stdin: |
+      hi
+      bye
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      while (true) {
+          System.out.[[print‖printf]]("> ");
+          String command = scanner.nextLine();
+          if (command.equals("bye")) {
+              System.out.println("See you");
+              break;
+          }
+          System.out.println(command.toUpperCase());
+      }
+    why: "The prompt is printed with `print`, which doesn't end the line, so the answer comes right after the `> `. With `println`, each `>` would be on a line of its own, and the answers on the lines below."
+
+  - type: fill
+    after: user-interface-class
+    prompt: Fill in the left side of the assignment, so the program prints the output shown.
+    classes: |
+      class Greeter {
+          private Scanner scanner;
+
+          public Greeter(Scanner scanner) {
+              [[this.scanner]] = scanner;
+          }
+
+          public void start() {
+              String name = this.scanner.nextLine();
+              System.out.println("Hello, " + name);
+          }
+      }
+    body: |
+      Greeter greeter = new Greeter(new Scanner("Ada\n"));
+      greeter.start();
+    why: "Inside the constructor, `scanner` alone is the parameter, so `scanner = scanner;` would only give the parameter its own value. `this.scanner` is the instance variable that `start()` reads. Without it, `this.scanner` stays `null`, and `start()` crashes with a NullPointerException."
+
+  - type: bug
+    after: command-loop
+    prompt: "The program should count the commands before `quit`, and print `2 commands`. Which line is wrong?"
+    stdin: |
+      look
+      wait
+      quit
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int commands = 0;
+      while (true) {
+          String command = scanner.nextLine();
+          if (command == "quit") { // BUG
+              break;
+          }
+          commands++;
+      }
+      System.out.println(commands + " commands");
+    fix: if (command.equals("quit")) {
+    why: "`==` asks whether two Strings are the same object, and the line read by the Scanner is a different object from `\"quit\"`, although the letters are the same. So the loop never stops, and `nextLine()` crashes when the input runs out. Strings are compared with `equals`."
+
+  - type: bug
+    after: changing-the-inside
+    prompt: "StepLog used to keep a list of every day's steps. Now it keeps only the total and the number of days, and the program should still print `5000`. Which line is wrong?"
+    classes: |
+      class StepLog {
+          private int total;
+          private int days;
+
+          public StepLog() {
+              this.total = 0;
+              this.days = 0;
+          }
+
+          public void add(int steps) {
+              this.total = steps; // BUG
+              this.days++;
+          }
+
+          public int average() {
+              return this.total / this.days;
+          }
+      }
+    body: |
+      StepLog log = new StepLog();
+      log.add(4000);
+      log.add(6000);
+      System.out.println(log.average());
+    fix: this.total = this.total + steps;
+    why: "`this.total = steps;` replaces the total with the last day's steps, so the average is 6000 / 2, which is 3000. The total has to grow by each day's steps: `this.total = this.total + steps;`. A change inside a class must still give the same answers as before."
+
+  - type: compiles
+    after: logic-class
+    classes: |
+      class PracticeLog {
+          private ArrayList<Integer> sessions;
+
+          public PracticeLog() {
+              this.sessions = new ArrayList<>();
+          }
+
+          public void add(int minutes) {
+              this.sessions.add(minutes);
+          }
+      }
+    body: |
+      PracticeLog log = new PracticeLog();
+      log.add(30);
+      System.out.println(log.sessions.size());
+    why: "No. `sessions` is private, so only the code of PracticeLog may use it: javac says `sessions has private access in PracticeLog`. `main` can only use the public methods. That's also why PracticeLog can change how it keeps its sessions without breaking `main`."
+
+  - type: compiles
+    after: user-interface-class
+    classes: |
+      class Menu {
+          public Menu(Scanner scanner) {
+          }
+
+          public void start() {
+              String command = scanner.nextLine();
+              System.out.println(command);
+          }
+      }
+    body: |
+      Menu menu = new Menu(new Scanner("hi\n"));
+      menu.start();
+    why: "No. A parameter only exists inside its own method, here the constructor, so `start()` can't see `scanner`: `cannot find symbol`. The constructor must keep the Scanner in an instance variable, `this.scanner = scanner;`, and `start()` then reads `this.scanner.nextLine()`."
+
+  - type: choice
+    after: logic-class
+    prompt: "Which method fits best in a logic class such as `PracticeLog`?"
+    choices:
+      - "`public int total()`, which returns the total minutes"
+      - "`public void printTotal()`, which prints `Total: 65 minutes`"
+      - "`public void askMinutes()`, which reads the minutes with a Scanner of its own"
+    answer: 1
+    why: "The logic class keeps the data and answers with return values. Reading and printing are the user interface's job, so the words `Total:` and `minutes` belong there. A method that returns the number can be used by any user interface, and checked without typing anything."
+
+  - type: choice
+    after: user-interface-class
+    prompt: "Why does `UserInterface` get its Scanner as a constructor parameter, instead of creating `new Scanner(System.in)` itself?"
+    choices:
+      - "A Scanner can only be created in `main`"
+      - "The program then has only one Scanner reading `System.in`, and the user interface can read from any Scanner, such as one that reads a String"
+      - "A class can't have a Scanner as an instance variable"
+    answer: 2
+    why: "A Scanner may read more of the input than the line it returns, so a second Scanner on `System.in` could miss lines. And a user interface that takes any Scanner can be run with commands written in a String, as the checks do. A Scanner can be created anywhere, and kept in an instance variable like any other object."
+
+  - type: choice
+    after: changing-the-inside
+    prompt: "A user interface calls `add(int minutes)`, `total()` and `longest()` of `PracticeLog`. Which change to `PracticeLog` forces a change in the user interface?"
+    choices:
+      - "Keeping the total in an `int` instead of adding up a list"
+      - "Renaming the private list from `sessions` to `minutes`"
+      - "Renaming `total()` to `sum()`"
+      - "Adding a new method `average()`"
+    answer: 3
+    why: "The user interface calls `total()`, so after the rename its code no longer compiles. The public methods are what other classes use. Private variables and how answers are worked out can change freely, and a new method breaks nothing: no one calls it yet."
+
+  - type: choice
+    after: adding-a-feature
+    prompt: "A new command, `reset`, should empty the practice log, whose sessions are in a private list. Where does the code go?"
+    choices:
+      - "Only in `UserInterface`: it clears the log's list"
+      - "A method `reset()` in `PracticeLog`, and one more `else if` in `UserInterface` that calls it and prints a message"
+      - "Only in `main`, before `ui.start()`"
+    answer: 2
+    why: "Emptying the log is logic, and only PracticeLog can touch its private list, so it gets a `reset()` method. The command and its message are the user interface's part. `main` only puts the program together, and code before `start()` runs before any command is read."
+
+  - type: boss
+    after: bigger-program
+    prompt: |
+      A vending machine sells snacks for 180 cents each. `UserInterface.java` and `Main.java` are ready. Write the logic class, `VendingMachine.java`:
+
+      - `VendingMachine(int price)`: a machine with that price for a snack, and no credit.
+      - `insert(int cents)`: adds the coin's cents to the credit.
+      - `buy()`: if the credit is at least the price, takes the price off the credit and returns `true`. Otherwise it changes nothing and returns `false`.
+      - `getCredit()`: returns the credit.
+
+      The class doesn't print anything. For the input shown, the program prints:
+
+      ```
+      > Credit: 100
+      > Not enough credit
+      > Credit: 200
+      > Enjoy! Credit: 20
+      > Bye
+      ```
+    seed:
+      VendingMachine.java: |
+        public class VendingMachine {
+            // Write the logic here.
+        }
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            private Scanner scanner;
+            private VendingMachine machine;
+
+            public UserInterface(Scanner scanner, VendingMachine machine) {
+                this.scanner = scanner;
+                this.machine = machine;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Bye");
+                        break;
+                    }
+                    if (command.equals("coin")) {
+                        this.machine.insert(Integer.valueOf(this.scanner.nextLine()));
+                        System.out.println("Credit: " + this.machine.getCredit());
+                    } else if (command.equals("buy")) {
+                        if (this.machine.buy()) {
+                            System.out.println("Enjoy! Credit: " + this.machine.getCredit());
+                        } else {
+                            System.out.println("Not enough credit");
+                        }
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                VendingMachine machine = new VendingMachine(180);
+                UserInterface ui = new UserInterface(scanner, machine);
+                ui.start();
+            }
+        }
+    solution:
+      VendingMachine.java: |
+        public class VendingMachine {
+            // Write the logic here.
+            private int price;
+            private int credit;
+
+            public VendingMachine(int price) {
+                this.price = price;
+                this.credit = 0;
+            }
+
+            public void insert(int cents) {
+                this.credit = this.credit + cents;
+            }
+
+            public boolean buy() {
+                if (this.credit < this.price) {
+                    return false;
+                }
+                this.credit = this.credit - this.price;
+                return true;
+            }
+
+            public int getCredit() {
+                return this.credit;
+            }
+        }
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            private Scanner scanner;
+            private VendingMachine machine;
+
+            public UserInterface(Scanner scanner, VendingMachine machine) {
+                this.scanner = scanner;
+                this.machine = machine;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Bye");
+                        break;
+                    }
+                    if (command.equals("coin")) {
+                        this.machine.insert(Integer.valueOf(this.scanner.nextLine()));
+                        System.out.println("Credit: " + this.machine.getCredit());
+                    } else if (command.equals("buy")) {
+                        if (this.machine.buy()) {
+                            System.out.println("Enjoy! Credit: " + this.machine.getCredit());
+                        } else {
+                            System.out.println("Not enough credit");
+                        }
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                VendingMachine machine = new VendingMachine(180);
+                UserInterface ui = new UserInterface(scanner, machine);
+                ui.start();
+            }
+        }
+    hints:
+      - "The machine remembers two numbers: the price, given to the constructor, and the credit, which starts at 0."
+      - "In `buy()`, return `false` first when `this.credit < this.price`. Otherwise take the price off the credit and return `true`."
+    forbid:
+      - pattern: \bclass\s+VendingMachine\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+UserInterface\b
+        message: "VendingMachine doesn't print. `buy()` returns `true` or `false`, and the user interface prints the messages."
+    tests:
+      - stdin: |
+          coin
+          100
+          buy
+          coin
+          100
+          buy
+          quit
+      - stdin: |
+          buy
+          coin
+          180
+          buy
+          buy
+          snack
+          quit
+        hidden: true
+      - call: |
+          VendingMachine cheap = new VendingMachine(50);
+          cheap.insert(120);
+          System.out.println(cheap.buy() + " " + cheap.buy() + " " + cheap.buy() + " " + cheap.getCredit());
+        hidden: true

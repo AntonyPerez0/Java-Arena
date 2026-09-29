@@ -1,4 +1,4 @@
-// Replays every program of the lessons in the browser engine (headless Chromium, the built site's
+// Replays every program of the lessons and drills in the browser engine (headless Chromium, the built site's
 // own worker code) and compares with the reference JDK's results, which scripts/build-content.mjs
 // wrote to fidelity/out/content-checks.json: every solution on every test input, every example,
 // and javac's exact message for every example that must not compile.
@@ -38,7 +38,9 @@ for (const c of checks) {
     if (got.compile.ok) problems.push("compiles in the browser, but not on the JDK");
     else if (got.compile.output !== c.javac) problems.push(`javac prints\n${c.javac}\nbut the browser compiler prints\n${got.compile.output}`);
   } else if (!got.compile.ok) problems.push(`does not compile in the browser:\n${got.compile.output}`);
-  else {
+  else if (c.kind === "compiles") {
+    // Compiling is the whole check ("Will it compile?" drills whose answer is yes).
+  } else {
     c.tests.forEach((t, i) => {
       const r = got.runs[i];
       runs++;

@@ -24,9 +24,34 @@ export type StepProgress = {
 
 export type Theme = "system" | "dark" | "light";
 
+/** A drill's spaced-review state: Leitner box 1 to 5, and when it's due again. */
+export type DrillStat = { box: number; right: number; wrong: number; last: number; due: number };
+
+export type DmMode = "deathmatch" | "casual" | "warmup" | "interview";
+
+export type RunRecord = { at: number; mode: DmMode; streak: number; reps: number; kills: number };
+
+export type DmStats = {
+  /** Best streak per mode (warm-up: most reviews cleared in one run). */
+  best: Record<DmMode, number>;
+  /** The latest runs, newest first (at most 50). */
+  runs: RunRecord[];
+  reps: number;
+  kills: number;
+  bossKills: number;
+  /** Reps answered per local day (YYYY-MM-DD). */
+  days: Record<string, number>;
+};
+
 export type State = {
   version: 1;
   steps: Record<string, StepProgress>;
+  drills: Record<string, DrillStat>;
+  dm: DmStats;
+  /** Daily challenge: the local date and whether the first answer was right. */
+  daily: Record<string, boolean>;
+  /** Modules the placement quiz said the learner already knows. */
+  placed: string[];
   /** When "Delete all progress" was last used, so another open tab doesn't bring the old progress back. */
   resetAt?: number;
   settings: {
@@ -35,6 +60,16 @@ export type State = {
     textScale: number;
     /** Download the Java engine without asking, even on mobile data or an unknown connection. */
     mobileData: boolean;
+    /** Deathmatch: sound effects (off unless turned on). */
+    sound: boolean;
+    /** Deathmatch: every module's drills, without finishing its steps first. */
+    unlockAll: boolean;
+    /** Deathmatch: the chosen modules, or null for all unlocked ones. */
+    topics: string[] | null;
+    /** Deathmatch: a coding challenge ("boss rep") every 8th rep. */
+    boss: boolean;
+    /** Deathmatch: single-key shortcuts (Y and N, line numbers, A to D, R). */
+    keys: boolean;
   };
 };
 
@@ -50,10 +85,16 @@ function read(key: string): string | null {
   }
 }
 
+const freshDm = (): DmStats => ({ best: { deathmatch: 0, casual: 0, warmup: 0, interview: 0 }, runs: [], reps: 0, kills: 0, bossKills: 0, days: {} });
+
 const fresh = (): State => ({
   version: 1,
   steps: {},
-  settings: { theme: "system", textScale: 1, mobileData: read(MOBILE_KEY) === "1" },
+  drills: {},
+  dm: freshDm(),
+  daily: {},
+  placed: [],
+  settings: { theme: "system", textScale: 1, mobileData: read(MOBILE_KEY) === "1", sound: false, unlockAll: false, topics: null, boss: true, keys: true },
 });
 
 /** Fill in anything an older save is missing. */
@@ -61,7 +102,19 @@ function normalize(s: Partial<State>): State {
   const f = fresh();
   const steps: Record<string, StepProgress> = {};
   for (const [id, p] of Object.entries(s.steps ?? {})) steps[id] = { done: !!p.done, doneAt: p.doneAt, clean: p.clean, challenges: p.challenges ?? {} };
-  return { ...f, ...s, version: 1, steps, resetAt: typeof s.resetAt === "number" ? s.resetAt : undefined, settings: { ...f.settings, ...s.settings } };
+  const dm = { ...f.dm, ...s.dm, best: { ...f.dm.best, ...s.dm?.best } };
+  return {
+    ...f,
+    ...s,
+    version: 1,
+    steps,
+    drills: s.drills ?? {},
+    dm,
+    daily: s.daily ?? {},
+    placed: Array.isArray(s.placed) ? s.placed : [],
+    resetAt: typeof s.resetAt === "number" ? s.resetAt : undefined,
+    settings: { ...f.settings, ...s.settings },
+  };
 }
 
 function load(): State {
@@ -100,22 +153,40 @@ function mergeStep(a: StepProgress | undefined, b: StepProgress | undefined): St
   return { done: a.done || b.done, doneAt: times.length ? Math.min(...times) : undefined, clean: (a.done && a.clean) || (b.done && b.clean) || undefined, challenges };
 }
 
+/** Practice in both tabs counts: the drill state with more answers wins, and totals keep the higher count. */
+function mergeDm(a: State, b: State): Pick<State, "drills" | "dm" | "daily"> {
+  const drills: Record<string, DrillStat> = { ...a.drills };
+  for (const [id, st] of Object.entries(b.drills)) {
+    const o = drills[id];
+    if (!o || st.right + st.wrong > o.right + o.wrong || (st.right + st.wrong === o.right + o.wrong && st.last > o.last)) drills[id] = st;
+  }
+  const best = { ...a.dm.best };
+  for (const k of Object.keys(best) as DmMode[]) best[k] = Math.max(a.dm.best[k] ?? 0, b.dm.best[k] ?? 0);
+  const days = { ...a.dm.days };
+  for (const [d, n] of Object.entries(b.dm.days)) days[d] = Math.max(days[d] ?? 0, n);
+  const seen = new Set<number>();
+  const runs = [...a.dm.runs, ...b.dm.runs].sort((x, y) => y.at - x.at).filter((r) => !seen.has(r.at) && seen.add(r.at)).slice(0, 50);
+  const dm = { best, runs, days, reps: Math.max(a.dm.reps, b.dm.reps), kills: Math.max(a.dm.kills, b.dm.kills), bossKills: Math.max(a.dm.bossKills, b.dm.bossKills) };
+  // The first answer of the day is the one that counts.
+  return { drills, dm, daily: { ...b.daily, ...a.daily } };
+}
+
 /**
  * Combines the saved progress (possibly written by another tab) with this tab's: a step or challenge
- * done in either stays done. After "Delete all progress" in one tab, the newer reset wins. Settings
- * come from `settingsFrom`.
+ * done in either stays done, and practice in either counts. After "Delete all progress" in one tab,
+ * the newer reset wins. Settings and placement skips come from `settingsFrom`.
  */
 function merge(saved: State, local: State, settingsFrom: "saved" | "local"): State {
-  const settings = settingsFrom === "saved" ? saved.settings : local.settings;
+  const from = settingsFrom === "saved" ? saved : local;
   const savedReset = saved.resetAt ?? 0;
   const localReset = local.resetAt ?? 0;
   if (savedReset !== localReset) {
     const newer = savedReset > localReset ? saved : local;
-    return { ...newer, settings };
+    return { ...newer, settings: from.settings };
   }
   const steps: Record<string, StepProgress> = {};
   for (const id of new Set([...Object.keys(saved.steps), ...Object.keys(local.steps)])) steps[id] = mergeStep(saved.steps[id], local.steps[id]);
-  return { ...local, steps, settings };
+  return { ...local, steps, ...mergeDm(saved, local), placed: from.placed, settings: from.settings };
 }
 
 function write() {
@@ -126,7 +197,7 @@ function write() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const merged = merge(normalize(JSON.parse(raw)), state, "local");
-      if (JSON.stringify(merged.steps) !== JSON.stringify(state.steps)) {
+      if (JSON.stringify(merged) !== JSON.stringify(state)) {
         state = merged;
         notify();
       }
@@ -207,6 +278,11 @@ export function patchSettings(patch: Partial<State["settings"]>) {
 
 /** Where the Playground keeps its program (separate from progress, but deleted with it). */
 export const PLAYGROUND_KEY = "java-arena-playground";
+
+/** The learner's local date as YYYY-MM-DD (the daily challenge changes at local midnight). */
+export function localDay(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export function resetProgress() {
   update((s) => ({ ...fresh(), resetAt: Date.now(), settings: s.settings }));

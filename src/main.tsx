@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App, { loadPlayground, loadStepPage } from "./App";
+import App, { loadPlayground, loadPractice, loadStepPage } from "./App";
 import { loadModule } from "./content";
 import "./styles.css";
 
@@ -9,11 +9,14 @@ import "./styles.css";
 const base = import.meta.env.BASE_URL;
 const path = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : location.pathname;
 const lesson = /^learn\/([^/]+)\/[^/]+/.exec(path);
+const practice = loadPractice[path.replace(/\/$/, "")];
 const ready = lesson
   ? Promise.all([loadStepPage(), loadModule(lesson[1])]).catch(() => undefined)
   : /^playground\/?$/.test(path)
     ? loadPlayground().catch(() => undefined)
-    : Promise.resolve();
+    : practice
+      ? practice().catch(() => undefined)
+      : Promise.resolve();
 
 ready.then(() => {
   ReactDOM.createRoot(document.getElementById("root")!).render(

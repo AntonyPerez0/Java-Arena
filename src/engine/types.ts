@@ -21,6 +21,8 @@ export type CompileResult = {
   diagnostics: Diagnostic[];
   classes: ClassFile[];
   ms: number;
+  /** Everything javac printed, exactly as the javac command prints it (with the "1 error" line). */
+  output?: string;
   /** Set when the compiler itself failed (not the learner's code). */
   internalError?: string;
 };

@@ -1,8 +1,12 @@
-// A static server for dist/ that behaves like GitHub Pages: files under BASE_PATH, no special headers.
+// A static server for dist/ that behaves like GitHub Pages: files under BASE_PATH, 404.html for
+// unknown addresses, and text files gzip-compressed when the browser accepts it.
 import { createServer } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
+// GitHub Pages compresses text responses; binary files (.wasm, .gz, .zip, fonts) are sent as they are.
+const COMPRESSED = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.txt', '.xml', '.webmanifest']);
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -40,8 +44,15 @@ export function serve({ dir = new URL('../dist', import.meta.url).pathname, base
       res.writeHead(404, { 'Content-Type': TYPES['.html'] }).end(existsSync(notFound) ? readFileSync(notFound) : 'not found');
       return;
     }
-    res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
-    res.end(readFileSync(file));
+    const headers = { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' };
+    let body = readFileSync(file);
+    if (COMPRESSED.has(extname(file)) && /\bgzip\b/.test(req.headers['accept-encoding'] ?? '')) {
+      body = gzipSync(body);
+      headers['Content-Encoding'] = 'gzip';
+      headers['Vary'] = 'Accept-Encoding';
+    }
+    res.writeHead(200, headers);
+    res.end(body);
   });
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve({ server, url: `http://127.0.0.1:${server.address().port}${base}` })));
 }

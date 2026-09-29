@@ -6,7 +6,7 @@ module.exports = {
     collect: {
       startServerCommand: "node scripts/serve.mjs",
       startServerReadyPattern: "Serving dist",
-      url: [`${origin}${base}`, `${origin}${base}bench/`],
+      url: [`${origin}${base}`, `${origin}${base}learn/`, `${origin}${base}learn/printing/first-program/`, `${origin}${base}bench/`],
       numberOfRuns: 3,
       settings: { chromeFlags: "--no-sandbox --headless=new" },
     },

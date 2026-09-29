@@ -1,11 +1,15 @@
-// After vite build: fills in the service worker's file list and version, and writes the sitemap.
+// After vite build and scripts/prerender.mjs: fills in the service worker's file list and version,
+// and checks the workers' size budgets.
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { writeNpmLicenses } from './npm-licenses.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const dist = join(root, 'dist');
-const siteUrl = (process.env.SITE_URL ?? 'https://antonyperez0.github.io/Java-Arena').replace(/\/$/, '');
+
+const licenses = writeNpmLicenses(root, join(dist, 'licenses', 'npm-packages.txt'));
+console.log(`finish-build: licenses of ${licenses.count} npm packages in licenses/npm-packages.txt`);
 
 function walk(dir) {
   const out = [];
@@ -20,8 +24,10 @@ function walk(dir) {
 const files = walk(dist)
   .map((f) => relative(dist, f).split('\\').join('/'))
   .filter((f) => !f.startsWith('engine/') && f !== 'sw.js' && !f.endsWith('.map'));
+// Pages and their files are saved for offline use; license texts are not needed offline.
+const offline = (f) => !f.startsWith('licenses/') && f !== 'robots.txt' && f !== 'sitemap.xml';
 const assets = files
-  .filter((f) => f !== 'robots.txt' && f !== 'sitemap.xml')
+  .filter(offline)
   .map((f) => (f.endsWith('index.html') ? f.slice(0, -'index.html'.length) : f));
 const hash = createHash('sha256');
 for (const f of files.sort()) hash.update(f).update(readFileSync(join(dist, f)));
@@ -33,13 +39,7 @@ const sw = readFileSync(swPath, 'utf8')
   .replace('const ASSETS = [];', `const ASSETS = ${JSON.stringify(assets)};`);
 writeFileSync(swPath, sw);
 
-const pages = ['', 'bench/'];
-writeFileSync(
-  join(dist, 'sitemap.xml'),
-  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages.map((p) => `  <url><loc>${siteUrl}/${p}</loc></url>`).join('\n')}\n</urlset>\n`,
-);
-writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}/sitemap.xml\n`);
-console.log(`finish-build: service worker ${version} with ${assets.length} files; sitemap with ${pages.length} pages`);
+console.log(`finish-build: service worker ${version} with ${assets.length} files`);
 
 // Lighthouse's script budget only sees the page's own scripts, so the workers get their own budget.
 const WORKER_BUDGET = { 'compile.worker': 100_000, 'run.worker': 600_000 };

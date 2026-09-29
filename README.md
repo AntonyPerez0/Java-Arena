@@ -10,11 +10,19 @@ The site is built in batches, one pull request per batch.
 
 | Batch | What | Status |
 |---|---|---|
-| 1 | Java engine prototype: javac 21 and a JVM running in the browser, fidelity suite, CI | this batch |
-| 2 | Site foundation: design, content pipeline, lesson pages, modules 1 and 2 | next |
-| 3 to 20 | Parts 1 to 14 of the course, practice, projects, Pro Track, tools, polish | planned |
+| 1 | Java engine prototype: javac 21 and a JVM running in the browser, fidelity suite, CI | done |
+| 2 | Site foundation: design, lesson content pipeline, lesson pages, modules 1 and 2 | this batch |
+| 3 | Rest of MOOC part 1 (modules 3 to 6) and the Playground | next |
+| 4 to 20 | Parts 2 to 14 of the course, practice, projects, Pro Track, tools, polish | planned |
 
 The plan and the research behind it are in [`docs/research/`](docs/research/README.md), including the full curriculum map.
+
+## The site
+
+- **Pages**: a home page, the course plan (all 59 planned modules; the ones not written yet are marked), a page per module, a lesson page per step, settings and about. React 18 with React Router; every page is also pre-rendered as plain HTML for search engines and link previews (`scripts/prerender.mjs`), with a sitemap. The design is adapted from C/C++ Arena's: light and dark themes, four text sizes, and a desktop layout where the lesson and the editor fill the window.
+- **Lessons**: each step has a short lesson and three challenges: fill-in blanks, programs to fix, or programs to write, graded by input and output tests (some hidden, so answers can't be typed in directly) plus optional rules about the code (for example "use exactly three println statements"). Hints unlock one at a time and a solution after all hints or three checks. Compile errors and crashes get plain-English explanations. On phones a row of symbol keys (including `sout` for `System.out.println();`) sits under the editor. Every challenge has a "Report a problem" link that opens a GitHub issue with the code filled in.
+- **Content**: lessons are YAML files in [`content/`](content/README.md). The build compiles and runs every solution and example with the reference JDK, so the expected outputs are real, and then CI replays them in the browser engine.
+- **Progress** is saved in the browser (localStorage). The site works offline once visited (a service worker keeps the pages; the engine keeps its own copy) and can be installed as an app.
 
 ## How the engine works
 
@@ -33,15 +41,17 @@ Needs Node 22. The reference JDK (Eclipse Temurin 21.0.10+7) is fetched by `scri
 
 ```bash
 npm install        # also copies the built engine into public/engine
-npm run dev        # http://localhost:5173/ and /bench/
+npm run dev        # checks the lessons, then serves http://localhost:5173/
 ```
 
 | Script | What it does |
 |---|---|
-| `npm run build` | Type-checks and builds `dist/` (service worker file list, sitemap) |
+| `npm run content` | Checks every lesson on the reference JDK and writes `src/generated/` |
+| `npm run build` | Checks the lessons, type-checks and builds `dist/` (pre-rendered pages, service worker, sitemap) |
+| `npm run content:browser` | Replays every lesson program in the built site's engine in headless Chromium and compares with the JDK |
 | `npm run fidelity:jdk` | Runs the fidelity suite on the local JDK (`fidelity/out/jdk.json`) |
 | `npm run fidelity:browser` | Runs the suite through the built site's engine in headless Chromium and compares (`fidelity/out/report.md`) |
-| `npm run test:e2e` | Browser tests of the built site: engine, errors and crashes, endless loops, mobile-data prompt, offline, axe (WCAG 2.2 AA) in both themes and at phone widths. `-- --shots dir` saves screenshots |
+| `npm run test:e2e` | Browser tests of the built site: pre-rendered pages, lessons (fill-ins, code, hidden tests, rules, hints, progress), the engine, errors and crashes, endless loops, the mobile-data question, offline, axe (WCAG 2.2 AA) on every page type in both themes and at phone widths. `-- --shots dir` saves screenshots |
 
 Rebuilding the engine itself is only needed when changing it: see `engine/compiler/README.md` and `engine/runner/README.md`.
 
@@ -51,4 +61,4 @@ Rebuilding the engine itself is only needed when changing it: see `engine/compil
 
 ## License
 
-Site code: MIT (see [LICENSE](LICENSE) for what it covers). Lesson content, once added under `content/`, will be licensed CC BY-NC-SA 4.0, as it follows the CC BY-NC-SA 4.0 licensed MOOC. Third-party components keep their own licenses.
+Site code: MIT (see [LICENSE](LICENSE) for what it covers). Lesson content in `content/` is licensed CC BY-NC-SA 4.0 ([content/README.md](content/README.md)), as it follows the CC BY-NC-SA 4.0 licensed MOOC. Third-party components keep their own licenses ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).

@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from "vite";
+import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
 // The engine's JavaScript glue can load its own files relative to import.meta.url when no loader
@@ -30,10 +31,12 @@ function skipEngineSelfLoading(): Plugin {
 // publishing to a github.io project page.
 export default defineConfig({
   base: process.env.BASE_PATH ?? "/",
-  plugins: [skipEngineSelfLoading()],
+  plugins: [skipEngineSelfLoading(), react()],
   worker: { format: "es", plugins: () => [skipEngineSelfLoading()] },
   build: {
     target: "es2022",
+    // The lesson page's chunk holds the code editor (CodeMirror), about 530 kB before compression.
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       input: {
         main: resolve(__dirname, "index.html"),

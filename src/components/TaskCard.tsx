@@ -12,6 +12,7 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
   const others = ex.tests.filter((t) => t !== shown);
   const moreTests = others.length;
   const hiddenCount = others.filter((t) => t.hidden).length;
+  const what = shown?.call ? "calls" : "input";
   // The expected output gets its own box below, so a copy of it in the task text is dropped.
   const text = shown ? withoutBlock(task, shown.expect) : task;
   return (
@@ -31,7 +32,15 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
       {ex.kind === "predict" && <p className="task-note">Read the program below and type each line it prints. The answers are what Java really prints for it.</p>}
       {shown && (
         <div className="task-expect">
-          <div className={"task-io" + (shown.stdin ? " two" : "")}>
+          <div className={"task-io" + (shown.stdin || shown.call ? " two" : "")}>
+            {shown.call ? (
+              <div>
+                <div className="lbl">The check runs</div>
+                <pre className="console tiny" tabIndex={0}>
+                  {shown.call.replace(/\n$/, "")}
+                </pre>
+              </div>
+            ) : null}
             {shown.stdin ? (
               <div>
                 <div className="lbl">Input</div>
@@ -50,8 +59,8 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
           {moreTests > 0 && (
             <p className="task-note">
               {hiddenCount === moreTests
-                ? `${moreTests} more hidden ${moreTests === 1 ? "test uses" : "tests use"} other input, so the answer can't be typed in directly.`
-                : `${moreTests} more ${moreTests === 1 ? "test uses" : "tests use"} other input${hiddenCount ? ", some of them hidden so the answer can't be typed in directly" : ""}.`}
+                ? `${moreTests} more hidden ${moreTests === 1 ? "test uses" : "tests use"} other ${what}, so the answer can't be typed in directly.`
+                : `${moreTests} more ${moreTests === 1 ? "test uses" : "tests use"} other ${what}${hiddenCount ? ", some of them hidden so the answer can't be typed in directly" : ""}.`}
             </p>
           )}
         </div>

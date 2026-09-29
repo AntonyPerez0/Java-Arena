@@ -83,6 +83,20 @@ Two more kinds of challenge settings:
 
 Every solution, example and predict program must itself be indented to match its braces (4 spaces per level); the build checks it.
 
+A test can call the learner's methods instead of running `main`:
+
+```yaml
+    tests:
+      - call: countdown(3);          # Java statements, written as they'd be inside Main
+      - call: |
+          int smaller = smaller(3, 7);
+          System.out.println(smaller);
+        hidden: true
+      - stdin: "5"                   # a test without `call` still runs main
+```
+
+The site compiles a hidden class, `ArenaCheck extends Main`, whose `main` runs the test's code (so a call reads exactly as it would inside `Main`), and grades what it prints. The build does the same on the JDK. When the learner's own code compiles but the check can't call it (a misspelled name, other parameter types, a `private` or non-`static` method, a `void` method whose value is used), the learner gets a plain explanation that names the call instead of the check program's javac errors. A test named after a one-line call shows that call as its name.
+
 Every Java block in lesson text says what it is:
 
 - ` ```java run ` a complete program; it's compiled and run. An ` ```input ` block right after it is what it reads, and an ` ```output ` block after that must be exactly what it prints.

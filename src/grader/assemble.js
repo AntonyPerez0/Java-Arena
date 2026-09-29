@@ -117,3 +117,28 @@ export function mainProgram(statements, imports = "") {
     .join("\n");
   return `${imports}public class Main {\n    public static void main(String[] args) {\n${body}\n    }\n}\n`;
 }
+
+/** The hidden class that calls the learner's methods in tests with a `call`. */
+export const CHECK_CLASS = "ArenaCheck";
+export const CHECK_FILE = "ArenaCheck.java";
+
+/**
+ * The check program for a challenge whose tests call methods: `ArenaCheck extends Main`, so a call
+ * reads exactly as it would inside Main (`printStars(3);`). It runs with the test's number as its
+ * only argument; a test without a call runs Main's own main method. Returns the source and, for
+ * each test, the lines its code is on (to tell which call a compile error belongs to).
+ */
+export function checkSource(tests) {
+  const lines = [`public class ${CHECK_CLASS} extends Main {`, "    public static void main(String[] args) {", "        switch (args[0]) {"];
+  const ranges = [];
+  tests.forEach((t, i) => {
+    lines.push(`            case "${i}" -> {`);
+    const from = lines.length + 1;
+    const body = t.call == null ? "Main.main(new String[0]);" : String(t.call).replace(/\s+$/, "");
+    for (const l of body.split("\n")) lines.push(l ? "                " + l : l);
+    ranges.push({ from, to: lines.length });
+    lines.push("            }");
+  });
+  lines.push("            default -> {", "            }", "        }", "    }", "}", "");
+  return { text: lines.join("\n"), ranges };
+}

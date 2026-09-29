@@ -38,8 +38,10 @@ async function shot(page, name) {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
 }
 async function axe(page, label) {
+  // Colour contrast is measured on what's painted: wait for fade-ins (the pass banner's) to end.
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity), null, { timeout: 5000 });
   const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
-  expect(r.violations.length === 0, `${label}: ${r.violations.map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0]?.target}`).join('; ')}`);
+  expect(r.violations.length === 0, `${label}: ${r.violations.map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0]?.target} ${v.nodes[0]?.any?.[0]?.message ?? ''}`).join('; ')}`);
 }
 async function noOverflow(page, label) {
   const w = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
@@ -316,6 +318,29 @@ const lessonSession = await newPage();
     await setCode(page, 'public class Main {\npublic static void main(String[] args) {\nSystem.out.println("Semicolons end the line,");\nSystem.out.println("braces keep the blocks in line,");\nSystem.out.println("println makes the output shine.");\n}\n}\n');
     const out = await check(page);
     expect(out.includes('All tests passed') && /style note \(doesn't affect passing\)/i.test(out) && out.includes('Line 2 is indented 0 spaces'), out);
+  });
+  await test('a method challenge: the check calls the method, and explains why it can\'t', async () => {
+    await page.goto(BASE + 'learn/methods/parameters/');
+    await lessonReady(page);
+    await page.click('text=Challenge 2');
+    await page.locator('.cm-content').waitFor();
+    const card = await page.locator('.task-card').innerText();
+    expect(/the check runs/i.test(card) && card.includes('countdown(3);') && card.includes('Liftoff!'), card);
+    const withMethod = (m) => `public class Main {\n    public static void main(String[] args) {\n        countdown(3);\n    }\n\n${m}\n}\n`;
+    // A private method compiles (main is inside Main) but the check can't call it: one plain reason.
+    await setCode(page, withMethod('    private static void countdown(int start) {\n        System.out.println("Liftoff!");\n    }'));
+    let out = await check(page);
+    expect(out.includes("The check couldn't call your method") && out.includes('is private') && out.split('is private').length === 2, out);
+    // A crash inside the method: explained with the learner's own line, without the check's frames.
+    await setCode(page, withMethod('    public static void countdown(int start) {\n        System.out.println(10 / (start - 3));\n    }'));
+    out = await check(page);
+    expect(out.includes('ArithmeticException') && out.includes('line 7, in countdown'), out);
+    const stderr = await page.locator('details.stderr pre').first().textContent();
+    expect(stderr.includes('Main.countdown') && !stderr.includes('ArenaCheck'), stderr);
+    await setCode(page, withMethod('    public static void countdown(int start) {\n        for (int i = start; i >= 1; i--) {\n            System.out.println(i);\n        }\n        System.out.println("Liftoff!");\n    }'));
+    out = await check(page);
+    expect(out.includes('All tests passed'), out);
+    await axe(page, 'method challenge');
   });
   await test('the indentation check accepts switch, multi-line headers, lambdas and other brace styles', async () => {
     const ok = {

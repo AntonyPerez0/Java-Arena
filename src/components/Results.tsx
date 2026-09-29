@@ -73,6 +73,22 @@ export default function Results({ result }: { result: GradeResult }) {
           <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} />
         </>
       )}
+      {result.status === "call-error" && (
+        <>
+          <div className="banner banner-fail">
+            <span>
+              <CircleX className="icon" aria-hidden="true" /> The check couldn't call your method
+            </span>
+          </div>
+          <ul className="rules" aria-label="Why the check couldn't call your method">
+            {result.callProblems.map((p, i) => (
+              <li key={i}>
+                <InlineMd text={p} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {result.status === "internal-error" && (
         <div className="banner banner-fail">
           <span>The Java engine couldn't check this ({result.internalError}). Try again; if it keeps happening, reload the page.</span>
@@ -112,6 +128,14 @@ export default function Results({ result }: { result: GradeResult }) {
                 </div>
                 {!t.pass && !t.hidden && (
                   <div className="t-detail">
+                    {t.call && t.call.trim() !== t.name ? (
+                      <div>
+                        <span className="lbl">the check ran</span>
+                        <pre tabIndex={0} className="console tiny">
+                          {t.call.replace(/\n$/, "")}
+                        </pre>
+                      </div>
+                    ) : null}
                     {t.stdin ? (
                       <div>
                         <span className="lbl">input</span>

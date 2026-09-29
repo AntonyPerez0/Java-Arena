@@ -662,6 +662,11 @@ for (const width of [360, 390]) {
       await axe(page, `${p || 'home'} ${width}`);
       await shot(page, `phone-${width}-${p.replace(/\//g, '_') || 'home'}`);
     }
+    // The course list gives module titles the room they need (no empty column beside them).
+    await page.goto(BASE + 'learn/');
+    await page.locator('.module-live').first().waitFor();
+    const titleWidth = await page.locator('.module-live .module-title').nth(2).evaluate((e) => e.getBoundingClientRect().width);
+    expect(titleWidth > width * 0.45, `module title only ${Math.round(titleWidth)} px wide`);
     await page.goto(BASE + 'learn/reading-input/reading-a-line/');
     await lessonReady(page);
     await page.fill('input.blank >> nth=0', 'Scanner');

@@ -1,0 +1,1743 @@
+id: class-design
+summary: Designing classes of your own. Turning a program of plain variables into objects, deciding a class's instance variables, constructor and methods from a description, several constructors for one class, one constructor calling another with `this(...)`, and methods with the same name. The start of MOOC part 5.
+steps:
+  - id: class-design-objects
+    slug: from-variables-to-objects
+    title: Turning a program into objects
+    text: |
+      This module is about designing classes: deciding what a class should hold and do, and giving it several constructors, or several methods of the same name. It starts with why a class of your own is worth writing at all.
+
+      ### A program of plain variables
+
+      Here's a program that follows two people's steps for a day, written the way you'd have written it before module 17. The goal is 10000 steps a day.
+
+      ```java main
+      String firstName = "Noor";
+      int firstSteps = 0;
+      String secondName = "Theo";
+      int secondSteps = 0;
+
+      firstSteps = firstSteps + 6200;
+      secondSteps = secondSteps + 3100;
+      firstSteps = firstSteps + 4500;
+
+      if (firstSteps >= 10000) {
+          System.out.println(firstName + ": " + firstSteps + " steps, goal reached");
+      } else {
+          System.out.println(firstName + ": " + firstSteps + " steps");
+      }
+      if (secondSteps >= 10000) {
+          System.out.println(secondName + ": " + secondSteps + " steps, goal reached");
+      } else {
+          System.out.println(secondName + ": " + secondSteps + " steps");
+      }
+      ```
+
+      ```output
+      Noor: 10700 steps, goal reached
+      Theo: 3100 steps
+      ```
+
+      It works, but look at what it takes:
+
+      - Four variables, and only their names say that `firstName` and `firstSteps` belong together.
+      - The goal check is written twice. To change the goal, you have to find and change both copies.
+      - A third person means two more variables and a copy of every line that uses them. Write `firstSteps` in one of the copies where you meant `secondSteps`, and the program adds the steps to the wrong person, without any error message.
+
+      ### The same program with objects
+
+      Each person has a name and a number of steps, and the same goal applies to everyone. That's a class: a `StepCounter` holds one person's name and steps, and knows the goal.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              StepCounter noor = new StepCounter("Noor");
+              StepCounter theo = new StepCounter("Theo");
+
+              noor.walk(6200);
+              theo.walk(3100);
+              noor.walk(4500);
+
+              System.out.println(noor);
+              System.out.println(theo);
+          }
+      }
+      // ==== StepCounter.java ====
+      public class StepCounter {
+          private String name;
+          private int steps;
+
+          public StepCounter(String name) {
+              this.name = name;
+              this.steps = 0;
+          }
+
+          public void walk(int steps) {
+              this.steps = this.steps + steps;
+          }
+
+          public String toString() {
+              if (this.steps >= 10000) {
+                  return this.name + ": " + this.steps + " steps, goal reached";
+              }
+              return this.name + ": " + this.steps + " steps";
+          }
+      }
+      ```
+
+      ```output
+      Noor: 10700 steps, goal reached
+      Theo: 3100 steps
+      ```
+
+      The output is the same, but the program reads differently:
+
+      - `main` tells what happens in the words of the problem: Noor walks 6200 steps, Theo walks 3100. How the steps are added up is the class's business.
+      - Each person's name and steps travel together in one object, so they can't get mixed up with someone else's.
+      - The goal is written once, in `toString`. Change it there, and it changes for everyone.
+      - A third person is one more line: `StepCounter maya = new StepCounter("Maya");`.
+
+      This is the idea behind **object-oriented programming**: a program is built from objects, and each object looks after its own data and the rules that go with it. A class stands for one idea of the problem (here, a step counter), its instance variables are what each object must remember, and its methods are what can be done with it. The rest of the program only calls the methods, just as it uses an ArrayList without knowing how it works inside.
+
+      A class is worth it even when there's only one object. A program about a single person is still easier to read with a `StepCounter`, because the names of the class and its methods say what the variables are for.
+
+      **Your turn:** in a game, a hero starts with 100 health. A hit takes health away, but never below 0, and healing gives health back, but never above 100. `Main.java` is ready and uses a `Hero` object. Write the class in `Hero.java`:
+
+      - `Hero(String name)` makes a hero with 100 health.
+      - `hit(int damage)` takes `damage` off the health. The health doesn't go below 0.
+      - `heal(int amount)` adds `amount` to the health. The health doesn't go above 100.
+      - `toString()` returns the name and the health, as in the output below.
+
+      The program prints:
+
+      ```
+      Aria, health 90
+      Aria, health 100
+      Aria, health 0
+      ```
+    seed:
+      Hero.java: |
+        public class Hero {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Hero hero = new Hero("Aria");
+                hero.hit(30);
+                hero.heal(20);
+                System.out.println(hero);
+                hero.heal(50);
+                System.out.println(hero);
+                hero.hit(120);
+                System.out.println(hero);
+            }
+        }
+    solution:
+      Hero.java: |
+        public class Hero {
+            private String name;
+            private int health;
+
+            public Hero(String name) {
+                this.name = name;
+                this.health = 100;
+            }
+
+            public void hit(int damage) {
+                this.health = this.health - damage;
+                if (this.health < 0) {
+                    this.health = 0;
+                }
+            }
+
+            public void heal(int amount) {
+                this.health = this.health + amount;
+                if (this.health > 100) {
+                    this.health = 100;
+                }
+            }
+
+            public String toString() {
+                return this.name + ", health " + this.health;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Hero hero = new Hero("Aria");
+                hero.hit(30);
+                hero.heal(20);
+                System.out.println(hero);
+                hero.heal(50);
+                System.out.println(hero);
+                hero.hit(120);
+                System.out.println(hero);
+            }
+        }
+    hints:
+      - "A hero must remember two things: `private String name;` and `private int health;`. The constructor stores the name and sets the health to 100."
+      - "`hit` subtracts and then sets the health back to 0 if it went below 0. `heal` adds and then sets it back to 100 if it went above 100. `toString` returns `this.name + \", health \" + this.health`."
+    require:
+      - pattern: \bprivate\s+\w+\s+\w+\s*[;=]
+        min: 2
+        message: "Keep the hero's name and health in private instance variables."
+    tests:
+      - name: The program
+      - call: |
+          Hero hero = new Hero("Bram");
+          System.out.println(hero);
+          hero.hit(100);
+          System.out.println(hero);
+          hero.heal(35);
+          System.out.println(hero);
+        hidden: true
+      - call: |
+          Hero first = new Hero("Cleo");
+          Hero second = new Hero("Dev");
+          first.hit(45);
+          second.hit(5);
+          second.heal(3);
+          System.out.println(first);
+          System.out.println(second);
+        hidden: true
+      - call: |
+          Hero hero = new Hero("Eli");
+          hero.heal(10);
+          System.out.println(hero);
+          hero.hit(250);
+          hero.hit(10);
+          System.out.println(hero);
+        hidden: true
+    more:
+      - task: |
+          This program counts the visitors at the two gates of a zoo. It reads a line for each visitor, `north` or `south`, until the line `end`, and then prints both counts. It keeps the counts in plain variables. `Gate.java` holds a class that does the counting: rewrite `main` so it uses two Gate objects instead of the two counters, gives each visitor to the right gate with `pass()`, and prints the gates. For the input `north`, `south`, `north` and `end`, one per line, the program still prints:
+
+          ```
+          North gate: 2
+          South gate: 1
+          ```
+        seed:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    int northVisitors = 0;
+                    int southVisitors = 0;
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.equals("end")) {
+                            break;
+                        }
+                        if (line.equals("north")) {
+                            northVisitors++;
+                        } else if (line.equals("south")) {
+                            southVisitors++;
+                        }
+                    }
+                    System.out.println("North gate: " + northVisitors);
+                    System.out.println("South gate: " + southVisitors);
+                }
+            }
+          Gate.java: |
+            public class Gate {
+                private String name;
+                private int visitors;
+
+                public Gate(String name) {
+                    this.name = name;
+                    this.visitors = 0;
+                }
+
+                public void pass() {
+                    this.visitors = this.visitors + 1;
+                }
+
+                public String toString() {
+                    return this.name + " gate: " + this.visitors;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Gate north = new Gate("North");
+                    Gate south = new Gate("South");
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.equals("end")) {
+                            break;
+                        }
+                        if (line.equals("north")) {
+                            north.pass();
+                        } else if (line.equals("south")) {
+                            south.pass();
+                        }
+                    }
+                    System.out.println(north);
+                    System.out.println(south);
+                }
+            }
+          Gate.java: |
+            public class Gate {
+                private String name;
+                private int visitors;
+
+                public Gate(String name) {
+                    this.name = name;
+                    this.visitors = 0;
+                }
+
+                public void pass() {
+                    this.visitors = this.visitors + 1;
+                }
+
+                public String toString() {
+                    return this.name + " gate: " + this.visitors;
+                }
+            }
+        hints:
+          - "Replace the two counters with two gates before the loop: `Gate north = new Gate(\"North\");` and `Gate south = new Gate(\"South\");`."
+          - "In the loop, `north.pass();` instead of `northVisitors++;`, and the same for south. At the end, `System.out.println(north);` prints the gate with its `toString`."
+        require:
+          - pattern: \bnew\s+Gate\s*\(
+            min: 2
+            message: "Create two gates with `new Gate(...)`, one for each side."
+          - pattern: \.pass\s*\(\s*\)
+            message: "Count each visitor with the gate's `pass()` method."
+        forbid:
+          - pattern: \b(northVisitors|southVisitors)\b
+            message: "Let the Gate objects do the counting: remove `northVisitors` and `southVisitors` from `main`."
+        tests:
+          - stdin: |
+              north
+              south
+              north
+              end
+          - stdin: |
+              end
+            hidden: true
+          - stdin: |
+              south
+              south
+              south
+              north
+              south
+              end
+            hidden: true
+          - stdin: |
+              west
+              north
+              end
+            hidden: true
+      - task: |
+          What does this program print? It uses the `Hero` class from the first challenge, with two heroes.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Hero aria = new Hero("Aria");
+                  Hero bram = new Hero("Bram");
+                  aria.hit(40);
+                  bram.hit(70);
+                  bram.heal(50);
+                  aria.hit(80);
+                  aria.heal(10);
+                  System.out.println(aria);
+                  System.out.println(bram);
+              }
+          }
+          // ==== Hero.java ====
+          public class Hero {
+              private String name;
+              private int health;
+
+              public Hero(String name) {
+                  this.name = name;
+                  this.health = 100;
+              }
+
+              public void hit(int damage) {
+                  this.health = this.health - damage;
+                  if (this.health < 0) {
+                      this.health = 0;
+                  }
+              }
+
+              public void heal(int amount) {
+                  this.health = this.health + amount;
+                  if (this.health > 100) {
+                      this.health = 100;
+                  }
+              }
+
+              public String toString() {
+                  return this.name + ", health " + this.health;
+              }
+          }
+        hints:
+          - "Follow each hero on their own. Aria goes from 100 to 60, and then a hit of 80 would take her below 0."
+          - "Bram goes from 100 to 30, and healing 50 takes him to 80, which is still under the limit of 100."
+
+  - id: class-design-designing
+    slug: designing-a-class
+    title: Designing a class
+    text: |
+      Writing a class starts before the code. From a description of the problem, you decide what the class holds and what it can do. Take this one:
+
+      > A train has a name and a number of cars. Every car seats 60 people. Cars can be added to the train and taken off it, but a train always keeps at least one car. We want to know how many seats a train has, and to print it like `Coast Line: 3 cars, 180 seats`.
+
+      Four questions lead from a description like this to a class.
+
+      **1. What must each object remember?** The answer gives the instance variables. A train must remember its name and its number of cars. They differ from train to train, and the cars can change: `private String name;` and `private int cars;`.
+
+      The seats are different: they follow from the number of cars. If the class kept them in a variable of their own, every method that changes the cars would also have to update the seats, and a single forgotten line would leave a train with 3 cars and 240 seats. A value that can be worked out from the others is best worked out by a method, each time it's needed. The 60 seats of a car are the same for every train, so that method can simply use the number 60.
+
+      **2. What does a new object need?** The answer gives the constructor's parameters. A new train needs its name. The description doesn't say how many cars a train starts with, so let it start with one: `public Train(String name)`.
+
+      **3. What can be done with it, and what do we want to know?** The answers give the methods. The things that are done, adding cars and taking them off, become methods that change the object: `addCar()` and `removeCar()`. The rule "at least one car" goes into `removeCar`, the only place where the cars go down. The question "how many seats?" becomes a method that returns a value: `seats()`.
+
+      **4. How should it look as text?** The answer goes in `toString`, which can call `seats()` instead of multiplying again.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Train train = new Train("Coast Line");
+              train.addCar();
+              train.addCar();
+              System.out.println(train);
+              train.removeCar();
+              train.removeCar();
+              train.removeCar();
+              System.out.println(train.seats());
+          }
+      }
+      // ==== Train.java ====
+      public class Train {
+          private String name;
+          private int cars;
+
+          public Train(String name) {
+              this.name = name;
+              this.cars = 1;
+          }
+
+          public void addCar() {
+              this.cars = this.cars + 1;
+          }
+
+          public void removeCar() {
+              if (this.cars > 1) {
+                  this.cars = this.cars - 1;
+              }
+          }
+
+          public int seats() {
+              return this.cars * 60;
+          }
+
+          public String toString() {
+              return this.name + ": " + this.cars + " cars, " + this.seats() + " seats";
+          }
+      }
+      ```
+
+      ```output
+      Coast Line: 3 cars, 180 seats
+      60
+      ```
+
+      - `main` doesn't need to know that the seats are worked out rather than stored: it just asks `seats()`.
+      - `toString` calls the object's own `seats()`, so "60 seats a car" is written in one place only.
+      - `removeCar` keeps the train at one car at least, whatever `main` does. The third `removeCar()` above changes nothing.
+
+      Designs can differ. Another program might need a constructor that also takes the number of cars, or a method that tells whether a group fits on the train. Start with what the description asks for: a method that nothing calls is only more code to read.
+
+      **Your turn:** here's a description. *A garden bed is a rectangle, with a length and a width in whole meters. Every square meter has room for 4 plants. We want to know a bed's area and how many plants it has room for, and to print it like `3 x 2 m, room for 24 plants`.*
+
+      Write the class `GardenBed`, with the constructor `GardenBed(int length, int width)` and the methods `area()`, `room()` and `toString()`. Keep only what a bed must remember in instance variables. `room()` should use `area()`, and `toString()` should use `room()`. The check creates `new GardenBed(3, 2)` and prints its area and then the bed:
+
+      ```
+      6
+      3 x 2 m, room for 24 plants
+      ```
+    seed:
+      GardenBed.java: |
+        public class GardenBed {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                GardenBed bed = new GardenBed(3, 2);
+                System.out.println(bed.area());
+                System.out.println(bed);
+            }
+        }
+    solution:
+      GardenBed.java: |
+        public class GardenBed {
+            private int length;
+            private int width;
+
+            public GardenBed(int length, int width) {
+                this.length = length;
+                this.width = width;
+            }
+
+            public int area() {
+                return this.length * this.width;
+            }
+
+            public int room() {
+                return this.area() * 4;
+            }
+
+            public String toString() {
+                return this.length + " x " + this.width + " m, room for " + this.room() + " plants";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                GardenBed bed = new GardenBed(3, 2);
+                System.out.println(bed.area());
+                System.out.println(bed);
+            }
+        }
+    hints:
+      - "A bed must remember its length and its width: two private `int` instance variables. The area and the room follow from them, so they're methods: `public int area()` and `public int room()`."
+      - "`area()` returns `this.length * this.width`, and `room()` returns `this.area() * 4`. `toString` builds the text with `this.room()`."
+    require:
+      - pattern: \barea\s*\(\s*\)
+        min: 3
+        message: "Write `area()`, and let `room()` call it instead of multiplying the length and the width again."
+      - pattern: \broom\s*\(\s*\)
+        min: 2
+        message: "Write `room()`, and let `toString()` call it."
+    forbid:
+      - pattern: \bprivate\s+int\s+(area|room)\b
+        message: "The area and the room follow from the length and the width: work them out in `area()` and `room()` instead of storing them in instance variables."
+    tests:
+      - call: |
+          GardenBed bed = new GardenBed(3, 2);
+          System.out.println(bed.area());
+          System.out.println(bed);
+      - call: |
+          GardenBed bed = new GardenBed(5, 4);
+          System.out.println(bed.area());
+          System.out.println(bed.room());
+          System.out.println(bed);
+        hidden: true
+      - call: |
+          GardenBed small = new GardenBed(1, 1);
+          GardenBed strip = new GardenBed(12, 1);
+          System.out.println(strip);
+          System.out.println(small);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? It uses the `Train` class from the lesson.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Train morning = new Train("Morning Express");
+                  Train night = new Train("Night Owl");
+                  morning.addCar();
+                  night.removeCar();
+                  night.addCar();
+                  night.addCar();
+                  morning.addCar();
+                  morning.removeCar();
+                  System.out.println(morning);
+                  System.out.println(night.seats());
+              }
+          }
+          // ==== Train.java ====
+          public class Train {
+              private String name;
+              private int cars;
+
+              public Train(String name) {
+                  this.name = name;
+                  this.cars = 1;
+              }
+
+              public void addCar() {
+                  this.cars = this.cars + 1;
+              }
+
+              public void removeCar() {
+                  if (this.cars > 1) {
+                      this.cars = this.cars - 1;
+                  }
+              }
+
+              public int seats() {
+                  return this.cars * 60;
+              }
+
+              public String toString() {
+                  return this.name + ": " + this.cars + " cars, " + this.seats() + " seats";
+              }
+          }
+        hints:
+          - "Every train starts with one car. The morning train gets two cars added and one taken off."
+          - "The night train can't lose its only car, so its `removeCar()` changes nothing. Then it gets two cars added, and `seats()` multiplies its cars by 60."
+      - task: |
+          A parcel locker at a station has a number of compartments, each for one parcel. Write the class `ParcelLocker`:
+
+          - `ParcelLocker(int compartments)` makes an empty locker with that many compartments.
+          - `free()` returns how many compartments are empty.
+          - `store()` puts a parcel in an empty compartment and returns `true`. When no compartment is free, it returns `false` and nothing changes. Use `free()` to check.
+          - `pickUp()` takes a parcel out. When the locker is empty, nothing changes.
+          - `toString()` returns how many compartments are in use, as in the output below.
+
+          Decide the instance variables yourself: what must a locker remember? The check makes a locker of 2 compartments, tries to store three parcels (printing what `store()` returns each time), prints the locker, picks up a parcel and prints `free()`:
+
+          ```
+          true
+          true
+          false
+          2 of 2 compartments in use
+          1
+          ```
+        seed:
+          ParcelLocker.java: |
+            public class ParcelLocker {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    ParcelLocker locker = new ParcelLocker(2);
+                    System.out.println(locker.store());
+                    System.out.println(locker.store());
+                    System.out.println(locker.store());
+                    System.out.println(locker);
+                    locker.pickUp();
+                    System.out.println(locker.free());
+                }
+            }
+        solution:
+          ParcelLocker.java: |
+            public class ParcelLocker {
+                private int compartments;
+                private int parcels;
+
+                public ParcelLocker(int compartments) {
+                    this.compartments = compartments;
+                    this.parcels = 0;
+                }
+
+                public int free() {
+                    return this.compartments - this.parcels;
+                }
+
+                public boolean store() {
+                    if (this.free() == 0) {
+                        return false;
+                    }
+                    this.parcels = this.parcels + 1;
+                    return true;
+                }
+
+                public void pickUp() {
+                    if (this.parcels > 0) {
+                        this.parcels = this.parcels - 1;
+                    }
+                }
+
+                public String toString() {
+                    return this.parcels + " of " + this.compartments + " compartments in use";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    ParcelLocker locker = new ParcelLocker(2);
+                    System.out.println(locker.store());
+                    System.out.println(locker.store());
+                    System.out.println(locker.store());
+                    System.out.println(locker);
+                    locker.pickUp();
+                    System.out.println(locker.free());
+                }
+            }
+        hints:
+          - "A locker must remember how many compartments it has and how many parcels are in it. The free compartments follow from those two, so `free()` works them out: `return this.compartments - this.parcels;`."
+          - "`store()` starts with `if (this.free() == 0) { return false; }`. After that there's room, so it adds a parcel and returns `true`. `pickUp()` takes one off only when there's at least one."
+        require:
+          - pattern: \bfree\s*\(\s*\)
+            min: 3
+            message: "Write `free()`, and let `store()` call it to check for an empty compartment."
+        forbid:
+          - pattern: \bprivate\s+int\s+free\b
+            message: "The free compartments follow from the other two numbers: work them out in `free()` instead of storing them."
+        tests:
+          - call: |
+              ParcelLocker locker = new ParcelLocker(2);
+              System.out.println(locker.store());
+              System.out.println(locker.store());
+              System.out.println(locker.store());
+              System.out.println(locker);
+              locker.pickUp();
+              System.out.println(locker.free());
+          - call: |
+              ParcelLocker locker = new ParcelLocker(4);
+              System.out.println(locker);
+              System.out.println(locker.free());
+              locker.pickUp();
+              System.out.println(locker.free());
+              System.out.println(locker.store());
+              System.out.println(locker);
+            hidden: true
+          - call: |
+              ParcelLocker locker = new ParcelLocker(1);
+              System.out.println(locker.store());
+              System.out.println(locker.store());
+              locker.pickUp();
+              locker.pickUp();
+              System.out.println(locker.store());
+              System.out.println(locker);
+            hidden: true
+
+  - id: class-design-constructors
+    slug: several-constructors
+    title: Several constructors
+    text: |
+      Some objects are nearly always made the same way. At a café, most coffee orders are for a medium cup, so writing `"medium"` in every order gets tiresome. A class can have more than one constructor, and `new` picks the one that fits:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              CoffeeOrder first = new CoffeeOrder("latte");
+              CoffeeOrder second = new CoffeeOrder("mocha", "large");
+              System.out.println(first);
+              System.out.println(second);
+          }
+      }
+      // ==== CoffeeOrder.java ====
+      public class CoffeeOrder {
+          private String drink;
+          private String size;
+
+          public CoffeeOrder(String drink) {
+              this.drink = drink;
+              this.size = "medium";
+          }
+
+          public CoffeeOrder(String drink, String size) {
+              this.drink = drink;
+              this.size = size;
+          }
+
+          public String toString() {
+              return this.size + " " + this.drink;
+          }
+      }
+      ```
+
+      ```output
+      medium latte
+      large mocha
+      ```
+
+      - Both constructors have the class's name, but different parameters. Constructors like these are called **overloaded** constructors.
+      - Java picks the constructor whose parameters fit the values in `new`. `new CoffeeOrder("latte")` gives one String, so it runs the first constructor. `new CoffeeOrder("mocha", "large")` gives two, so it runs the second. Values that fit no constructor, as in `new CoffeeOrder(2)`, don't compile.
+      - The first constructor fills in a **default value**: the size used when the order doesn't say one.
+
+      ### A constructor without parameters
+
+      Module 17 showed that Java adds a default constructor, without parameters, only to a class that has no constructor of its own. `CoffeeOrder` has two, so `new CoffeeOrder()` doesn't compile. If the café wants a quick way to order "the usual", the class needs a third constructor, written out:
+
+      ```java fragment
+      public CoffeeOrder() {
+          this.drink = "filter coffee";
+          this.size = "medium";
+      }
+      ```
+
+      A class can have as many constructors as it needs, in any order.
+
+      ### What makes constructors different
+
+      Constructors must differ in their **parameter types**: in the number of parameters, in their types, or in the order of the types. The parameter names don't count. Say the café wants a constructor for a drink and a kind of milk. It takes two Strings, just like the one for a drink and a size, so `new CoffeeOrder("tea", "oat")` couldn't say which one it meant, and javac doesn't allow it:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              CoffeeOrder order = new CoffeeOrder("tea", "oat");
+          }
+      }
+      // ==== CoffeeOrder.java ====
+      public class CoffeeOrder {
+          private String drink;
+          private String size;
+          private String milk;
+
+          public CoffeeOrder(String drink, String size) {
+              this.drink = drink;
+              this.size = size;
+              this.milk = "none";
+          }
+
+          public CoffeeOrder(String drink, String milk) {
+              this.drink = drink;
+              this.size = "medium";
+              this.milk = milk;
+          }
+      }
+      ```
+
+      ```javac
+      CoffeeOrder.java:12: error: constructor CoffeeOrder(String,String) is already defined in class CoffeeOrder
+          public CoffeeOrder(String drink, String milk) {
+                 ^
+      1 error
+      ```
+
+      `CoffeeOrder(String,String)` is the constructor as javac sees it: only the types, no names. A constructor for a drink, a size and a milk, `CoffeeOrder(String drink, String size, String milk)`, would be fine, since it takes three values.
+
+      **Your turn:** a library loan is usually for 14 days. `Loan.java` has a constructor that takes the book's title and the number of days. Add a second constructor, `Loan(String title)`, for a loan of 14 days. The check runs:
+
+      ```java fragment
+      Loan usual = new Loan("Moby Dick");
+      Loan quick = new Loan("Atlas of Birds", 7);
+      System.out.println(usual);
+      System.out.println(quick);
+      ```
+
+      and expects:
+
+      ```
+      Moby Dick, due in 14 days
+      Atlas of Birds, due in 7 days
+      ```
+    seed:
+      Loan.java: |
+        public class Loan {
+            private String title;
+            private int days;
+
+            public Loan(String title, int days) {
+                this.title = title;
+                this.days = days;
+            }
+
+            // Write the second constructor here.
+
+            public String toString() {
+                return this.title + ", due in " + this.days + " days";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Loan usual = new Loan("Moby Dick");
+                Loan quick = new Loan("Atlas of Birds", 7);
+                System.out.println(usual);
+                System.out.println(quick);
+            }
+        }
+    solution:
+      Loan.java: |
+        public class Loan {
+            private String title;
+            private int days;
+
+            public Loan(String title, int days) {
+                this.title = title;
+                this.days = days;
+            }
+
+            public Loan(String title) {
+                this.title = title;
+                this.days = 14;
+            }
+
+            public String toString() {
+                return this.title + ", due in " + this.days + " days";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Loan usual = new Loan("Moby Dick");
+                Loan quick = new Loan("Atlas of Birds", 7);
+                System.out.println(usual);
+                System.out.println(quick);
+            }
+        }
+    hints:
+      - "The new constructor has the same name and one parameter: `public Loan(String title) {`."
+      - "It stores the title from the parameter, and the default for the days: `this.title = title;` and `this.days = 14;`."
+    tests:
+      - call: |
+          Loan usual = new Loan("Moby Dick");
+          Loan quick = new Loan("Atlas of Birds", 7);
+          System.out.println(usual);
+          System.out.println(quick);
+      - call: |
+          Loan loan = new Loan("The Hobbit");
+          System.out.println(loan);
+        hidden: true
+      - call: |
+          Loan first = new Loan("Emma", 28);
+          Loan second = new Loan("Dracula");
+          System.out.println(second);
+          System.out.println(first);
+        hidden: true
+    more:
+      - task: |
+          A snowman has a number of snowballs and a nose. Write three constructors for the `Snowman` class:
+
+          - `Snowman()` makes the classic snowman: 3 balls and a `carrot` nose.
+          - `Snowman(int balls)` has that many balls, and a `carrot` nose.
+          - `Snowman(int balls, String nose)` has the balls and the nose given.
+
+          The instance variables and `toString` are ready. The check prints `new Snowman()`, `new Snowman(4)` and `new Snowman(2, "pine cone")`:
+
+          ```
+          3 balls, carrot nose
+          4 balls, carrot nose
+          2 balls, pine cone nose
+          ```
+        seed:
+          Snowman.java: |
+            public class Snowman {
+                private int balls;
+                private String nose;
+
+                // Write the three constructors here.
+
+                public String toString() {
+                    return this.balls + " balls, " + this.nose + " nose";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(new Snowman());
+                    System.out.println(new Snowman(4));
+                    System.out.println(new Snowman(2, "pine cone"));
+                }
+            }
+        solution:
+          Snowman.java: |
+            public class Snowman {
+                private int balls;
+                private String nose;
+
+                public Snowman() {
+                    this.balls = 3;
+                    this.nose = "carrot";
+                }
+
+                public Snowman(int balls) {
+                    this.balls = balls;
+                    this.nose = "carrot";
+                }
+
+                public Snowman(int balls, String nose) {
+                    this.balls = balls;
+                    this.nose = nose;
+                }
+
+                public String toString() {
+                    return this.balls + " balls, " + this.nose + " nose";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(new Snowman());
+                    System.out.println(new Snowman(4));
+                    System.out.println(new Snowman(2, "pine cone"));
+                }
+            }
+        hints:
+          - "Three constructors, all called `Snowman`, with different parameters: `public Snowman()`, `public Snowman(int balls)` and `public Snowman(int balls, String nose)`."
+          - "Each one sets both instance variables. Where a value isn't given, it uses the default: 3 for the balls, `\"carrot\"` for the nose."
+        tests:
+          - call: |
+              System.out.println(new Snowman());
+              System.out.println(new Snowman(4));
+              System.out.println(new Snowman(2, "pine cone"));
+          - call: |
+              System.out.println(new Snowman(5, "button"));
+              System.out.println(new Snowman(6));
+            hidden: true
+          - call: |
+              Snowman a = new Snowman(2);
+              Snowman b = new Snowman();
+              System.out.println(b);
+              System.out.println(a);
+            hidden: true
+      - task: |
+          What does this program print? `Label` has three constructors. Look at the type of each value given to `new`.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Label a = new Label("Spices");
+                  Label b = new Label(7);
+                  Label c = new Label();
+                  Label d = new Label("7");
+                  System.out.println(a);
+                  System.out.println(b);
+                  System.out.println(c);
+                  System.out.println(d);
+              }
+          }
+          // ==== Label.java ====
+          public class Label {
+              private String text;
+
+              public Label() {
+                  this.text = "blank";
+              }
+
+              public Label(String text) {
+                  this.text = text;
+              }
+
+              public Label(int number) {
+                  this.text = "No. " + number;
+              }
+
+              public String toString() {
+                  return "[" + this.text + "]";
+              }
+          }
+        hints:
+          - "`new Label(7)` gives an int, so it runs `Label(int number)`. `new Label()` gives nothing, so it runs the constructor without parameters."
+          - "`\"7\"` is in quotes, so it's a String, even though it looks like a number. It runs `Label(String text)`."
+
+  - id: class-design-this-call
+    slug: constructor-calling-constructor
+    title: One constructor calling another
+    text: |
+      The two constructors of `CoffeeOrder` in step 3 repeat each other: both store a drink and a size. That's only two lines, but setting up an object often takes more. Say the café adds a rule: it only has small, medium and large cups, and any other size is made a medium. With every constructor setting up the object on its own, a rule like that has to be written into each of them, and so does every instance variable the class gets later.
+
+      Instead, a constructor can hand the work to another constructor of the same class, with `this(...)`:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(new CoffeeOrder("latte", "large"));
+              System.out.println(new CoffeeOrder("tea", "huge"));
+              System.out.println(new CoffeeOrder("mocha"));
+              System.out.println(new CoffeeOrder());
+          }
+      }
+      // ==== CoffeeOrder.java ====
+      public class CoffeeOrder {
+          private String drink;
+          private String size;
+
+          public CoffeeOrder(String drink, String size) {
+              this.drink = drink;
+              if (size.equals("small") || size.equals("large")) {
+                  this.size = size;
+              } else {
+                  this.size = "medium";
+              }
+          }
+
+          public CoffeeOrder(String drink) {
+              this(drink, "medium");
+          }
+
+          public CoffeeOrder() {
+              this("filter coffee");
+          }
+
+          public String toString() {
+              return this.size + " " + this.drink;
+          }
+      }
+      ```
+
+      ```output
+      large latte
+      medium tea
+      medium mocha
+      medium filter coffee
+      ```
+
+      - `this(drink, "medium");` runs the constructor that takes two Strings, with the drink and the default size. That constructor sets up the object, and the one-parameter constructor has nothing else to do.
+      - `this("filter coffee");` runs the one-parameter constructor, which in turn runs the two-parameter one. However an order is made, it goes through the same code, so the size rule is written once.
+      - Java picks the constructor for `this(...)` the same way as for `new`: by the values in the parentheses.
+
+      `this(...)` and `this.size` look alike but are different things. `this.size` is the object's instance variable. `this` with parentheses right after it runs another constructor on the same object, the one being built. It doesn't make a new object. Writing `new CoffeeOrder(drink, "medium");` inside a constructor would build a second, separate order and throw it away, and the order being built would get no drink at all.
+
+      ### It must come first
+
+      `this(...)` can only be used in a constructor, and it must be the constructor's first statement. Anything before it is an error:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              CoffeeOrder order = new CoffeeOrder("latte");
+          }
+      }
+      // ==== CoffeeOrder.java ====
+      public class CoffeeOrder {
+          private String drink;
+          private String size;
+
+          public CoffeeOrder(String drink, String size) {
+              this.drink = drink;
+              this.size = size;
+          }
+
+          public CoffeeOrder(String drink) {
+              System.out.println("New order");
+              this(drink, "medium");
+          }
+      }
+      ```
+
+      ```javac
+      CoffeeOrder.java:12: error: call to this must be first statement in constructor
+              this(drink, "medium");
+                  ^
+      1 error
+      ```
+
+      After `this(...)`, a constructor may do more: its other lines run once the other constructor has finished.
+
+      **Your turn:** `Bouquet.java` has a constructor that takes a kind of flower and a number of stems. Add a second constructor, `Bouquet(String flower)`, for the florist's usual bouquet of 12 stems. Don't store the values in it: call the other constructor with `this(...)`. The check runs:
+
+      ```java fragment
+      Bouquet usual = new Bouquet("tulips");
+      Bouquet small = new Bouquet("roses", 5);
+      System.out.println(usual);
+      System.out.println(small);
+      ```
+
+      and expects:
+
+      ```
+      12 tulips
+      5 roses
+      ```
+    seed:
+      Bouquet.java: |
+        public class Bouquet {
+            private String flower;
+            private int stems;
+
+            public Bouquet(String flower, int stems) {
+                this.flower = flower;
+                this.stems = stems;
+                if (this.stems < 1) {
+                    this.stems = 1;
+                }
+            }
+
+            // Write the second constructor here.
+
+            public String toString() {
+                return this.stems + " " + this.flower;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Bouquet usual = new Bouquet("tulips");
+                Bouquet small = new Bouquet("roses", 5);
+                System.out.println(usual);
+                System.out.println(small);
+            }
+        }
+    solution:
+      Bouquet.java: |
+        public class Bouquet {
+            private String flower;
+            private int stems;
+
+            public Bouquet(String flower, int stems) {
+                this.flower = flower;
+                this.stems = stems;
+                if (this.stems < 1) {
+                    this.stems = 1;
+                }
+            }
+
+            public Bouquet(String flower) {
+                this(flower, 12);
+            }
+
+            public String toString() {
+                return this.stems + " " + this.flower;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Bouquet usual = new Bouquet("tulips");
+                Bouquet small = new Bouquet("roses", 5);
+                System.out.println(usual);
+                System.out.println(small);
+            }
+        }
+    hints:
+      - "The new constructor's header is `public Bouquet(String flower) {`."
+      - "Its only line runs the other constructor, with the flower and the default number of stems: `this(flower, 12);`."
+    require:
+      - pattern: \bthis\s*\(
+        message: "Let the new constructor call the other one with `this(flower, 12);`."
+    tests:
+      - call: |
+          Bouquet usual = new Bouquet("tulips");
+          Bouquet small = new Bouquet("roses", 5);
+          System.out.println(usual);
+          System.out.println(small);
+      - call: |
+          System.out.println(new Bouquet("daisies"));
+          System.out.println(new Bouquet("lilies", 0));
+        hidden: true
+      - call: |
+          Bouquet a = new Bouquet("sunflowers", 3);
+          Bouquet b = new Bouquet("peonies");
+          System.out.println(b);
+          System.out.println(a);
+        hidden: true
+    more:
+      - task: |
+          Here's the `Snowman` from step 3, with three constructors that each store both values. Rewrite the first two so that only `Snowman(int balls, String nose)` stores anything: `Snowman(int balls)` calls it with a carrot nose, and `Snowman()` calls one of the other constructors for 3 balls. The output stays the same:
+
+          ```
+          3 balls, carrot nose
+          4 balls, carrot nose
+          2 balls, pine cone nose
+          ```
+        seed:
+          Snowman.java: |
+            public class Snowman {
+                private int balls;
+                private String nose;
+
+                public Snowman() {
+                    this.balls = 3;
+                    this.nose = "carrot";
+                }
+
+                public Snowman(int balls) {
+                    this.balls = balls;
+                    this.nose = "carrot";
+                }
+
+                public Snowman(int balls, String nose) {
+                    this.balls = balls;
+                    this.nose = nose;
+                }
+
+                public String toString() {
+                    return this.balls + " balls, " + this.nose + " nose";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(new Snowman());
+                    System.out.println(new Snowman(4));
+                    System.out.println(new Snowman(2, "pine cone"));
+                }
+            }
+        solution:
+          Snowman.java: |
+            public class Snowman {
+                private int balls;
+                private String nose;
+
+                public Snowman() {
+                    this(3);
+                }
+
+                public Snowman(int balls) {
+                    this(balls, "carrot");
+                }
+
+                public Snowman(int balls, String nose) {
+                    this.balls = balls;
+                    this.nose = nose;
+                }
+
+                public String toString() {
+                    return this.balls + " balls, " + this.nose + " nose";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(new Snowman());
+                    System.out.println(new Snowman(4));
+                    System.out.println(new Snowman(2, "pine cone"));
+                }
+            }
+        hints:
+          - "`Snowman(int balls)` becomes one line: `this(balls, \"carrot\");`."
+          - "`Snowman()` becomes one line too: `this(3);` runs `Snowman(int balls)`, which runs the two-parameter constructor. (`this(3, \"carrot\");` works as well.)"
+        require:
+          - pattern: \bthis\s*\(
+            min: 2
+            message: "Let the two shorter constructors call another constructor with `this(...)`."
+          - pattern: \bthis\.balls\s*=
+            max: 1
+            message: "Only `Snowman(int balls, String nose)` should store the balls: let the others call it with `this(...)`."
+          - pattern: \bthis\.nose\s*=
+            max: 1
+            message: "Only `Snowman(int balls, String nose)` should store the nose: let the others call it with `this(...)`."
+        tests:
+          - call: |
+              System.out.println(new Snowman());
+              System.out.println(new Snowman(4));
+              System.out.println(new Snowman(2, "pine cone"));
+          - call: |
+              System.out.println(new Snowman(5, "button"));
+              System.out.println(new Snowman(6));
+            hidden: true
+          - call: |
+              Snowman a = new Snowman(2);
+              Snowman b = new Snowman();
+              System.out.println(b);
+              System.out.println(a);
+            hidden: true
+      - task: |
+          What does this program print? Each constructor of `Lantern` prints a line, so you can see when it runs. (Constructors don't usually print anything.)
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Lantern first = new Lantern();
+                  Lantern second = new Lantern("glass", 3);
+              }
+          }
+          // ==== Lantern.java ====
+          public class Lantern {
+              private String material;
+              private int candles;
+
+              public Lantern() {
+                  this("paper");
+                  System.out.println("The usual lantern");
+              }
+
+              public Lantern(String material) {
+                  this(material, 1);
+                  System.out.println("Made of " + material);
+              }
+
+              public Lantern(String material, int candles) {
+                  this.material = material;
+                  this.candles = candles;
+                  System.out.println("Candles: " + candles);
+              }
+          }
+        hints:
+          - "`new Lantern()` starts with `this(\"paper\")`, which starts with `this(\"paper\", 1)`. The innermost constructor finishes first and prints first."
+          - "Each constructor prints its line after the constructor it called has finished. `new Lantern(\"glass\", 3)` runs only the two-parameter constructor."
+
+  - id: class-design-overloading
+    slug: overloaded-methods
+    title: Methods with the same name
+    text: |
+      You've called one method name with all kinds of values since module 1: `System.out.println("Hi")`, `System.out.println(42)`, `System.out.println(3.5)` and `System.out.println()`. That isn't one method that takes anything: `println` is several methods with the same name, one for each type of parameter. Like constructors, methods can be **overloaded**, and the methods of your own classes can be too:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              LabelPrinter printer = new LabelPrinter();
+              printer.print("Flour");
+              printer.print(42);
+              printer.print("Sugar", 2);
+              System.out.println("Labels printed: " + printer.getPrinted());
+          }
+      }
+      // ==== LabelPrinter.java ====
+      public class LabelPrinter {
+          private int printed;
+
+          public LabelPrinter() {
+              this.printed = 0;
+          }
+
+          public void print(String text) {
+              System.out.println("[ " + text + " ]");
+              this.printed = this.printed + 1;
+          }
+
+          public void print(int number) {
+              this.print("No. " + number);
+          }
+
+          public void print(String text, int copies) {
+              for (int i = 0; i < copies; i++) {
+                  this.print(text);
+              }
+          }
+
+          public int getPrinted() {
+              return this.printed;
+          }
+      }
+      ```
+
+      ```output
+      [ Flour ]
+      [ No. 42 ]
+      [ Sugar ]
+      [ Sugar ]
+      Labels printed: 4
+      ```
+
+      - Three methods are called `print`. Java picks one by the values in the call: a String runs `print(String text)`, an int runs `print(int number)`, and a String and an int run `print(String text, int copies)`.
+      - The other two call `print(String text)` instead of printing on their own, so how a label looks, and the counting, are written once. It's the same idea as `this(...)` in the last step, as an ordinary method call.
+      - Overloading suits methods that do the same thing with different kinds of values. Methods that do different things should get different names.
+
+      ### Which one Java picks
+
+      Java compares the values in the call with each method's parameters: how many there are, and their types, in order. What decides is the type of each value, not what it looks like when printed. Static methods can be overloaded too, so here's the idea in `Main` alone:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              show(5);
+              show(5.0);
+              show("5");
+              show(2 + 3);
+              show(5 / 2.0);
+          }
+
+          public static void show(int value) {
+              System.out.println("int: " + value);
+          }
+
+          public static void show(double value) {
+              System.out.println("double: " + value);
+          }
+
+          public static void show(String value) {
+              System.out.println("String: " + value);
+          }
+      }
+      ```
+
+      ```output
+      int: 5
+      double: 5.0
+      String: 5
+      int: 5
+      double: 2.5
+      ```
+
+      - `5.0` is a double and `"5"` is a String, so each goes to its own method.
+      - `2 + 3` is an int, and `5 / 2.0` a double, so the type of the result decides.
+      - An int also fits a `double` parameter, just as `double distance = 5;` works (module 3). Without `show(int value)`, `show(5)` would run `show(double value)` and print `double: 5.0`. With both there, Java takes the one that fits exactly.
+
+      ### The return type doesn't count
+
+      Methods, like constructors, differ only by their parameter types. Parameter names don't count, and neither does the return type. Say you want a method that returns a label's text instead of printing it, and you call it `print` too:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              LabelPrinter printer = new LabelPrinter();
+              printer.print("Salt");
+          }
+      }
+      // ==== LabelPrinter.java ====
+      public class LabelPrinter {
+          public void print(String text) {
+              System.out.println("[ " + text + " ]");
+          }
+
+          public String print(String label) {
+              return "[ " + label + " ]";
+          }
+      }
+      ```
+
+      ```javac
+      LabelPrinter.java:6: error: method print(String) is already defined in class LabelPrinter
+          public String print(String label) {
+                        ^
+      1 error
+      ```
+
+      A call such as `printer.print("Salt");` doesn't have to use the value a method returns, so nothing in it could tell the two apart. A method that does something different gets a name of its own, such as `labelFor(String text)`.
+
+      **Your turn:** an `Odometer` counts the kilometers a car has driven, and `add(int km)` adds a trip. Add a second method, `add(int hours, int speed)`, for a trip of `hours` hours at `speed` kilometers an hour. It adds `hours * speed` kilometers by calling `add(int km)`. The check runs:
+
+      ```java fragment
+      Odometer odometer = new Odometer();
+      odometer.add(35);
+      odometer.add(2, 80);
+      System.out.println(odometer);
+      ```
+
+      and expects:
+
+      ```
+      195 km
+      ```
+    seed:
+      Odometer.java: |
+        public class Odometer {
+            private int km;
+
+            public Odometer() {
+                this.km = 0;
+            }
+
+            public void add(int km) {
+                this.km = this.km + km;
+            }
+
+            // Write the second add method here.
+
+            public String toString() {
+                return this.km + " km";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Odometer odometer = new Odometer();
+                odometer.add(35);
+                odometer.add(2, 80);
+                System.out.println(odometer);
+            }
+        }
+    solution:
+      Odometer.java: |
+        public class Odometer {
+            private int km;
+
+            public Odometer() {
+                this.km = 0;
+            }
+
+            public void add(int km) {
+                this.km = this.km + km;
+            }
+
+            public void add(int hours, int speed) {
+                this.add(hours * speed);
+            }
+
+            public String toString() {
+                return this.km + " km";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Odometer odometer = new Odometer();
+                odometer.add(35);
+                odometer.add(2, 80);
+                System.out.println(odometer);
+            }
+        }
+    hints:
+      - "The new method has the same name and two int parameters: `public void add(int hours, int speed) {`."
+      - "It works out the kilometers and passes them on to the other `add`: `this.add(hours * speed);`."
+    require:
+      - pattern: \badd\s*\(\s*int\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the second method as `public void add(int hours, int speed)`."
+      - pattern: \badd\s*\([^()]*\*[^()]*\)
+        message: "Let the new method call `add` with the kilometers: `this.add(hours * speed);`."
+    tests:
+      - call: |
+          Odometer odometer = new Odometer();
+          odometer.add(35);
+          odometer.add(2, 80);
+          System.out.println(odometer);
+      - call: |
+          Odometer odometer = new Odometer();
+          odometer.add(3, 50);
+          System.out.println(odometer);
+          odometer.add(1, 7);
+          odometer.add(12);
+          System.out.println(odometer);
+        hidden: true
+      - call: |
+          Odometer odometer = new Odometer();
+          odometer.add(0, 90);
+          System.out.println(odometer);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? The kitchen scale has three `add` methods, and two of them call another one.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  KitchenScale scale = new KitchenScale();
+                  scale.add(250);
+                  scale.add("egg");
+                  scale.add("250");
+                  scale.add(40, 2);
+                  System.out.println(scale.getGrams() + " g in total");
+              }
+          }
+          // ==== KitchenScale.java ====
+          public class KitchenScale {
+              private int grams;
+
+              public KitchenScale() {
+                  this.grams = 0;
+              }
+
+              public void add(int grams) {
+                  this.grams = this.grams + grams;
+                  System.out.println("Added " + grams + " g");
+              }
+
+              public void add(String item) {
+                  if (item.equals("egg")) {
+                      this.add(60);
+                  } else if (item.equals("apple")) {
+                      this.add(150);
+                  } else {
+                      System.out.println("Unknown: " + item);
+                  }
+              }
+
+              public void add(int grams, int times) {
+                  for (int i = 0; i < times; i++) {
+                      this.add(grams);
+                  }
+              }
+
+              public int getGrams() {
+                  return this.grams;
+              }
+          }
+        hints:
+          - "`\"egg\"` is a String, so it runs `add(String item)`, which calls `add(int grams)` with 60. That's the method that prints `Added`. `\"250\"` is in quotes, so it's a String too, and it isn't an egg or an apple."
+          - "`add(40, 2)` calls `add(int grams)` twice, and each call prints a line. The total counts only what went through `add(int grams)`."
+      - task: |
+          An `Alarm` is set with `set(int hours, int minutes)`. Add a second `set` method, `set(String time)`, that takes the time as text, like `"6:45"`: split it at the `:`, turn both parts into numbers, and call `set(int hours, int minutes)` with them. The check runs:
+
+          ```java fragment
+          Alarm alarm = new Alarm();
+          alarm.set(7, 30);
+          System.out.println(alarm);
+          alarm.set("6:05");
+          System.out.println(alarm);
+          ```
+
+          and expects:
+
+          ```
+          Alarm at 7:30
+          Alarm at 6:05
+          ```
+        seed:
+          Alarm.java: |
+            public class Alarm {
+                private int hours;
+                private int minutes;
+
+                public Alarm() {
+                    this.hours = 7;
+                    this.minutes = 0;
+                }
+
+                public void set(int hours, int minutes) {
+                    this.hours = hours;
+                    this.minutes = minutes;
+                }
+
+                // Write the set(String time) method here.
+
+                public String toString() {
+                    if (this.minutes < 10) {
+                        return "Alarm at " + this.hours + ":0" + this.minutes;
+                    }
+                    return "Alarm at " + this.hours + ":" + this.minutes;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Alarm alarm = new Alarm();
+                    alarm.set(7, 30);
+                    System.out.println(alarm);
+                    alarm.set("6:05");
+                    System.out.println(alarm);
+                }
+            }
+        solution:
+          Alarm.java: |
+            public class Alarm {
+                private int hours;
+                private int minutes;
+
+                public Alarm() {
+                    this.hours = 7;
+                    this.minutes = 0;
+                }
+
+                public void set(int hours, int minutes) {
+                    this.hours = hours;
+                    this.minutes = minutes;
+                }
+
+                public void set(String time) {
+                    String[] parts = time.split(":");
+                    this.set(Integer.valueOf(parts[0]), Integer.valueOf(parts[1]));
+                }
+
+                public String toString() {
+                    if (this.minutes < 10) {
+                        return "Alarm at " + this.hours + ":0" + this.minutes;
+                    }
+                    return "Alarm at " + this.hours + ":" + this.minutes;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Alarm alarm = new Alarm();
+                    alarm.set(7, 30);
+                    System.out.println(alarm);
+                    alarm.set("6:05");
+                    System.out.println(alarm);
+                }
+            }
+        hints:
+          - "The header is `public void set(String time) {`. Inside it, `String[] parts = time.split(\":\");` gives the hours in `parts[0]` and the minutes in `parts[1]`, as text."
+          - "`Integer.valueOf` turns each part into a number (`\"05\"` becomes 5). Then `this.set(Integer.valueOf(parts[0]), Integer.valueOf(parts[1]));` runs the other `set`."
+        require:
+          - pattern: \bset\s*\(\s*String\s+\w+\s*\)
+            message: "Write the new method as `public void set(String time)`."
+          - pattern: \.split\s*\(
+            message: "Split the time at the `:` with `split(\":\")`."
+          - pattern: \bset\s*\(\s*Integer\.(valueOf|parseInt)\s*\(|\bset\s*\(\s*[a-z]\w*\s*,\s*[a-z]\w*\s*\)
+            message: "Let `set(String time)` call `set(int hours, int minutes)` with the two numbers, instead of storing them itself."
+        tests:
+          - call: |
+              Alarm alarm = new Alarm();
+              alarm.set(7, 30);
+              System.out.println(alarm);
+              alarm.set("6:05");
+              System.out.println(alarm);
+          - call: |
+              Alarm alarm = new Alarm();
+              alarm.set("23:59");
+              System.out.println(alarm);
+              alarm.set("0:07");
+              System.out.println(alarm);
+            hidden: true
+          - call: |
+              Alarm alarm = new Alarm();
+              System.out.println(alarm);
+              alarm.set("12:00");
+              System.out.println(alarm);
+            hidden: true

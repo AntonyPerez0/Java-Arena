@@ -1,0 +1,398 @@
+topic: class-design
+drills:
+  - type: predict
+    after: from-variables-to-objects
+    classes: |
+      class Hive {
+          private int bees;
+
+          public Hive(int bees) {
+              this.bees = bees;
+          }
+
+          public void swarm() {
+              this.bees = this.bees / 2;
+          }
+
+          public void grow(int bees) {
+              this.bees = this.bees + bees;
+          }
+
+          public String toString() {
+              return this.bees + " bees";
+          }
+      }
+    body: |
+      Hive east = new Hive(400);
+      Hive west = new Hive(400);
+      east.swarm();
+      west.grow(100);
+      east.grow(100);
+      System.out.println(east + ", " + west);
+    why: "Each hive is an object with its own `bees`. `east` is halved to 200 and then grows to 300, while `west` only grows, to 500. Without the class, this would take a variable for each hive, and the halving would be written out wherever a hive swarms."
+
+  - type: choice
+    after: from-variables-to-objects
+    prompt: "A program about two pets keeps `String firstPet`, `int firstAge`, `String secondPet` and `int secondAge`, and copies every line that uses them. What's the better design?"
+    choices:
+      - "A class `Pet` with a name and an age, and one Pet object for each pet"
+      - "A class `FirstPet` for the first pet and a class `SecondPet` for the second"
+      - "One String that holds all four values, split when they're needed"
+    answer: 1
+    why: "A class stands for one idea of the problem, a pet, and each object holds one pet's name and age together. One class makes as many objects as the program needs, so a third pet is one more `new Pet(...)`, and the code that uses a pet is written once, in the class's methods."
+
+  - type: predict
+    after: designing-a-class
+    classes: |
+      class Bookcase {
+          private int shelves;
+
+          public Bookcase(int shelves) {
+              this.shelves = shelves;
+          }
+
+          public void addShelf() {
+              this.shelves++;
+          }
+
+          public int capacity() {
+              return this.shelves * 30;
+          }
+      }
+    body: |
+      Bookcase bookcase = new Bookcase(2);
+      int before = bookcase.capacity();
+      bookcase.addShelf();
+      System.out.println(before + " " + bookcase.capacity());
+    why: "`capacity()` works out the room from the shelves each time it's called. `before` holds the answer from when there were 2 shelves, 60, and a variable doesn't change on its own. After `addShelf()`, the method works it out again: 3 * 30 is 90."
+
+  - type: bug
+    after: designing-a-class
+    prompt: "Posts stand 2 meters apart, so a fence of 4 posts is 6 meters long. `addPost()` should only change `posts`, and the program should print `8`. Which line is wrong?"
+    classes: |
+      class Fence {
+          private int posts;
+          private int meters;
+
+          public Fence(int posts) {
+              this.posts = posts;
+              this.meters = (posts - 1) * 2;
+          }
+
+          public void addPost() {
+              this.posts++;
+          }
+
+          public int length() {
+              return this.meters; // BUG
+          }
+      }
+    body: |
+      Fence fence = new Fence(4);
+      fence.addPost();
+      System.out.println(fence.length());
+    fix: return (this.posts - 1) * 2;
+    why: "`meters` is worked out once, in the constructor, and nothing updates it when a post is added, so `length()` still says 6. The length follows from the posts, so `length()` should work it out from them each time it's called. Then the stored `meters` isn't needed at all."
+
+  - type: predict
+    after: several-constructors
+    classes: |
+      class Seat {
+          private String label;
+
+          public Seat(int row) {
+              this.label = "row " + row;
+          }
+
+          public Seat(String name) {
+              this.label = name;
+          }
+
+          public Seat(int row, int number) {
+              this.label = row + "-" + number;
+          }
+
+          public String toString() {
+              return this.label;
+          }
+      }
+    body: |
+      System.out.println(new Seat(4));
+      System.out.println(new Seat("4"));
+      System.out.println(new Seat(4, 12));
+    why: "Java picks the constructor that fits the values in `new`. `4` is an int, so it runs `Seat(int row)`. `\"4\"` is a String, so it runs `Seat(String name)`, which keeps the text as it is. Two ints run `Seat(int row, int number)`."
+
+  - type: choice
+    after: several-constructors
+    prompt: "The class `Poster` has the constructor `public Poster(int width, int height)`. Which of these constructors can the class have as well?"
+    choices:
+      - "`public Poster(int height, int width)`"
+      - "`public Poster(int w, int h)`"
+      - "`public Poster(int side)`"
+    answer: 3
+    why: "Constructors must differ in the types of their parameters, and the names don't count. The first two take two ints, just like the one already there, so javac says `constructor Poster(int,int) is already defined`. `Poster(int side)` takes one int, so `new Poster(50)` can only mean that one."
+
+  - type: predict
+    after: constructor-calling-constructor
+    classes: |
+      class Pancake {
+          private int size;
+
+          public Pancake() {
+              this(20);
+              System.out.println("plain");
+          }
+
+          public Pancake(int size) {
+              this.size = size;
+              System.out.println("size " + size);
+          }
+      }
+    body: |
+      Pancake first = new Pancake();
+      Pancake second = new Pancake(15);
+    why: "`new Pancake()` starts with `this(20)`, so the other constructor runs first and prints `size 20`. Then the rest of `Pancake()` runs and prints `plain`. `new Pancake(15)` runs only the constructor with a parameter."
+
+  - type: fill
+    after: constructor-calling-constructor
+    prompt: "Fill the blank so the one-parameter constructor hands the work to the other one."
+    classes: |
+      class Scarf {
+          private String color;
+          private int length;
+
+          public Scarf(String color, int length) {
+              this.color = color;
+              this.length = length;
+          }
+
+          public Scarf(String color) {
+              [[this]](color, 150);
+          }
+
+          public String toString() {
+              return this.length + " cm " + this.color + " scarf";
+          }
+      }
+    body: |
+      System.out.println(new Scarf("red"));
+    why: "`this(color, 150);` runs the constructor that takes a String and an int, on the scarf being built, with 150 as the default length. It must be the first statement of the constructor."
+
+  - type: bug
+    after: constructor-calling-constructor
+    prompt: "The program should print `green hammock for 1`. Which line is wrong?"
+    classes: |
+      class Hammock {
+          private String color;
+          private int people;
+
+          public Hammock(String color, int people) {
+              this.color = color;
+              this.people = people;
+          }
+
+          public Hammock(String color) {
+              new Hammock(color, 1); // BUG
+          }
+
+          public String toString() {
+              return this.color + " hammock for " + this.people;
+          }
+      }
+    body: |
+      System.out.println(new Hammock("green"));
+    fix: this(color, 1);
+    why: "`new Hammock(color, 1);` builds a second, separate hammock and throws it away. The hammock being built never gets its values, so it prints `null hammock for 0`. `this(color, 1);` runs the other constructor on this same hammock."
+
+  - type: compiles
+    after: constructor-calling-constructor
+    classes: |
+      class Pot {
+          private int liters;
+
+          public Pot(int liters) {
+              this.liters = liters;
+          }
+
+          public Pot() {
+              System.out.println("A new pot");
+              this(5);
+          }
+      }
+    body: |
+      Pot pot = new Pot();
+    why: "No. `this(...)` must be the first statement of a constructor, and here a print comes before it. javac says `call to this must be first statement in constructor`. The print can go after `this(5);`."
+
+  - type: predict
+    after: overloaded-methods
+    classes: |
+      class Meter {
+          public String read(int value) {
+              return "whole " + value;
+          }
+
+          public String read(double value) {
+              return "decimal " + value;
+          }
+      }
+    body: |
+      Meter meter = new Meter();
+      System.out.println(meter.read(7 / 2));
+      System.out.println(meter.read(7 / 2.0));
+    why: "Java picks the method by the type of the value. `7 / 2` divides two ints, so it's the int 3, and `read(int value)` runs. `7 / 2.0` has a double in it, so it's the double 3.5, and `read(double value)` runs."
+
+  - type: fill
+    after: overloaded-methods
+    prompt: "Fill in the second method's name, so that `sign.make(5)` works."
+    classes: |
+      class Sign {
+          public String make(String text) {
+              return "*" + text + "*";
+          }
+
+          public String [[make]](int number) {
+              return this.make("#" + number);
+          }
+      }
+    body: |
+      Sign sign = new Sign();
+      System.out.println(sign.make("Exit"));
+      System.out.println(sign.make(5));
+    why: "Two methods may share a name when their parameters differ. `make(\"Exit\")` runs the one that takes a String, and `make(5)` the one that takes an int, which builds the text `#5` and passes it on to the other `make`."
+
+  - type: compiles
+    after: overloaded-methods
+    classes: |
+      class Dice {
+          public int roll() {
+              return 4;
+          }
+
+          public String roll() {
+              return "four";
+          }
+      }
+    body: |
+      Dice dice = new Dice();
+      System.out.println(dice.roll());
+    why: "No. Both methods are called `roll` and take no parameters, and a different return type doesn't make them different: javac says `method roll() is already defined in class Dice`. From the call `dice.roll()`, Java couldn't tell which one to run."
+
+  - type: choice
+    after: overloaded-methods
+    prompt: "A class has the method `public int total(int a, int b)`. Which of these methods can it have as well?"
+    choices:
+      - "`public double total(int a, int b)`"
+      - "`public int total(int b, int a)`"
+      - "`public int total(int a, int b, int c)`"
+    answer: 3
+    why: "Only the parameter types tell methods of the same name apart: how many there are, and which types, in order. The first differs only in its return type and the second only in its parameter names, so both clash with the method already there. Three int parameters make a different method."
+
+  - type: boss
+    after: overloaded-methods
+    prompt: |
+      Write the class `Ribbon`, for a roll of ribbon measured in whole centimeters:
+
+      - `Ribbon(int cm)` makes a roll of that many centimeters, and `Ribbon()` a roll of 500 cm. Let `Ribbon()` call the other constructor.
+      - `cut(int cm)` cuts off `cm` centimeters. When less than that is left, it cuts off what's there, and the roll is empty (0 cm).
+      - `cut(int pieces, int cm)` cuts off `pieces` pieces of `cm` centimeters each, by calling `cut(int cm)` for each piece.
+      - `toString()` returns the length left, as in the output below.
+
+      The check cuts 120 cm and then 5 pieces of 10 cm off a new 500 cm roll, and 3 pieces of 15 cm off a 40 cm roll, and prints both rolls:
+
+      ```
+      Ribbon: 330 cm
+      Ribbon: 0 cm
+      ```
+    seed:
+      Ribbon.java: |
+        public class Ribbon {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Ribbon ribbon = new Ribbon();
+                ribbon.cut(120);
+                ribbon.cut(5, 10);
+                System.out.println(ribbon);
+                Ribbon spare = new Ribbon(40);
+                spare.cut(3, 15);
+                System.out.println(spare);
+            }
+        }
+    solution:
+      Ribbon.java: |
+        public class Ribbon {
+            private int cm;
+
+            public Ribbon(int cm) {
+                this.cm = cm;
+            }
+
+            public Ribbon() {
+                this(500);
+            }
+
+            public void cut(int cm) {
+                this.cm = this.cm - cm;
+                if (this.cm < 0) {
+                    this.cm = 0;
+                }
+            }
+
+            public void cut(int pieces, int cm) {
+                for (int i = 0; i < pieces; i++) {
+                    this.cut(cm);
+                }
+            }
+
+            public String toString() {
+                return "Ribbon: " + this.cm + " cm";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Ribbon ribbon = new Ribbon();
+                ribbon.cut(120);
+                ribbon.cut(5, 10);
+                System.out.println(ribbon);
+                Ribbon spare = new Ribbon(40);
+                spare.cut(3, 15);
+                System.out.println(spare);
+            }
+        }
+    hints:
+      - "One instance variable is enough: the centimeters left. `Ribbon()` is one line, `this(500);`, which runs `Ribbon(int cm)`."
+      - "`cut(int cm)` subtracts and sets the length back to 0 if it went below 0. `cut(int pieces, int cm)` is a loop that runs `this.cut(cm);` once for each piece."
+    require:
+      - pattern: \bthis\s*\(
+        message: "Let `Ribbon()` call the other constructor with `this(500);`."
+      - pattern: \bcut\s*\(\s*int\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the second method as `public void cut(int pieces, int cm)`."
+    tests:
+      - call: |
+          Ribbon ribbon = new Ribbon();
+          ribbon.cut(120);
+          ribbon.cut(5, 10);
+          System.out.println(ribbon);
+          Ribbon spare = new Ribbon(40);
+          spare.cut(3, 15);
+          System.out.println(spare);
+      - call: |
+          Ribbon ribbon = new Ribbon();
+          System.out.println(ribbon);
+          ribbon.cut(2, 250);
+          System.out.println(ribbon);
+          ribbon.cut(1);
+          System.out.println(ribbon);
+        hidden: true
+      - call: |
+          Ribbon ribbon = new Ribbon(100);
+          ribbon.cut(30);
+          System.out.println(ribbon);
+          ribbon.cut(0, 50);
+          System.out.println(ribbon);
+          ribbon.cut(4, 5);
+          System.out.println(ribbon);
+        hidden: true

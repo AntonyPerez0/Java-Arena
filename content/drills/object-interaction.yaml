@@ -48,45 +48,43 @@ drills:
   - type: predict
     after: object-inside-object
     classes: |
-      class Coach {
+      class Router {
           private String name;
-          private int years;
 
-          public Coach(String name, int years) {
+          public Router(String name) {
               this.name = name;
-              this.years = years;
           }
 
-          public void addYear() {
-              this.years++;
+          public void rename(String name) {
+              this.name = name;
           }
 
           public String toString() {
-              return this.name + " (" + this.years + " years)";
+              return this.name;
           }
       }
 
-      class Team {
-          private String name;
-          private Coach coach;
+      class Flat {
+          private int number;
+          private Router router;
 
-          public Team(String name, Coach coach) {
-              this.name = name;
-              this.coach = coach;
+          public Flat(int number, Router router) {
+              this.number = number;
+              this.router = router;
           }
 
           public String toString() {
-              return this.name + ", coached by " + this.coach;
+              return "Flat " + this.number + " uses " + this.router;
           }
       }
     body: |
-      Coach rosa = new Coach("Rosa", 12);
-      Team hawks = new Team("Hawks", rosa);
-      Team kites = new Team("Kites", rosa);
-      rosa.addYear();
-      System.out.println(hawks);
-      System.out.println(kites);
-    why: "Both teams hold a reference to the same Coach object, the one `rosa` refers to. `rosa.addYear()` changes that one coach, and each team's `toString` asks the coach for its text when it's called, so both show 13 years."
+      Router router = new Router("Home5G");
+      Flat upstairs = new Flat(1, router);
+      Flat downstairs = new Flat(2, router);
+      router.rename("Attic");
+      System.out.println(upstairs);
+      System.out.println(downstairs);
+    why: "Both flats hold a reference to the same Router object, the one `router` refers to. `router.rename(\"Attic\")` changes that one router, and each flat's `toString` asks the router for its text when it's called, so both show `Attic`."
 
   - type: predict
     after: same-class-parameter
@@ -231,7 +229,8 @@ drills:
       }
     body: |
       Photo photo = new Photo(4, 3);
-      System.out.println(photo.rotated() + ", " + photo);
+      Photo turned = photo.rotated();
+      System.out.println(turned + ", " + photo);
     why: "The method returns a new Photo object, so its return type is the class, `Photo`, just as a method that returns a number has `int`. The original photo is left as it was."
 
   - type: bug
@@ -292,15 +291,15 @@ drills:
     after: returning-objects
     prompt: "The program should print `3 min, 5 min`. Which line is wrong?"
     classes: |
-      class Timer {
+      class Countdown {
           private int minutes;
 
-          public Timer(int minutes) {
+          public Countdown(int minutes) {
               this.minutes = minutes;
           }
 
-          public Timer plus(int more) {
-              return new Timer(more); // BUG
+          public Countdown extendedBy(int more) {
+              return new Countdown(more); // BUG
           }
 
           public String toString() {
@@ -308,11 +307,11 @@ drills:
           }
       }
     body: |
-      Timer tea = new Timer(3);
-      Timer longer = tea.plus(2);
+      Countdown tea = new Countdown(3);
+      Countdown longer = tea.extendedBy(2);
       System.out.println(tea + ", " + longer);
-    fix: return new Timer(this.minutes + more);
-    why: "The new timer should have this timer's minutes plus the extra ones. `new Timer(more)` forgets `this.minutes`, so it prints `2 min`. The original stays at 3 minutes either way, because `plus` makes a new Timer."
+    fix: return new Countdown(this.minutes + more);
+    why: "The new countdown should have this countdown's minutes plus the extra ones. `new Countdown(more)` forgets `this.minutes`, so it prints `2 min`. The original stays at 3 minutes either way, because `extendedBy` makes a new Countdown."
 
   - type: compiles
     after: same-class-parameter
@@ -357,7 +356,7 @@ drills:
     why: "No. `compared` has the type `Object`, and javac won't put an Object into a Seat variable, even after the `instanceof` check: `incompatible types: Object cannot be converted to Seat`. The cast says it: `Seat other = (Seat) compared;`."
 
   - type: choice
-    after: equals
+    after: equals-and-lists
     prompt: "Which header makes a list's `contains` use your class's `equals`?"
     choices:
       - "`public boolean equals(Seat other)`"
@@ -484,8 +483,8 @@ drills:
             }
         }
     hints:
-      - "`flipped` makes the new domino with the numbers the other way around: `return new Domino(this.right, this.left);`."
-      - "In `equals`, after the `this ==` check, `instanceof Domino` and the cast, the dominoes are equal if the numbers match as they are, or match crosswise: `this.left == other.right && this.right == other.left`."
+      - "`flipped` makes a new Domino with the numbers the other way around, and returns it. In `equals`, after the `this ==` check, `instanceof Domino` and the cast, there are two ways to be equal: the numbers match as they are, or they match crosswise."
+      - "`return new Domino(this.right, this.left);` for `flipped`. In `equals`: `if (this.left == other.left && this.right == other.right) { return true; }` and then `return this.left == other.right && this.right == other.left;`."
     require:
       - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
         message: "Write the header exactly as `public boolean equals(Object compared)`."
@@ -510,4 +509,8 @@ drills:
           ArrayList<Domino> box = new ArrayList<>();
           box.add(new Domino(4, 1));
           System.out.println(box.contains(new Domino(1, 4)));
+        hidden: true
+      - call: |
+          System.out.println(new Domino(2, 5).equals(new Domino(3, 4)) + " " + new Domino(1, 6).equals(new Domino(6, 1)));
+          System.out.println(new Domino(0, 4).equals(new Domino(2, 2)) + " " + new Domino(4, 0).equals(new Domino(0, 4)));
         hidden: true

@@ -569,18 +569,20 @@ steps:
 
       With this constructor, `new Parcel("Amir", "Elm Street", 12, "Riverton", 1200)` makes the parcel and its address in one go. Either way, the parcel ends up with an Address object in its instance variable.
 
-      **Your turn:** a sports team has a name and a coach, and `Coach.java` is ready. In `Team.java`, add a private instance variable `coach` of type `Coach`, change the constructor to `Team(String name, Coach coach)`, and make `toString` return the team's name, then `, coached by ` and the coach. Let the coach's own `toString` write out the coach. The check runs:
+      **Your turn:** a sports team has a name and a coach, and `Coach.java` is ready. In `Team.java`, add a private instance variable `coach` of type `Coach`, and change the constructor to `Team(String name, Coach coach)`. Then write the method `isCoachedBy(String coachName)`: it returns `true` when the team's coach has that name. Ask the coach for its name with `getName()`. The check runs:
 
       ```java fragment
       Coach rosa = new Coach("Rosa", 12);
       Team team = new Team("Hawks", rosa);
-      System.out.println(team);
+      System.out.println(team.isCoachedBy("Rosa"));
+      System.out.println(team.isCoachedBy("Ken"));
       ```
 
       and expects:
 
       ```
-      Hawks, coached by Rosa (12 years)
+      true
+      false
       ```
     seed:
       Team.java: |
@@ -591,7 +593,7 @@ steps:
                 this.name = name;
             }
 
-            public String toString() {
+            public String getName() {
                 return this.name;
             }
         }
@@ -605,6 +607,10 @@ steps:
                 this.years = years;
             }
 
+            public String getName() {
+                return this.name;
+            }
+
             public String toString() {
                 return this.name + " (" + this.years + " years)";
             }
@@ -614,7 +620,8 @@ steps:
             public static void main(String[] args) {
                 Coach rosa = new Coach("Rosa", 12);
                 Team team = new Team("Hawks", rosa);
-                System.out.println(team);
+                System.out.println(team.isCoachedBy("Rosa"));
+                System.out.println(team.isCoachedBy("Ken"));
             }
         }
     solution:
@@ -628,8 +635,12 @@ steps:
                 this.coach = coach;
             }
 
-            public String toString() {
-                return this.name + ", coached by " + this.coach;
+            public String getName() {
+                return this.name;
+            }
+
+            public boolean isCoachedBy(String coachName) {
+                return this.coach.getName().equals(coachName);
             }
         }
       Coach.java: |
@@ -642,6 +653,10 @@ steps:
                 this.years = years;
             }
 
+            public String getName() {
+                return this.name;
+            }
+
             public String toString() {
                 return this.name + " (" + this.years + " years)";
             }
@@ -651,32 +666,39 @@ steps:
             public static void main(String[] args) {
                 Coach rosa = new Coach("Rosa", 12);
                 Team team = new Team("Hawks", rosa);
-                System.out.println(team);
+                System.out.println(team.isCoachedBy("Rosa"));
+                System.out.println(team.isCoachedBy("Ken"));
             }
         }
     hints:
       - "The new instance variable is declared like the others, with the class as its type: `private Coach coach;`. The constructor gets a second parameter, `Coach coach`, and stores it with `this.coach = coach;`."
-      - "In `toString`, `this.name + \", coached by \" + this.coach` joins the coach with `+`, which calls the coach's own `toString`."
+      - "`isCoachedBy` asks the coach for its name and compares it with `equals`: `return this.coach.getName().equals(coachName);`."
     require:
       - pattern: \bprivate\s+Coach\s+coach\s*;
         message: "Keep the coach in a private instance variable: `private Coach coach;`."
       - pattern: \bpublic\s+Team\s*\(\s*String\s+\w+\s*,\s*Coach\s+\w+\s*\)
         message: "The constructor takes the name and the coach: `public Team(String name, Coach coach)`."
+      - pattern: \.getName\s*\(\s*\)
+        message: "Ask the coach for its name with `getName()`."
     tests:
       - call: |
           Coach rosa = new Coach("Rosa", 12);
           Team team = new Team("Hawks", rosa);
-          System.out.println(team);
+          System.out.println(team.isCoachedBy("Rosa"));
+          System.out.println(team.isCoachedBy("Ken"));
       - call: |
           Team team = new Team("River Otters", new Coach("Ken", 3));
-          System.out.println("Team: " + team);
+          String first = "K";
+          System.out.println(team.isCoachedBy(first + "en"));
+          System.out.println(team.isCoachedBy("ken"));
+          System.out.println(team.getName());
         hidden: true
       - call: |
           Coach lou = new Coach("Lou", 25);
-          Team first = new Team("Comets", lou);
-          Team second = new Team("Lynx", lou);
-          System.out.println(second);
-          System.out.println(first);
+          Team comets = new Team("Comets", lou);
+          Team lynx = new Team("Lynx", new Coach("Mo", 1));
+          System.out.println(comets.isCoachedBy("Lou") + " " + lynx.isCoachedBy("Lou"));
+          System.out.println(lynx.isCoachedBy("Mo") + " " + comets.isCoachedBy("Mo"));
         hidden: true
     more:
       - task: |
@@ -846,8 +868,8 @@ steps:
                 }
             }
         hints:
-          - "In the constructor, `this.passenger = passenger;` as usual, and the route is made with `new`: `this.route = new Route(from, to);`."
-          - "`goesTo` asks the route and compares the String it gets back: `return this.route.getTo().equals(city);`. Compare text with `equals`, not `==`."
+          - "The constructor gets two city names, not a Route. It makes the Route from them with `new` and stores it in `this.route`. `goesTo` then asks that route where it ends, and compares the answer with the city."
+          - "In the constructor: `this.passenger = passenger;` and `this.route = new Route(from, to);`. In `goesTo`: `return this.route.getTo().equals(city);`. Compare text with `equals`, not `==`."
         require:
           - pattern: \bnew\s+Route\s*\(
             message: "Make the route in the constructor with `new Route(from, to)`."
@@ -1389,8 +1411,8 @@ steps:
             }
         }
     hints:
-      - "The header is `public boolean equals(Object compared) {`. Then the three steps: `if (this == compared)` returns true, `if (!(compared instanceof PlayingCard))` returns false, and the cast `PlayingCard other = (PlayingCard) compared;`."
-      - "The last line compares the contents: `return this.suit.equals(other.suit) && this.rank == other.rank;`. The suit is a String, so it's compared with `equals`."
+      - "Follow the Seat's `equals` from the lesson, with PlayingCard in place of Seat: the same header, the same two checks and the cast, and at the end a comparison of the suit and the rank. The suit is a String, so it's compared with `equals`."
+      - "`public boolean equals(Object compared) {`, then `if (this == compared) { return true; }`, `if (!(compared instanceof PlayingCard)) { return false; }`, `PlayingCard other = (PlayingCard) compared;` and last `return this.suit.equals(other.suit) && this.rank == other.rank;`."
     require:
       - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
         message: "Write the header exactly as `public boolean equals(Object compared)`, so Java uses your method."
@@ -1617,6 +1639,8 @@ steps:
 
       Without the `equals` method in Seat, all three would miss: `contains` would print `false`, `indexOf` would print `-1`, and `remove` wouldn't remove anything. The seat they're given is never the very same object as one in the list, and the `equals` that every class gets only looks for the same object.
 
+      For lists, `equals` is all it takes. Some of Java's other collections, which come in part 8, also need a second method, `hashCode`.
+
       ### Only once in the list
 
       A common use is a list that holds each value only once: before adding, check that no equal value is in it yet.
@@ -1631,27 +1655,29 @@ steps:
       }
       ```
 
-      **Your turn:** a sticker collector puts each sticker in the album once, and counts the doubles. `Main.java` is ready: it reads stickers such as `animals 12` until an empty line, and adds a sticker to the album only when `album.contains(sticker)` is false. But every sticker ends up in the album, because `Sticker` has no `equals` of its own. Write `equals` in `Sticker.java`: two stickers are equal when their series and their number are the same. For the input shown below, the program prints:
+      **Your turn:** at a bakery, the orders waiting to be picked up are in a list, in the order they were placed. `Main.java` is ready: it reads pick-ups such as `Ben bagel` (a customer and an item) until an empty line. For each one, it looks for the order's place in line with `indexOf`, prints it, and takes the order out of the list with `remove`. But no order is ever found, because `Order` has no `equals` of its own. Write `equals` in `Order.java`: two orders are equal when they're for the same customer and the same item. For the input shown below, the program prints:
 
       ```
-      In the album: [animals 12, space 3, animals 4]
-      Doubles: 2
+      Picked up: bagel for Ben, number 2 in line
+      No order: muffin for Ada
+      Picked up: bagel for Di, number 3 in line
+      Still waiting: [croissant for Ada, muffin for Cy]
       ```
     seed:
-      Sticker.java: |
-        public class Sticker {
-            private String series;
-            private int number;
+      Order.java: |
+        public class Order {
+            private String customer;
+            private String item;
 
-            public Sticker(String series, int number) {
-                this.series = series;
-                this.number = number;
+            public Order(String customer, String item) {
+                this.customer = customer;
+                this.item = item;
             }
 
             // Write the equals method here.
 
             public String toString() {
-                return this.series + " " + this.number;
+                return this.item + " for " + this.customer;
             }
         }
       Main.java: |
@@ -1660,50 +1686,55 @@ steps:
 
         public class Main {
             public static void main(String[] args) {
+                ArrayList<Order> waiting = new ArrayList<>();
+                waiting.add(new Order("Ada", "croissant"));
+                waiting.add(new Order("Ben", "bagel"));
+                waiting.add(new Order("Cy", "muffin"));
+                waiting.add(new Order("Di", "bagel"));
+
                 Scanner scanner = new Scanner(System.in);
-                ArrayList<Sticker> album = new ArrayList<>();
-                int doubles = 0;
                 while (true) {
                     String line = scanner.nextLine();
                     if (line.isEmpty()) {
                         break;
                     }
                     String[] parts = line.split(" ");
-                    Sticker sticker = new Sticker(parts[0], Integer.valueOf(parts[1]));
-                    if (album.contains(sticker)) {
-                        doubles++;
+                    Order order = new Order(parts[0], parts[1]);
+                    int place = waiting.indexOf(order);
+                    if (place == -1) {
+                        System.out.println("No order: " + order);
                     } else {
-                        album.add(sticker);
+                        System.out.println("Picked up: " + order + ", number " + (place + 1) + " in line");
+                        waiting.remove(order);
                     }
                 }
-                System.out.println("In the album: " + album);
-                System.out.println("Doubles: " + doubles);
+                System.out.println("Still waiting: " + waiting);
             }
         }
     solution:
-      Sticker.java: |
-        public class Sticker {
-            private String series;
-            private int number;
+      Order.java: |
+        public class Order {
+            private String customer;
+            private String item;
 
-            public Sticker(String series, int number) {
-                this.series = series;
-                this.number = number;
+            public Order(String customer, String item) {
+                this.customer = customer;
+                this.item = item;
             }
 
             public boolean equals(Object compared) {
                 if (this == compared) {
                     return true;
                 }
-                if (!(compared instanceof Sticker)) {
+                if (!(compared instanceof Order)) {
                     return false;
                 }
-                Sticker other = (Sticker) compared;
-                return this.series.equals(other.series) && this.number == other.number;
+                Order other = (Order) compared;
+                return this.customer.equals(other.customer) && this.item.equals(other.item);
             }
 
             public String toString() {
-                return this.series + " " + this.number;
+                return this.item + " for " + this.customer;
             }
         }
       Main.java: |
@@ -1712,60 +1743,66 @@ steps:
 
         public class Main {
             public static void main(String[] args) {
+                ArrayList<Order> waiting = new ArrayList<>();
+                waiting.add(new Order("Ada", "croissant"));
+                waiting.add(new Order("Ben", "bagel"));
+                waiting.add(new Order("Cy", "muffin"));
+                waiting.add(new Order("Di", "bagel"));
+
                 Scanner scanner = new Scanner(System.in);
-                ArrayList<Sticker> album = new ArrayList<>();
-                int doubles = 0;
                 while (true) {
                     String line = scanner.nextLine();
                     if (line.isEmpty()) {
                         break;
                     }
                     String[] parts = line.split(" ");
-                    Sticker sticker = new Sticker(parts[0], Integer.valueOf(parts[1]));
-                    if (album.contains(sticker)) {
-                        doubles++;
+                    Order order = new Order(parts[0], parts[1]);
+                    int place = waiting.indexOf(order);
+                    if (place == -1) {
+                        System.out.println("No order: " + order);
                     } else {
-                        album.add(sticker);
+                        System.out.println("Picked up: " + order + ", number " + (place + 1) + " in line");
+                        waiting.remove(order);
                     }
                 }
-                System.out.println("In the album: " + album);
-                System.out.println("Doubles: " + doubles);
+                System.out.println("Still waiting: " + waiting);
             }
         }
     hints:
-      - "`contains` calls `equals`, so `Main` needs no change: once `Sticker` has an `equals` that compares the series and the number, `contains` finds the doubles."
-      - "Write it as in the previous step: `public boolean equals(Object compared)`, the `this ==` check, `instanceof Sticker`, the cast, and `return this.series.equals(other.series) && this.number == other.number;`."
+      - "`indexOf` and `remove` call `equals`, so `Main` needs no change. Once `Order` has an `equals` that compares the customer and the item, they find the order in the list that's equal to the one typed in."
+      - "Write it as in the previous step: `public boolean equals(Object compared)`, the `this ==` check, `instanceof Order`, the cast, and `return this.customer.equals(other.customer) && this.item.equals(other.item);`."
     require:
       - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
-        message: "Write the header exactly as `public boolean equals(Object compared)`: `contains` uses only an equals with that header."
-      - pattern: \binstanceof\s+Sticker\b
-        message: "Check with `instanceof Sticker` that the compared object is a sticker, before the cast."
+        message: "Write the header exactly as `public boolean equals(Object compared)`: `indexOf` and `remove` use only an equals with that header."
+      - pattern: \binstanceof\s+Order\b
+        message: "Check with `instanceof Order` that the compared object is an order, before the cast."
     tests:
       - stdin: |+
-          animals 12
-          space 3
-          animals 12
-          animals 4
-          space 3
+          Ben bagel
+          Ada muffin
+          Di bagel
 
       - stdin: |+
-          cars 1
-          cars 1
-          cars 1
-          cars 2
+          Cy muffin
+          Cy muffin
+          Ada croissant
 
         hidden: true
       - stdin: |+
-          birds 5
-          birds 6
-          fish 5
+
+        hidden: true
+      - stdin: |+
+          Ben muffin
+          Di bagel
+          Ben bagel
 
         hidden: true
       - call: |
-          Sticker sticker = new Sticker("space", 3);
-          System.out.println(sticker.equals(new Sticker("space", 4)));
-          System.out.println(sticker.equals("space 3"));
-          System.out.println(sticker.equals(sticker));
+          Order order = new Order("Ben", "bagel");
+          System.out.println(order.equals(new Order("Di", "bagel")));
+          System.out.println(order.equals(new Order("Ben", "muffin")));
+          System.out.println(order.equals("bagel for Ben"));
+          System.out.println(order.equals(order));
         hidden: true
     more:
       - task: |
@@ -2603,7 +2640,7 @@ steps:
           - "Making a Match gives no points: only `givePoints()` does. After the first two matches, the draw has given each team 1 point, and the Foxes won the second match for 3 more."
           - "`favorite` refers to the same team as `foxes`. The third match is a Foxes win too, but its points come only when `third.givePoints()` runs, after the first two lines are printed."
       - task: |
-          An auction keeps the best bid so far in its instance variable `best`, which is `null` until the first bid comes in. `Bid.java` is ready, with the method `isHigherThan(Bid other)`. In `Auction.java`, write the method `offer(Bid bid)`: the bid becomes the best one when there's no best bid yet, or when it's higher than the best one. A bid that's only as high as the best one doesn't count, so the earlier bidder stays ahead.
+          An auction keeps the best bid so far in its instance variable `best`, which is `null` until the first bid comes in. `Bid.java` is ready, with the method `isHigherThan(Bid other)`. In `Auction.java`, write the method `offer(Bid bid)`: the bid becomes the best one when there's no best bid yet, or when it's higher than the best one. A bid that's only as high as the best one doesn't count, so the earlier bidder stays ahead. Compare the bids with `isHigherThan`.
 
           `Main.java` is ready: it reads bids such as `Mia 40` (a name and euros) until an empty line, and prints the auction before and after. For the input shown below, it prints:
 
@@ -2730,8 +2767,8 @@ steps:
                 }
             }
         hints:
-          - "Check for `null` first: `if (this.best == null || bid.isHigherThan(this.best))`. With `||`, the second part runs only when there is a best bid, so `isHigherThan` never gets `null`."
-          - "Inside the `if`, `this.best = bid;`: the auction now refers to the new bid."
+          - "The bid becomes the best one in two cases: when there's no best bid yet (`this.best` is `null`), or when the bid is higher than the best one. Check for `null` first, so that `isHigherThan` is never given `null`."
+          - "`if (this.best == null || bid.isHigherThan(this.best)) { this.best = bid; }`. With `||`, the second part runs only when the first is false, that is, when there is a best bid."
         require:
           - pattern: \bpublic\s+void\s+offer\s*\(\s*Bid\s+\w+\s*\)
             message: "Write the method as `public void offer(Bid bid)`."
@@ -3015,7 +3052,7 @@ steps:
     require:
       - pattern: \.moved\s*\(
         message: "Move the robot with the position's `moved` method, and keep the Position it returns."
-      - pattern: \b(position|place)\s*\.\s*equals\s*\(
+      - pattern: \bposition\s*\.\s*equals\s*\(|\.equals\s*\(\s*(this\s*\.\s*)?position\s*\)
         message: "In `isAt`, compare the positions with `equals`."
     tests:
       - call: |

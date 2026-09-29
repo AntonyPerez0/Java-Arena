@@ -11,6 +11,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { launchChromium } from './browser.mjs';
 import { serve } from './serve.mjs';
 import { indentProblems } from '../src/grader/style.js';
+import { splitFiles } from '../src/grader/files.js';
 
 const shotsIdx = process.argv.indexOf('--shots');
 const SHOTS = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
@@ -408,6 +409,29 @@ const lessonSession = await newPage();
     // The code of both files is saved.
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('java-arena-v1')).steps['classes-constructor']?.challenges?.[0]?.code ?? '');
     expect(saved.includes('// ==== Main.java ====') && saved.includes('this.grams = grams;'), saved.slice(0, 300));
+  });
+  await test('JUnit: the learner\'s tests run on the class and on versions with bugs, with the report shown', async () => {
+    // The first challenge of the JUnit step: the learner adds an assertion that catches a bug.
+    const junitStep = JSON.parse(readFileSync(new URL('../src/generated/modules/unit-testing.json', import.meta.url), 'utf8')).steps.find((st) => st.slug === 'junit');
+    const testFile = splitFiles(junitStep.solution)[0];
+    await page.goto(BASE + 'learn/unit-testing/junit/');
+    await lessonReady(page);
+    const card = await page.locator('.task-card').first().innerText();
+    expect(/the check runs your tests on/i.test(card) && card.includes('at least one test must fail'), card);
+    // The starter tests pass on every version, so they miss the bug.
+    let out = await check(page);
+    expect(out.includes('Not yet') && out.includes('this version has a bug your tests should catch') && /your tests printed/i.test(out), out);
+    await axe(page, 'a JUnit challenge, not passed yet');
+    // "Run my tests" shows the report of the learner's tests.
+    await page.click('text=Run my tests');
+    await page.waitForFunction(() => /tests? passed/.test(document.querySelector('.freerun')?.textContent ?? ''), null, { timeout: 120_000 });
+    const report = await page.locator('.freerun').innerText();
+    expect(report.includes(`${testFile.path.replace('.java', '')}: `) && /\d+ of \d+ tests? passed/.test(report), report);
+    // The finished test catches the bugs.
+    await page.click('#file-tab-0');
+    await setCode(page, testFile.text);
+    out = await check(page);
+    expect(out.includes('All tests passed'), out);
   });
   await test('the indentation check accepts switch, multi-line headers, lambdas and other brace styles', async () => {
     const ok = {

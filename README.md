@@ -17,8 +17,9 @@ The site is built in batches, one pull request per batch.
 | 5 | Practice: Deathmatch drills for parts 1 and 2, interview prep, daily challenge, placement quiz | done |
 | 6 | MOOC part 3 (modules 12 to 16) and its drills, lessons that show a crash, plainer crash explanations | done |
 | 7 | MOOC part 4 (modules 17 to 20: objects, classes, reading files), an editor for programs of several files | done |
-| 8 | MOOC part 5 (modules 21 to 23: designing classes and overloading, references and null, objects working together), undo history per file | this batch |
-| 9 to 20 | Parts 6 to 14 of the course, progress sync, projects, Pro Track, tools, polish | planned |
+| 8 | MOOC part 5 (modules 21 to 23: designing classes and overloading, references and null, objects working together), undo history per file | done |
+| 9 | MOOC part 6 (modules 24 to 26: lists inside objects, a text user interface, troubleshooting and unit testing), JUnit 4 in the browser | this batch |
+| 10 to 20 | Parts 7 to 14 of the course, progress sync, projects, Pro Track, tools, polish | planned |
 
 The plan and the research behind it are in [`docs/research/`](docs/research/README.md), including the full curriculum map.
 
@@ -29,6 +30,7 @@ The plan and the research behind it are in [`docs/research/`](docs/research/READ
 - **Practice**: Deathmatch, endless quick drills (predict the output, fill the blank, spot the bug, will it compile, pick one, and a "boss rep" program to write every 8th rep) that unlock as lesson steps are finished, in four modes: one life, three lives, spaced review of due drills (Leitner boxes), and interview prep, which is open to everyone. Also a daily challenge (the same drill for everyone on a date) and a placement quiz that can skip modules. Every drill's code is compiled and run on the reference JDK at build time. Predict-the-output and will-it-compile answers are what the JDK really prints or says; the fixed line of a spot-the-bug drill must change what the program does; pick-one answers are written by hand, and the ones about output are checked against it.
 - **Playground**: write and run any program with your own input, with classes in files of their own if you like; it's saved in the browser and can be shared as a link that carries the program and its input.
 - **Programs of several files**: from part 4 on, a challenge can have a class in its own file next to `Main.java`. The editor shows a tab per file and marks javac's errors in each; tests can create objects and call their methods, and can give the program files to read.
+- **Unit tests with JUnit**: part 6's lessons use JUnit 4.13.2, which the browser downloads the first time a program uses it. A challenge can run the learner's tests on the class as it is and on versions with bugs (the tests must pass on the first and catch the others), or check the learner's class with given tests. Results show a report of every test, with JUnit's own failure messages.
 - **Content**: lessons are YAML files in [`content/`](content/README.md). The build compiles and runs every solution and example with the reference JDK, so the expected outputs are real, and then CI replays them in the browser engine.
 - **Progress** is saved in the browser (localStorage). The site works offline once visited (a service worker keeps the pages; the engine keeps its own copy) and can be installed as an app.
 

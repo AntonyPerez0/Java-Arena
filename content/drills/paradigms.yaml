@@ -1,0 +1,512 @@
+topic: paradigms
+drills:
+  - type: predict
+    after: procedural
+    pre: |
+      public static int addMinutes(int minutes, int coins) {
+          minutes = minutes + coins * 15;
+          if (minutes > 60) {
+              minutes = 60;
+          }
+          return minutes;
+      }
+    body: |
+      int minutes = 0;
+      minutes = addMinutes(minutes, 3);
+      minutes = minutes + 30;
+      System.out.println(minutes);
+      minutes = addMinutes(minutes, 1);
+      System.out.println(minutes);
+    why: "`addMinutes` keeps the 60-minute limit, but only for the calls that go through it. `minutes = minutes + 30;` changes the variable directly, so it reaches 45 + 30 = 75. The next call adds 15 and then cuts the result to 60. In a procedural program, a rule holds only where its method is used."
+
+  - type: predict
+    after: with-objects
+    pre: |
+      public static void addLap(int laps) {
+          laps++;
+      }
+    classes: |
+      class LapCounter {
+          private int laps;
+
+          public LapCounter() {
+              this.laps = 0;
+          }
+
+          public void addLap() {
+              this.laps++;
+          }
+
+          public int getLaps() {
+              return this.laps;
+          }
+      }
+    body: |
+      int laps = 0;
+      addLap(laps);
+      addLap(laps);
+      LapCounter counter = new LapCounter();
+      counter.addLap();
+      counter.addLap();
+      System.out.println(laps + " " + counter.getLaps());
+    why: "The static `addLap` gets a copy of the value of `laps` and adds one to its copy, so the variable in `main` stays 0. It would have to return the new value, and `main` would have to store it. The object's `addLap` changes the object itself, so the counter keeps both laps."
+
+  - type: predict
+    after: with-objects
+    classes: |
+      class Battery {
+          private int level;
+
+          public Battery() {
+              this.level = 50;
+          }
+
+          public void charge(int percent) {
+              this.level = this.level + percent;
+              if (this.level > 100) {
+                  this.level = 100;
+              }
+          }
+
+          public int getLevel() {
+              return this.level;
+          }
+      }
+    body: |
+      Battery phone = new Battery();
+      Battery watch = new Battery();
+      Battery same = phone;
+      phone.charge(30);
+      same.charge(30);
+      watch.charge(10);
+      System.out.println(phone.getLevel() + " " + watch.getLevel() + " " + same.getLevel());
+    why: "`same = phone` makes no new battery, so both variables refer to one object, which is charged twice: 50 + 30 is 80, and 80 + 30 stops at 100. The watch is an object of its own, with its own level: 60. However the object is reached, its own `charge` keeps the limit."
+
+  - type: predict
+    after: procedural-commands
+    stdin: |
+      bake
+      12
+      sell
+      5
+      bake
+      15
+      sell
+      9
+      end
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int loaves = 0;
+      while (true) {
+          String command = scanner.nextLine();
+          if (command.equals("end")) {
+              break;
+          }
+          int count = Integer.valueOf(scanner.nextLine());
+          if (command.equals("bake") && loaves + count <= 20) {
+              loaves = loaves + count;
+          } else if (command.equals("sell") && count <= loaves) {
+              loaves = loaves - count;
+          } else {
+              System.out.println("no: " + command);
+          }
+      }
+      System.out.println(loaves);
+    why: "The shelf holds at most 20 loaves. Baking 12 and selling 5 leaves 7. Baking 15 would make 22, so the first condition is false, the second isn't about `bake`, and the `else` refuses it. Selling 9 of 7 is refused too, so 7 loaves are left."
+
+  - type: predict
+    after: object-commands
+    classes: |
+      class Ferry {
+          private int spaces;
+          private int cars;
+
+          public Ferry(int spaces) {
+              this.spaces = spaces;
+              this.cars = 0;
+          }
+
+          public boolean board(int count) {
+              if (this.cars + count > this.spaces) {
+                  return false;
+              }
+              this.cars = this.cars + count;
+              return true;
+          }
+
+          public int getCars() {
+              return this.cars;
+          }
+      }
+    body: |
+      Ferry early = new Ferry(10);
+      Ferry late = new Ferry(10);
+      System.out.println(early.board(6) + " " + early.board(6) + " " + late.board(6));
+      System.out.println(early.getCars() + " " + late.getCars());
+    why: "The early ferry takes 6 cars, and then refuses 6 more, since 12 is more than its 10 spaces. The refusal changes nothing. The late ferry is another object with its own `cars`, starting from 0, so it takes its 6. The rules are written once, in the class, and hold for both ferries."
+
+  - type: fill
+    after: procedural
+    prompt: "In a game, a purchase that costs more coins than the player has changes nothing. Fill in the blank (an expression), so that the program prints the output shown."
+    pre: |
+      public static int spend(int coins, int price) {
+          if (price > [[coins]]) {
+              return coins;
+          }
+          return coins - price;
+      }
+    body: |
+      int coins = 30;
+      coins = spend(coins, 50);
+      coins = spend(coins, 20);
+      System.out.println(coins);
+    why: "The method gets the player's coins as a parameter and compares the price with them. A price of 50 is more than 30, so it returns the coins unchanged. 20 is affordable, so it returns 10, the coins left. `main` stores each answer, so the second call starts from 30."
+
+  - type: fill
+    after: object-commands
+    prompt: Fill in the return type of `add`.
+    classes: |
+      class Shelf {
+          private int capacity;
+          private int books;
+
+          public Shelf(int capacity) {
+              this.capacity = capacity;
+              this.books = 0;
+          }
+
+          public [[boolean]] add(int count) {
+              if (this.books + count > this.capacity) {
+                  return false;
+              }
+              this.books = this.books + count;
+              return true;
+          }
+      }
+    body: |
+      Shelf shelf = new Shelf(12);
+      if (shelf.add(8)) {
+          System.out.println("Shelved");
+      }
+      if (!shelf.add(8)) {
+          System.out.println("No room");
+      }
+    why: "`add` returns `true` or `false`: whether it did what was asked. The class keeps the rule, and the code that calls it decides what to print. That's how a logic class tells its user interface that it refused, without printing anything itself."
+
+  - type: bug
+    after: procedural
+    prompt: "A coffee card gets a stamp for each of 3 coffees, so this should print `3 stamps`. Which line is wrong?"
+    pre: |
+      public static int addStamp(int stamps) {
+          if (stamps < 8) {
+              stamps++;
+          }
+          return stamps;
+      }
+    body: |
+      int stamps = 0;
+      for (int i = 0; i < 3; i++) {
+          addStamp(stamps); // BUG
+      }
+      System.out.println(stamps + " stamps");
+    fix: stamps = addStamp(stamps);
+    why: "`addStamp` works on a copy of the value and returns the new count, but the call throws the answer away, so `stamps` stays 0. In a procedural program, the caller has to store what the method returns: `stamps = addStamp(stamps);`."
+
+  - type: bug
+    after: procedural-commands
+    prompt: "A refund can't give back more tickets than were sold, so this should print `Sold: 3`. Which line is wrong?"
+    stdin: |
+      sell
+      3
+      refund
+      5
+      end
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int seats = 10;
+      int sold = 0;
+      while (true) {
+          String command = scanner.nextLine();
+          if (command.equals("end")) {
+              break;
+          }
+          int count = Integer.valueOf(scanner.nextLine());
+          if (command.equals("sell") && sold + count <= seats) {
+              sold = sold + count;
+          } else if (command.equals("refund") && count <= seats) { // BUG
+              sold = sold - count;
+          }
+      }
+      System.out.println("Sold: " + sold);
+    fix: '} else if (command.equals("refund") && count <= sold) {'
+    why: "The refund compares the count with the seats, so any refund of up to 10 tickets goes through, and `sold` drops to -2. The limit for a refund is what was sold: `count <= sold`. In a procedural program, each branch keeps its own copy of a rule, and a copy can go wrong."
+
+  - type: bug
+    after: object-commands
+    prompt: "A van that holds 500 kg should take exactly 500 kg, so this should print `true true 500`. Which line is wrong?"
+    classes: |
+      class Van {
+          private int max;
+          private int cargo;
+
+          public Van(int max) {
+              this.max = max;
+              this.cargo = 0;
+          }
+
+          public boolean load(int kg) {
+              if (this.cargo + kg >= this.max) { // BUG
+                  return false;
+              }
+              this.cargo = this.cargo + kg;
+              return true;
+          }
+
+          public int getCargo() {
+              return this.cargo;
+          }
+      }
+    body: |
+      Van van = new Van(500);
+      System.out.println(van.load(300) + " " + van.load(200) + " " + van.getCargo());
+    fix: if (this.cargo + kg > this.max) {
+    why: "With `>=`, a load that fills the van exactly is refused: 300 + 200 is 500, which is not more than the limit, but is equal to it. The limit is only broken when the cargo would be more than `max`. Since the rule lives in one method, fixing that one line fixes it for every caller."
+
+  - type: compiles
+    after: procedural
+    pre: |
+      public static void turnPage() {
+          page++;
+      }
+    body: |
+      int page = 5;
+      turnPage();
+      System.out.println(page);
+    why: "No. `page` is a local variable of `main`, and a method sees only its own variables and parameters: javac says `cannot find symbol`. In a procedural program, a method gets its data as parameters, like `turnPage(int page)`, and hands the new value back with `return`."
+
+  - type: compiles
+    after: with-objects
+    classes: |
+      class Book {
+          private int pages;
+          private int page;
+
+          public Book(int pages) {
+              this.pages = pages;
+              this.page = 0;
+          }
+
+          public void read(int count) {
+              this.page = Math.min(this.page + count, this.pages);
+          }
+
+          public int getPage() {
+              return this.page;
+          }
+      }
+    body: |
+      Book book = new Book(240);
+      book.page = 900;
+      System.out.println(book.getPage());
+    why: "No. `page` is private, so only the code of Book may use it: javac says `page has private access in Book`. That's what keeps the rule safe: the only way to move the bookmark is `read`, which never goes past the last page. In the procedural version, any line of `main` could set the page to anything."
+
+  - type: choice
+    after: with-objects
+    prompt: Which sentence about Java and paradigms is true?
+    choices:
+      - "Java is mainly object-oriented, but the body of every method is procedural code: statements that run one after another"
+      - "A Java program can't be procedural, because every method is in a class"
+      - "Static methods are object-oriented, because they're written inside a class"
+      - "A Java program has to use one paradigm everywhere"
+    answer: 1
+    why: "Every Java method belongs to a class, but inside it, the code runs step by step, with ifs and loops. A program of `main` and static methods that pass values around is procedural, even though it sits in a class. Most Java programs mix the two: objects for the data and its rules, procedural code inside the methods."
+
+  - type: choice
+    after: object-commands
+    prompt: "A box office has a class `Concert` that keeps the seats and the tickets sold, and its `sell` method checks the limit. The hall adds a second show. What does the program need?"
+    choices:
+      - "One more `new Concert(...)`: the new object gets its own seats and tickets sold, and the same rules"
+      - "A copy of the class, `Concert2`, for the second show"
+      - "Two more instance variables in `Concert`, for the second show's seats and tickets"
+      - "A copy of the check in every branch that sells tickets for the second show"
+    answer: 1
+    why: "A class describes one concert, and every object made from it has its own instance variables. The rules are in the methods, so the new object follows them without a line of new code. Copying the class, or the checks, is what the procedural version would need."
+
+  - type: boss
+    after: object-commands
+    prompt: |
+      An ice rink rents out skates, and it has 30 pairs. `Main.java` has a working procedural version. Move the state and the rules into a class, `SkateRental.java`, and change `main` so that it only reads the commands, calls the methods and prints. The class needs:
+
+      - `SkateRental(int pairs)`: a rink with that many pairs, none of them rented out.
+      - `rent(int count)`: if at least `count` pairs are on the shelf, rents them out and returns `true`. Otherwise it changes nothing and returns `false`.
+      - `giveBack(int count)`: if at least `count` pairs are rented out, takes them back and returns `true`. Otherwise it changes nothing and returns `false`.
+      - `onShelf()`: returns the number of pairs on the shelf.
+      - `rentedOut()`: returns the number of pairs rented out.
+
+      The class doesn't print anything. The program prints what it does now. For the input shown:
+
+      ```
+      > Have fun! On the shelf: 18
+      > Sorry, on the shelf: 18
+      > Thanks! On the shelf: 23
+      > Sorry, rented out: 7
+      > On the shelf: 23
+      > Rink closed
+      ```
+    seed:
+      SkateRental.java: |
+        public class SkateRental {
+            // Move the state and the rules here.
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                int pairs = 30;
+                int rented = 0;
+                while (true) {
+                    System.out.print("> ");
+                    String command = scanner.nextLine();
+                    if (command.equals("close")) {
+                        System.out.println("Rink closed");
+                        break;
+                    }
+                    if (command.equals("rent")) {
+                        int count = Integer.valueOf(scanner.nextLine());
+                        if (rented + count > pairs) {
+                            System.out.println("Sorry, on the shelf: " + (pairs - rented));
+                        } else {
+                            rented = rented + count;
+                            System.out.println("Have fun! On the shelf: " + (pairs - rented));
+                        }
+                    } else if (command.equals("back")) {
+                        int count = Integer.valueOf(scanner.nextLine());
+                        if (count > rented) {
+                            System.out.println("Sorry, rented out: " + rented);
+                        } else {
+                            rented = rented - count;
+                            System.out.println("Thanks! On the shelf: " + (pairs - rented));
+                        }
+                    } else if (command.equals("shelf")) {
+                        System.out.println("On the shelf: " + (pairs - rented));
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+    solution:
+      SkateRental.java: |
+        public class SkateRental {
+            // Move the state and the rules here.
+            private int pairs;
+            private int rented;
+
+            public SkateRental(int pairs) {
+                this.pairs = pairs;
+                this.rented = 0;
+            }
+
+            public boolean rent(int count) {
+                if (count > this.onShelf()) {
+                    return false;
+                }
+                this.rented = this.rented + count;
+                return true;
+            }
+
+            public boolean giveBack(int count) {
+                if (count > this.rented) {
+                    return false;
+                }
+                this.rented = this.rented - count;
+                return true;
+            }
+
+            public int onShelf() {
+                return this.pairs - this.rented;
+            }
+
+            public int rentedOut() {
+                return this.rented;
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                SkateRental rink = new SkateRental(30);
+                while (true) {
+                    System.out.print("> ");
+                    String command = scanner.nextLine();
+                    if (command.equals("close")) {
+                        System.out.println("Rink closed");
+                        break;
+                    }
+                    if (command.equals("rent")) {
+                        int count = Integer.valueOf(scanner.nextLine());
+                        if (rink.rent(count)) {
+                            System.out.println("Have fun! On the shelf: " + rink.onShelf());
+                        } else {
+                            System.out.println("Sorry, on the shelf: " + rink.onShelf());
+                        }
+                    } else if (command.equals("back")) {
+                        int count = Integer.valueOf(scanner.nextLine());
+                        if (rink.giveBack(count)) {
+                            System.out.println("Thanks! On the shelf: " + rink.onShelf());
+                        } else {
+                            System.out.println("Sorry, rented out: " + rink.rentedOut());
+                        }
+                    } else if (command.equals("shelf")) {
+                        System.out.println("On the shelf: " + rink.onShelf());
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+    hints:
+      - "The two local variables `pairs` and `rented` become the private instance variables of SkateRental. Each check in `main` moves into a method that returns `true` or `false`."
+      - "In `main`, create `SkateRental rink = new SkateRental(30);` and write each branch as `if (rink.rent(count)) { ... } else { ... }`, printing what it printed before, with `rink.onShelf()` and `rink.rentedOut()` for the numbers."
+    require:
+      - pattern: new\s+SkateRental\s*\(\s*30\s*\)
+        message: "Create the rink in `main` with `new SkateRental(30)`."
+    forbid:
+      - pattern: \bclass\s+Main\b[\s\S]*\bint\s+rented\b
+        message: "`main` shouldn't keep the count of rented pairs any more: it belongs in SkateRental."
+      - pattern: \bclass\s+SkateRental\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Main\b
+        message: "SkateRental doesn't print. Its methods return their answers, and `main` prints the messages."
+    tests:
+      - stdin: |
+          rent
+          12
+          rent
+          20
+          back
+          5
+          back
+          10
+          shelf
+          close
+      - stdin: |
+          back
+          1
+          rent
+          30
+          rent
+          1
+          back
+          30
+          skate
+          shelf
+          close
+        hidden: true
+      - call: |
+          SkateRental small = new SkateRental(4);
+          System.out.println(small.rent(5) + " " + small.rent(4) + " " + small.onShelf() + " " + small.rentedOut());
+          System.out.println(small.giveBack(5) + " " + small.giveBack(3) + " " + small.onShelf() + " " + small.rentedOut());
+        hidden: true

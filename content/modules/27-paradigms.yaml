@@ -1,0 +1,1758 @@
+id: paradigms
+summary: Two ways of organizing a program. What a programming paradigm is, procedural programs made of steps and of methods that work on the values passed to them, the same programs made of objects that keep their own data and rules, what each style makes easy, and how Java programs combine the two. MOOC section 7.1.
+steps:
+  - id: paradigms-procedural
+    slug: procedural
+    title: Procedural programs
+    text: |
+      You've written programs in two different styles already. Up to module 16, a program was `main` and a few static methods. From module 17 on, programs were made of objects too. This module gives the two styles their names, writes the same programs in both, and looks honestly at what each one makes easy.
+
+      ### What a paradigm is
+
+      A **programming paradigm** is a style of programming: a set of ideas about what a program is made of and how its parts work together. Two programs can print exactly the same thing and still follow different paradigms. Many languages support more than one paradigm, and Java is one of them.
+
+      Module 21 already named one paradigm, **object-oriented programming**: a program is built from objects, and each object looks after its own data. This step is about another one.
+
+      ### Procedural programming
+
+      In **procedural programming**, a program is a sequence of steps, run one after another. The data is kept in variables, and the work is split into **procedures**: named pieces of code that get the data they need as parameters and hand back a result. In Java, a procedure is a method, usually a `static` method like the ones in module 10. The data and the methods stay apart: a method knows only what it's given, and the caller decides what to do with the answer. The C language, for example, is built around this style.
+
+      Here's a program that keeps track of how far someone has read in a book, written procedurally:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              String title = "The Salt Road";
+              int pages = 240;
+              int page = 0;
+
+              page = read(page, 60, pages);
+              page = read(page, 100, pages);
+              printProgress(title, page, pages);
+
+              page = read(page, 120, pages);
+              printProgress(title, page, pages);
+          }
+
+          public static int read(int page, int count, int pages) {
+              page = page + count;
+              if (page > pages) {
+                  page = pages;
+              }
+              return page;
+          }
+
+          public static void printProgress(String title, int page, int pages) {
+              int percent = 100 * page / pages;
+              System.out.println(title + ": page " + page + " of " + pages + ", " + percent + "% read");
+          }
+      }
+      ```
+
+      ```output
+      The Salt Road: page 160 of 240, 66% read
+      The Salt Road: page 240 of 240, 100% read
+      ```
+
+      - `main` keeps the book's data in three local variables, and runs from top to bottom: read 60 pages, read 100 more, print, read 120 more, print.
+      - `read` works out which page the reader is on after reading `count` more pages. It gets everything it needs as parameters, and it keeps a rule of the problem: nobody reads past the last page, so the third call stops at 240.
+      - `read` can't change the variable `page` of `main`, because a parameter gets a copy of the value (module 22). So it returns the new page, and `main` stores it: `page = read(page, 60, pages);`.
+      - `printProgress` gets everything it prints as parameters too. `100 * page / pages` divides whole numbers, so 160 of 240 pages is 66%, with the decimals dropped.
+
+      ### Strengths and weak spots
+
+      For a program this small, the procedural style is hard to beat. It all happens in `main`, in the order it's written, and each method is a small calculation that's easy to check on its own: `read(200, 60, 240)` returns 240, whatever the rest of the program does.
+
+      The weak spots show up as a program grows:
+
+      - The title, the number of pages and the page reached belong together, but only their names say so. Every method that needs them has to be handed them one by one.
+      - The rule "not past the last page" is in `read`, but nothing makes `main` use `read`. The line `page = page + 500;` compiles and runs, and then the reader is on page 660 of a 240-page book.
+      - A call without `page =` in front of it, like `read(page, 60, pages);`, compiles too. It works out the new page and throws it away, and the program goes on as if nothing had been read.
+      - A second book needs three more variables, and every call has to be given the right ones.
+
+      The next step writes the same program with an object, and comes back to these weak spots.
+
+      **Your turn:** in a board game, the pieces move along the squares 1 to 30. A piece can't go past square 30, and a card like "go back 5" can't take it below square 1. The program is procedural: `main` keeps the square in a variable, and `move` gets the square and a number of steps, and returns the new square. Fill in the blanks, so that the program prints:
+
+      ```
+      Square 6
+      Square 30
+      Square 1
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              int square = 1;
+              square = move(square, 5);
+              System.out.println("Square " + square);
+              [[square]] = move(square, 28);
+              System.out.println("Square " + square);
+              square = move(square, -40);
+              System.out.println("Square " + square);
+          }
+
+          public static [[int]] move(int square, int steps) {
+              square = square + steps;
+              if (square > 30) {
+                  square = 30;
+              }
+              if (square < 1) {
+                  square = 1;
+              }
+              [[return]] square;
+          }
+      }
+    hints:
+      - "`move` gives back a whole number, so its return type is `int`, and its last line hands the square back with `return`."
+      - "`move` can't change the variable of `main`. `main` has to store what it returns, as the first call does: `square = move(square, 28);`."
+    tests:
+      - name: The program
+      - call: |
+          System.out.println(move(10, 4) + " " + move(27, 6) + " " + move(3, -5) + " " + move(30, 0));
+        hidden: true
+    more:
+      - task: |
+          A hiking trail is 14 km long. `main` is ready, and it's procedural: it keeps the kilometers walked in a variable. Write the two methods it uses:
+
+          - `walk(int walked, int km, int length)` returns how many kilometers have been walked after walking `km` more: `walked + km`, but never more than `length`, the length of the trail.
+          - `kmLeft(int walked, int length)` returns how many kilometers are left to the end of the trail.
+
+          The program prints:
+
+          ```
+          Walked 5 km, 9 km to go
+          Walked 11 km, 3 km to go
+          Walked 14 km, 0 km to go
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  int length = 14;
+                  int walked = 0;
+                  walked = walk(walked, 5, length);
+                  System.out.println("Walked " + walked + " km, " + kmLeft(walked, length) + " km to go");
+                  walked = walk(walked, 6, length);
+                  System.out.println("Walked " + walked + " km, " + kmLeft(walked, length) + " km to go");
+                  walked = walk(walked, 8, length);
+                  System.out.println("Walked " + walked + " km, " + kmLeft(walked, length) + " km to go");
+              }
+
+              // Write the methods walk and kmLeft here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  int length = 14;
+                  int walked = 0;
+                  walked = walk(walked, 5, length);
+                  System.out.println("Walked " + walked + " km, " + kmLeft(walked, length) + " km to go");
+                  walked = walk(walked, 6, length);
+                  System.out.println("Walked " + walked + " km, " + kmLeft(walked, length) + " km to go");
+                  walked = walk(walked, 8, length);
+                  System.out.println("Walked " + walked + " km, " + kmLeft(walked, length) + " km to go");
+              }
+
+              // Write the methods walk and kmLeft here.
+              public static int walk(int walked, int km, int length) {
+                  walked = walked + km;
+                  if (walked > length) {
+                      walked = length;
+                  }
+                  return walked;
+              }
+
+              public static int kmLeft(int walked, int length) {
+                  return length - walked;
+              }
+          }
+        hints:
+          - "Both methods are `public static int`, with the parameters in the order given. `walk` works like `read` in the book program: add first, then check the limit."
+          - "In `walk`, return `length` when `walked + km` is more than `length`, and `walked + km` otherwise. `kmLeft` returns `length - walked`."
+        tests:
+          - name: The program
+          - call: |
+              System.out.println(walk(0, 3, 10) + " " + walk(9, 3, 10) + " " + walk(4, 0, 4) + " " + walk(2, 8, 10));
+            hidden: true
+          - call: |
+              System.out.println(kmLeft(3, 10) + " " + kmLeft(10, 10) + " " + kmLeft(0, 25));
+            hidden: true
+      - task: |
+          What does this program print? One of the calls doesn't store what `read` returns.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int page = 0;
+                  page = read(page, 50, 200);
+                  read(page, 30, 200);
+                  System.out.println(page);
+                  int next = read(page, 170, 200);
+                  System.out.println(next + " " + page);
+                  page = read(next, 10, 200);
+                  System.out.println(page);
+              }
+
+              public static int read(int page, int count, int pages) {
+                  page = page + count;
+                  if (page > pages) {
+                      page = pages;
+                  }
+                  return page;
+              }
+          }
+        hints:
+          - "`read(page, 30, 200);` works out 80 and returns it, but nothing stores the answer. The variable `page` of `main` is still 50."
+          - "`next` gets 50 + 170, which stops at 200. `page` doesn't change until the last line stores into it, and that call starts from `next`."
+
+  - id: paradigms-objects
+    slug: with-objects
+    title: The same program with objects
+    text: |
+      Here's the reading program of the previous step once more, written with an object. The book's data, and the rule that guards it, move into a class, `Book`. `main` only creates a book and uses it:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Book book = new Book("The Salt Road", 240);
+              book.read(60);
+              book.read(100);
+              System.out.println(book);
+
+              book.read(120);
+              System.out.println(book);
+          }
+      }
+      // ==== Book.java ====
+      public class Book {
+          private String title;
+          private int pages;
+          private int page;
+
+          public Book(String title, int pages) {
+              this.title = title;
+              this.pages = pages;
+              this.page = 0;
+          }
+
+          public void read(int count) {
+              this.page = this.page + count;
+              if (this.page > this.pages) {
+                  this.page = this.pages;
+              }
+          }
+
+          public String toString() {
+              int percent = 100 * this.page / this.pages;
+              return this.title + ": page " + this.page + " of " + this.pages + ", " + percent + "% read";
+          }
+      }
+      ```
+
+      ```output
+      The Salt Road: page 160 of 240, 66% read
+      The Salt Road: page 240 of 240, 100% read
+      ```
+
+      It prints exactly what the procedural version printed. Here's what moved where:
+
+      - The three local variables of `main` became the instance variables of `Book`. The data that belongs together is now in one object, and it's `private`, so only the code of `Book` can change it.
+      - `read` takes one parameter, the number of pages read. It finds the rest in its own object, as `this.page` and `this.pages`. It changes the object itself and returns nothing, so there's no result to forget to store.
+      - `printProgress` became `toString`, which builds the same line from the object's own data.
+      - The rule "not past the last page" is still in `read`, and now nothing can get around it. `book.page = 900;` in `main` doesn't compile, because `page` is private: javac says `page has private access in Book`. The only way to move the bookmark is `read`.
+      - `main` reads like a description of what happens: a book, 60 pages read, then 100 more.
+
+      ### What each version makes easy
+
+      Neither version is wrong. They print the same lines, and each makes different things easy:
+
+      | | Procedural | Object-oriented |
+      | --- | --- | --- |
+      | Where the data is | local variables in `main` | instance variables of an object |
+      | How a method gets the data | as parameters, one by one | from its own object, with `this` |
+      | How a change is kept | the method returns the new value, and the caller stores it | the method changes the object |
+      | Who can get around the rule | any code that has the variables | only the code of the class |
+      | A second book | three more variables | one more `new Book(...)` |
+
+      - The procedural version is shorter: no class, no constructor, no `this`. It reads from top to bottom in one file, and every value a method uses is right there in its call. For a small program that runs once from start to end, that's often the simplest choice.
+      - The object version has more lines, but each part has one job. The book's data and its rule are in one place, and no other code can get around the rule. As the program grows, with more books or more things to do with a book, `main` stays short and the rules stay in `Book`.
+
+      ### Java and paradigms
+
+      Java is mainly an object-oriented language: every method belongs to a class, and even `main` sits in the class `Main`. But the body of every method is procedural code: statements that run one after another, with ifs and loops, just as in module 1. A program made only of `main` and static methods, like the one in the previous step, is a procedural program that happens to sit in a class. So in Java, the real question is how much of a program to organize into objects. The last step of this module comes back to that.
+
+      **Your turn:** here's the board game of the previous step, with an object. `Main.java` is ready. Write the class in `Piece.java`:
+
+      - `Piece(int lastSquare)`: a piece on square 1, on a board whose last square is `lastSquare`.
+      - `move(int steps)`: moves the piece by `steps` squares, but never past the last square, and never below square 1.
+      - `getSquare()`: returns the square the piece is on.
+
+      The program prints:
+
+      ```
+      Square 6
+      Square 30
+      Square 1
+      ```
+    seed:
+      Piece.java: |
+        public class Piece {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Piece piece = new Piece(30);
+                piece.move(5);
+                System.out.println("Square " + piece.getSquare());
+                piece.move(28);
+                System.out.println("Square " + piece.getSquare());
+                piece.move(-40);
+                System.out.println("Square " + piece.getSquare());
+            }
+        }
+    solution:
+      Piece.java: |
+        public class Piece {
+            private int lastSquare;
+            private int square;
+
+            public Piece(int lastSquare) {
+                this.lastSquare = lastSquare;
+                this.square = 1;
+            }
+
+            public void move(int steps) {
+                this.square = this.square + steps;
+                if (this.square > this.lastSquare) {
+                    this.square = this.lastSquare;
+                }
+                if (this.square < 1) {
+                    this.square = 1;
+                }
+            }
+
+            public int getSquare() {
+                return this.square;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Piece piece = new Piece(30);
+                piece.move(5);
+                System.out.println("Square " + piece.getSquare());
+                piece.move(28);
+                System.out.println("Square " + piece.getSquare());
+                piece.move(-40);
+                System.out.println("Square " + piece.getSquare());
+            }
+        }
+    hints:
+      - "The piece remembers two numbers, in private instance variables: the last square, given to the constructor, and the square it's on, which starts at 1."
+      - "`move` is the static `move` of the previous step, working on the object: add `steps` to `this.square`, then set it to `this.lastSquare` if it's past that, and to 1 if it's below 1."
+    tests:
+      - name: The program
+      - call: |
+          Piece big = new Piece(50);
+          Piece small = new Piece(10);
+          big.move(20);
+          small.move(20);
+          System.out.println(big.getSquare() + " " + small.getSquare());
+          big.move(-30);
+          small.move(-3);
+          System.out.println(big.getSquare() + " " + small.getSquare());
+        hidden: true
+    more:
+      - task: |
+          At a quiz night, a team gets 10 points for a right answer and loses 5 for a wrong one, but its score never goes below 0. The program in `Main.java` keeps two teams' scores procedurally. Rewrite it with objects. Write the class in `Team.java`:
+
+          - `Team(String name)`: a team with 0 points.
+          - `answer(boolean right)`: adds 10 points for a right answer, and takes 5 off for a wrong one, but never below 0.
+          - `toString()`: returns the name and the points, like `Foxes: 15 points`.
+
+          Then change `main` so that it uses two Team objects instead of the four variables and the static method, which it doesn't need any more. The program prints what it does now:
+
+          ```
+          Foxes: 15 points
+          Owls: 0 points
+          ```
+        seed:
+          Team.java: |
+            public class Team {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    String firstName = "Foxes";
+                    int firstPoints = 0;
+                    String secondName = "Owls";
+                    int secondPoints = 0;
+
+                    firstPoints = answer(firstPoints, true);
+                    secondPoints = answer(secondPoints, false);
+                    firstPoints = answer(firstPoints, false);
+                    secondPoints = answer(secondPoints, true);
+                    firstPoints = answer(firstPoints, true);
+                    secondPoints = answer(secondPoints, false);
+                    secondPoints = answer(secondPoints, false);
+
+                    System.out.println(firstName + ": " + firstPoints + " points");
+                    System.out.println(secondName + ": " + secondPoints + " points");
+                }
+
+                public static int answer(int points, boolean right) {
+                    if (right) {
+                        return points + 10;
+                    }
+                    points = points - 5;
+                    if (points < 0) {
+                        points = 0;
+                    }
+                    return points;
+                }
+            }
+        solution:
+          Team.java: |
+            public class Team {
+                private String name;
+                private int points;
+
+                public Team(String name) {
+                    this.name = name;
+                    this.points = 0;
+                }
+
+                public void answer(boolean right) {
+                    if (right) {
+                        this.points = this.points + 10;
+                    } else {
+                        this.points = this.points - 5;
+                        if (this.points < 0) {
+                            this.points = 0;
+                        }
+                    }
+                }
+
+                public String toString() {
+                    return this.name + ": " + this.points + " points";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Team foxes = new Team("Foxes");
+                    Team owls = new Team("Owls");
+
+                    foxes.answer(true);
+                    owls.answer(false);
+                    foxes.answer(false);
+                    owls.answer(true);
+                    foxes.answer(true);
+                    owls.answer(false);
+                    owls.answer(false);
+
+                    System.out.println(foxes);
+                    System.out.println(owls);
+                }
+            }
+        hints:
+          - "The name and the points of one team become the private instance variables of Team. `answer` does what the static method did, but on `this.points`, and it returns nothing."
+          - "In `main`, create `Team foxes = new Team(\"Foxes\");` and one for the Owls, and turn each line like `firstPoints = answer(firstPoints, true);` into `foxes.answer(true);`. `System.out.println(foxes);` uses toString."
+        require:
+          - pattern: new\s+Team\s*\(
+            min: 2
+            message: "Create two Team objects in `main`, one for each team."
+        forbid:
+          - pattern: \bstatic\s+int\s+answer\b
+            message: "The rule now lives in Team, so `main` doesn't need the static method `answer` any more."
+        tests:
+          - name: The program
+          - call: |
+              Team bees = new Team("Bees");
+              bees.answer(false);
+              bees.answer(true);
+              bees.answer(true);
+              bees.answer(false);
+              Team ants = new Team("Ants");
+              ants.answer(true);
+              System.out.println(bees);
+              System.out.println(ants + " / " + bees);
+            hidden: true
+      - task: |
+          Going the other way helps you see both styles. In a board game, each turn has a time limit. `TurnTimer.java` is an object version: `tick(int seconds)` counts the seconds down, never below 0, and `isOver()` tells when the time is up. `main` uses it.
+
+          Rewrite `main` procedurally, without the TurnTimer class. Keep the seconds left in an `int` variable in `main`, and write two static methods in `Main`:
+
+          - `tick(int seconds, int passed)` returns the seconds left after `passed` more seconds, but never below 0.
+          - `isOver(int seconds)` returns `true` when no seconds are left, and `false` otherwise.
+
+          Leave `TurnTimer.java` as it is, to compare. The program prints what it does now:
+
+          ```
+          35 seconds left
+          15 seconds left
+          Time's up!
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TurnTimer timer = new TurnTimer(60);
+                    timer.tick(25);
+                    System.out.println(timer.getSeconds() + " seconds left");
+                    timer.tick(20);
+                    System.out.println(timer.getSeconds() + " seconds left");
+                    timer.tick(30);
+                    if (timer.isOver()) {
+                        System.out.println("Time's up!");
+                    } else {
+                        System.out.println(timer.getSeconds() + " seconds left");
+                    }
+                }
+            }
+          TurnTimer.java: |
+            public class TurnTimer {
+                private int seconds;
+
+                public TurnTimer(int seconds) {
+                    this.seconds = seconds;
+                }
+
+                public void tick(int passed) {
+                    this.seconds = this.seconds - passed;
+                    if (this.seconds < 0) {
+                        this.seconds = 0;
+                    }
+                }
+
+                public boolean isOver() {
+                    return this.seconds == 0;
+                }
+
+                public int getSeconds() {
+                    return this.seconds;
+                }
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    int seconds = 60;
+                    seconds = tick(seconds, 25);
+                    System.out.println(seconds + " seconds left");
+                    seconds = tick(seconds, 20);
+                    System.out.println(seconds + " seconds left");
+                    seconds = tick(seconds, 30);
+                    if (isOver(seconds)) {
+                        System.out.println("Time's up!");
+                    } else {
+                        System.out.println(seconds + " seconds left");
+                    }
+                }
+
+                public static int tick(int seconds, int passed) {
+                    seconds = seconds - passed;
+                    if (seconds < 0) {
+                        seconds = 0;
+                    }
+                    return seconds;
+                }
+
+                public static boolean isOver(int seconds) {
+                    return seconds == 0;
+                }
+            }
+          TurnTimer.java: |
+            public class TurnTimer {
+                private int seconds;
+
+                public TurnTimer(int seconds) {
+                    this.seconds = seconds;
+                }
+
+                public void tick(int passed) {
+                    this.seconds = this.seconds - passed;
+                    if (this.seconds < 0) {
+                        this.seconds = 0;
+                    }
+                }
+
+                public boolean isOver() {
+                    return this.seconds == 0;
+                }
+
+                public int getSeconds() {
+                    return this.seconds;
+                }
+            }
+        hints:
+          - "The object's instance variable becomes a local variable of `main`: `int seconds = 60;`. Each `timer.tick(25);` becomes `seconds = tick(seconds, 25);`, which stores the answer."
+          - "`tick` gets the seconds as a parameter, takes `passed` off, sets the result to 0 if it's below 0, and returns it. `isOver(int seconds)` returns `seconds == 0`."
+        forbid:
+          - pattern: \bnew\s+TurnTimer\s*\(
+            message: "Write `main` without the TurnTimer class: keep the seconds in an `int` variable, and use your static methods."
+        tests:
+          - name: The program
+          - call: |
+              System.out.println(tick(60, 25) + " " + tick(10, 25) + " " + tick(0, 5) + " " + tick(30, 30));
+            hidden: true
+          - call: |
+              System.out.println(isOver(0) + " " + isOver(1) + " " + isOver(45));
+            hidden: true
+
+  - id: paradigms-procedural-commands
+    slug: procedural-commands
+    title: A command program, procedurally
+    text: |
+      Programs that take commands are where the two styles differ the most. Module 25 wrote them both ways without naming the styles: first with everything in `main`, then with the work in a class. This step and the next one look at that change as a change of paradigm.
+
+      Here's a box office that sells tickets for one concert, in a hall of 200 seats, written procedurally. Everything is in `main`: the program's state is two local variables, and its rules are `if`s inside the branches:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int seats = 200;
+              int sold = 0;
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Box office closed");
+                      break;
+                  }
+                  if (command.equals("sell")) {
+                      int count = Integer.valueOf(scanner.nextLine());
+                      if (sold + count > seats) {
+                          System.out.println("Sorry, tickets left: " + (seats - sold));
+                      } else {
+                          sold = sold + count;
+                          System.out.println("Sold! Tickets left: " + (seats - sold));
+                      }
+                  } else if (command.equals("refund")) {
+                      int count = Integer.valueOf(scanner.nextLine());
+                      if (count > sold) {
+                          System.out.println("Sorry, tickets sold: " + sold);
+                      } else {
+                          sold = sold - count;
+                          System.out.println("Refunded! Tickets left: " + (seats - sold));
+                      }
+                  } else if (command.equals("status")) {
+                      System.out.println("Sold: " + sold + ", left: " + (seats - sold));
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+      ```
+
+      ```input
+      sell
+      150
+      sell
+      80
+      sell
+      50
+      refund
+      20
+      refund
+      300
+      status
+      quit
+      ```
+
+      ```output
+      > Sold! Tickets left: 50
+      > Sorry, tickets left: 50
+      > Sold! Tickets left: 0
+      > Refunded! Tickets left: 20
+      > Sorry, tickets sold: 180
+      > Sold: 180, left: 20
+      > Box office closed
+      ```
+
+      - `seats` and `sold` are the program's state. They're created before the loop, so they last from one command to the next (module 25).
+      - `sell` checks the limit before it changes anything. When the tickets asked for don't fit, it sells none of them and says how many are left. `refund` checks the other end: it can't take back more tickets than were sold, so `sold` never goes below 0.
+      - The number of tickets left isn't kept anywhere. It's worked out from the two variables, as `seats - sold`, in four places.
+
+      ### How it grows
+
+      This is easy to follow: one loop, one branch per command, read from top to bottom. The trouble comes as the program grows:
+
+      - The rules are mixed in with the reading and the printing. To find out what a refund may do, you read the `refund` branch past its `nextLine` and between its `println`s.
+      - Every branch that changes `sold` needs its own copy of a check. A new command that sells tickets in another way needs one too, and if a copy is missing or wrong, the concert is overbooked. Nothing warns you.
+      - A second concert, such as an afternoon show with its own seats, means two more variables and a copy of every branch that uses them.
+      - The only way to try the rules is to run the whole program and type commands.
+
+      Static methods would help a little, as in step 1: `sold = sell(sold, count, seats);` could keep the check in one place. But a method returns only one value, so that call can't also say whether the sale went through. `main` needs to know that to print the right message, and it would have to find out by comparing `sold` before and after the call. The next step moves the state and the rules into a class instead.
+
+      **Your turn:** a bike-share station has 12 slots, and in the morning 5 of them hold a bike. Write the program procedurally, with everything in `main`: keep the number of bikes in a local variable, created before the loop, and print the prompt `> ` before each command. The commands:
+
+      - `rent`: the next line is a number of bikes. If the station has that many, take them and print `Enjoy the ride! Bikes here: ` and the bikes left. If it doesn't, change nothing and print `Sorry, bikes here: ` and the bikes.
+      - `return`: the next line is a number of bikes. If there are that many free slots, put the bikes back and print `Thanks! Bikes here: ` and the bikes. If not, change nothing and print `Sorry, free slots: ` and the free slots.
+      - `status`: print the bikes and the free slots, like `Bikes: 5, free slots: 7`.
+      - `close`: print `Station closed` and end the program.
+      - Anything else: print `Unknown command: ` and the command.
+
+      For the input shown, the program prints:
+
+      ```
+      > Enjoy the ride! Bikes here: 2
+      > Sorry, bikes here: 2
+      > Thanks! Bikes here: 11
+      > Sorry, free slots: 1
+      > Bikes: 11, free slots: 1
+      > Station closed
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              // Create the variables for the station here.
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("close")) {
+                      System.out.println("Station closed");
+                      break;
+                  }
+                  // Handle rent, return, status and unknown commands here.
+              }
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              // Create the variables for the station here.
+              int slots = 12;
+              int bikes = 5;
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("close")) {
+                      System.out.println("Station closed");
+                      break;
+                  }
+                  // Handle rent, return, status and unknown commands here.
+                  if (command.equals("rent")) {
+                      int count = Integer.valueOf(scanner.nextLine());
+                      if (count > bikes) {
+                          System.out.println("Sorry, bikes here: " + bikes);
+                      } else {
+                          bikes = bikes - count;
+                          System.out.println("Enjoy the ride! Bikes here: " + bikes);
+                      }
+                  } else if (command.equals("return")) {
+                      int count = Integer.valueOf(scanner.nextLine());
+                      if (bikes + count > slots) {
+                          System.out.println("Sorry, free slots: " + (slots - bikes));
+                      } else {
+                          bikes = bikes + count;
+                          System.out.println("Thanks! Bikes here: " + bikes);
+                      }
+                  } else if (command.equals("status")) {
+                      System.out.println("Bikes: " + bikes + ", free slots: " + (slots - bikes));
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+    hints:
+      - "Two variables before the loop: the slots, 12, and the bikes, 5. The free slots aren't a variable of their own: they're `slots - bikes`, like the tickets left at the box office."
+      - "Each of `rent` and `return` reads its number with `Integer.valueOf(scanner.nextLine())`, checks the limit first, and only changes `bikes` when the command is allowed. For `return`, the limit is `bikes + count > slots`."
+    tests:
+      - stdin: |
+          rent
+          3
+          rent
+          4
+          return
+          9
+          return
+          3
+          status
+          close
+      - stdin: |
+          status
+          rent
+          5
+          rent
+          1
+          return
+          12
+          return
+          1
+          repair
+          status
+          close
+        hidden: true
+      - stdin: |
+          return
+          7
+          return
+          1
+          rent
+          12
+          rent
+          13
+          status
+          close
+        hidden: true
+    more:
+      - task: |
+          The box office added the command `one`, which sells a single ticket, for people who buy at the door. But once the concert is sold out, `one` goes on selling, and `status` shows more tickets sold than there are seats. Fix the `one` branch so that it follows the same rule as `sell`: when no ticket is left, it sells nothing and prints `Sorry, sold out`. For the input shown, the program prints:
+
+          ```
+          > Sold! Tickets left: 2
+          > Sold! Tickets left: 1
+          > Sold! Tickets left: 0
+          > Sorry, sold out
+          > Sold: 200, left: 0
+          > Box office closed
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int seats = 200;
+                  int sold = 0;
+                  while (true) {
+                      System.out.print("> ");
+                      String command = scanner.nextLine();
+                      if (command.equals("quit")) {
+                          System.out.println("Box office closed");
+                          break;
+                      }
+                      if (command.equals("sell")) {
+                          int count = Integer.valueOf(scanner.nextLine());
+                          if (sold + count > seats) {
+                              System.out.println("Sorry, tickets left: " + (seats - sold));
+                          } else {
+                              sold = sold + count;
+                              System.out.println("Sold! Tickets left: " + (seats - sold));
+                          }
+                      } else if (command.equals("one")) {
+                          sold++;
+                          System.out.println("Sold! Tickets left: " + (seats - sold));
+                      } else if (command.equals("refund")) {
+                          int count = Integer.valueOf(scanner.nextLine());
+                          if (count > sold) {
+                              System.out.println("Sorry, tickets sold: " + sold);
+                          } else {
+                              sold = sold - count;
+                              System.out.println("Refunded! Tickets left: " + (seats - sold));
+                          }
+                      } else if (command.equals("status")) {
+                          System.out.println("Sold: " + sold + ", left: " + (seats - sold));
+                      } else {
+                          System.out.println("Unknown command: " + command);
+                      }
+                  }
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int seats = 200;
+                  int sold = 0;
+                  while (true) {
+                      System.out.print("> ");
+                      String command = scanner.nextLine();
+                      if (command.equals("quit")) {
+                          System.out.println("Box office closed");
+                          break;
+                      }
+                      if (command.equals("sell")) {
+                          int count = Integer.valueOf(scanner.nextLine());
+                          if (sold + count > seats) {
+                              System.out.println("Sorry, tickets left: " + (seats - sold));
+                          } else {
+                              sold = sold + count;
+                              System.out.println("Sold! Tickets left: " + (seats - sold));
+                          }
+                      } else if (command.equals("one")) {
+                          if (sold >= seats) {
+                              System.out.println("Sorry, sold out");
+                          } else {
+                              sold++;
+                              System.out.println("Sold! Tickets left: " + (seats - sold));
+                          }
+                      } else if (command.equals("refund")) {
+                          int count = Integer.valueOf(scanner.nextLine());
+                          if (count > sold) {
+                              System.out.println("Sorry, tickets sold: " + sold);
+                          } else {
+                              sold = sold - count;
+                              System.out.println("Refunded! Tickets left: " + (seats - sold));
+                          }
+                      } else if (command.equals("status")) {
+                          System.out.println("Sold: " + sold + ", left: " + (seats - sold));
+                      } else {
+                          System.out.println("Unknown command: " + command);
+                      }
+                  }
+              }
+          }
+        hints:
+          - "The `sell` branch checks before it changes `sold`. The `one` branch changes `sold` without any check. That's the copy of the rule that went missing."
+          - "Wrap the two lines of `one` in an `if`: when `sold >= seats`, print `Sorry, sold out`, and otherwise add one to `sold` and print what it printed before."
+        tests:
+          - stdin: |
+              sell
+              198
+              one
+              one
+              one
+              status
+              quit
+          - stdin: |
+              one
+              status
+              sell
+              200
+              one
+              refund
+              1
+              one
+              one
+              status
+              quit
+            hidden: true
+          - stdin: |
+              sell
+              200
+              one
+              one
+              refund
+              5
+              one
+              status
+              quit
+            hidden: true
+      - task: |
+          What does this program print? A room of a museum lets in at most 50 visitors at a time. The commands come from a String, so the program reads no input: `in` and `out` are each followed by a line with the size of a group.
+        predict: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner("in\n30\nout\n40\nin\n25\nout\n10\nend\n");
+                  int capacity = 50;
+                  int inside = 0;
+                  while (true) {
+                      String command = scanner.nextLine();
+                      if (command.equals("end")) {
+                          break;
+                      }
+                      int count = Integer.valueOf(scanner.nextLine());
+                      if (command.equals("in") && inside + count <= capacity) {
+                          inside = inside + count;
+                      } else if (command.equals("out") && count <= inside) {
+                          inside = inside - count;
+                      } else {
+                          System.out.println("refused: " + command + " " + count);
+                      }
+                  }
+                  System.out.println(inside);
+              }
+          }
+        hints:
+          - "Keep track of `inside` command by command. After `in 30` it's 30, and `out 40` asks for more visitors than are inside."
+          - "A refused command changes nothing and prints a line. `in 25` would make 55, more than the 50 allowed. Then `out 10` leaves 20."
+
+  - id: paradigms-object-commands
+    slug: object-commands
+    title: The command program with a class
+    text: |
+      Here's the box office again. The state and the rules that guard it move into a class, `Concert`, and the part of `main` that reads commands only calls its methods:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              Concert concert = new Concert(200);
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Box office closed");
+                      break;
+                  }
+                  if (command.equals("sell")) {
+                      int count = Integer.valueOf(scanner.nextLine());
+                      if (concert.sell(count)) {
+                          System.out.println("Sold! Tickets left: " + concert.ticketsLeft());
+                      } else {
+                          System.out.println("Sorry, tickets left: " + concert.ticketsLeft());
+                      }
+                  } else if (command.equals("refund")) {
+                      int count = Integer.valueOf(scanner.nextLine());
+                      if (concert.refund(count)) {
+                          System.out.println("Refunded! Tickets left: " + concert.ticketsLeft());
+                      } else {
+                          System.out.println("Sorry, tickets sold: " + concert.getSold());
+                      }
+                  } else if (command.equals("status")) {
+                      System.out.println("Sold: " + concert.getSold() + ", left: " + concert.ticketsLeft());
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+      // ==== Concert.java ====
+      public class Concert {
+          private int seats;
+          private int sold;
+
+          public Concert(int seats) {
+              this.seats = seats;
+              this.sold = 0;
+          }
+
+          public boolean sell(int count) {
+              if (this.sold + count > this.seats) {
+                  return false;
+              }
+              this.sold = this.sold + count;
+              return true;
+          }
+
+          public boolean refund(int count) {
+              if (count > this.sold) {
+                  return false;
+              }
+              this.sold = this.sold - count;
+              return true;
+          }
+
+          public int getSold() {
+              return this.sold;
+          }
+
+          public int ticketsLeft() {
+              return this.seats - this.sold;
+          }
+      }
+      ```
+
+      ```input
+      sell
+      150
+      sell
+      80
+      sell
+      50
+      refund
+      20
+      refund
+      300
+      status
+      quit
+      ```
+
+      ```output
+      > Sold! Tickets left: 50
+      > Sorry, tickets left: 50
+      > Sold! Tickets left: 0
+      > Refunded! Tickets left: 20
+      > Sorry, tickets sold: 180
+      > Sold: 180, left: 20
+      > Box office closed
+      ```
+
+      - `Concert` keeps the state, `seats` and `sold`, in private instance variables, and its methods keep the rules. `sell` and `refund` return `true` when they did what was asked and `false` when they refused, so the caller knows which message to print. The class never reads or prints anything, as in module 25.
+      - The loop in `main` reads the commands and prints the answers. It no longer knows how the limits are checked: it asks `concert.sell(count)` and looks at the answer.
+      - The tickets left are worked out in one place, `ticketsLeft()`.
+      - `main` isn't much shorter than before. The gain isn't in the number of lines, but in where things are, as the next section shows.
+
+      ### Why it helps
+
+      The procedural version made three changes hard. Here they are again.
+
+      **A second concert.** The hall adds an afternoon show with 120 seats. That's one more object:
+
+      ```java fragment
+      Concert afternoon = new Concert(120);
+      Concert evening = new Concert(200);
+      ```
+
+      Each object has its own `seats` and `sold`, and both follow the same rules, written once in the class. In the procedural version, the afternoon show needed two more variables and a copy of every branch. This step's second challenge sells tickets for both shows.
+
+      **A new command.** Say the box office adds `one`, which sells a single ticket at the door. In the class version, its branch calls `concert.sell(1)`, and it can't skip the check, because the check is inside `sell`. Every command that sells tickets goes through the same method, so a rule written once holds for all of them.
+
+      **A test of the class alone.** The rules can be checked without the command loop, and without typing a single command. Here are two JUnit tests for them (module 26):
+
+      ```java test
+      // ==== Concert.java ====
+      public class Concert {
+          private int seats;
+          private int sold;
+
+          public Concert(int seats) {
+              this.seats = seats;
+              this.sold = 0;
+          }
+
+          public boolean sell(int count) {
+              if (this.sold + count > this.seats) {
+                  return false;
+              }
+              this.sold = this.sold + count;
+              return true;
+          }
+
+          public boolean refund(int count) {
+              if (count > this.sold) {
+                  return false;
+              }
+              this.sold = this.sold - count;
+              return true;
+          }
+
+          public int getSold() {
+              return this.sold;
+          }
+
+          public int ticketsLeft() {
+              return this.seats - this.sold;
+          }
+      }
+      // ==== ConcertTest.java ====
+      import static org.junit.Assert.assertEquals;
+      import static org.junit.Assert.assertFalse;
+
+      import org.junit.Test;
+
+      public class ConcertTest {
+          @Test
+          public void cannotSellMoreThanTheSeats() {
+              Concert concert = new Concert(10);
+              concert.sell(8);
+              assertFalse(concert.sell(3));
+              assertEquals(2, concert.ticketsLeft());
+          }
+
+          @Test
+          public void cannotRefundMoreThanWereSold() {
+              Concert concert = new Concert(10);
+              concert.sell(4);
+              assertFalse(concert.refund(5));
+              assertEquals(4, concert.getSold());
+          }
+      }
+      ```
+
+      ```output
+      ConcertTest: 2 tests
+        cannotRefundMoreThanWereSold: passed
+        cannotSellMoreThanTheSeats: passed
+      2 of 2 tests passed
+      ```
+
+      In the procedural version, the same rules sat inside the loop, between a `nextLine` and a `println`, where no test could reach them.
+
+      ### Both styles in one program
+
+      Look at the class version once more. It isn't object-oriented all the way down. The command loop in `main` is a sequence of steps with a loop and ifs, and so is the body of `sell`: check the limit, change the count, return. That's procedural code. What the object adds is the organization: which data belongs together, and which code may change it.
+
+      That's how Java programs are usually written. Objects hold the data and the rules that guard it, and inside each method, the code runs step by step. A calculation that needs no data of its own often stays a static method, like `Math.max`, which takes two numbers and returns the larger one. And in a bigger program, the command loop would move into a user interface class that takes a Scanner, as in module 25, so that `main` only creates the objects.
+
+      There are other paradigms too. In **functional programming**, for example, a program is built from functions that compute new values from the values they're given, instead of changing variables step by step. Java supports parts of that style as well, with lambdas and streams, which come later in the course (MOOC part 10).
+
+      **Your turn:** here's the bike-share station of the previous step, with a class. `Main.java` is ready: it reads the commands and prints the answers. Write the class in `BikeDock.java`:
+
+      - `BikeDock(int slots, int bikes)`: a station with `slots` slots, `bikes` of which hold a bike.
+      - `rent(int count)`: if the station has at least `count` bikes, takes them and returns `true`. Otherwise it changes nothing and returns `false`.
+      - `bringBack(int count)`: if there are at least `count` free slots, puts the bikes in them and returns `true`. Otherwise it changes nothing and returns `false`.
+      - `getBikes()`: returns the number of bikes at the station.
+      - `freeSlots()`: returns the number of free slots.
+
+      The class doesn't print anything. For the input shown, the program prints:
+
+      ```
+      > Enjoy the ride! Bikes here: 2
+      > Sorry, bikes here: 2
+      > Thanks! Bikes here: 11
+      > Sorry, free slots: 1
+      > Bikes: 11, free slots: 1
+      > Station closed
+      ```
+    seed:
+      BikeDock.java: |
+        public class BikeDock {
+            // Write the instance variables, the constructor and the methods here.
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                BikeDock dock = new BikeDock(12, 5);
+                while (true) {
+                    System.out.print("> ");
+                    String command = scanner.nextLine();
+                    if (command.equals("close")) {
+                        System.out.println("Station closed");
+                        break;
+                    }
+                    if (command.equals("rent")) {
+                        int count = Integer.valueOf(scanner.nextLine());
+                        if (dock.rent(count)) {
+                            System.out.println("Enjoy the ride! Bikes here: " + dock.getBikes());
+                        } else {
+                            System.out.println("Sorry, bikes here: " + dock.getBikes());
+                        }
+                    } else if (command.equals("return")) {
+                        int count = Integer.valueOf(scanner.nextLine());
+                        if (dock.bringBack(count)) {
+                            System.out.println("Thanks! Bikes here: " + dock.getBikes());
+                        } else {
+                            System.out.println("Sorry, free slots: " + dock.freeSlots());
+                        }
+                    } else if (command.equals("status")) {
+                        System.out.println("Bikes: " + dock.getBikes() + ", free slots: " + dock.freeSlots());
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+    solution:
+      BikeDock.java: |
+        public class BikeDock {
+            // Write the instance variables, the constructor and the methods here.
+            private int slots;
+            private int bikes;
+
+            public BikeDock(int slots, int bikes) {
+                this.slots = slots;
+                this.bikes = bikes;
+            }
+
+            public boolean rent(int count) {
+                if (count > this.bikes) {
+                    return false;
+                }
+                this.bikes = this.bikes - count;
+                return true;
+            }
+
+            public boolean bringBack(int count) {
+                if (count > this.freeSlots()) {
+                    return false;
+                }
+                this.bikes = this.bikes + count;
+                return true;
+            }
+
+            public int getBikes() {
+                return this.bikes;
+            }
+
+            public int freeSlots() {
+                return this.slots - this.bikes;
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                BikeDock dock = new BikeDock(12, 5);
+                while (true) {
+                    System.out.print("> ");
+                    String command = scanner.nextLine();
+                    if (command.equals("close")) {
+                        System.out.println("Station closed");
+                        break;
+                    }
+                    if (command.equals("rent")) {
+                        int count = Integer.valueOf(scanner.nextLine());
+                        if (dock.rent(count)) {
+                            System.out.println("Enjoy the ride! Bikes here: " + dock.getBikes());
+                        } else {
+                            System.out.println("Sorry, bikes here: " + dock.getBikes());
+                        }
+                    } else if (command.equals("return")) {
+                        int count = Integer.valueOf(scanner.nextLine());
+                        if (dock.bringBack(count)) {
+                            System.out.println("Thanks! Bikes here: " + dock.getBikes());
+                        } else {
+                            System.out.println("Sorry, free slots: " + dock.freeSlots());
+                        }
+                    } else if (command.equals("status")) {
+                        System.out.println("Bikes: " + dock.getBikes() + ", free slots: " + dock.freeSlots());
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+    hints:
+      - "The station remembers two numbers, the two local variables of your procedural version: the slots and the bikes. Both come from the constructor. `freeSlots()` works out its answer from them."
+      - "In `rent`, return `false` first when `count > this.bikes`. Otherwise take the bikes away and return `true`. `bringBack` works the same way, with `count > this.freeSlots()`."
+    forbid:
+      - pattern: \bclass\s+BikeDock\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Main\b
+        message: "BikeDock doesn't print. `rent` and `bringBack` return `true` or `false`, and `main` prints the messages."
+    tests:
+      - stdin: |
+          rent
+          3
+          rent
+          4
+          return
+          9
+          return
+          3
+          status
+          close
+      - stdin: |
+          status
+          rent
+          5
+          rent
+          1
+          return
+          12
+          return
+          1
+          repair
+          status
+          close
+        hidden: true
+      - call: |
+          BikeDock small = new BikeDock(4, 0);
+          BikeDock big = new BikeDock(20, 20);
+          System.out.println(small.rent(1) + " " + small.bringBack(4) + " " + small.bringBack(1) + " " + small.getBikes() + " " + small.freeSlots());
+          System.out.println(big.bringBack(1) + " " + big.rent(20) + " " + big.rent(1) + " " + big.getBikes() + " " + big.freeSlots());
+        hidden: true
+    more:
+      - task: |
+          The box office now sells tickets for two shows: an afternoon show with 120 seats, and an evening show with 200. `Concert.java` is the class above, unchanged. Write `main`: create one Concert for each show, and read commands, with the prompt `> ` before each one:
+
+          - `afternoon`: the next line is a number of tickets. Sell them for the afternoon show, and print `Sold! Tickets left: ` and the tickets left for that show. If they don't fit, print `Sorry, tickets left: ` and the tickets left.
+          - `evening`: the same, for the evening show.
+          - `status`: print the tickets left for both shows, like `Afternoon: 20 left, evening: 150 left`.
+          - `quit`: print `Box office closed` and end the program.
+          - Anything else: print `Unknown command: ` and the command.
+
+          For the input shown, the program prints:
+
+          ```
+          > Sold! Tickets left: 20
+          > Sold! Tickets left: 150
+          > Sorry, tickets left: 20
+          > Afternoon: 20 left, evening: 150 left
+          > Box office closed
+          ```
+        seed:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    // Create the two concerts, then write the command loop.
+                }
+            }
+          Concert.java: |
+            public class Concert {
+                private int seats;
+                private int sold;
+
+                public Concert(int seats) {
+                    this.seats = seats;
+                    this.sold = 0;
+                }
+
+                public boolean sell(int count) {
+                    if (this.sold + count > this.seats) {
+                        return false;
+                    }
+                    this.sold = this.sold + count;
+                    return true;
+                }
+
+                public boolean refund(int count) {
+                    if (count > this.sold) {
+                        return false;
+                    }
+                    this.sold = this.sold - count;
+                    return true;
+                }
+
+                public int getSold() {
+                    return this.sold;
+                }
+
+                public int ticketsLeft() {
+                    return this.seats - this.sold;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    // Create the two concerts, then write the command loop.
+                    Concert afternoon = new Concert(120);
+                    Concert evening = new Concert(200);
+                    while (true) {
+                        System.out.print("> ");
+                        String command = scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Box office closed");
+                            break;
+                        }
+                        if (command.equals("afternoon")) {
+                            sellTickets(afternoon, Integer.valueOf(scanner.nextLine()));
+                        } else if (command.equals("evening")) {
+                            sellTickets(evening, Integer.valueOf(scanner.nextLine()));
+                        } else if (command.equals("status")) {
+                            System.out.println("Afternoon: " + afternoon.ticketsLeft() + " left, evening: " + evening.ticketsLeft() + " left");
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+
+                public static void sellTickets(Concert concert, int count) {
+                    if (concert.sell(count)) {
+                        System.out.println("Sold! Tickets left: " + concert.ticketsLeft());
+                    } else {
+                        System.out.println("Sorry, tickets left: " + concert.ticketsLeft());
+                    }
+                }
+            }
+          Concert.java: |
+            public class Concert {
+                private int seats;
+                private int sold;
+
+                public Concert(int seats) {
+                    this.seats = seats;
+                    this.sold = 0;
+                }
+
+                public boolean sell(int count) {
+                    if (this.sold + count > this.seats) {
+                        return false;
+                    }
+                    this.sold = this.sold + count;
+                    return true;
+                }
+
+                public boolean refund(int count) {
+                    if (count > this.sold) {
+                        return false;
+                    }
+                    this.sold = this.sold - count;
+                    return true;
+                }
+
+                public int getSold() {
+                    return this.sold;
+                }
+
+                public int ticketsLeft() {
+                    return this.seats - this.sold;
+                }
+            }
+        hints:
+          - "Create `Concert afternoon = new Concert(120);` and `Concert evening = new Concert(200);` before the loop. The loop is shaped like the box office's, with `afternoon` and `evening` in the place of `sell`."
+          - "The answer to a sale is the same for both shows, so a static method in `Main`, such as `sellTickets(Concert concert, int count)`, can print it for either one: both styles in one program. Call it with `afternoon` or with `evening`."
+        require:
+          - pattern: new\s+Concert\s*\(\s*120\s*\)
+            message: "Create the afternoon show with `new Concert(120)`."
+          - pattern: new\s+Concert\s*\(\s*200\s*\)
+            message: "Create the evening show with `new Concert(200)`."
+        tests:
+          - stdin: |
+              afternoon
+              100
+              evening
+              50
+              afternoon
+              30
+              status
+              quit
+          - stdin: |
+              status
+              evening
+              200
+              evening
+              1
+              afternoon
+              120
+              status
+              morning
+              quit
+            hidden: true
+          - stdin: |
+              evening
+              30
+              afternoon
+              121
+              afternoon
+              20
+              evening
+              171
+              status
+              quit
+            hidden: true
+      - task: |
+          In the procedural version of the station, the only way to try its rules was to run the program and type commands. Now the rules are in `BikeDock`, and a test can check them alone. `BikeDockTest` has one test, for renting. Add a second test, for the other rule: bringing back more bikes than there are free slots changes nothing. For example, make a station of 10 slots with 8 bikes, try to bring back 3, and check that `bringBack` returns `false` and that the station still has 8 bikes.
+
+          The checks run your tests on the BikeDock as it is, where every test should pass, and on BikeDocks with a mistake in `bringBack`, where your new test should fail.
+        seed:
+          BikeDockTest.java: |
+            import static org.junit.Assert.assertEquals;
+            import static org.junit.Assert.assertFalse;
+            import static org.junit.Assert.assertTrue;
+
+            import org.junit.Test;
+
+            public class BikeDockTest {
+                @Test
+                public void rentingTakesBikes() {
+                    BikeDock dock = new BikeDock(10, 4);
+                    assertTrue(dock.rent(3));
+                    assertEquals(1, dock.getBikes());
+                }
+
+                // Write a test here for bringing back more bikes than there are free slots.
+            }
+          BikeDock.java: |
+            public class BikeDock {
+                private int slots;
+                private int bikes;
+
+                public BikeDock(int slots, int bikes) {
+                    this.slots = slots;
+                    this.bikes = bikes;
+                }
+
+                public boolean rent(int count) {
+                    if (count > this.bikes) {
+                        return false;
+                    }
+                    this.bikes = this.bikes - count;
+                    return true;
+                }
+
+                public boolean bringBack(int count) {
+                    if (count > this.freeSlots()) {
+                        return false;
+                    }
+                    this.bikes = this.bikes + count;
+                    return true;
+                }
+
+                public int getBikes() {
+                    return this.bikes;
+                }
+
+                public int freeSlots() {
+                    return this.slots - this.bikes;
+                }
+            }
+        solution:
+          BikeDockTest.java: |
+            import static org.junit.Assert.assertEquals;
+            import static org.junit.Assert.assertFalse;
+            import static org.junit.Assert.assertTrue;
+
+            import org.junit.Test;
+
+            public class BikeDockTest {
+                @Test
+                public void rentingTakesBikes() {
+                    BikeDock dock = new BikeDock(10, 4);
+                    assertTrue(dock.rent(3));
+                    assertEquals(1, dock.getBikes());
+                }
+
+                // Write a test here for bringing back more bikes than there are free slots.
+                @Test
+                public void bringingBackNeedsFreeSlots() {
+                    BikeDock dock = new BikeDock(10, 8);
+                    assertFalse(dock.bringBack(3));
+                    assertEquals(8, dock.getBikes());
+                }
+            }
+          BikeDock.java: |
+            public class BikeDock {
+                private int slots;
+                private int bikes;
+
+                public BikeDock(int slots, int bikes) {
+                    this.slots = slots;
+                    this.bikes = bikes;
+                }
+
+                public boolean rent(int count) {
+                    if (count > this.bikes) {
+                        return false;
+                    }
+                    this.bikes = this.bikes - count;
+                    return true;
+                }
+
+                public boolean bringBack(int count) {
+                    if (count > this.freeSlots()) {
+                        return false;
+                    }
+                    this.bikes = this.bikes + count;
+                    return true;
+                }
+
+                public int getBikes() {
+                    return this.bikes;
+                }
+
+                public int freeSlots() {
+                    return this.slots - this.bikes;
+                }
+            }
+        hints:
+          - "A new test is a `public void` method with `@Test` on the line before it. Make its own BikeDock, with `new BikeDock(10, 8)`, so that only 2 slots are free."
+          - "`assertFalse(dock.bringBack(3));` checks the answer, and `assertEquals(8, dock.getBikes());` checks that nothing changed. Check both: a mistake could get either one wrong."
+        require:
+          - pattern: "@Test\\b"
+            min: 2
+            message: "Add a second test method, with `@Test` on the line before it."
+        tests:
+          - name: The BikeDock as it is
+            junit: BikeDockTest
+          - name: A BikeDock whose bringBack never checks the free slots
+            junit: BikeDockTest
+            outcome: fail
+            replace:
+              BikeDock.java: |
+                public class BikeDock {
+                    private int slots;
+                    private int bikes;
+
+                    public BikeDock(int slots, int bikes) {
+                        this.slots = slots;
+                        this.bikes = bikes;
+                    }
+
+                    public boolean rent(int count) {
+                        if (count > this.bikes) {
+                            return false;
+                        }
+                        this.bikes = this.bikes - count;
+                        return true;
+                    }
+
+                    public boolean bringBack(int count) {
+                        this.bikes = this.bikes + count;
+                        return true;
+                    }
+
+                    public int getBikes() {
+                        return this.bikes;
+                    }
+
+                    public int freeSlots() {
+                        return this.slots - this.bikes;
+                    }
+                }
+          - name: A BikeDock whose bringBack says no, but takes the bikes anyway
+            junit: BikeDockTest
+            outcome: fail
+            hidden: true
+            replace:
+              BikeDock.java: |
+                public class BikeDock {
+                    private int slots;
+                    private int bikes;
+
+                    public BikeDock(int slots, int bikes) {
+                        this.slots = slots;
+                        this.bikes = bikes;
+                    }
+
+                    public boolean rent(int count) {
+                        if (count > this.bikes) {
+                            return false;
+                        }
+                        this.bikes = this.bikes - count;
+                        return true;
+                    }
+
+                    public boolean bringBack(int count) {
+                        boolean fits = count <= this.freeSlots();
+                        this.bikes = this.bikes + count;
+                        return fits;
+                    }
+
+                    public int getBikes() {
+                        return this.bikes;
+                    }
+
+                    public int freeSlots() {
+                        return this.slots - this.bikes;
+                    }
+                }
+          - name: A BikeDock whose bringBack changes nothing, but says yes
+            junit: BikeDockTest
+            outcome: fail
+            hidden: true
+            replace:
+              BikeDock.java: |
+                public class BikeDock {
+                    private int slots;
+                    private int bikes;
+
+                    public BikeDock(int slots, int bikes) {
+                        this.slots = slots;
+                        this.bikes = bikes;
+                    }
+
+                    public boolean rent(int count) {
+                        if (count > this.bikes) {
+                            return false;
+                        }
+                        this.bikes = this.bikes - count;
+                        return true;
+                    }
+
+                    public boolean bringBack(int count) {
+                        if (count > this.freeSlots()) {
+                            return true;
+                        }
+                        this.bikes = this.bikes + count;
+                        return true;
+                    }
+
+                    public int getBikes() {
+                        return this.bikes;
+                    }
+
+                    public int freeSlots() {
+                        return this.slots - this.bikes;
+                    }
+                }

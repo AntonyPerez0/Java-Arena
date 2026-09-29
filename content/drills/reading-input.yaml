@@ -1,0 +1,193 @@
+topic: reading-input
+drills:
+  - type: predict
+    after: reading-a-line
+    stdin: "Is anyone there?"
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      String shout = scanner.nextLine();
+      System.out.print("Echo: ");
+      System.out.println(shout);
+    why: "`nextLine()` keeps the typed line in `shout`, and the input itself isn't part of the output. `print` doesn't end the line, so the echoed text follows `Echo:` on the same line."
+
+  - type: predict
+    after: string-variables
+    body: |
+      String cat = "dog";
+      String dog = "cat";
+      System.out.println(cat);
+      System.out.println("dog");
+      System.out.println(dog);
+    why: "Without quotes, `cat` and `dog` are variable names, so they print their values: `cat` holds `dog` and `dog` holds `cat`. With quotes, `\"dog\"` is just that text."
+
+  - type: predict
+    after: joining-strings
+    body: |
+      String first = "sun";
+      String second = "flower";
+      System.out.println(first + second);
+      System.out.println(second + " " + first);
+    why: "`+` adds no space of its own, so `first + second` is `sunflower`. The second line gets its space from the `\" \"` between the two words."
+
+  - type: predict
+    after: joining-strings
+    body: |
+      String word = "ping";
+      System.out.println(word + "-" + word + "!");
+      System.out.println("word + word");
+    why: "Outside quotes, `+` joins the pieces `ping`, `-`, `ping` and `!`. Inside quotes, `word + word` is only text, printed exactly as written."
+
+  - type: predict
+    after: several-inputs
+    stdin: |
+      Ines
+      Tomas
+      Keiko
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      String gold = scanner.nextLine();
+      String silver = scanner.nextLine();
+      System.out.println("Silver: " + silver);
+      System.out.println("Gold: " + gold);
+    why: "The first `nextLine()` gets the first line and the second gets the second, whatever order they're printed in. Nothing reads `Keiko`, and input that's never read is simply left over."
+
+  - type: fill
+    after: joining-strings
+    body: |
+      String user = "mika";
+      String site = "example.org";
+      System.out.println(user + "[[@]]" + site);
+    why: "The text between the two variables is just the `@` sign. `+` puts the pieces right next to each other, with nothing added in between."
+
+  - type: fill
+    after: several-inputs
+    stdin: |
+      Noor
+      San Diego
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      String name = scanner.nextLine();
+      String city = scanner.[[nextLine]]();
+      System.out.println(name + " moved to " + city + ".");
+    why: "Each `nextLine()` reads the next whole line, spaces included, so the second call gets `San Diego`."
+
+  - type: bug
+    after: joining-strings
+    body: |
+      String guest = "Priya";
+      System.out.println("Welcome, " + guest + "!");
+      System.out.println("Good night," + guest + "!"); // BUG
+    fix: System.out.println("Good night, " + guest + "!");
+    why: "`+` adds no space, so the last line prints `Good night,Priya!`. The space belongs inside the quotes, after the comma."
+
+  - type: bug
+    after: several-inputs
+    stdin: |
+      soup
+      tea
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      System.out.println("Dish?");
+      String dish = scanner.nextLine();
+      System.out.println("Drink?");
+      String drink = scanner.nextLine();
+      System.out.println("Order: " + dish + " with " + dish); // BUG
+    fix: 'System.out.println("Order: " + dish + " with " + drink);'
+    why: "The second answer is read into `drink`, but the last line prints `dish` twice, giving `soup with soup`. The second variable there should be `drink`."
+
+  - type: compiles
+    after: reading-a-line
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      String line = scanner.nextline();
+      System.out.println(line);
+    why: "Java tells capital and small letters apart in method names too: the method is `nextLine`, with a capital L. There's no `nextline`, so javac reports `cannot find symbol`."
+
+  - type: compiles
+    after: joining-strings
+    body: |
+      String nothing = "";
+      System.out.println("[" + nothing + "]");
+    why: "`\"\"` is an empty String: text with no characters in it. It's a perfectly good value, so this compiles, and it prints `[]`."
+
+  - type: choice
+    after: string-variables
+    prompt: Why doesn't this compile?
+    body: |
+      String greeting = Hello;
+      System.out.println(greeting);
+    compiles: false
+    choices:
+      - "A variable can't be called `greeting`"
+      - "`Hello` has no quotes, so Java takes it as the name of a variable, and there's no such variable"
+      - "Text must be written in single quotes, like `'Hello'`"
+      - "`println` can only print text that is in quotes"
+    answer: 2
+    why: "Without quotes, a word is a name, and no variable called `Hello` exists, so javac says `cannot find symbol`. In double quotes, `\"Hello\"` is the text itself."
+
+  - type: choice
+    after: several-inputs
+    prompt: The input has only two lines, `up` and `down`. What happens when this program runs?
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      String a = scanner.nextLine();
+      String b = scanner.nextLine();
+      String c = scanner.nextLine();
+      System.out.println(a + b + c);
+    choices:
+      - "It prints `updown`: the missing line counts as empty text"
+      - "It prints `updownup`: the third read starts over from the first line"
+      - "It stops with a `NoSuchElementException` at the third `nextLine()`"
+      - "It doesn't compile, because it reads more lines than the input has"
+    answer: 3
+    why: "Each `nextLine()` takes the next line, and after `up` and `down` there's none left. The third call stops the program with `NoSuchElementException: No line found` before anything is printed. The compiler can't know how much input there will be, so it compiles fine."
+
+  - type: boss
+    after: several-inputs
+    prompt: |
+      Read two words, one per line, and print them as a hashtag and then as two separate words. For the input `sunny` and `day` the program prints:
+
+      ```
+      First word:
+      Second word:
+      #sunnyday
+      sunny day
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              System.out.println("First word:");
+              String first = scanner.nextLine();
+              System.out.println("Second word:");
+              String second = scanner.nextLine();
+              System.out.println("#" + first + second);
+              System.out.println(first + " " + second);
+          }
+      }
+    hints:
+      - Print each question, then read its answer with `nextLine()` into its own variable.
+      - "The hashtag is `\"#\" + first + second`, with no spaces. The last line needs `\" \"` between the two words."
+    tests:
+      - stdin: |
+          sunny
+          day
+      - stdin: |
+          ice
+          cream
+        hidden: true
+      - stdin: |
+          late
+          night
+        hidden: true

@@ -1,0 +1,222 @@
+topic: conditionals
+drills:
+  - type: predict
+    after: if-statements
+    body: |
+      int coins = 3;
+      if (coins > 10); {
+          coins = coins - 10;
+      }
+      System.out.println(coins);
+    why: "The `;` right after `if (coins > 10)` ends the `if` there, with nothing in it. The block below is then an ordinary block that always runs, so `coins` becomes 3 - 10, which is -7."
+
+  - type: predict
+    after: indentation
+    body: |
+      int total = 45;
+      if (total > 30) {
+          System.out.println("Free delivery");
+          if (total > 60) {
+              System.out.println("Free gift");
+          }
+          System.out.println("Thanks for ordering");
+      }
+      System.out.println("Total: " + total);
+    why: "45 is over 30, so the outer block runs from top to bottom. The inner `if` is false (45 isn't over 60), so only its own block is skipped: `Thanks for ordering` belongs to the outer block and still prints."
+
+  - type: predict
+    after: comparisons
+    body: |
+      int stock = 0;
+      if (stock <= 0) {
+          System.out.println("Sold out");
+      }
+      if (stock != 0) {
+          System.out.println("In stock: " + stock);
+      }
+      if (stock >= 0) {
+          System.out.println("Count OK");
+      }
+    why: "Each `if` is checked on its own. `<=` and `>=` include equality, so `0 <= 0` and `0 >= 0` are both true, while `0 != 0` is false and the middle block is skipped."
+
+  - type: predict
+    after: else
+    stdin: "0"
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int floor = Integer.valueOf(scanner.nextLine());
+      if (floor < 0) {
+          System.out.println("Lift to the car park");
+      } else {
+          System.out.println("Lift to floor " + floor);
+      }
+      System.out.println("Doors closing");
+    why: "0 is not less than 0, so the condition is false and the `else` block runs. The last line comes after the whole `if`/`else`, so it runs either way."
+
+  - type: predict
+    after: else-if
+    body: |
+      int signal = 50;
+      if (signal >= 80) {
+          System.out.println("4 bars");
+      } else if (signal > 50) {
+          System.out.println("3 bars");
+      } else if (signal >= 20) {
+          System.out.println("2 bars");
+      } else {
+          System.out.println("1 bar");
+      }
+    why: "50 isn't `>= 80`, and it isn't `> 50` either, since a number is never greater than itself. `50 >= 20` is true, so the chain prints `2 bars` and skips the rest."
+
+  - type: fill
+    after: comparisons
+    prompt: Fill in the condition, so `Refill soon` is printed only when fewer than 10 litres are left.
+    body: |
+      int litres = 6;
+      if ([[litres < 10‖10 > litres‖litres <= 9‖9 >= litres]]) {
+          System.out.println("Refill soon");
+      }
+      System.out.println("Litres left: " + litres);
+    why: "Fewer than 10 is `litres < 10`. With `<=` it has to be `litres <= 9`, because exactly 10 litres is not fewer than 10."
+
+  - type: fill
+    after: else-if
+    body: |
+      int hour = 9;
+      if (hour < 12) {
+          System.out.println("Morning shift");
+      } [[else if]] (hour < 18) {
+          System.out.println("Afternoon shift");
+      } else {
+          System.out.println("Night shift");
+      }
+    why: "`else if` adds a condition that is checked only when the ones before it were false, so just one shift is printed. With a plain `if` there, 9 would also pass `hour < 18` and print `Afternoon shift` too."
+
+  - type: bug
+    after: if-statements
+    prompt: The program should print `Watch out for ice` only when the temperature is below 0. Which line is wrong?
+    body: |
+      int temperature = 4;
+      if (temperature > 0) { // BUG
+          System.out.println("Watch out for ice");
+      }
+      System.out.println("Drive safely");
+    fix: "if (temperature < 0) {"
+    why: "Below 0 is `temperature < 0`. With `>`, the warning shows on every day above 0, like this one at 4 degrees, and never when it's freezing."
+
+  - type: bug
+    after: else-if
+    prompt: 50 points or more is a pass. With exactly 50 points the program should print `Pass`. Which line is wrong?
+    body: |
+      int points = 50;
+      if (points >= 90) {
+          System.out.println("Pass with honours");
+      } else if (points > 50) { // BUG
+          System.out.println("Pass");
+      } else {
+          System.out.println("Fail");
+      }
+    fix: "} else if (points >= 50) {"
+    why: "`points > 50` is false for exactly 50, so the chain falls through to `Fail`. \"50 or more\" is `points >= 50`."
+
+  - type: compiles
+    after: else
+    body: |
+      int age = 15;
+      if (age >= 18) {
+          System.out.println("Adult");
+      } else (age < 18) {
+          System.out.println("Minor");
+      }
+    why: "No. `else` has no condition of its own: it runs whenever the `if` was false, so javac can't make sense of `(age < 18)` after it and reports `not a statement`. Write just `} else {`, or `} else if (age < 18) {`."
+
+  - type: compiles
+    after: comparisons
+    body: |
+      double budget = 12.5;
+      int price = 12;
+      if (price <= budget) {
+          System.out.println("You can afford it");
+      }
+    why: "Yes. The comparison operators work on any numbers: to compare an `int` with a `double`, Java turns the `int` into a `double` first (12 becomes 12.0). The result is `true` or `false`, which is what `if` needs."
+
+  - type: choice
+    after: comparisons
+    prompt: Which condition is true when `level` is 10 or more?
+    choices:
+      - "`level > 10`"
+      - "`level >= 10`"
+      - "`level => 10`"
+      - "`10 >= level`"
+    answer: 2
+    why: "`>=` means greater than or equal to, so it includes 10 itself. `level > 10` misses 10, `=>` isn't a Java operator, and `10 >= level` is true for 10 or less."
+
+  - type: choice
+    after: order-of-conditions
+    prompt: This chain should print `Veteran` for 5 years or more, but it never does. Why?
+    body: |
+      int years = 7;
+      if (years >= 1) {
+          System.out.println("Member");
+      } else if (years >= 5) {
+          System.out.println("Veteran");
+      } else {
+          System.out.println("New");
+      }
+    choices:
+      - "An `else if` only runs when the `if` before it was true"
+      - "`>=` can only be used once in a chain"
+      - "Every number that is at least 5 is also at least 1, so the first branch takes it and the rest of the chain is skipped"
+      - "The final `else` is checked before the `else if`"
+    answer: 3
+    why: "Only the first true condition in a chain counts, and `years >= 1` is true for every veteran, so the `Veteran` branch can never run. Checking `years >= 5` first fixes it."
+
+  - type: boss
+    after: order-of-conditions
+    prompt: |
+      Read a wind speed in km/h (a whole number) and print how strong the wind is, on this invented scale: under 20 is `Calm`, 20 to 49 is `Breezy`, 50 to 88 is `Gale`, and 89 or more is `Storm`. For the input `60` the program prints:
+
+      ```
+      Gale
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int speed = Integer.valueOf(scanner.nextLine());
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int speed = Integer.valueOf(scanner.nextLine());
+              if (speed < 20) {
+                  System.out.println("Calm");
+              } else if (speed < 50) {
+                  System.out.println("Breezy");
+              } else if (speed < 89) {
+                  System.out.println("Gale");
+              } else {
+                  System.out.println("Storm");
+              }
+          }
+      }
+    hints:
+      - Start from one end of the scale, so each `else if` can rely on the conditions before it being false.
+      - "`if (speed < 20)`, then `else if (speed < 50)`, then `else if (speed < 89)`, and a final `else` for `Storm`."
+    tests:
+      - stdin: "60"
+      - stdin: "19"
+        hidden: true
+      - stdin: "20"
+        hidden: true
+      - stdin: "88"
+        hidden: true
+      - stdin: "89"
+        hidden: true

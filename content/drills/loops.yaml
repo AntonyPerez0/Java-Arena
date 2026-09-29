@@ -1,0 +1,302 @@
+topic: loops
+drills:
+  - type: predict
+    after: while-and-break
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      while (true) {
+          String stop = scanner.nextLine();
+          if (stop.equals("depot")) {
+              break;
+          }
+          System.out.println("Next stop: " + stop);
+      }
+      System.out.println("Everyone off");
+    stdin: |
+      Harbour
+      Old Mill
+      depot
+      Castle Hill
+    why: "The loop prints each stop until it reads `depot`. Then `break` jumps to the first line after the loop, so `Castle Hill` is never read."
+
+  - type: predict
+    after: continue
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      while (true) {
+          String dish = scanner.nextLine();
+          if (dish.equals("done")) {
+              break;
+          }
+          System.out.println("Order: " + dish);
+          if (dish.equals("salad")) {
+              continue;
+          }
+          System.out.println("with fries");
+      }
+    stdin: |
+      salad
+      burger
+      done
+    why: "For `salad`, `continue` goes back to the start of the loop before `with fries` is printed. `burger` runs through the whole round, and `done` ends the loop."
+
+  - type: predict
+    after: counting
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      while (true) {
+          String item = scanner.nextLine();
+          if (item.equals("pay")) {
+              break;
+          }
+          int items = 0;
+          items++;
+          System.out.println("Items: " + items);
+      }
+    stdin: |
+      milk
+      bread
+      eggs
+      pay
+    why: "`int items = 0;` is inside the loop, so every round makes a new counter at 0, and `items++` only ever takes it to 1. A counter belongs before the loop."
+
+  - type: predict
+    after: summing
+    body: |
+      int total = 0;
+      int n = 1;
+      while (true) {
+          total += n;
+          if (total > 10) {
+              break;
+          }
+          n += 2;
+      }
+      System.out.println("n: " + n);
+      System.out.println("total: " + total);
+    why: "`n` goes 1, 3, 5, 7 while `total` goes 1, 4, 9, 16. At 16 the `break` runs before `n += 2`, so `n` stays 7."
+
+  - type: predict
+    after: averages
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int sum = 0;
+      int count = 0;
+      while (true) {
+          int mark = Integer.valueOf(scanner.nextLine());
+          if (mark == -1) {
+              break;
+          }
+          sum += mark;
+          count++;
+      }
+      System.out.println("Average: " + sum / count);
+    stdin: |
+      7
+      8
+      8
+      8
+      -1
+    why: "The sum is 31 and the count 4. Both are `int`s, so `sum / count` is whole-number division and drops the .75; keeping it takes `(double) sum / count`."
+
+  - type: fill
+    after: continue
+    prompt: Empty lines should be skipped. Fill the blank so the program prints the output shown.
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      while (true) {
+          String guest = scanner.nextLine();
+          if (guest.equals("")) {
+              [[continue]];
+          }
+          if (guest.equals("end")) {
+              break;
+          }
+          System.out.println("Welcome, " + guest + "!");
+      }
+    stdin: |
+      Mira
+
+      Oskar
+      end
+    why: "`continue` skips the rest of the round for the empty line, and the loop goes on reading. `break` would end the loop at the empty line, before `Oskar` is read."
+
+  - type: fill
+    after: counting
+    prompt: Each `in` adds a person and each `out` takes one away. Fill the blank so the program prints the output shown.
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int people = 0;
+      while (true) {
+          String move = scanner.nextLine();
+          if (move.equals("close")) {
+              break;
+          }
+          if (move.equals("in")) {
+              people++;
+          } else {
+              [[people--‖people -= 1‖people = people - 1‖--people]];
+          }
+      }
+      System.out.println(people + " inside");
+    stdin: |
+      in
+      in
+      out
+      in
+      close
+    why: "`people--` takes one away, just as `people++` adds one. Three people went in and one came out, so 2 are inside."
+
+  - type: bug
+    after: while-and-break
+    body: |
+      int set = 1;
+      while (true) {
+          if (set == 4) { // BUG
+              break;
+          }
+          System.out.println("Set " + set);
+          set = set + 1;
+      }
+    fix: "if (set > 4) {"
+    why: "With `set == 4` the loop stops before it prints `Set 4`. It must still run when `set` is 4 and stop only once it goes past it, as with `set > 4`."
+
+  - type: bug
+    after: summing
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int total = 0;
+      while (true) {
+          int minutes = Integer.valueOf(scanner.nextLine());
+          if (minutes == 0) {
+              break;
+          }
+          total = minutes; // BUG
+      }
+      System.out.println("Screen time: " + total + " min");
+    stdin: |
+      40
+      25
+      30
+      0
+    fix: total += minutes;
+    why: "`total = minutes;` replaces the total with the latest number each round, so only the last one, 30, is left. `total += minutes;` adds each one to it."
+
+  - type: compiles
+    after: while-and-break
+    body: |
+      int n = 1;
+      while (true) {
+          if (n <= 3) {
+              System.out.println(n);
+          } else {
+              break;
+          }
+          n = n + 1;
+      }
+      System.out.println("done");
+    why: "Yes. `break` may sit anywhere inside the loop's block, also inside an `else`, and it leaves the loop around it."
+
+  - type: compiles
+    after: summing
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int total;
+      while (true) {
+          int points = Integer.valueOf(scanner.nextLine());
+          if (points == 0) {
+              break;
+          }
+          total += points;
+      }
+      System.out.println(total);
+    why: "No. `total` is made without a starting value, so `total += points` has nothing to add to, and javac says `variable total might not have been initialized`. A sum starts with `int total = 0;`."
+
+  - type: choice
+    after: continue
+    prompt: A `continue` runs inside a `while (true)` loop. Where does the program go next?
+    choices:
+      - "To the first line after the loop"
+      - "Back to the start of the loop, for the next round"
+      - "To the line right after the `if` that holds the `continue`"
+      - "The program ends"
+    answer: 2
+    why: "`continue` skips only the rest of this round: the loop goes back to its start and runs the next round. Leaving the loop is what `break` does."
+
+  - type: choice
+    after: averages
+    prompt: "`sum` is 7 and `count` is 2, both `int` variables. Which line prints `3.5`?"
+    choices:
+      - "`System.out.println(sum / count);`"
+      - "`System.out.println((double) (sum / count));`"
+      - "`System.out.println((double) sum / count);`"
+      - "`System.out.println(sum / count * 1.0);`"
+    answer: 3
+    why: "`(double) sum` makes the sum a `double` before the division, so the .5 is kept. In the other lines `sum / count` divides two `int`s first and gets 3, and making that a `double` afterwards only gives 3.0."
+
+  - type: boss
+    after: averages
+    prompt: |
+      Read the minutes you practised each day until `-1`. A day with 0 minutes is a rest day: skip it with `continue`. Then print the number of practice days and the average minutes per practice day. There's always at least one practice day. For the input `30`, `0`, `45`, `60`, `35` and `-1` the program prints:
+
+      ```
+      Practice days: 4
+      Average: 42.5
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int days = 0;
+              int minutes = 0;
+              while (true) {
+                  int today = Integer.valueOf(scanner.nextLine());
+                  if (today == -1) {
+                      break;
+                  }
+                  if (today == 0) {
+                      continue;
+                  }
+                  days++;
+                  minutes += today;
+              }
+              System.out.println("Practice days: " + days);
+              System.out.println("Average: " + (double) minutes / days);
+          }
+      }
+    hints:
+      - "A count of days and a sum of minutes, both made before the loop. Check for -1 (`break`) first, then for 0 (`continue`)."
+      - "After the loop, `(double) minutes / days` keeps the decimals of the average."
+    require:
+      - pattern: \bcontinue\s*;
+        message: "Skip the rest days with `continue`."
+    tests:
+      - stdin: |
+          30
+          0
+          45
+          60
+          35
+          -1
+      - stdin: |
+          20
+          -1
+        hidden: true
+      - stdin: |
+          0
+          15
+          0
+          10
+          -1
+        hidden: true

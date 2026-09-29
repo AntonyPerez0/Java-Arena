@@ -498,6 +498,24 @@ await test('playground: a class in a file of its own; errors and crashes name th
   await ctx.close();
 });
 
+await test('part 5 mistakes are explained: a missing cast in equals, and an instance variable that is null', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, MAIN('        Pot pot = new Pot();\n        pot.water();'));
+  await page.click('text=Add a class');
+  await page.fill('#new-class', 'Pot');
+  await page.click('.file-add-form button[type=submit]');
+  await setCode(page, 'public class Pot {\n    private String plant;\n\n    public void water() {\n        System.out.println(this.plant.length());\n    }\n\n    public boolean equals(Object compared) {\n        return this.plant.equals(compared.plant);\n    }\n}\n');
+  let out = await check(page);
+  expect(/Pot\.java, line 9/i.test(out) && out.includes('compared has the type Object') && out.includes('other.plant'), out);
+  await setCode(page, 'public class Pot {\n    private String plant;\n\n    public void water() {\n        System.out.println(this.plant.length());\n    }\n}\n');
+  out = await check(page);
+  expect(out.includes('NullPointerException') && out.includes('the instance variable plant holds no object') && out.includes('for example in the constructor'), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('playground: run a program with input, share it, open the link elsewhere', async () => {
   const { ctx, page, errors } = await newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);

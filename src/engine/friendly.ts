@@ -11,6 +11,8 @@ const RULES: Rule[] = [
   { code: "compiler.err.expected", when: /^';' expected/, explain: () => "Java needs a semicolon ; at the end of this statement. Look at the end of the line the arrow points to (or the line before it)." },
   { code: "compiler.err.expected", explain: (d) => `Java expected ${quoted(d.message) ? `'${quoted(d.message)}'` : "something else"} here. Check for a missing bracket, parenthesis or semicolon just before the arrow.` },
   { code: "compiler.err.expected3", explain: () => "Java expected a different symbol here. Check for a missing bracket, parenthesis or semicolon just before the arrow." },
+  { code: "compiler.err.cant.resolve.location", when: /location: variable \w+ of type Object\b/, explain: (d) => objectHasNo(d.message) },
+  { code: "compiler.err.cant.resolve.location.args", when: /location: variable \w+ of type Object\b/, explain: (d) => objectHasNo(d.message) },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: () => "Java doesn't know a variable with this name here. Check the spelling (upper and lower case matter) and that the variable was created before this line, inside the same block { }." },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class (Scanner|ArrayList|HashMap|List|Map|Random|HashSet|Set|Arrays|Collections|LocalDate|Files|Paths|Path)\b/, explain: (d) => `To use ${/symbol:\s+class (\w+)/.exec(d.message)?.[1]}, import it at the top of the file, for example import java.util.Scanner;` },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: () => "Java doesn't know a class with this name. Check the spelling and capital letters, and whether it needs an import at the top of the file." },
@@ -20,6 +22,23 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.resolve.location", explain: () => "Java can't find this name. Check the spelling and capital letters." },
   { code: "compiler.err.cant.resolve", explain: () => "Java can't find this name. Check the spelling and capital letters." },
   { code: "compiler.err.prob.found.req", when: /possible lossy conversion/, explain: () => "This would squeeze a bigger or more precise number type into a smaller one and could lose information, for example a double into an int. Convert it on purpose with a cast such as (int), or use a variable of the bigger type." },
+  {
+    code: "compiler.err.prob.found.req",
+    when: /incompatible types: Object cannot be converted to \w+/,
+    explain: (d) => {
+      const t = /Object cannot be converted to (\w+)/.exec(d.message)?.[1];
+      return `A value of type Object could be any object, so Java won't put it in a ${t} variable by itself. When you know it is a ${t} (check with instanceof first, as equals does), cast it by putting (${t}) in front of it.`;
+    },
+  },
+  {
+    code: "compiler.err.prob.found.req",
+    when: /incompatible types: <null> cannot be converted to (int|long|double|float|boolean|char|byte|short)\b/,
+    explain: (d) => {
+      const t = /<null> cannot be converted to (\w+)/.exec(d.message)?.[1] ?? "int";
+      const zero: Record<string, string> = { boolean: "false", char: "'a'", double: "0.0", float: "0.0f" };
+      return `${/^[aeiou]/.test(t) ? "An" : "A"} ${t} variable always holds a value, so it can't be null. null means "no object", and only variables of a class type, such as String, can hold it. Give it a value such as ${zero[t] ?? "0"} instead.`;
+    },
+  },
   { code: "compiler.err.prob.found.req", when: /cannot be converted to/, explain: () => "The value on the right has a different type than the variable or parameter expects. For example text in quotes is a String, not an int; Integer.valueOf(...) turns text into a number." },
   { code: "compiler.err.prob.found.req", when: /unexpected return value/, explain: () => "This method is void, so it can't return a value. Change void to the value's type, or remove the value after return." },
   { code: "compiler.err.prob.found.req", when: /missing return value/, explain: () => "This method must return a value: write return followed by the value." },
@@ -60,6 +79,15 @@ const RULES: Rule[] = [
   { code: "compiler.err.var.might.not.have.been.initialized", explain: () => "This variable is used before it has a value. Give it a starting value where you create it, for example int sum = 0;" },
   { code: "compiler.err.else.without.if", explain: () => "This else has no matching if. A common cause is a semicolon right after if (...), which ends the if before its block, or a missing { }." },
   { code: "compiler.err.premature.eof", explain: () => "The file ended while Java was still inside a block. A closing brace } is missing somewhere; every { needs its }." },
+  {
+    code: "compiler.err.already.defined",
+    when: /^(method|constructor) [\w$]+\(.*\) is already defined in class/,
+    explain: (d) => {
+      const [, kind, name, params] = /^(method|constructor) ([\w$]+)\((.*)\)/.exec(d.message) ?? [];
+      const takes = params ? `takes (${params.replace(/,/g, ", ")})` : "takes no parameters";
+      return `This class already has a ${kind} ${name} that ${takes}. Methods and constructors can share a name only when their parameters differ in number, types or order. The parameter names and the return type don't count.`;
+    },
+  },
   { code: "compiler.err.already.defined", explain: () => "A variable or method with this name already exists here. Use a different name, or drop the type to change the existing variable (name = ... instead of String name = ...)." },
   { code: "compiler.err.report.access", explain: () => "This is private, so only code inside its own class can use it. Use a public method of that class (for example a getter) instead." },
   { code: "compiler.err.unreported.exception.need.to.catch.or.throw", explain: () => "This can throw a checked exception, so Java insists you handle it: wrap it in try { ... } catch (...) { ... }, or add throws ... to the method header." },
@@ -82,6 +110,14 @@ const RULES: Rule[] = [
   { code: "compiler.err.ref.ambiguous", explain: () => "Java found more than one thing with this name and can't tell which one you mean." },
   { code: "compiler.err.var.not.initialized.in.default.constructor", explain: () => "This final variable never gets a value. Give it one where it is declared or in every constructor." },
 ];
+
+/** A name looked up on a variable of type Object, such as equals' parameter used before its cast. */
+function objectHasNo(m: string): string {
+  const v = /location: variable (\w+) of type Object/.exec(m)?.[1] ?? "it";
+  const what = /symbol:\s+(variable|method) (\w+)/.exec(m);
+  const member = what ? (what[1] === "method" ? `${what[2]}()` : what[2]) : "";
+  return `${v} has the type Object, and Object has no ${what?.[1] ?? "member"} ${member}. Java goes by the variable's type, even when the object in it is one of yours. Cast it to your own class first, for example Parcel other = (Parcel) ${v}; with your class's name instead of Parcel, and then use other.${member}.`;
+}
 
 /** A plain-English note for one javac diagnostic, or null when there is no rule for it. */
 export function explainDiagnostic(d: Diagnostic): string | null {
@@ -128,8 +164,8 @@ function nullThing(because: string): string {
   if (/^<(local|parameter)\d+>\[/.test(t) || /\[[^\]]*\]$/.test(t)) return "an element of an array";
   const ret = /^the return value of "(?:[\w$]+\.)*([\w$]+\([^)]*\))"$/.exec(because);
   if (ret) return `the value ${ret[1].replace(/\(.*\)/, "()")} returned`;
-  const field = /^(?:this|[\w$]+)\.([\w$]+)$/.exec(t);
-  if (field) return `the variable ${field[1]}`;
+  const field = /^(this|[\w$]+)\.([\w$]+)$/.exec(t);
+  if (field) return field[1] === "this" ? `the instance variable ${field[2]}` : `the variable ${field[2]}`;
   return /^[\w$]+$/.test(t) ? `the variable ${t}` : "a value";
 }
 
@@ -140,13 +176,14 @@ function explainNull(m: string): string {
     const primitive: Record<string, string> = { Integer: "int", Double: "double", Long: "long", Boolean: "boolean", Character: "char" };
     if (primitive[type] && /Value$/.test(method))
       return `The program used ${/^[AEIOU]/.test(type) ? "an" : "a"} ${type} that is null as a plain ${primitive[type]} (it was ${nullThing(because)}). null means "no value": a list, a map or a variable that was never set may have given it.`;
-    return `The program called ${method}() on ${/^[AEIOU]/.test(type) ? "an" : "a"} ${type} that is null: ${nullThing(because)} holds no object, so there is nothing to call ${method}() on. Check where that value was supposed to be set.`;
+    const own = /^"this\.([\w$]+)"$/.exec(because)?.[1];
+    return `The program called ${method}() on ${/^[AEIOU]/.test(type) ? "an" : "a"} ${type} that is null: ${nullThing(because)} holds no object, so there is nothing to call ${method}() on. ${own ? `An instance variable of a class type is null until the constructor or a method gives it an object: check that ${own} gets one, for example in the constructor.` : "Check where that value was supposed to be set."}`;
   }
   const arr = /^Cannot (?:load from \w+ array|store to \w+ array|read the array length) because (.+) is null$/.exec(m);
   if (arr)
     return `The program used an array that is null: ${nullThing(arr[1])} holds no array. An array exists only after new, for example new int[5].`;
   const field = /^Cannot (?:read|assign) field "([\w$]+)" because (.+) is null$/.exec(m);
-  if (field) return `The program used the field ${field[1]} of an object that is null: ${nullThing(field[2])} holds no object.`;
+  if (field) return `The program used the instance variable ${field[1]} of an object that is null: ${nullThing(field[2])} holds no object.`;
   return `The program used a variable that holds null (no object) as if it held an object.${m ? " " + m + "." : ""}`;
 }
 

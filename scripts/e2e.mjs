@@ -375,6 +375,25 @@ const lessonSession = await newPage();
     const list = await check(page);
     expect(list.includes('IndexOutOfBoundsException (line 11)') && list.includes('asked for index 3 of a list with 3 values'), list);
   });
+  await test('a class in its own file: a tab per file, errors marked in the right file, and a pass', async () => {
+    await page.goto(BASE + 'learn/classes/constructors/');
+    await lessonReady(page);
+    expect((await page.locator('.file-tab').allInnerTexts()).join() === 'Parcel.java,Main.java', 'a tab per file, the class first');
+    // The starter Parcel has no constructor yet, so Main's new Parcel("Amir", 1200) doesn't compile.
+    await check(page);
+    const res = await page.locator('.results').innerText();
+    expect(/didn't compile/i.test(res) && res.includes('constructor Parcel'), res);
+    expect((await page.locator('.file-tab-on').innerText()).includes('Main.java') && (await page.locator('.file-tab-on .file-tab-errors').count()) === 1, 'the file with the error is shown, with its count');
+    await axe(page, 'a challenge of two files, with an error');
+    await page.click('#file-tab-0');
+    await setCode(page, 'public class Parcel {\n    private String recipient;\n    private int grams;\n\n    public Parcel(String recipient, int grams) {\n        this.recipient = recipient;\n        this.grams = grams;\n    }\n\n    public void printInfo() {\n        System.out.println("Parcel for " + this.recipient + ", " + this.grams + " g");\n    }\n}\n');
+    await check(page);
+    const passed = await page.locator('.results').innerText();
+    expect(passed.includes('All tests passed'), passed);
+    // The code of both files is saved.
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('java-arena-v1')).steps['classes-constructor']?.challenges?.[0]?.code ?? '');
+    expect(saved.includes('// ==== Main.java ====') && saved.includes('this.grams = grams;'), saved.slice(0, 300));
+  });
   await test('the indentation check accepts switch, multi-line headers, lambdas and other brace styles', async () => {
     const ok = {
       'classic switch': 'class A {\n    void f(int x) {\n        switch (x) {\n            case 1:\n                g();\n                break;\n            case 2: {\n                h();\n                break;\n            }\n            default:\n                k();\n        }\n    }\n}',

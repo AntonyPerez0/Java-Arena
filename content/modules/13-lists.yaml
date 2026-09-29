@@ -1570,11 +1570,13 @@ steps:
 
       Lists have ready-made methods for some searches, such as `indexOf` and `contains`, and the next module introduces them. Writing the loop yourself shows how they work, and a loop can do more than they can, like finding every match.
 
-      **Your turn:** read song titles, one per line, until `end`. Then read one more title: the song to look for. Print its track number (its place in the playlist, counting from 1) as `Track 3`, or `Not in the playlist` when it isn't there. When the song is in the playlist twice, print its first track. For the input `Night Drive`, `Low Tide`, `Glass Garden`, `end` and `Glass Garden` the program prints:
+      **Your turn:** a music player repeats its playlist: after the last song, it starts again from the first. Read the song titles, one per line, until `end`. Then read one more title: the song playing now. Print `Up next: ` and the song that comes after it, or `Unknown song` when the title isn't in the playlist. When the song is in the playlist twice, go by its first place. For the input `Night Drive`, `Low Tide`, `Glass Garden`, `end` and `Low Tide` the program prints:
 
       ```
-      Track 3
+      Up next: Glass Garden
       ```
+
+      After `Glass Garden`, the next song would be `Night Drive`.
     seed: |
       import java.util.ArrayList;
       import java.util.Scanner;
@@ -1601,27 +1603,33 @@ steps:
                   }
                   playlist.add(title);
               }
-              String wanted = scanner.nextLine();
+              String playing = scanner.nextLine();
               int found = -1;
               for (int i = 0; i < playlist.size(); i++) {
-                  if (playlist.get(i).equals(wanted)) {
+                  if (playlist.get(i).equals(playing)) {
                       found = i;
                       break;
                   }
               }
               if (found == -1) {
-                  System.out.println("Not in the playlist");
+                  System.out.println("Unknown song");
               } else {
-                  System.out.println("Track " + (found + 1));
+                  int next = found + 1;
+                  if (next == playlist.size()) {
+                      next = 0;
+                  }
+                  System.out.println("Up next: " + playlist.get(next));
               }
           }
       }
     hints:
-      - "After reading the playlist, read the wanted title. Then search with `int found = -1;` and a loop that sets `found = i` and breaks at the first match."
-      - "Compare with `playlist.get(i).equals(wanted)`. The track number is `found + 1`."
+      - "First find the index of the song playing now: `int found = -1;`, and a loop that sets `found = i` and breaks at the first match (compare with `equals`)."
+      - "The next song is at `found + 1`. When that equals `playlist.size()`, there's no such index: the next song is the one at index 0."
     require:
       - pattern: \bplaylist\.get\s*\(
         message: "Look through the list with `playlist.get(i)`."
+      - pattern: \bplaylist\.size\s*\(\s*\)
+        message: "Use `playlist.size()`, in the search loop and to tell whether the song is the last one."
       - pattern: \.equals\s*\(
         message: "Compare the titles with `equals`."
     tests:
@@ -1630,7 +1638,14 @@ steps:
           Low Tide
           Glass Garden
           end
+          Low Tide
+      - stdin: |
+          Night Drive
+          Low Tide
           Glass Garden
+          end
+          Glass Garden
+        hidden: true
       - stdin: |
           Night Drive
           Low Tide
@@ -1642,16 +1657,16 @@ steps:
           Low Tide
           Night Drive
           Low Tide
+          Glass Garden
           end
           Low Tide
         hidden: true
       - stdin: |
+          Glass Garden
           end
-          Low Tide
+          Glass Garden
         hidden: true
       - stdin: |
-          Night Drive
-          Low Tide
           end
           Low Tide
         hidden: true

@@ -161,7 +161,7 @@ const EXCEPTIONS: [RegExp, (message: string) => string][] = [
   [/InputMismatchException$/, () => "The program asked the Scanner for a number, but the next input wasn't one."],
   [/NoSuchElementException$/, (m) => (/No line found/.test(m) ? "The program asked for more input than it was given: it read another line after the input ran out." : "The program asked for the next element, but there wasn't one.")],
   [/ClassCastException$/, () => "The program cast an object to a type it isn't."],
-  [/ConcurrentModificationException$/, () => "The program changed a list while looping over it with a for-each loop. Collect the changes and apply them after the loop, or use removeIf."],
+  [/ConcurrentModificationException$/, () => "The program added to or removed from a list while a for-each loop was going through it. Loop over the indexes instead (going backwards when removing), or collect the changes and make them after the loop."],
   [/StackOverflowError$/, () => "A method kept calling itself (or methods kept calling each other) without stopping, until the call stack ran out of room. Check the stopping condition of the recursion."],
   [/OutOfMemoryError$/, () => "The program used up all its memory, for example by adding to a list forever."],
   [/UnsupportedOperationException$/, () => "This collection can't be changed (lists from List.of(...) are fixed). Copy it into a new ArrayList<>(...) first."],

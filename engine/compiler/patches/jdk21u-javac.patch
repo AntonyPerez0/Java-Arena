@@ -1,0 +1,284 @@
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Type.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Type.java
+index 203e9f9c..3a385fe0 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Type.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Type.java
+@@ -807,7 +807,8 @@ public abstract class Type extends AnnoConstruct implements TypeMirror, PoolCons
+                 return String.valueOf((char) ((Integer) cv).intValue());
+             }
+             else {
+-                return cv.toString();
++                // Java Arena: JDK Float/Double.toString on TeaVM (constant folding of "x" + 1e23)
++                return javaarena.jdk.JdkNumbers.valueToString(cv);
+             }
+         }
+ 
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Types.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Types.java
+index f4e2ea66..22b94c3d 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Types.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/code/Types.java
+@@ -665,7 +665,10 @@ public class Types {
+      */
+     class DescriptorCache {
+ 
+-        private WeakHashMap<TypeSymbol, Entry> _map = new WeakHashMap<>();
++        // Java Arena: a HashMap instead of a WeakHashMap. On TeaVM a WeakHashMap entry is held
++        // by a JS FinalizationRegistry together with its value, and the value refers back to the
++        // key, so no entry is ever freed and each compile leaks its symbols. Output is unchanged.
++        private HashMap<TypeSymbol, Entry> _map = new HashMap<>();
+ 
+         class FunctionDescriptor {
+             Symbol descSym;
+@@ -2932,7 +2935,8 @@ public class Types {
+     // <editor-fold defaultstate="collapsed" desc="Determining method implementation in given site">
+     class ImplementationCache {
+ 
+-        private WeakHashMap<MethodSymbol, SoftReference<Map<TypeSymbol, Entry>>> _map = new WeakHashMap<>();
++        // Java Arena: HashMap instead of WeakHashMap, see DescriptorCache.
++        private HashMap<MethodSymbol, SoftReference<Map<TypeSymbol, Entry>>> _map = new HashMap<>();
+ 
+         class Entry {
+             final MethodSymbol cachedImpl;
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/comp/ConstFold.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/comp/ConstFold.java
+index d46694b6..5328cba3 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/comp/ConstFold.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/comp/ConstFold.java
+@@ -113,10 +113,10 @@ strictfp class ConstFold {
+                 return syms.longType.constType(Long.valueOf(~longValue(od)));
+ 
+             case fneg: // unary -
+-                return syms.floatType.constType(Float.valueOf(-floatValue(od)));
++                return syms.floatType.constType(Float.valueOf(javaarena.jdk.JdkNumbers.negate(floatValue(od)))); // Java Arena
+ 
+             case dneg: // ~
+-                return syms.doubleType.constType(Double.valueOf(-doubleValue(od)));
++                return syms.doubleType.constType(Double.valueOf(javaarena.jdk.JdkNumbers.negate(doubleValue(od)))); // Java Arena
+ 
+             default:
+                 return null;
+@@ -145,6 +145,23 @@ strictfp class ConstFold {
+             } else {
+                 Object l = left.constValue();
+                 Object r = right.constValue();
++                // Java Arena: compiled to WebAssembly by TeaVM, an integer division by zero
++                // traps instead of throwing ArithmeticException, and MIN_VALUE / -1 traps
++                // instead of overflowing, so handle both before dividing.
++                switch (opcode) {
++                case idiv: case imod:
++                    if (intValue(r) == 0)
++                        throw new ArithmeticException("/ by zero");
++                    if (intValue(r) == -1)
++                        return syms.intType.constType(opcode == idiv ? -intValue(l) : 0);
++                    break;
++                case ldiv: case lmod:
++                    if (longValue(r) == 0)
++                        throw new ArithmeticException("/ by zero");
++                    if (longValue(r) == -1)
++                        return syms.longType.constType(Long.valueOf(opcode == ldiv ? -longValue(l) : 0L));
++                    break;
++                }
+                 switch (opcode) {
+                 case iadd:
+                     return syms.intType.constType(intValue(l) + intValue(r));
+@@ -251,7 +268,7 @@ strictfp class ConstFold {
+                         Float.valueOf(floatValue(l) / floatValue(r)));
+                 case fmod:
+                     return syms.floatType.constType(
+-                        Float.valueOf(floatValue(l) % floatValue(r)));
++                        Float.valueOf(javaarena.jdk.JdkNumbers.remainder(floatValue(l), floatValue(r)))); // Java Arena
+                 case fcmpg: case fcmpl:
+                     if (floatValue(l) < floatValue(r))
+                         return syms.intType.constType(minusOne);
+@@ -277,7 +294,7 @@ strictfp class ConstFold {
+                         Double.valueOf(doubleValue(l) / doubleValue(r)));
+                 case dmod:
+                     return syms.doubleType.constType(
+-                        Double.valueOf(doubleValue(l) % doubleValue(r)));
++                        Double.valueOf(javaarena.jdk.JdkNumbers.remainder(doubleValue(l), doubleValue(r)))); // Java Arena
+                 case dcmpg: case dcmpl:
+                     if (doubleValue(l) < doubleValue(r))
+                         return syms.intType.constType(minusOne);
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavaTokenizer.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavaTokenizer.java
+index 6f6c3a19..866148ad 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavaTokenizer.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavaTokenizer.java
+@@ -841,14 +841,15 @@ public class JavaTokenizer extends UnicodeReader {
+                     // all ASCII range chars already handled, above
+                     isJavaIdentifierPart = false;
+                 } else {
+-                    if (Character.isIdentifierIgnorable(get())) {
++                    // Java Arena: JDK 21 character data instead of TeaVM's (javaarena.jdk.JdkChars)
++                    if (javaarena.jdk.JdkChars.isIdentifierIgnorable(get())) {
+                         next();
+                         continue;
+                     }
+ 
+                     isJavaIdentifierPart = isSurrogate()
+-                            ? Character.isJavaIdentifierPart(getCodepoint())
+-                            : Character.isJavaIdentifierPart(get());
++                            ? javaarena.jdk.JdkChars.isJavaIdentifierPart(getCodepoint())
++                            : javaarena.jdk.JdkChars.isJavaIdentifierPart(get());
+                 }
+ 
+                 if (!isJavaIdentifierPart) {
+@@ -1139,9 +1140,10 @@ public class JavaTokenizer extends UnicodeReader {
+                             // all ASCII range chars already handled, above
+                             isJavaIdentifierStart = false;
+                         } else {
++                            // Java Arena: JDK 21 character data instead of TeaVM's
+                             isJavaIdentifierStart = isSurrogate()
+-                                    ? Character.isJavaIdentifierStart(getCodepoint())
+-                                    : Character.isJavaIdentifierStart(get());
++                                    ? javaarena.jdk.JdkChars.isJavaIdentifierStart(getCodepoint())
++                                    : javaarena.jdk.JdkChars.isJavaIdentifierStart(get());
+                         }
+ 
+                         if (isJavaIdentifierStart) {
+@@ -1205,7 +1207,7 @@ public class JavaTokenizer extends UnicodeReader {
+                     }
+                     // Remove incidental indentation.
+                     try {
+-                        string = string.stripIndent();
++                        string = javaarena.jdk.JdkStrings.stripIndent(string); // Java Arena
+                     } catch (Exception ex) {
+                         // Error already reported, just use unstripped string.
+                     }
+@@ -1219,7 +1221,7 @@ public class JavaTokenizer extends UnicodeReader {
+                 // Translate escape sequences if present.
+                 if (hasEscapeSequences) {
+                     try {
+-                        string = string.translateEscapes();
++                        string = javaarena.jdk.JdkStrings.translateEscapes(string); // Java Arena
+                     } catch (Exception ex) {
+                         // Error already reported, just use untranslated string.
+                     }
+@@ -1258,7 +1260,7 @@ public class JavaTokenizer extends UnicodeReader {
+         List<Token> tokens = List.nil();
+         Iterator<Integer> rangeIter = fragmentRanges.iterator();
+         for (String fragment : fragment(string)) {
+-            fragment = fragment.translateEscapes();
++            fragment = javaarena.jdk.JdkStrings.translateEscapes(fragment); // Java Arena
+             int fragmentPos = rangeIter.next();
+             int fragmentEndPos = rangeIter.next();
+             Token token = new StringToken(TokenKind.STRINGFRAGMENT,
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavacParser.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavacParser.java
+index e7b646cc..b9c422eb 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavacParser.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/JavacParser.java
+@@ -789,7 +789,7 @@ public class JavacParser implements Parser {
+                     token.stringVal();
+             Float n;
+             try {
+-                n = Float.valueOf(proper);
++                n = Float.valueOf(javaarena.jdk.JdkNumbers.parseFloat(proper)); // Java Arena: JDK parsing on TeaVM
+             } catch (NumberFormatException ex) {
+                 // error already reported in scanner
+                 n = Float.NaN;
+@@ -808,7 +808,7 @@ public class JavacParser implements Parser {
+                     token.stringVal();
+             Double n;
+             try {
+-                n = Double.valueOf(proper);
++                n = Double.valueOf(javaarena.jdk.JdkNumbers.parseDouble(proper)); // Java Arena: JDK parsing on TeaVM
+             } catch (NumberFormatException ex) {
+                 // error already reported in scanner
+                 n = Double.NaN;
+@@ -856,7 +856,7 @@ public class JavacParser implements Parser {
+             int base = ((cs.length > 1 && Character.toLowerCase(cs[1]) == 'x') ? 16 : 10);
+             int i = ((base==16) ? 2 : 0);
+             while (i < cs.length && (cs[i] == '0' || cs[i] == '.')) i++;
+-            return !(i < cs.length && (Character.digit(cs[i], base) > 0));
++            return !(i < cs.length && (javaarena.jdk.JdkChars.digit(cs[i], base) > 0)); // Java Arena
+         }
+ 
+         String strval(Name prefix) {
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/TextBlockSupport.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/TextBlockSupport.java
+index d099cead..b1779405 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/TextBlockSupport.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/TextBlockSupport.java
+@@ -86,7 +86,7 @@ class TextBlockSupport {
+             if (outdent < line.length()) {
+                 // Is the last character a white space.
+                 lastChar = line.charAt(line.length() - 1);
+-                if (Character.isWhitespace(lastChar)) {
++                if (javaarena.jdk.JdkChars.isWhitespace(lastChar)) { // Java Arena
+                     // Has trailing white space.
+                     checks.add(WhitespaceChecks.TRAILING);
+                 }
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/UnicodeReader.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/UnicodeReader.java
+index d4121080..d0049143 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/UnicodeReader.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/parser/UnicodeReader.java
+@@ -298,7 +298,7 @@ public class UnicodeReader {
+ 
+         for (int i = 0; i < 4; i++) {
+             // Translate and merge digit.
+-            int digit = index < length ? Character.digit(buffer[index], 16) : -1;
++            int digit = index < length ? javaarena.jdk.JdkChars.digit(buffer[index], 16) : -1; // Java Arena
+             code = code << 4 | digit;
+ 
+             // If invalid digit.
+@@ -619,8 +619,9 @@ public class UnicodeReader {
+         }
+ 
+         // Handle other digits.
+-        result = isSurrogate() ? Character.digit(codepoint, digitRadix) :
+-                                 Character.digit(character, digitRadix);
++        // Java Arena: JDK 21 character data instead of TeaVM's
++        result = isSurrogate() ? javaarena.jdk.JdkChars.digit(codepoint, digitRadix) :
++                                 javaarena.jdk.JdkChars.digit(character, digitRadix);
+ 
+         if (result >= 0 && !isASCII()) {
+             log.error(position(), Errors.IllegalNonasciiDigit);
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/tree/Pretty.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/tree/Pretty.java
+index 7398b5ea..f5e2621b 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/tree/Pretty.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/tree/Pretty.java
+@@ -1448,11 +1448,11 @@ public class Pretty extends JCTree.Visitor {
+                     print('L');
+                     break;
+                 case FLOAT:
+-                    print(tree.value);
++                    print(javaarena.jdk.JdkNumbers.valueToString(tree.value)); // Java Arena
+                     print('F');
+                     break;
+                 case DOUBLE:
+-                    print(tree.value.toString());
++                    print(javaarena.jdk.JdkNumbers.valueToString(tree.value)); // Java Arena
+                     break;
+                 case CHAR:
+                     print('\'');
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/util/AbstractDiagnosticFormatter.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/util/AbstractDiagnosticFormatter.java
+index fc33c895..3ba64baf 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/util/AbstractDiagnosticFormatter.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/util/AbstractDiagnosticFormatter.java
+@@ -228,7 +228,7 @@ public abstract class AbstractDiagnosticFormatter implements DiagnosticFormatter
+                                                   StringUtils.toLowerCase(tag.name()));
+         }
+         else {
+-            return String.valueOf(arg);
++            return javaarena.jdk.JdkNumbers.valueToString(arg); // Java Arena: JDK number text
+         }
+     }
+     //where
+diff --git a/src/jdk.compiler/share/classes/com/sun/tools/javac/util/Constants.java b/src/jdk.compiler/share/classes/com/sun/tools/javac/util/Constants.java
+index 3e2fc7ca..b2d8ded0 100644
+--- a/src/jdk.compiler/share/classes/com/sun/tools/javac/util/Constants.java
++++ b/src/jdk.compiler/share/classes/com/sun/tools/javac/util/Constants.java
+@@ -115,7 +115,7 @@ public class Constants {
+         else if (Float.isInfinite(f))
+             return (f < 0) ? "-1.0f/0.0f" : "1.0f/0.0f";
+         else
+-            return f + "f";
++            return javaarena.jdk.JdkNumbers.toString(f) + "f"; // Java Arena
+     }
+ 
+     private static String formatDouble(double d) {
+@@ -124,7 +124,7 @@ public class Constants {
+         else if (Double.isInfinite(d))
+             return (d < 0) ? "-1.0/0.0" : "1.0/0.0";
+         else
+-            return d + "";
++            return javaarena.jdk.JdkNumbers.toString(d); // Java Arena
+     }
+ 
+     private static String formatChar(char c) {

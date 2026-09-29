@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Runner test page</title>
+<script type="module">
+  // Driven by run-tests.mjs through Playwright. One Worker per runner, as the site will do.
+  const workers = new Map();
+  let nextId = 1;
+  function call(worker, message, transfer = []) {
+    return new Promise((resolve, reject) => {
+      const id = nextId++;
+      const onMessage = ({ data }) => {
+        if (data.id !== id) return;
+        worker.removeEventListener('message', onMessage);
+        data.error ? reject(new Error(data.error)) : resolve(data.result);
+      };
+      worker.addEventListener('message', onMessage);
+      worker.postMessage({ id, ...message }, transfer);
+    });
+  }
+  window.startWorker = async (key, dist, options = {}) => {
+    const begin = performance.now();
+    const worker = new Worker(new URL('./worker.mjs', location.href), { type: 'module' });
+    workers.set(key, worker);
+    const modules = options.modulesFrom ? await call(workers.get(options.modulesFrom), { type: 'modules' }) : undefined;
+    const timings = await call(worker, { type: 'init', dist, modules, freshInstance: !!options.freshInstance });
+    return { ...timings, workerReadyMs: performance.now() - begin };
+  };
+  window.runCase = async (key, request) => {
+    const result = await call(workers.get(key), { type: 'run', request });
+    return result;
+  };
+  // Run a program that never ends in its own Worker, collect what onOutput delivers in the first
+  // `withinMs` of the run, then terminate the Worker.
+  window.streamCase = async (dist, request, withinMs) => {
+    const worker = new Worker(new URL('./worker.mjs', location.href), { type: 'module' });
+    try {
+      await call(worker, { type: 'init', dist });
+      let received = '';
+      let started;
+      await new Promise((resolve) => {
+        worker.addEventListener('message', ({ data }) => {
+          if (data.started) {
+            started = performance.now();
+            setTimeout(resolve, withinMs);
+          } else if (data.output?.stream === 'stdout') {
+            received += data.output.text;
+          }
+        });
+        worker.postMessage({ id: nextId++, type: 'run', request, stream: true });
+      });
+      return { received, durationMs: performance.now() - started };
+    } finally {
+      worker.terminate();
+    }
+  };
+  window.stopWorker = (key) => {
+    const begin = performance.now();
+    workers.get(key)?.terminate();
+    workers.delete(key);
+    return performance.now() - begin;
+  };
+  window.ready = true;
+</script>

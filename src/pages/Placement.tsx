@@ -166,7 +166,7 @@ function Intro({ count, loading, children }: { count?: number; loading?: boolean
     <div className="narrow">
       <div className="page-head">
         <h1>Placement quiz</h1>
-        <p>Already know some Java? {loading ? "Answer a few quick questions" : `Answer ${count} quick questions`}, one for each module so far, from printing to methods. The first one you miss shows where to start, and you can skip the modules before it.</p>
+        <p>Already know some Java? {loading ? "Answer a few quick questions" : `Answer ${count} quick questions`}, one for each module written so far. The first one you miss shows where to start, and you can skip the modules before it.</p>
         <p className="muted small">Take your time and don't guess: a wrong answer only means starting a little earlier, while a lucky guess could skip something you need. You can take it again at any time.</p>
       </div>
       {loading ? <p className="muted">Loading the questions…</p> : children}

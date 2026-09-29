@@ -165,7 +165,7 @@ page("/placement", {
   title: `Placement quiz: where to start with Java | ${NAME}`,
   description: "Already know some Java? A short quiz, one question per module, shows where to start and which modules you can skip.",
   layout: true,
-  body: `<div class="narrow"><div class="page-head"><h1>Placement quiz</h1><p>Already know some Java? Answer a few quick questions, one for each module so far, from printing to methods. The first one you miss shows where to start, and you can skip the modules before it.</p></div></div>`,
+  body: `<div class="narrow"><div class="page-head"><h1>Placement quiz</h1><p>Already know some Java? Answer a few quick questions, one for each module written so far. The first one you miss shows where to start, and you can skip the modules before it.</p></div></div>`,
 });
 
 page("/settings", { title: `Settings | ${NAME}`, description: "Theme, text size, the Java engine download, and your progress on this device.", body: `<h1>Settings</h1><p>Theme, text size, the Java engine download, and your progress. Everything here is saved in this browser only.</p>` });

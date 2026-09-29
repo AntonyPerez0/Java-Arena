@@ -1,0 +1,413 @@
+id: unit-testing
+summary: Finding bugs step by step, and tests that check your code for you. Reading a stack trace through several classes, a checklist for troubleshooting, giving code that reads a Scanner its input from a String, unit tests with JUnit and its assertions, choosing good test cases, and test-driven development. The end of MOOC part 6.
+steps:
+  - id: unit-testing-troubleshooting
+    slug: troubleshooting
+    title: Bugs and troubleshooting step by step
+    text: |
+      Every program has bugs at first, and finding them is a big part of programming. This module is about doing it on purpose and step by step: reading what Java tells you, narrowing a problem down, and then writing tests that check your code for you, every time it changes.
+
+      ### Three kinds of errors
+
+      | Kind | When it shows | What points to it |
+      | --- | --- | --- |
+      | A compile error | Before the program runs | javac names the file, the line and the problem |
+      | A crash | While the program runs | The exception and its stack trace name the line |
+      | A wrong result | After it runs, if you check | Nothing: you have to find it yourself |
+
+      The first two tell you where to look. The third is the sneaky one: the program ends normally, and what it prints just isn't right. Nobody may notice for a long time, and that's why most of this module is about catching it.
+
+      ### A stack trace through several classes
+
+      Module 12 showed how to read a crash: the exception, its message, and the `at` lines, with the method that crashed at the top. That list of `at` lines is called a **stack trace**. In a program of several classes, each line names the class, the method and the file. A train has cars, and each car tells how full it is:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Train train = new Train();
+              train.addCar(new Car("A", 40, 31));
+              train.addCar(new Car("Dining", 0, 0));
+              train.addCar(new Car("B", 40, 12));
+              train.printReport();
+          }
+      }
+      // ==== Train.java ====
+      import java.util.ArrayList;
+
+      public class Train {
+          private ArrayList<Car> cars;
+
+          public Train() {
+              this.cars = new ArrayList<>();
+          }
+
+          public void addCar(Car car) {
+              this.cars.add(car);
+          }
+
+          public void printReport() {
+              for (Car car : this.cars) {
+                  System.out.println(car.getName() + ": " + car.percentFull() + "% full");
+              }
+          }
+      }
+      // ==== Car.java ====
+      public class Car {
+          private String name;
+          private int seats;
+          private int passengers;
+
+          public Car(String name, int seats, int passengers) {
+              this.name = name;
+              this.seats = seats;
+              this.passengers = passengers;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public int percentFull() {
+              return 100 * this.passengers / this.seats;
+          }
+      }
+      ```
+
+      ```output
+      A: 77% full
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.ArithmeticException: / by zero
+      	at Car.percentFull(Car.java:17)
+      	at Train.printReport(Train.java:16)
+      	at Main.main(Main.java:7)
+      ```
+
+      Read it from the top, one line at a time:
+
+      - `at Car.percentFull(Car.java:17)`: the division on line 17 of `Car.java`, in the method `percentFull`, divided by zero.
+      - `at Train.printReport(Train.java:16)`: `percentFull` was called by the train's `printReport`, on line 16 of `Train.java`.
+      - `at Main.main(Main.java:7)`: and `printReport` was called on line 7 of `main`.
+
+      Each line is a method that was still running, waiting for the method above it to return. The trace doesn't say which car it was, but the output does: car A was printed, so the crash came with the next car, the dining car, which has no seats. A car without seats is a real thing, so the fix belongs in `percentFull`: return 0 when `seats` is 0, before dividing.
+
+      On your own computer, a stack trace often has lines from inside Java's own classes too, above yours. They start with `at java.base/`, for example when a list's `get` is given an index that doesn't exist. Java Arena leaves them out. When you see them, read down to the first line that names one of your own classes: that's the last place your code was.
+
+      ### A checklist for troubleshooting
+
+      When a program does something wrong and you don't see why, changing things at random usually makes it worse. Work through it step by step:
+
+      1. **Make the bug happen again.** Find an input that shows it every time, as small as you can. Write down what the program should print for it, and what it prints.
+      2. **Read everything Java tells you.** The first line of a compile error or a crash, and the first `at` line in your own code.
+      3. **Narrow it down.** Find the first place where a value goes wrong. Try one method at a time with a value you know the answer for, or print values along the way (module 12).
+      4. **Change one thing, then run again.** If it didn't help, undo it before you try something else.
+      5. **Try the other cases again.** A fix for one input can break another input that worked before.
+      6. **Clean up.** Remove the debug prints.
+
+      Steps 1 and 5 mean running the same inputs again and again. The rest of this module shows how to make that automatic.
+
+      **Your turn:** a recipe box keeps recipes, and `minutesFor` tells how long a recipe takes. The program crashes:
+
+      ```crash
+      Exception in thread "main" java.lang.NullPointerException: Cannot invoke "Recipe.getMinutes()" because the return value of "RecipeBox.find(String)" is null
+      	at RecipeBox.minutesFor(RecipeBox.java:24)
+      	at Main.main(Main.java:7)
+      ```
+
+      `find` returns `null` when the box has no recipe of that name, and `minutesFor` calls `getMinutes()` on what it got. Change `minutesFor` in `RecipeBox.java` so it returns 0 for a recipe that isn't in the box. `Main.java` is ready, and with it the program prints:
+
+      ```
+      45
+      0
+      ```
+    seed:
+      RecipeBox.java: |
+        import java.util.ArrayList;
+
+        public class RecipeBox {
+            private ArrayList<Recipe> recipes;
+
+            public RecipeBox() {
+                this.recipes = new ArrayList<>();
+            }
+
+            public void add(Recipe recipe) {
+                this.recipes.add(recipe);
+            }
+
+            public Recipe find(String name) {
+                for (Recipe recipe : this.recipes) {
+                    if (recipe.getName().equals(name)) {
+                        return recipe;
+                    }
+                }
+                return null;
+            }
+
+            public int minutesFor(String name) {
+                return this.find(name).getMinutes();
+            }
+        }
+      Recipe.java: |
+        public class Recipe {
+            private String name;
+            private int minutes;
+
+            public Recipe(String name, int minutes) {
+                this.name = name;
+                this.minutes = minutes;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getMinutes() {
+                return this.minutes;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                RecipeBox box = new RecipeBox();
+                box.add(new Recipe("pancakes", 20));
+                box.add(new Recipe("soup", 45));
+                System.out.println(box.minutesFor("soup"));
+                System.out.println(box.minutesFor("pizza"));
+            }
+        }
+    solution:
+      RecipeBox.java: |
+        import java.util.ArrayList;
+
+        public class RecipeBox {
+            private ArrayList<Recipe> recipes;
+
+            public RecipeBox() {
+                this.recipes = new ArrayList<>();
+            }
+
+            public void add(Recipe recipe) {
+                this.recipes.add(recipe);
+            }
+
+            public Recipe find(String name) {
+                for (Recipe recipe : this.recipes) {
+                    if (recipe.getName().equals(name)) {
+                        return recipe;
+                    }
+                }
+                return null;
+            }
+
+            public int minutesFor(String name) {
+                Recipe recipe = this.find(name);
+                if (recipe == null) {
+                    return 0;
+                }
+                return recipe.getMinutes();
+            }
+        }
+      Recipe.java: |
+        public class Recipe {
+            private String name;
+            private int minutes;
+
+            public Recipe(String name, int minutes) {
+                this.name = name;
+                this.minutes = minutes;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getMinutes() {
+                return this.minutes;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                RecipeBox box = new RecipeBox();
+                box.add(new Recipe("pancakes", 20));
+                box.add(new Recipe("soup", 45));
+                System.out.println(box.minutesFor("soup"));
+                System.out.println(box.minutesFor("pizza"));
+            }
+        }
+    hints:
+      - "The first `at` line is `RecipeBox.minutesFor`, line 24 of `RecipeBox.java`, and the message says what was null there: the value `find` returned. So the fix goes in `minutesFor`, before `getMinutes()` is called."
+      - "Keep what `find` returns in a variable, `Recipe recipe = this.find(name);`, then `if (recipe == null) { return 0; }`, and after that `return recipe.getMinutes();`."
+    tests:
+      - call: |
+          RecipeBox box = new RecipeBox();
+          box.add(new Recipe("pancakes", 20));
+          box.add(new Recipe("soup", 45));
+          System.out.println(box.minutesFor("soup"));
+          System.out.println(box.minutesFor("pizza"));
+      - call: |
+          RecipeBox box = new RecipeBox();
+          System.out.println(box.minutesFor("tea"));
+          box.add(new Recipe("tea", 5));
+          System.out.println(box.minutesFor("tea"));
+          System.out.println(box.minutesFor("Tea"));
+        hidden: true
+      - call: |
+          RecipeBox box = new RecipeBox();
+          box.add(new Recipe("bread", 180));
+          box.add(new Recipe("salad", 10));
+          System.out.println(box.minutesFor("salad") + box.minutesFor("bread"));
+          System.out.println(box.find("stew") == null);
+        hidden: true
+    more:
+      - task: |
+          Here is a crash from a program you can't see:
+
+          ```crash
+          Exception in thread "main" java.lang.IndexOutOfBoundsException: Index 4 out of bounds for length 4
+          	at Shelf.bookAt(Shelf.java:18)
+          	at Library.lastBookOn(Library.java:31)
+          	at Main.main(Main.java:9)
+          ```
+
+          Fill in the blanks: the class whose code was running when it crashed, the method of `Library` that called it, and the line of `Library.java` that made the call.
+        fill: |
+          public class Main {
+              public static void main(String[] args) {
+                  String crashedClass = "[[Shelf]]";
+                  String caller = "[[lastBookOn]]";
+                  int callerLine = [[31]];
+                  System.out.println(crashedClass + " crashed, called by " + caller + " on line " + callerLine);
+              }
+          }
+        hints:
+          - "The top `at` line is where the crash happened, and the line under it is the method that called it."
+          - "It crashed in `Shelf` (in its method `bookAt`), which was called by `lastBookOn` on line 31 of `Library.java`."
+        tests:
+          - expect: Shelf crashed, called by lastBookOn on line 31
+      - task: |
+          A bike shop rents bikes for 3 euros for the first hour and 2 euros for every hour after it. So 1 hour costs 3 euros, 2 hours cost 5 and 3 hours cost 7. Today three bikes were rented, for 1, 3 and 2 hours, and the program should print `Earnings: 15 euros`, but it prints `Earnings: 17 euros`. Nothing crashes, so no line is named for you.
+
+          Use the checklist: try the methods one at a time with values you know the answer for, find the one wrong line, and fix it. The program then prints:
+
+          ```
+          Earnings: 15 euros
+          ```
+        seed:
+          Rental.java: |
+            public class Rental {
+                private int hours;
+
+                public Rental(int hours) {
+                    this.hours = hours;
+                }
+
+                public int fee() {
+                    if (this.hours <= 1) {
+                        return 3;
+                    }
+                    return 3 + this.hours * 2;
+                }
+            }
+          BikeShop.java: |
+            import java.util.ArrayList;
+
+            public class BikeShop {
+                private ArrayList<Rental> rentals;
+
+                public BikeShop() {
+                    this.rentals = new ArrayList<>();
+                }
+
+                public void rent(int hours) {
+                    this.rentals.add(new Rental(hours));
+                }
+
+                public int earnings() {
+                    int total = 0;
+                    for (Rental rental : this.rentals) {
+                        total += rental.fee();
+                    }
+                    return total;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    BikeShop shop = new BikeShop();
+                    shop.rent(1);
+                    shop.rent(3);
+                    shop.rent(2);
+                    System.out.println("Earnings: " + shop.earnings() + " euros");
+                }
+            }
+        solution:
+          Rental.java: |
+            public class Rental {
+                private int hours;
+
+                public Rental(int hours) {
+                    this.hours = hours;
+                }
+
+                public int fee() {
+                    if (this.hours <= 1) {
+                        return 3;
+                    }
+                    return 3 + (this.hours - 1) * 2;
+                }
+            }
+          BikeShop.java: |
+            import java.util.ArrayList;
+
+            public class BikeShop {
+                private ArrayList<Rental> rentals;
+
+                public BikeShop() {
+                    this.rentals = new ArrayList<>();
+                }
+
+                public void rent(int hours) {
+                    this.rentals.add(new Rental(hours));
+                }
+
+                public int earnings() {
+                    int total = 0;
+                    for (Rental rental : this.rentals) {
+                        total += rental.fee();
+                    }
+                    return total;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    BikeShop shop = new BikeShop();
+                    shop.rent(1);
+                    shop.rent(3);
+                    shop.rent(2);
+                    System.out.println("Earnings: " + shop.earnings() + " euros");
+                }
+            }
+        hints:
+          - "Narrow it down: in `main`, print `new Rental(1).fee()`, `new Rental(2).fee()` and `new Rental(3).fee()`. You know they should be 3, 5 and 7. Which ones are wrong?"
+          - "A 2-hour rental comes out as 7 instead of 5: `fee` charges 2 euros for every hour, the first one too, although the first hour is already in the 3 euros. The extra hours are `this.hours - 1`."
+        tests:
+          - call: |
+              BikeShop shop = new BikeShop();
+              shop.rent(1);
+              shop.rent(3);
+              shop.rent(2);
+              System.out.println("Earnings: " + shop.earnings() + " euros");
+          - call: |
+              System.out.println(new Rental(1).fee() + " " + new Rental(2).fee() + " " + new Rental(5).fee());
+            hidden: true
+          - call: |
+              BikeShop shop = new BikeShop();
+              System.out.println(shop.earnings());
+              shop.rent(10);
+              shop.rent(4);
+              System.out.println(shop.earnings());
+            hidden: true

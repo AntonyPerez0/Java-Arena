@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Lightbulb, Play } from "lucide-react";
 import type { Exercise } from "../content/types";
 import { grade, runOnly, type FreeRun, type GradeResult } from "../grader/grade";
@@ -34,6 +34,12 @@ function announce(r: GradeResult): string {
   return `${failed ? `${failed} of ${r.tests.length} tests failed.` : "All tests passed, but"}${rules} Details are below the editor.`;
 }
 
+function announceRun(r: FreeRun): string {
+  if (r.status === "compile-error") return "It didn't compile. The errors are listed below the input box.";
+  if (r.status === "internal-error") return "The Java engine couldn't run this. Try again.";
+  return r.note ? "The program ran and stopped with a problem. The output and an explanation are below the input box." : "The program finished. Its output is below the input box.";
+}
+
 const SOLUTION_AFTER_ATTEMPTS = 3;
 
 /** The editor (or the fill-in code), Check, Run with my input, results, hints and the solution. */
@@ -50,6 +56,8 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
   const [showConsole, setShowConsole] = useState(false);
   // Counts finished checks (the browser tests wait on it).
   const [checks, setChecks] = useState(0);
+  // A newly shown hint or solution gets focus, so it's read out and the pressed button can disappear.
+  const [focusId, setFocusId] = useState<string | null>(null);
   const status = useEngineStatus();
   const askFirst = useEngineAutoload();
   const busyRef = useRef(false);
@@ -57,6 +65,11 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
   const hintsUsed = progress?.hintsUsed ?? 0;
   const attempts = progress?.attempts ?? 0;
   const sawSolution = !!progress?.sawSolution;
+  useEffect(() => {
+    if (!focusId) return;
+    document.getElementById(focusId)?.focus();
+    setFocusId(null);
+  }, [focusId, hintsUsed, showSolution]);
 
   const source = isFill ? fillTemplate(ex.seed, blanks) : code;
 
@@ -187,20 +200,24 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
       )}
 
       <p className="visually-hidden" role="status" aria-live="polite">
-        {busy === "check" ? "Checking your code." : result ? announce(result) : ""}
+        {busy === "check" ? "Checking your code." : busy === "run" ? "Running your program." : freeRun ? announceRun(freeRun) : result ? announce(result) : ""}
       </p>
       {result && <Results result={result} />}
 
       <div className="hints">
         {ex.hints.slice(0, hintsUsed).map((h, i) => (
-          <div key={i} className="hint">
+          <div key={i} className="hint" id={`hint-${i + 1}`} tabIndex={-1}>
             <span className="hint-n">Hint {i + 1}</span>
             <Markdown text={h} />
           </div>
         ))}
         <div className="hint-actions">
           {hintsUsed < ex.hints.length && (
-            <button type="button" className={"btn btn-hint" + (attempts >= 2 && result?.status !== "pass" ? " pulse" : "")} onClick={() => onChange({ hintsUsed: hintsUsed + 1 })}>
+            <button type="button" className={"btn btn-hint" + (attempts >= 2 && result?.status !== "pass" ? " pulse" : "")} onClick={() => {
+                onChange({ hintsUsed: hintsUsed + 1 });
+                setFocusId(`hint-${hintsUsed + 1}`);
+              }}
+            >
               <Lightbulb className="icon" aria-hidden="true" /> Hint ({hintsUsed + 1} of {ex.hints.length})
             </button>
           )}
@@ -210,6 +227,7 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
               className="btn btn-ghost"
               onClick={() => {
                 setShowSolution(true);
+                setFocusId("solution");
                 onChange({ sawSolution: true });
               }}
             >
@@ -219,7 +237,7 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
         </div>
         {!canShowSolution && <p className="muted small">The solution can be shown after all the hints or {SOLUTION_AFTER_ATTEMPTS} checks.</p>}
         {showSolution && (
-          <div className="solution">
+          <div className="solution" id="solution" tabIndex={-1}>
             <div className="lbl">A solution (typing it in yourself helps it stick)</div>
             <CodeView code={ex.solution} label="Solution" />
             {isFill && (

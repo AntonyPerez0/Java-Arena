@@ -42,7 +42,14 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         })
-        .catch(async () => (await caches.match(url.pathname, { ignoreSearch: true })) || (await caches.match(BASE)) || Response.error()),
+        .catch(
+          async () =>
+            (await caches.match(url.pathname, { ignoreSearch: true })) ||
+            // Pages are saved at their folder address (/learn/printing/); links may leave off the slash.
+            (!url.pathname.endsWith("/") && (await caches.match(url.pathname + "/", { ignoreSearch: true }))) ||
+            (await caches.match(BASE)) ||
+            Response.error(),
+        ),
     );
     return;
   }

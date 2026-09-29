@@ -8,7 +8,7 @@ export default function NotFound() {
       <h1>Page not found</h1>
       <p>There's no page at this address. It may have moved, or the link may have a typo.</p>
       <p>
-        <Link to="/learn">See all modules</Link> or <Link to="/">go to the home page</Link>.
+        <Link to="/learn/">See all modules</Link> or <Link to="/">go to the home page</Link>.
       </p>
     </div>
   );

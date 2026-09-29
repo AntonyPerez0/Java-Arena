@@ -5,8 +5,8 @@ import { EditorView } from "@codemirror/view";
 // inserted text (for pairs, between the two characters); `move` moves the cursor instead.
 type Key = { label: string; text: string; name: string; caret?: number; move?: number };
 const KEYS: Key[] = [
-  { label: "sout", text: "System.out.println();", name: "System.out.println", caret: 19 },
-  { label: "Tab", text: "    ", name: "indent" },
+  { label: "sout", text: "System.out.println();", name: "sout, System.out.println", caret: 19 },
+  { label: "Tab", text: "    ", name: "Tab, indent" },
   { label: "{ }", text: "{}", name: "braces", caret: 1 },
   { label: "( )", text: "()", name: "parentheses", caret: 1 },
   { label: '" "', text: '""', name: "double quotes", caret: 1 },

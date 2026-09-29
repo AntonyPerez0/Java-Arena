@@ -91,10 +91,10 @@ function Footer() {
             <h2>Learn</h2>
             <ul>
               <li>
-                <Link to="/learn">All modules</Link>
+                <Link to="/learn/">All modules</Link>
               </li>
               <li>
-                <Link to="/learn/printing">Start with module 1</Link>
+                <Link to="/learn/printing/">Start with module 1</Link>
               </li>
             </ul>
           </div>
@@ -102,10 +102,10 @@ function Footer() {
             <h2>Site</h2>
             <ul>
               <li>
-                <Link to="/settings">Settings</Link>
+                <Link to="/settings/">Settings</Link>
               </li>
               <li>
-                <Link to="/about">About and credits</Link>
+                <Link to="/about/">About and credits</Link>
               </li>
               <li>
                 <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
@@ -140,9 +140,9 @@ function Footer() {
 }
 
 const NAV: [string, string][] = [
-  ["/learn", "Learn"],
-  ["/settings", "Settings"],
-  ["/about", "About"],
+  ["/learn/", "Learn"],
+  ["/settings/", "Settings"],
+  ["/about/", "About"],
 ];
 
 /** The header: the navigation on wide screens, a menu button on phones and tablets. */
@@ -150,9 +150,12 @@ function Header() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   const menuRef = useRef<HTMLButtonElement>(null);
+  const navRef = useRef<HTMLElement>(null);
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
     if (!open) return;
+    // The menu comes before its button in the page, so move focus into it when it opens.
+    navRef.current?.querySelector("a")?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setOpen(false);
@@ -163,14 +166,20 @@ function Header() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
   return (
-    <header className="topbar">
+    <header
+      className="topbar"
+      onBlur={(e) => {
+        // Close the menu once keyboard focus leaves the header, so it never covers what has focus.
+        if (open && !e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
       <Link to="/" className="brand" aria-label="Java Arena home">
         <BrandMark />
         <span className="brand-name">
           Java <b>Arena</b>
         </span>
       </Link>
-      <nav id="main-nav" className={open ? "nav nav-open" : "nav"} aria-label="Main">
+      <nav id="main-nav" ref={navRef} className={open ? "nav nav-open" : "nav"} aria-label="Main">
         {NAV.map(([to, label]) => (
           <NavLink key={to} to={to}>
             {label}
@@ -184,7 +193,7 @@ function Header() {
       <div className="topbar-right">
         <EngineBadge />
         <ThemeToggle />
-        <Link to="/learn" className="btn btn-primary btn-sm topbar-cta">
+        <Link to="/learn/" className="btn btn-primary btn-sm topbar-cta">
           Start learning
         </Link>
         <button ref={menuRef} type="button" className="icon-btn menu-btn" aria-expanded={open} aria-controls="main-nav" aria-label={open ? "Close menu" : "Open menu"} onClick={() => setOpen((o) => !o)}>

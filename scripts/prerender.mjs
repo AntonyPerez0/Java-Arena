@@ -24,8 +24,9 @@ const template = fs.readFileSync(path.join(DIST, "index.html"), "utf8");
 if (!template.includes("<!--head-->") || !template.includes("<!--app-->")) throw new Error("prerender: dist/index.html has lost its <!--head--> or <!--app--> marker");
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const link = (p) => BASE + p.replace(/^\//, "");
-const canonical = (route) => (route === "/" ? `${SITE}/` : `${SITE}${route}/`);
+// Links to pages end with a slash (the folder address GitHub Pages serves without a redirect).
+const link = (p) => BASE + p.replace(/^\//, "").replace(/^([^.?#]*[^/.?#])$/, "$1/");
+const canonical = (route) => (route === "/" ? `${SITE}/` : `${SITE}${route.replace(/\/$/, "")}/`);
 
 const LABELS = { output: "Output", input: "Input", javac: "What javac prints" };
 marked.use({
@@ -59,15 +60,15 @@ function summary(text, max = 155) {
   return cut.slice(0, cut.lastIndexOf(" ")) + "…";
 }
 
-const stepPath = (m, s) => `/learn/${m.id}/${s.slug}`;
-const modulePath = (m) => `/learn/${m.id}`;
+const stepPath = (m, s) => `/learn/${m.id}/${s.slug}/`;
+const modulePath = (m) => `/learn/${m.id}/`;
 const stepCount = content.modules.reduce((n, m) => n + m.steps.length, 0);
 const challengeCount = content.modules.reduce((n, m) => n + m.steps.reduce((k, s) => k + 1 + s.more.length, 0), 0);
 
 function credit(m) {
   if (!m.mooc?.length) return `<p>An extra module, not part of the University of Helsinki's course. Lesson text: <a href="${LICENSE}">CC BY-NC-SA 4.0</a>.</p>`;
   const secs = m.mooc.map((s) => `<a href="${MOOC}${s.path}">${esc(s.section)} ${esc(s.title)}</a>`).join(", ");
-  return `<p>This module follows ${m.mooc.length > 1 ? "sections" : "section"} ${secs} of <a href="${MOOC}">Java Programming</a> by the University of Helsinki (Agile Education Research group), licensed under <a href="${LICENSE}">CC BY-NC-SA 4.0</a>. The explanations and exercises here are written for Java Arena and shared under the same license. Java Arena is not affiliated with the University of Helsinki.</p>`;
+  return `<p>This module follows ${m.mooc.length > 1 ? "sections" : "section"} ${secs} of <a href="${MOOC}">Java Programming</a> by Arto Hellas, Matti Luukkainen and contributors (Agile Education Research group, University of Helsinki), licensed under <a href="${LICENSE}">CC BY-NC-SA 4.0</a>. The explanations and exercises here are written for Java Arena and shared under the same license. Java Arena is not affiliated with or endorsed by the University of Helsinki.</p>`;
 }
 
 const pages = [];

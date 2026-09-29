@@ -72,6 +72,12 @@ export function useEngineAutoload(): boolean {
   return ask;
 }
 
+/** Starts the engine and moves focus to the Check button, since the pressed button goes away. */
+function startAndFocusCheck() {
+  ensureEngine();
+  requestAnimationFrame(() => document.getElementById("check")?.focus());
+}
+
 /** Asks before the one-time download when the learner may be on mobile data. */
 export function DownloadCard({ what }: { what: string }) {
   const allow = useStore((s) => s.settings.mobileData);
@@ -91,7 +97,7 @@ export function DownloadCard({ what }: { what: string }) {
       </p>
       <p className="muted small">{data === "yes" ? "Your browser says you're on mobile data." : "Your browser can't tell whether you're on Wi-Fi or mobile data."} You can read the lesson now and download on Wi-Fi later; pressing Check also starts the download.</p>
       <div className="actions">
-        <button type="button" className="btn btn-primary" onClick={() => ensureEngine()}>
+        <button type="button" className="btn btn-primary" onClick={startAndFocusCheck}>
           Download now ({size})
         </button>
         <label className="inline-check small">
@@ -118,7 +124,7 @@ export function EngineErrorCard({ message }: { message: string }) {
   return (
     <div className="banner banner-fail" role="alert">
       <span>The Java engine couldn't start: {message}.</span>
-      <button type="button" className="btn" onClick={() => ensureEngine()}>
+      <button type="button" className="btn" onClick={startAndFocusCheck}>
         Try again
       </button>
     </div>

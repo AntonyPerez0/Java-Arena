@@ -192,8 +192,29 @@ function importsFor(code) {
   return lines.length ? lines.join("") + "\n" : "";
 }
 
+// Every key a lesson file may use. A misspelled key (for example "requires") is an error, not ignored.
+const KEYS = {
+  module: ["id", "summary", "steps"],
+  step: ["id", "slug", "title", "text", "fill", "seed", "solution", "hints", "tests", "require", "forbid", "seedMayPass", "more"],
+  challenge: ["task", "fill", "seed", "solution", "hints", "tests", "require", "forbid", "seedMayPass"],
+  rule: ["pattern", "flags", "message", "min", "max", "raw"],
+  test: ["name", "stdin", "expect", "hidden"],
+};
+function checkKeys(where, obj, kind) {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+    errors.push(`${where}: expected a ${kind} (a set of keys)`);
+    return;
+  }
+  for (const k of Object.keys(obj)) if (!KEYS[kind].includes(k)) errors.push(`${where}: unknown ${kind} key "${k}" (allowed: ${KEYS[kind].join(", ")})`);
+}
+
 function checkRuleShape(where, list, kind) {
+  if (!Array.isArray(list)) {
+    errors.push(`${where}: ${kind} must be a list of rules`);
+    return;
+  }
   for (const r of list) {
+    checkKeys(`${where} ${kind} rule`, r, "rule");
     if (!r || typeof r.pattern !== "string" || typeof r.message !== "string") errors.push(`${where}: each ${kind} rule needs a pattern and a message`);
     else {
       try {
@@ -283,8 +304,10 @@ async function buildExercise(where, raw) {
     if (blanks.length === 0) errors.push(`${where}: fill challenge has no [[blanks]]`);
     if (blanks.some((b) => !b.answer.trim())) errors.push(`${where}: a blank has an empty answer`);
   }
-  const hints = (raw.hints ?? []).map(String);
-  if (hints.length === 0) errors.push(`${where}: no hints`);
+  // YAML reads an unquoted line with ": " in it as a key and value, not as text: catch that.
+  const hints = raw.hints ?? [];
+  if (!Array.isArray(hints) || hints.length === 0) errors.push(`${where}: needs a list of hints`);
+  else hints.forEach((h, i) => typeof h !== "string" && errors.push(`${where}: hint ${i + 1} isn't plain text (quote it: a ": " inside makes YAML read it as a key and value)`));
   const require = raw.require ?? [];
   const forbid = raw.forbid ?? [];
   checkRuleShape(where, require, "require");
@@ -293,7 +316,7 @@ async function buildExercise(where, raw) {
   if (ruleProblems.length) errors.push(`${where}: the solution breaks its own rules: ${ruleProblems.join("; ")}`);
 
   const testsRaw = raw.tests?.length ? raw.tests : [{}];
-  for (const t of testsRaw) for (const k of Object.keys(t)) if (!["name", "stdin", "expect", "hidden"].includes(k)) errors.push(`${where}: unknown test field ${k}`);
+  for (const t of testsRaw) checkKeys(`${where} test`, t, "test");
   if (testsRaw.every((t) => t.hidden)) errors.push(`${where}: at least one test must be visible`);
   if (testsRaw.some((t) => t.stdin) && !testsRaw.some((t) => t.hidden)) warnings.push(`${where}: reads input but has no hidden test`);
 
@@ -355,6 +378,7 @@ const planned = new Map(course.modules.map((m, i) => [m.id, { ...m, number: i + 
 
 async function buildStep(file, m, s, i, slugs, ids) {
   const where = `${file} step ${i + 1} (${s?.title ?? "untitled"})`;
+  checkKeys(where, s, "step");
   if (typeof s?.title !== "string" || !s.title) errors.push(`${where}: title must be a non-empty string (quote it)`);
   // Saved progress is keyed by step id, so ids are explicit: a position-based id would shift when a step is inserted.
   if (!s?.id || !KEBAB.test(s.id)) errors.push(`${where}: needs an id in kebab-case (progress is saved by id)`);
@@ -365,7 +389,8 @@ async function buildStep(file, m, s, i, slugs, ids) {
   if (slugs.has(slug)) errors.push(`${where}: duplicate slug ${slug} in module ${m.id}`);
   slugs.add(slug);
   // The "**Your turn:**" paragraph and everything after it is the task, shown in its own card.
-  const full = s.text ?? "";
+  for (const k of ["text", "title", "slug", "id"]) if (s?.[k] != null && typeof s[k] !== "string") errors.push(`${where}: ${k} must be text (quote it)`);
+  const full = typeof s.text === "string" ? s.text : "";
   const at = full.indexOf("**Your turn:**");
   if (at < 0) errors.push(`${where}: the text needs a "**Your turn:**" paragraph (the task)`);
   const text = await checkExamples(where, at < 0 ? full : full.slice(0, at).trimEnd() + "\n");
@@ -377,7 +402,8 @@ async function buildStep(file, m, s, i, slugs, ids) {
   const extra = await Promise.all(
     more.map(async (c, k) => {
       const w = `${where} challenge ${k + 2}`;
-      if (!c.task) errors.push(`${w}: needs a task`);
+      checkKeys(w, c, "challenge");
+      if (typeof c?.task !== "string" || !c.task) errors.push(`${w}: needs a task (as text)`);
       const cx = await buildExercise(w, c);
       return cx && { task: await checkExamples(w, String(c.task ?? "").trim() + "\n"), ...cx };
     }),
@@ -395,13 +421,14 @@ async function buildModules() {
     const file = `content/modules/${name}`;
     const data = readYaml(path.join(dir, name));
     if (!data) continue;
+    checkKeys(file, data, "module");
     const plan = planned.get(data.id);
     if (!plan) {
       errors.push(`${file}: module ${data.id} is not in content/course.yaml`);
       continue;
     }
     if (!name.startsWith(String(plan.number).padStart(2, "0") + "-")) errors.push(`${file}: the file name should start with ${String(plan.number).padStart(2, "0")}- (its place in the course)`);
-    if (!data.summary) errors.push(`${file}: needs a summary`);
+    if (typeof data.summary !== "string" || !data.summary) errors.push(`${file}: needs a summary (as text)`);
     if (!Array.isArray(data.steps) || data.steps.length === 0) {
       errors.push(`${file}: needs steps`);
       continue;

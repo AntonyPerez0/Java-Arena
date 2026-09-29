@@ -42,7 +42,7 @@ export default function Home() {
                   {done ? `Continue: ${next.step.title}` : "Start with module 1"} <ArrowRight className="icon" aria-hidden="true" />
                 </Link>
               )}
-              <Link className="btn btn-lg" to="/learn">
+              <Link className="btn btn-lg" to="/learn/">
                 See all modules
               </Link>
             </div>
@@ -92,7 +92,7 @@ export default function Home() {
           <div className="card card-callout status-card">
             <h2 className="h3">Being built</h2>
             <p>
-              Java Arena is new. {modules.length} of {plan.length} modules are online so far ({totalSteps} steps, {totalChallenges} challenges); the rest of the course is added in batches. <Link to="/learn">The course page</Link> lists every planned module.
+              Java Arena is new. {modules.length} of {plan.length} modules are online so far ({totalSteps} steps, {totalChallenges} challenges); the rest of the course is added in batches. <Link to="/learn/">The course page</Link> lists every planned module.
             </p>
           </div>
         </div>

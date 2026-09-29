@@ -8,8 +8,9 @@ export const modules = course.modules;
 export const plan = course.plan;
 export const moduleById = new Map(modules.map((m) => [m.id, m]));
 
-export const modulePath = (m: { id: string }) => `/learn/${m.id}`;
-export const stepPath = (m: { id: string }, s: { slug: string }) => `/learn/${m.id}/${s.slug}`;
+// Addresses end with a slash, like the pre-rendered pages (/learn/printing/first-program/index.html).
+export const modulePath = (m: { id: string }) => `/learn/${m.id}/`;
+export const stepPath = (m: { id: string }, s: { slug: string }) => `/learn/${m.id}/${s.slug}/`;
 
 /** A step's challenges: its own exercise first, then the others. */
 export function challengesOf(step: Step): Challenge[] {

@@ -173,11 +173,14 @@ const lessonSession = await newPage();
   await test('hints one at a time, then the solution and "Fill the blanks for me"', async () => {
     const hint = page.locator('.btn-hint');
     await hint.click();
+    expect((await page.evaluate(() => document.activeElement?.id)) === 'hint-1', 'focus moves to the new hint');
     await hint.click();
     await hint.click();
     expect((await page.locator('.hint').count()) === 3, 'three hints shown');
+    expect((await page.evaluate(() => document.activeElement?.id)) === 'hint-3', 'focus on the last hint, not lost with its button');
     await page.click('text=Show solution');
     await page.locator('.solution').waitFor();
+    expect((await page.evaluate(() => document.activeElement?.id)) === 'solution', 'focus moves to the solution');
     await axe(page, 'lesson with hints and solution');
     await page.click('text=Fill the blanks for me');
     const out = await check(page);
@@ -266,6 +269,38 @@ const lessonSession = await newPage();
     await axe(page, 'settings');
     await page.check('input[name="size"][value="1"]');
     await page.check('input[name="theme"][value="system"]');
+  });
+  await test('two open tabs keep each other\'s progress', async () => {
+    const other = await lessonSession.ctx.newPage();
+    await other.goto(BASE + 'settings/');
+    await other.locator('input[name="theme"]').first().waitFor();
+    // This tab finishes a challenge; the other one then changes a setting and saves.
+    await page.goto(BASE + 'learn/printing/print-and-println/');
+    await lessonReady(page);
+    await page.locator('input.blank').nth(0).fill('print');
+    await page.locator('input.blank').nth(1).fill('println');
+    expect((await check(page)).includes('All tests passed'), 'passed');
+    await page.waitForTimeout(400);
+    await other.check('input[name="theme"][value="light"]');
+    await other.waitForTimeout(400);
+    await other.close();
+    // The setting reaches this tab right away, and this tab's progress survived the other tab's save.
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'light', null, { timeout: 5000 });
+    await page.reload();
+    await page.locator('.workbench').waitFor();
+    expect((await page.locator('.challenge-done').count()) >= 1, 'the passed challenge is still done');
+    await page.goto(BASE + 'settings/');
+    await page.check('input[name="theme"][value="system"]');
+  });
+  await test('phone menu: focus moves into it, Escape closes it', async () => {
+    await page.setViewportSize({ width: 800, height: 900 });
+    await page.goto(BASE + 'learn/');
+    await page.locator('.module-live').first().waitFor();
+    await page.click('button[aria-label="Open menu"]');
+    expect(await page.evaluate(() => !!document.activeElement?.closest('#main-nav')), 'focus is in the menu');
+    await page.keyboard.press('Escape');
+    expect((await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Open menu', 'focus back on the menu button');
+    await page.setViewportSize({ width: 1280, height: 900 });
   });
   await test('no errors in the console on lesson pages', async () => {
     expect(errors.length === 0, errors.join('\n'));

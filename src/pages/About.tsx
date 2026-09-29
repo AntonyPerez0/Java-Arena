@@ -22,7 +22,7 @@ export default function About() {
 
       <h2>The course it follows</h2>
       <p>
-        The modules follow the order and topics of <A href={MOOC_URL}>Java Programming</A>, a free online course (MOOC) by Arto Hellas, Matti Luukkainen and contributors, made by the Agile Education Research group at the University of Helsinki. Its material is licensed under <A href={MOOC_LICENSE_URL}>Creative Commons BY-NC-SA 4.0</A>. Every lesson page names the MOOC sections it follows and links to them.
+        The modules follow the order and topics of <A href={MOOC_URL}>Java Programming</A>, a free online course (MOOC) by Arto Hellas, Matti Luukkainen and contributors, made by the Agile Education Research group at the University of Helsinki. Its material is licensed under <A href={MOOC_LICENSE_URL}>Creative Commons BY-NC-SA 4.0</A>. The course's <A href={`${MOOC_URL}/credits`}>credits page</A> names everyone who made it, including its contributors and translators. Every lesson page names the MOOC sections it follows and links to them.
       </p>
       <p>
         Java Arena's explanations and exercises are written for this site; no exercise templates, tests or images are copied from the MOOC. Because the lessons follow the MOOC's structure, the lesson content is shared under the same license, CC BY-NC-SA 4.0. Java Arena is an independent project: it is not affiliated with, sponsored or endorsed by the University of Helsinki or MOOC.fi, and completing modules here doesn't earn MOOC credits.
@@ -53,7 +53,7 @@ export default function About() {
 
       <h2>Source and problems</h2>
       <p>
-        The source is on <A href={REPO_URL}>GitHub</A>. Found a mistake? Every challenge has a "Report a problem" link, or <A href={`${REPO_URL}/issues/new`}>open an issue</A>. Settings for the theme, text size and the engine download are on the <Link to="/settings">settings page</Link>.
+        The source is on <A href={REPO_URL}>GitHub</A>. Found a mistake? Every challenge has a "Report a problem" link, or <A href={`${REPO_URL}/issues/new`}>open an issue</A>. Settings for the theme, text size and the engine download are on the <Link to="/settings/">settings page</Link>.
       </p>
     </div>
   );

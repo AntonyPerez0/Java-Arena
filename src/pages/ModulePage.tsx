@@ -24,7 +24,7 @@ export default function ModulePage() {
   return (
     <div className="module-page narrow">
       <nav className="crumbs" aria-label="Breadcrumb">
-        <Link to="/learn">Learn</Link> <ChevronRight className="icon" aria-hidden="true" /> <span>{COURSE_NAMES[m.course]}{m.part != null ? `, part ${m.part}` : ""}</span>
+        <Link to="/learn/">Learn</Link> <ChevronRight className="icon" aria-hidden="true" /> <span>{COURSE_NAMES[m.course]}{m.part != null ? `, part ${m.part}` : ""}</span>
       </nav>
       <div className="page-head">
         <div className="eyebrow">Module {m.number}</div>

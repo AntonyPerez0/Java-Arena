@@ -30,11 +30,11 @@ export default function MoocCredit({ module: m, compact }: { module: { mooc: Moo
         <a href={MOOC_URL} target="_blank" rel="noopener noreferrer">
           Java Programming{ext}
         </a>{" "}
-        by the University of Helsinki (Agile Education Research group), licensed under{" "}
+        by Arto Hellas, Matti Luukkainen and contributors (Agile Education Research group, University of Helsinki), licensed under{" "}
         <a href={MOOC_LICENSE_URL} target="_blank" rel="noopener noreferrer license">
           CC BY-NC-SA 4.0{ext}
         </a>
-        . The explanations and exercises here are written for Java Arena and shared under the same license. Java Arena is not affiliated with the University of Helsinki. <Link to="/about">More about credits</Link>
+        . The explanations and exercises here are written for Java Arena and shared under the same license. Java Arena is not affiliated with or endorsed by the University of Helsinki. <Link to="/about/">More about credits</Link>
       </p>
     </aside>
   );

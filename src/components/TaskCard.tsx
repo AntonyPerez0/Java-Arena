@@ -8,8 +8,9 @@ import Markdown from "./Markdown";
  */
 export default function TaskCard({ ex, task, index, total }: { ex: Exercise; task: string; index: number; total: number }) {
   const shown = ex.tests.find((t) => !t.hidden && t.expect);
-  const moreTests = ex.tests.filter((t) => t !== shown).length;
-  const hidden = ex.tests.some((t) => t.hidden);
+  const others = ex.tests.filter((t) => t !== shown);
+  const moreTests = others.length;
+  const hiddenCount = others.filter((t) => t.hidden).length;
   // The expected output gets its own box below, so a copy of it in the task text is dropped.
   const text = shown ? withoutBlock(task, shown.expect) : task;
   return (
@@ -46,7 +47,9 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
           </div>
           {moreTests > 0 && (
             <p className="task-note">
-              {moreTests} more {moreTests === 1 ? "test uses" : "tests use"} other input{hidden ? ", some of them hidden so the answer can't be typed in directly" : ""}.
+              {hiddenCount === moreTests
+                ? `${moreTests} more hidden ${moreTests === 1 ? "test uses" : "tests use"} other input, so the answer can't be typed in directly.`
+                : `${moreTests} more ${moreTests === 1 ? "test uses" : "tests use"} other input${hiddenCount ? ", some of them hidden so the answer can't be typed in directly" : ""}.`}
             </p>
           )}
         </div>

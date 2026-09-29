@@ -153,13 +153,13 @@ page("/deathmatch", {
   title: `Deathmatch: Java practice drills | ${NAME}`,
   description: "Endless quick Java drills from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, and small programs to write. Spaced review and interview prep.",
   layout: true,
-  body: `<div class="lobby"><div class="page-head"><h1>Deathmatch</h1><p class="muted">Endless quick reps from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, pick one. Every 8th rep is a boss rep, a small program you write and run for real. Drills you miss come back more often until you know them.</p></div></div>`,
+  body: `<div class="lobby practice-page"><div class="page-head"><h1>Deathmatch</h1><p class="muted">Endless quick reps from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, pick one. Every 8th rep is a boss rep, a small program you write and run for real. Drills you miss come back more often until you know them.</p></div></div>`,
 });
 page("/daily", {
   title: `Daily Java challenge | ${NAME}`,
   description: "One Java question a day, the same for everyone. Answer it to keep your streak going.",
   layout: true,
-  body: `<div class="narrow"><div class="page-head"><h1>Daily challenge</h1><p class="muted">One question a day, the same for everyone. Answer it to keep your streak going; a new one comes at midnight.</p></div></div>`,
+  body: `<div class="narrow practice-page"><div class="page-head"><h1>Daily challenge</h1><p class="muted">One question a day, the same for everyone. Answer it to keep your streak going; a new one comes at midnight.</p></div></div>`,
 });
 page("/placement", {
   title: `Placement quiz: where to start with Java | ${NAME}`,

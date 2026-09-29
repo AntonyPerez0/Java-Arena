@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App, { loadPlayground, loadPractice, loadStepPage } from "./App";
 import { loadModule } from "./content";
+import { loadDrills } from "./content/drills";
 import "./styles.css";
 
 // A lesson or the playground opened directly: load its code first, so the pre-rendered page stays
@@ -15,7 +16,7 @@ const ready = lesson
   : /^playground\/?$/.test(path)
     ? loadPlayground().catch(() => undefined)
     : practice
-      ? practice().catch(() => undefined)
+      ? Promise.all([practice(), loadDrills()]).catch(() => undefined)
       : Promise.resolve();
 
 ready.then(() => {

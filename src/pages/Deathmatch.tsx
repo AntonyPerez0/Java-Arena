@@ -19,20 +19,19 @@ type Kill = { id: number; topic: string; type: Drill["type"]; ms: number; ok: bo
 export default function Deathmatch() {
   useTitle("Deathmatch");
   const set = useDrills();
-  if (set === undefined)
+  if (set === undefined || set === "error")
     return (
-      <div className="page-head">
-        <h1>Deathmatch</h1>
-        <p className="muted">Loading the drills…</p>
-      </div>
-    );
-  if (set === "error")
-    return (
-      <div className="page-head">
-        <h1>Deathmatch</h1>
-        <p className="banner banner-fail" role="alert">
-          The drills couldn't be loaded. Check the connection and reload the page.
-        </p>
+      <div className="lobby practice-page">
+        <div className="page-head">
+          <h1>Deathmatch</h1>
+          {set === "error" ? (
+            <p className="banner banner-fail" role="alert">
+              The drills couldn't be loaded. Check the connection and reload the page.
+            </p>
+          ) : (
+            <p className="muted">Loading the drills…</p>
+          )}
+        </div>
       </div>
     );
   return <Arena drills={set.drills} />;
@@ -297,7 +296,7 @@ function Lobby({ drills, pool, interviewCount, unlocked, selected, dueCount, onS
   });
 
   return (
-    <div className="lobby">
+    <div className="lobby practice-page">
       <div className="page-head">
         <h1>Deathmatch</h1>
         <p className="muted">Endless quick reps from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, pick one. Every {BOSS_EVERY}th rep is a boss rep, a small program you write and run for real. Drills you miss come back more often until you know them.</p>

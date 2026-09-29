@@ -42,7 +42,7 @@ export default function Daily() {
   }
 
   return (
-    <div className="narrow">
+    <div className="narrow practice-page">
       <div className="page-head">
         <h1>Daily challenge</h1>
         <p className="muted">One question a day, the same for everyone. Answer it to keep your streak going; a new one comes at midnight.</p>

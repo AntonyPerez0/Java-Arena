@@ -63,6 +63,8 @@ export const REFERENCE_JVM_FLAGS = [
   ...Object.entries(REFERENCE_PROPERTIES).map(([k, v]) => `-D${k}=${v}`),
   '-XX:+UnlockDiagnosticVMOptions',
   '-XX:-UseLibmIntrinsic',
+  // No hsperfdata file: with many JVMs at once, a clash on it prints a warning into the program's output.
+  '-XX:-UsePerfData',
 ];
 
 // Keeps what graders compare in stderr: the first line and the learner's own stack frames.

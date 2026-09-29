@@ -18,10 +18,12 @@ type Props = {
   minHeight?: string;
   /** Accessible name for the editor. */
   label?: string;
+  /** What Control or Command plus Enter does, for the help text. */
+  runAction?: string;
 };
 
 /** The Java code editor (CodeMirror), with javac's errors marked on their lines. */
-export default function CodeEditor({ value, onChange, onRun, diagnostics = [], minHeight = "10rem", label = "Java code editor" }: Props) {
+export default function CodeEditor({ value, onChange, onRun, diagnostics = [], minHeight = "10rem", label = "Java code editor", runAction = "checks your code" }: Props) {
   const helpId = useId();
   const theme = useResolvedTheme();
   const extensions = useMemo(() => {
@@ -62,7 +64,7 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
   return (
     <div className="editor">
       <p id={helpId} className="visually-hidden">
-        Tab inserts indentation. To leave the editor with the keyboard, press Escape, then Tab. Control or Command plus Enter checks your code.
+        Tab inserts indentation. To leave the editor with the keyboard, press Escape, then Tab. Control or Command plus Enter {runAction}.
       </p>
       <CodeMirror
         value={value}

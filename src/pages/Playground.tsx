@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Link2, Play, RotateCcw } from "lucide-react";
 import CodeEditor from "../components/CodeEditor";
 import SymbolBar from "../components/SymbolBar";
@@ -8,8 +9,7 @@ import { engineSupported } from "../engine/client";
 import { runOnly, type FreeRun } from "../grader/grade";
 import { decodeShare, encodeShare } from "../lib/share";
 import { useTitle } from "../lib/title";
-
-const KEY = "java-arena-playground";
+import { PLAYGROUND_KEY as KEY } from "../state/store";
 
 const EXAMPLE = `import java.util.Scanner;
 
@@ -62,31 +62,61 @@ export default function Playground() {
   const [runs, setRuns] = useState(0);
   const [link, setLink] = useState("");
   const [status, setStatus] = useState("");
+  // What screen readers hear; the region is always on the page so every change is announced.
+  const [live, setLive] = useState("");
   const engine = useEngineStatus();
   const askFirst = useEngineAutoload();
+  const { hash, pathname, search } = useLocation();
+  const navigate = useNavigate();
   const boxRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const busyRef = useRef(false);
+  const sharedRef = useRef(false);
+  sharedRef.current = shared;
 
+  const showOwn = useCallback(() => {
+    const s = loadSaved();
+    setCode(s.code);
+    setStdin(s.stdin);
+    setShared(false);
+  }, []);
+
+  // A share link can arrive at any time: on load, pasted into this tab, or with Back and Forward.
+  // Without one, the learner's own program is shown (for example after "Playground" in the menu).
   useEffect(() => {
-    if (!location.hash) return;
-    decodeShare(location.hash).then(
+    setShareError("");
+    if (!hash || hash === "#") {
+      if (sharedRef.current) showOwn();
+      return;
+    }
+    let current = true;
+    decodeShare(hash).then(
       (p) => {
-        if (!p) return;
+        if (!current || !p) return;
         setCode(p.code);
         setStdin(p.stdin);
         setShared(true);
+        setResult(null);
+        setLive("You opened a shared program. Your own playground program is still saved.");
       },
-      () => setShareError("This share link is damaged, so it couldn't be opened. Your own program is shown instead."),
+      () => current && setShareError("This share link is damaged, so it couldn't be opened. Your own program is shown instead."),
     );
-  }, []);
+    return () => {
+      current = false;
+    };
+  }, [hash, showOwn]);
+
+  const dropHash = () => navigate({ pathname, search }, { replace: true });
 
   const edit = (next: Partial<Saved>) => {
     const s = { code, stdin, ...next };
     if (next.code !== undefined) setCode(next.code);
     if (next.stdin !== undefined) setStdin(next.stdin);
     // Editing a shared program makes it this learner's own.
-    setShared(false);
-    if (shared) history.replaceState(null, "", location.pathname + location.search);
+    if (shared) {
+      setShared(false);
+      dropHash();
+    }
     save(s);
   };
 
@@ -95,14 +125,22 @@ export default function Playground() {
     busyRef.current = true;
     setBusy(true);
     setStatus("");
+    setLive("Running your program.");
     try {
-      setResult(await runOnly(code, stdin));
+      const r = await runOnly(code, stdin);
+      setResult(r);
       setRuns((n) => n + 1);
+      setLive(announce(r));
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
   }, [code, stdin]);
+
+  const tell = (msg: string) => {
+    setStatus(msg);
+    setLive(msg);
+  };
 
   const share = async () => {
     const url = new URL(location.pathname, location.origin).href + "#" + (await encodeShare({ code, stdin }));
@@ -110,7 +148,7 @@ export default function Playground() {
     if (navigator.share && matchMedia("(pointer: coarse)").matches) {
       try {
         await navigator.share({ title: "A Java program", url });
-        setStatus("Shared.");
+        tell("Shared.");
         return;
       } catch {
         /* cancelled: the link is still shown below */
@@ -118,9 +156,9 @@ export default function Playground() {
     }
     try {
       await navigator.clipboard.writeText(url);
-      setStatus("Link copied. Anyone who opens it sees this program and its input.");
+      tell("Link copied. Anyone who opens it sees this program and its input.");
     } catch {
-      setStatus("Copy the link below. Anyone who opens it sees this program and its input.");
+      tell("Copy the link below. Anyone who opens it sees this program and its input.");
     }
   };
 
@@ -131,21 +169,24 @@ export default function Playground() {
   return (
     <div className="playground">
       <div className="page-head">
-        <h1>Playground</h1>
+        <h1 ref={headingRef} tabIndex={-1}>
+          Playground
+        </h1>
         <p className="muted">Write any Java program and run it with your own input. It runs on your device with the real javac 21, and it's saved in this browser.</p>
       </div>
       {shared && (
-        <div className="banner banner-info" role="status">
+        <div className="banner banner-info">
           <span>You opened a shared program. Your own playground program is still saved; editing this one replaces it.</span>
           <button
             type="button"
             className="btn btn-sm"
             onClick={() => {
-              const s = loadSaved();
-              setCode(s.code);
-              setStdin(s.stdin);
-              setShared(false);
-              history.replaceState(null, "", location.pathname + location.search);
+              showOwn();
+              setResult(null);
+              dropHash();
+              // The banner (and this button) goes away: keep the keyboard focus on the page.
+              headingRef.current?.focus();
+              setLive("Your own program is back in the editor.");
             }}
           >
             Back to my program
@@ -160,7 +201,7 @@ export default function Playground() {
       <div className="workbench" ref={boxRef} data-checks={runs}>
         {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="Running programs" />}
         {engine.state === "error" && !unsupported && <EngineErrorCard message={engine.message} />}
-        <CodeEditor value={code} onChange={(v) => edit({ code: v })} onRun={run} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="16rem" label="Java code editor (Main.java)" />
+        <CodeEditor value={code} onChange={(v) => edit({ code: v })} onRun={run} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="16rem" label="Java code editor (Main.java)" runAction="runs the program" />
         <SymbolBar container={boxRef} />
         <label className="lbl" htmlFor="pg-stdin">
           Input (what the program reads)
@@ -204,7 +245,7 @@ export default function Playground() {
           </div>
         )}
         <p className="visually-hidden" role="status" aria-live="polite">
-          {busy ? "Running your program." : status || (result ? announce(result) : "")}
+          {live}
         </p>
         {status && <p className="small muted">{status}</p>}
         {result && (

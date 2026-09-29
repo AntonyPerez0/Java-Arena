@@ -30,7 +30,8 @@ function announce(r: GradeResult): string {
   if (r.status === "internal-error") return "The Java engine couldn't check this. Try again.";
   const failed = r.tests.filter((t) => !t.pass).length;
   const rules = r.ruleProblems.length ? ` ${r.ruleProblems.length} rule${r.ruleProblems.length > 1 ? "s" : ""} not met.` : "";
-  return `${failed ? `${failed} of ${r.tests.length} tests failed.` : "All tests passed, but"}${rules} Details are below the editor.`;
+  const style = r.styleProblems.length ? " The indentation doesn't match the braces." : "";
+  return `${failed ? `${failed} of ${r.tests.length} tests failed.` : "All tests passed."}${rules}${style} Details are below the editor.`;
 }
 
 function announceRun(r: FreeRun): string {

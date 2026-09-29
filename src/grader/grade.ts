@@ -28,6 +28,8 @@ export type GradeResult = {
   javacOutput: string;
   tests: TestResult[];
   ruleProblems: string[];
+  /** Indentation problems on a challenge that grades style (these fail it). */
+  styleProblems: string[];
   /** Indentation notes on a challenge that doesn't grade style (shown, but not failing). */
   styleNotes: string[];
   internalError?: string;
@@ -60,10 +62,10 @@ export function describeRun(r: RunResult | undefined): string | undefined {
 export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   const ruleProblems = checkRules(code, ex.require, ex.forbid) as string[];
   const style = indentMessages(code) as string[];
-  if (ex.style === "indent" && style.length) ruleProblems.push("Indent every line to match its braces: 4 spaces for each level.", ...style);
+  const styleProblems = ex.style === "indent" ? style : [];
   const styleNotes = ex.style === "indent" ? [] : style;
   const c = await compile([{ path: SOURCE, text: code }]);
-  const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", ruleProblems, styleNotes, compileMs: c.ms };
+  const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", ruleProblems, styleProblems, styleNotes, compileMs: c.ms };
   if (c.internalError) return { ...base, status: "internal-error", tests: [], internalError: c.internalError };
   if (!c.ok) return { ...base, status: "compile-error", tests: [] };
   const runs = await runClasses(c.classes, "Main", ex.tests.map((t) => ({ stdin: t.stdin })));
@@ -75,7 +77,7 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
     const note = pass ? undefined : describeRun(r);
     return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, expected: t.expect, got, note, stderr: !pass && r?.stderr ? r.stderr : undefined };
   });
-  const allPass = tests.every((t) => t.pass) && ruleProblems.length === 0;
+  const allPass = tests.every((t) => t.pass) && ruleProblems.length === 0 && styleProblems.length === 0;
   return { ...base, status: allPass ? "pass" : "fail", tests };
 }
 

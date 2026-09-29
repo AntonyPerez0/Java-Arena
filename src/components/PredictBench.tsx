@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, CircleCheck, CircleX, X } from "lucide-react";
 import type { Exercise } from "../content/types";
 import { gradePredict, type PredictResult } from "../grader/grade";
@@ -18,7 +18,7 @@ type Props = {
 function announce(r: PredictResult): string {
   if (r.pass) return "All lines are right.";
   const wrong = r.lines.filter((l) => !l.pass).length;
-  return `${wrong} of ${r.lines.length} lines are not what the program prints.`;
+  return `${wrong} of ${r.lines.length} lines ${wrong === 1 ? "is" : "are"} not what the program prints.`;
 }
 
 /**
@@ -30,6 +30,11 @@ export default function PredictBench({ ex, progress, onChange, onPass, report }:
   const [answers, setAnswers] = useState<string[]>(progress?.blanks ?? lines.map(() => ""));
   const [result, setResult] = useState<PredictResult | null>(null);
   const [checks, setChecks] = useState(0);
+  // Checking is instant, so the same result twice would be the same text: the region is emptied
+  // first and filled a moment later, so screen readers announce every check.
+  const [live, setLive] = useState("");
+  const liveTimer = useRef<number>();
+  useEffect(() => () => window.clearTimeout(liveTimer.current), []);
   const boxRef = useRef<HTMLDivElement>(null);
   const hintsUsed = progress?.hintsUsed ?? 0;
   const attempts = progress?.attempts ?? 0;
@@ -38,6 +43,9 @@ export default function PredictBench({ ex, progress, onChange, onPass, report }:
     const r = gradePredict(ex, answers);
     setResult(r);
     setChecks((n) => n + 1);
+    setLive("");
+    window.clearTimeout(liveTimer.current);
+    liveTimer.current = window.setTimeout(() => setLive(announce(r)), 150);
     onChange({ attempts: attempts + 1 });
     if (r.pass) onPass({ hintsUsed, sawSolution: !!progress?.sawSolution });
   };
@@ -102,7 +110,7 @@ export default function PredictBench({ ex, progress, onChange, onPass, report }:
         </div>
       </form>
       <p className="visually-hidden" role="status" aria-live="polite">
-        {result ? announce(result) : ""}
+        {live}
       </p>
       {result && (
         <div className="results">

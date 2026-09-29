@@ -18,7 +18,7 @@ The course follows the order and topics of [Java Programming](https://java-progr
 - every solution follows its own `require` and `forbid` rules;
 - every example program in the lesson text is compiled and run, and an `output` block after it must be exactly what it prints;
 - every step has exactly three challenges, a `**Your turn:**` task and at least one hint per challenge;
-- no key is misspelled, and every hint is plain text.
+- no key is misspelled, and every hint is a string of text (Markdown), not something YAML read as a list or mapping; quote a hint that contains `: `.
 
 `npm run content:browser` (after `npm run build`) then replays every program in the browser engine and fails if anything differs from the JDK.
 

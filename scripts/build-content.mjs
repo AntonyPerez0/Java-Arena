@@ -410,6 +410,21 @@ async function buildExercise(where, raw) {
   return { kind, seed, solution, hints, tests, require, forbid, ...(style ? { style } : {}) };
 }
 
+/**
+ * A task shows the expected output in its last plain ``` block. It must be what the first visible
+ * test really prints (the task card shows that test's output too, and drops the task's copy only
+ * when the two are the same).
+ */
+function checkTaskOutput(where, task, ex) {
+  if (!ex || ex.kind === "predict" || typeof task !== "string") return;
+  const blocks = [...task.matchAll(/^```[ \t]*\n([\s\S]*?)^```[ \t]*$/gm)];
+  const shown = ex.tests.find((t) => !t.hidden && t.expect);
+  if (!blocks.length || !shown) return;
+  const block = blocks[blocks.length - 1][1];
+  const norm = (x) => normalizeOutput(x).trim();
+  if (norm(block) !== norm(shown.expect)) errors.push(`${where}: the task shows the output\n${block}but the first visible test prints\n${shown.expect}`);
+}
+
 function templateEmpty(template) {
   const { parts } = parseTemplate(template);
   return parts.join("");
@@ -446,12 +461,14 @@ async function buildStep(file, m, s, i, slugs, ids) {
   const more = s.more ?? [];
   if (more.length + 1 !== CHALLENGES_PER_STEP) errors.push(`${where}: has ${more.length + 1} challenges; every step has ${CHALLENGES_PER_STEP} (the step's own plus ${CHALLENGES_PER_STEP - 1} under "more")`);
   const ex = await buildExercise(`${where} challenge 1`, s);
+  checkTaskOutput(`${where} challenge 1`, task, ex);
   const extra = await Promise.all(
     more.map(async (c, k) => {
       const w = `${where} challenge ${k + 2}`;
       checkKeys(w, c, "challenge");
       if (typeof c?.task !== "string" || !c.task) errors.push(`${w}: needs a task (as text)`);
       const cx = await buildExercise(w, c);
+      checkTaskOutput(w, c.task, cx);
       return cx && { task: await checkExamples(w, String(c.task ?? "").trim() + "\n"), ...cx };
     }),
   );

@@ -44,7 +44,8 @@ async function axe(page, label) {
   expect(r.violations.length === 0, `${label}: ${r.violations.map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0]?.target} ${v.nodes[0]?.any?.[0]?.message ?? ''}`).join('; ')}`);
 }
 async function noOverflow(page, label) {
-  const w = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+  // clientWidth, not innerWidth: with phone emulation innerWidth grows along with a too-wide page.
+  const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
   expect(w[0] <= w[1], `${label}: page is ${w[0]} px wide in a ${w[1]} px window`);
 }
 async function newPage(opts = {}) {
@@ -333,7 +334,11 @@ const lessonSession = await newPage();
     // A private method compiles (main is inside Main) but the check can't call it: one plain reason.
     await setCode(page, withMethod('    private static void countdown(int start) {\n        System.out.println("Liftoff!");\n    }'));
     let out = await check(page);
-    expect(out.includes("The check couldn't call your method") && out.includes('is private') && out.split('is private').length === 2, out);
+    expect(out.includes("The check couldn't call your code") && out.includes('is private') && out.split('is private').length === 2, out);
+    // A problem with the whole class gets one sentence, not a list of knock-on errors.
+    await setCode(page, 'package lessons;\n\n' + withMethod('    public static void countdown(int start) {\n        System.out.println("Liftoff!");\n    }'));
+    out = await check(page);
+    expect(out.includes('remove the package line') && !out.includes('has no method'), out);
     // A crash inside the method: explained with the learner's own line, without the check's frames.
     await setCode(page, withMethod('    public static void countdown(int start) {\n        System.out.println(10 / (start - 3));\n    }'));
     out = await check(page);
@@ -344,6 +349,12 @@ const lessonSession = await newPage();
     out = await check(page);
     expect(out.includes('All tests passed'), out);
     await axe(page, 'method challenge');
+    // A void method whose value main prints: javac's error in Main.java, explained.
+    await page.goto(BASE + 'learn/return-values/computing-return-values/');
+    await page.locator('.workbench').waitFor();
+    await setCode(page, 'public class Main {\n    public static void main(String[] args) {\n        System.out.println(perimeter(4, 3));\n    }\n\n    public static void perimeter(int width, int height) {\n        System.out.println(2 * width + 2 * height);\n    }\n}\n');
+    out = await check(page);
+    expect(out.includes("It didn't compile") && out.includes('a method that is void'), out);
   });
   await test('the indentation check accepts switch, multi-line headers, lambdas and other brace styles', async () => {
     const ok = {
@@ -679,11 +690,29 @@ await test('phone: a lesson asks before downloading, the symbol bar types into t
   expect(code.includes('System.out.println("braces keep the blocks in line,");'), code);
   await ctx.close();
 });
+await test('phone width 320 px: no page in the sitemap scrolls sideways', async () => {
+  const { ctx, page } = await newPage({ viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+  const xml = await (await fetch(BASE + 'sitemap.xml')).text();
+  // The sitemap lists the live site's addresses; its first entry is the home page.
+  const locs = [...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => new URL(m[1]).pathname);
+  const paths = locs.map((l) => l.slice(locs[0].length));
+  expect(paths.length > 50, `only ${paths.length} pages in the sitemap`);
+  const wide = [];
+  for (const p of paths) {
+    await page.goto(BASE + p);
+    await page.locator('#main h1').first().waitFor();
+    const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+    if (w[0] > w[1]) wide.push(`${p || 'home'} (${w[0]} px)`);
+  }
+  expect(wide.length === 0, `wider than 320 px: ${wide.join(', ')}`);
+  await ctx.close();
+});
 for (const width of [360, 390]) {
   await test(`phone width ${width} px: no sideways scrolling, axe passes`, async () => {
     const { ctx, page } = await newPage({ viewport: { width, height: 800 }, isMobile: true, hasTouch: true, colorScheme: width === 360 ? 'dark' : 'light' });
     await ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
-    for (const p of ['', 'learn/', 'learn/printing/', 'learn/return-values/drawing-shapes/', 'playground/', 'about/']) {
+    for (const p of ['', 'learn/', 'learn/printing/', 'learn/methods/parameters/', 'learn/return-values/drawing-shapes/', 'playground/', 'about/']) {
       await page.goto(BASE + p);
       await page.locator('#main h1').first().waitFor();
       await noOverflow(page, `${p || 'home'} ${width}`);

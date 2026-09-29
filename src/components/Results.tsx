@@ -77,10 +77,10 @@ export default function Results({ result }: { result: GradeResult }) {
         <>
           <div className="banner banner-fail">
             <span>
-              <CircleX className="icon" aria-hidden="true" /> The check couldn't call your method
+              <CircleX className="icon" aria-hidden="true" /> The check couldn't call your code
             </span>
           </div>
-          <ul className="rules" aria-label="Why the check couldn't call your method">
+          <ul className="rules" aria-label="Why the check couldn't call your code">
             {result.callProblems.map((p, i) => (
               <li key={i}>
                 <InlineMd text={p} />

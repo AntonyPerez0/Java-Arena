@@ -12,7 +12,8 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
   const others = ex.tests.filter((t) => t !== shown);
   const moreTests = others.length;
   const hiddenCount = others.filter((t) => t.hidden).length;
-  const what = shown?.call ? "calls" : "input";
+  const calls = others.filter((t) => t.call).length;
+  const what = calls === 0 ? "input" : calls === others.length ? "calls" : "input or calls";
   // The expected output gets its own box below, so a copy of it in the task text is dropped.
   const text = shown ? withoutBlock(task, shown.expect) : task;
   return (

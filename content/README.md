@@ -18,6 +18,7 @@ The course follows the order and topics of [Java Programming](https://java-progr
 - every solution follows its own `require` and `forbid` rules;
 - every example program in the lesson text is compiled and run, and an `output` block after it must be exactly what it prints;
 - every step has exactly three challenges, a `**Your turn:**` task and at least one hint per challenge;
+- the expected output a task shows (its last plain ``` block) is exactly what the first visible test prints;
 - no key is misspelled, and every hint is a string of text (Markdown), not something YAML read as a list or mapping; quote a hint that contains `: `.
 
 `npm run content:browser` (after `npm run build`) then replays every program in the browser engine and fails if anything differs from the JDK.
@@ -95,7 +96,7 @@ A test can call the learner's methods instead of running `main`:
       - stdin: "5"                   # a test without `call` still runs main
 ```
 
-The site compiles a hidden class, `ArenaCheck extends Main`, whose `main` runs the test's code (so a call reads exactly as it would inside `Main`), and grades what it prints. The build does the same on the JDK. When the learner's own code compiles but the check can't call it (a misspelled name, other parameter types, a `private` or non-`static` method, a `void` method whose value is used), the learner gets a plain explanation that names the call instead of the check program's javac errors. A test named after a one-line call shows that call as its name.
+The site compiles a hidden class, `ArenaCheck extends Main`, whose `main` runs the test's code (so a call reads exactly as it would inside `Main`), and grades what it prints. An exception from the learner's code, checked or not, comes out unchanged, as it would from `Main` itself. The build does the same on the JDK. When the learner's own code compiles but the check can't call it (a misspelled name, other parameter types, a `private` or non-`static` method, a `void` method whose value is used, a class not called `Main` or in a package), the learner gets a plain explanation that names the call instead of the check program's javac errors. A test named after a one-line call shows that call as its name.
 
 Every Java block in lesson text says what it is:
 

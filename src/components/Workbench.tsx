@@ -27,7 +27,7 @@ type Props = {
 function announce(r: GradeResult): string {
   if (r.status === "pass") return "All tests passed.";
   if (r.status === "compile-error") return "It didn't compile. The errors are listed below the editor.";
-  if (r.status === "call-error") return "The check couldn't call your method. The reason is below the editor.";
+  if (r.status === "call-error") return "The check couldn't call your code. What to change is explained below the editor.";
   if (r.status === "internal-error") return "The Java engine couldn't check this. Try again.";
   const failed = r.tests.filter((t) => !t.pass).length;
   const rules = r.ruleProblems.length ? ` ${r.ruleProblems.length} rule${r.ruleProblems.length > 1 ? "s" : ""} not met.` : "";

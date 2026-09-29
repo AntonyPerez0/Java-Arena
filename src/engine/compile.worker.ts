@@ -11,7 +11,8 @@ import { engineSupported } from "./support";
 import type { CompileResult, Diagnostic, SourceFile } from "./types";
 
 type Javac = {
-  compile(files: SourceFile[]): { success: boolean; crashed?: boolean; classes: { path: string; bytes: Uint8Array }[]; diagnostics: any[]; output?: string; timeMs: number };
+  compile(files: SourceFile[], options?: { libraries?: string[] }): { success: boolean; crashed?: boolean; classes: { path: string; bytes: Uint8Array }[]; diagnostics: any[]; output?: string; timeMs: number };
+  loadLibrary(name: string, bytes: Uint8Array): Promise<number>;
   recover(): Promise<void>;
   broken: boolean;
 };
@@ -19,7 +20,21 @@ type Javac = {
 let javac: Javac | null = null;
 let readyPromise: Promise<void> | null = null;
 let manifest: Manifest | null = null;
+let engineBase = "";
 let failed = false;
+/** Libraries loaded into javac (such as junit4), by name. */
+const libraries = new Map<string, Promise<number>>();
+
+/** Loads a library into javac the first time a compile needs it (downloaded once, then cached). */
+function loadLibrary(name: string): Promise<number> {
+  let p = libraries.get(name);
+  if (!p) {
+    p = fetchCached(engineBase, manifest!, `${name}.bin`, () => {}).then((bytes) => javac!.loadLibrary(name, bytes));
+    p.catch(() => libraries.delete(name));
+    libraries.set(name, p);
+  }
+  return p;
+}
 const progress: Record<string, number> = {};
 const fromCache: Record<string, boolean> = {};
 
@@ -38,6 +53,7 @@ function reportProgress() {
 
 async function init(base: string) {
   if (!engineSupported()) throw new Error("unsupported browser");
+  engineBase = base;
   const manifestUrl = new URL("manifest.json", base).href;
   manifest = await fetchManifest(manifestUrl);
   if (!manifest) throw new Error("couldn't download the Java engine (check your connection)");
@@ -96,7 +112,13 @@ self.onmessage = async (e: MessageEvent) => {
       if (!readyPromise) throw new Error("the engine hasn't started");
       await readyPromise;
       if (javac!.broken) await javac!.recover();
-      const r = javac!.compile(msg.files);
+      const wanted: string[] = msg.libraries ?? [];
+      try {
+        await Promise.all(wanted.map(loadLibrary));
+      } catch (err: any) {
+        throw new Error(`couldn't download the ${wanted.join(" and ")} library (${err?.message ?? err})`);
+      }
+      const r = javac!.compile(msg.files, { libraries: wanted });
       if (r.crashed) {
         // javac itself failed (for example extremely deep nesting overflowed its stack); the next
         // compile gets a fresh compiler.

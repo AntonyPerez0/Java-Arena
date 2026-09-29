@@ -177,15 +177,15 @@ export function engineReady(): Promise<void> {
   });
 }
 
-/** Compile Java source files with javac 21. */
-export async function compile(files: SourceFile[]): Promise<CompileResult> {
+/** Compile Java source files with javac 21, with any named libraries (such as junit4) on the class path. */
+export async function compile(files: SourceFile[], options: { libraries?: string[] } = {}): Promise<CompileResult> {
   ensureEngine();
   if (!compileWorker) return { ok: false, diagnostics: [], classes: [], ms: 0, internalError: status.state === "error" ? status.message : "the engine isn't running" };
   const id = nextId++;
   const worker = compileWorker;
   return new Promise((resolve) => {
     pending.set(id, resolve);
-    worker.postMessage({ type: "compile", id, files });
+    worker.postMessage({ type: "compile", id, files, libraries: options.libraries ?? [] });
   });
 }
 
@@ -222,7 +222,7 @@ const failed = (message: string): RunResult => ({ stdout: "", stderr: "", exitCo
  * Run cases from `first` on in one run worker. Resolves with the index of the next case still to
  * run: after a timeout the worker is killed and the caller continues in a new one.
  */
-function runBatch(classes: ClassFile[], mainClass: string, cases: RunInput[], first: number, timeLimitMs: number, results: RunResult[]): Promise<number> {
+function runBatch(classes: ClassFile[], mainClass: string, cases: RunInput[], first: number, timeLimitMs: number, results: RunResult[], libraries: string[]): Promise<number> {
   return new Promise((resolve) => {
     const rw = takeRunWorker();
     const runner = rw.worker;
@@ -281,18 +281,18 @@ function runBatch(classes: ClassFile[], mainClass: string, cases: RunInput[], fi
       results[first] = failed("the Java runner took too long to start");
       finish(cases.length);
     });
-    runner.postMessage({ type: "run", classes, mainClass, inputs: cases, first });
+    runner.postMessage({ type: "run", classes, mainClass, inputs: cases, first, libraries });
   });
 }
 
-/** Run compiled classes once per input, killing any case that exceeds timeLimitMs. */
-export async function runClasses(classes: ClassFile[], mainClass: string, inputs: RunInput[], timeLimitMs = DEFAULT_TIME_LIMIT_MS): Promise<RunResult[]> {
+/** Run compiled classes once per input, killing any case that exceeds timeLimitMs. Libraries (such as junit4) are loaded next to them. */
+export async function runClasses(classes: ClassFile[], mainClass: string, inputs: RunInput[], timeLimitMs = DEFAULT_TIME_LIMIT_MS, options: { libraries?: string[] } = {}): Promise<RunResult[]> {
   await engineReady();
   const cases = inputs.length ? inputs : [{}];
   const results: RunResult[] = [];
   let next = 0;
   while (next < cases.length) {
-    next = await runBatch(classes, mainClass, cases, next, timeLimitMs, results);
+    next = await runBatch(classes, mainClass, cases, next, timeLimitMs, results, options.libraries ?? []);
     prepareSpare();
   }
   for (let i = 0; i < cases.length; i++) results[i] ??= failed("this case was not run");

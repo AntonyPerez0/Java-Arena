@@ -153,12 +153,57 @@ Input normally ends with one line break. To end it with an empty line on purpose
 
 The site compiles a hidden class, `ArenaCheck extends Main`, whose `main` runs the test's code (so a call reads exactly as it would inside `Main`), and grades what it prints. It imports `java.util.*`, so a test can build an `ArrayList` by its short name. An exception from the learner's code, checked or not, comes out unchanged, as it would from `Main` itself. The build does the same on the JDK. When the learner's own code compiles but the check can't call it (a misspelled name, other parameter types, a `private` or non-`static` method, a `void` method whose value is used, a class not called `Main` or in a package), the learner gets a plain explanation that names the call instead of the check program's javac errors. A test named after a one-line call shows that call as its name.
 
+### Unit tests (JUnit)
+
+A program that uses `org.junit` is compiled with JUnit 4.13.2 and Hamcrest Core 1.3 on the class path, as `javac -cp .:junit-4.13.2.jar:hamcrest-core-1.3.jar` would, on the JDK at build time and in the browser. A program of classes and their test classes needs no `Main.java`.
+
+Tests run through ArenaTests, a small class of the site's (`src/grader/junit.js`) that runs each test class with JUnit's own runner and prints a report that is the same on every run. JUnit's text runner prints how long the tests took and runs them in an order of its own, so it can't be compared with a fixed output. The report lists the tests in alphabetical order, each passed or FAILED; a failure shows the exception JUnit reports (with JUnit's own message, such as `expected:<8> but was:<0>`) and the first line of the program's own code in its stack trace:
+
+```
+TallyTest: 3 tests
+  addsUp: passed
+  countsOne: FAILED
+    java.lang.AssertionError: expected:<1> but was:<0>
+    at TallyTest.countsOne(TallyTest.java:24)
+  startsAtZero: passed
+2 of 3 tests passed
+```
+
+- **Examples in lesson text:** a ` ```java test ` block holds the classes and their test classes, with a `// ==== Name.java ====` line before each file, and must be followed by an ` ```output ` block with the report. The build runs every class that has a `@Test`.
+- **Challenges where the learner writes tests:** give `seed` and `solution` as maps of files (the test class first, so it's the tab that opens), and tests with `junit:` instead of `stdin` or `call`. Each test runs that test class, either on the program as written or with some files swapped for other versions (`replace:`). `outcome: pass` (the default) wants every test to pass, and `outcome: fail` wants at least one to fail, which means the learner's tests caught the bug. Every test needs a `name` that says which version it runs on; the task card lists the visible ones.
+
+  ```yaml
+  tests:
+    - name: The Tally as it is
+      junit: TallyTest
+    - name: A Tally whose add forgets what was there
+      junit: TallyTest
+      outcome: fail
+      replace:
+        Tally.java: |
+          public class Tally {
+              ...
+          }
+    - name: A Tally that subtracts
+      junit: TallyTest
+      outcome: fail
+      hidden: true
+      replace:
+        Tally.java: |
+          ...
+  ```
+
+  The build checks that the solution gets every outcome and that the starter code doesn't. Versions in `replace` keep the same methods (only their behavior changes), so the learner's tests compile with each one. Hidden tests are for buggy versions. In a challenge with `junit` tests, every test has `junit`.
+- **Challenges where the learner writes the class and given tests check it:** put the test class in the files too, with a `junit` test with `outcome: pass`, and add `replace` with the test class itself (`replace: { TallyTest.java: ... }`), so editing the tests can't make them pass.
+- "Run with my input" becomes "Run my tests" in a challenge with `junit` tests, and runs the learner's test classes.
+
 Every Java block in lesson text says what it is:
 
 - ` ```java run ` a complete program; it's compiled and run. An ` ```input ` block right after it is what it reads, and an ` ```output ` block after that must be exactly what it prints.
 - ` ```java main ` statements that are run inside a main method (imports such as `java.util.Scanner` are added when used); same checks.
 - ` ```java error ` code that must not compile. A ` ```javac ` block after it must be exactly what javac prints.
 - ` ```java run crash ` a complete program that must stop with an uncaught exception (to show a crash on purpose). Its ` ```input ` and ` ```output ` blocks are optional; a ` ```crash ` block after them must be exactly what Java prints: the `Exception in thread "main" ...` line and the program's own `at Main...` lines (lines inside Java's own classes are left out, since they differ between JVMs).
+- ` ```java test ` classes and their JUnit test classes; the tests are run, and an ` ```output ` block after it must be exactly the report (see "Unit tests (JUnit)").
 - ` ```java fragment ` a piece of code that can't run on its own; shown only.
 
 ## Drills (Deathmatch, daily challenge, interview prep)

@@ -18,10 +18,12 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
+import { gunzipSync } from "node:zlib";
 import YAML from "yaml";
 import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, mainProgram, normalizeOutput, parseTemplate, templateSolution } from "../src/grader/assemble.js";
 import { indentMessages } from "../src/grader/style.js";
 import { FILE_MARK, joinFiles, splitFiles } from "../src/grader/files.js";
+import { JUNIT_LIBRARY, TEST_RUNNER_CLASS, TEST_RUNNER_FILE, TEST_RUNNER_SOURCE, parseTestReport, testClassesOf, usesJUnit } from "../src/grader/junit.js";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/suite.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -63,6 +65,34 @@ if (useCache && fs.existsSync(CACHE_FILE)) {
   if (c.version === CACHE_VERSION && c.jdk === jdkVersion) cache = c.entries;
 }
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "java-arena-content-"));
+
+/**
+ * A library a program may use (such as JUnit), unpacked once from engine/dist/libraries for the
+ * reference JDK's class path: the same class files the site's engine loads. `sha` identifies the
+ * archive in cache keys.
+ */
+const libraryDirs = new Map();
+function library(name) {
+  if (!libraryDirs.has(name)) {
+    const archive = fs.readFileSync(path.join(ROOT, "engine", "dist", "libraries", `${name}.bin`));
+    const data = gunzipSync(archive);
+    const dir = path.join(TMP, "libraries", name);
+    for (let p = 0; p < data.length; ) {
+      const n = data.readUInt16BE(p);
+      const file = data.toString("utf8", p + 2, p + 2 + n);
+      p += 2 + n;
+      const length = data.readUInt32BE(p);
+      p += 4;
+      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, file), data.subarray(p, p + length));
+      p += length;
+    }
+    libraryDirs.set(name, { dir, sha: crypto.createHash("sha256").update(archive).digest("hex").slice(0, 16) });
+  }
+  return libraryDirs.get(name);
+}
+/** The libraries a program needs: JUnit when it uses org.junit. */
+const librariesFor = (files) => (usesJUnit(files) ? [JUNIT_LIBRARY] : []);
 const errors = [];
 const warnings = [];
 const checks = []; // for the browser replay
@@ -79,8 +109,7 @@ const sha = (x) => crypto.createHash("sha256").update(JSON.stringify(x)).digest(
  */
 let batch = null;
 const javacJobs = new Map();
-function javacBatch(files) {
-  const id = sha(["compile", files]);
+function javacBatch(files, libraries, id) {
   if (javacJobs.has(id)) return javacJobs.get(id);
   if (!batch) {
     batch = new Map();
@@ -92,7 +121,7 @@ function javacBatch(files) {
   }
   let resolve;
   const promise = new Promise((r) => (resolve = r));
-  batch.set(id, { files, resolve, dir: path.join(TMP, "jobs", id) });
+  batch.set(id, { files, libraries, resolve, dir: path.join(TMP, "jobs", id) });
   javacJobs.set(id, promise);
   return promise;
 }
@@ -105,6 +134,8 @@ function runBatch(b) {
       fs.writeFileSync(target, f.text);
     }
     fs.mkdirSync(path.join(job.dir, "classes"), { recursive: true });
+    // Libraries go on javac's class path, as "javac -cp .:junit.jar:hamcrest.jar" would put them.
+    if (job.libraries.length) fs.writeFileSync(path.join(job.dir, "classpath.txt"), job.libraries.map((l) => library(l).dir).join(path.delimiter));
   }
   const r = spawnSync(bin("java"), ["-XX:-UsePerfData", path.join(ROOT, "scripts", "content", "JavaCheck.java"), path.join(TMP, "jobs"), ...b.keys()], { env, encoding: "utf8", maxBuffer: 64 << 20 });
   if (r.status !== 0) {
@@ -121,11 +152,12 @@ function runBatch(b) {
   }
 }
 
-/** javac's verdict and messages for a program: { ok, output, files }. */
+/** javac's verdict and messages for a program: { ok, output, files, libraries }. */
 async function compile(files) {
-  const id = sha(["compile", files]);
-  const res = cache[id] ?? (await javacBatch(files));
-  return { ok: res.ok, output: res.output, files };
+  const libraries = librariesFor(files);
+  const id = sha(["compile", files, ...libraries.map((l) => library(l).sha)]);
+  const res = cache[id] ?? (await javacBatch(files, libraries, id));
+  return { ok: res.ok, output: res.output, files, libraries };
 }
 
 // A few JVMs at a time: each run is a separate `java` process, like the browser's fresh runner.
@@ -163,16 +195,18 @@ async function run(compiled, stdin, opts = {}, tries = 3) {
 const JVM_LOG = /^\[\d+\.\d+s\]\[(warning|error)\].*$/m;
 
 async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files = null } = {}) {
-  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS, ...(files ? [files] : [])]);
+  const libraries = compiled.libraries ?? [];
+  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS, ...(files ? [files] : []), ...libraries.map((l) => library(l).sha)]);
   if (cache[id]) return cache[id];
-  const { classes } = await javacBatch(compiled.files);
+  const { classes } = await javacBatch(compiled.files, libraries, sha(["compile", compiled.files, ...libraries.map((l) => library(l).sha)]));
+  const classPath = [classes, ...libraries.map((l) => library(l).dir)].join(path.delimiter);
   return limit(
     () =>
       new Promise((resolve) => {
         const cwd = fs.mkdtempSync(path.join(TMP, "run-"));
         // Files the program reads sit in its working folder, as they would next to a real program.
         for (const [name, text] of Object.entries(files ?? {})) fs.writeFileSync(path.join(cwd, name), text);
-        const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, "-cp", classes, mainClass, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+        const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, "-cp", classPath, mainClass, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
         let timedOut = false;
@@ -237,7 +271,8 @@ function codeOf(where, value) {
     const cls = /^\s*public\s+(?:final\s+|abstract\s+)?(?:class|interface|record|enum)\s+(\w+)/m.exec(f.text)?.[1];
     if (cls && `${cls}.java` !== f.path) errors.push(`${where}: ${f.path} holds public class ${cls}, which must be in ${cls}.java`);
   }
-  if (!files.some((f) => f.path === "Main.java")) errors.push(`${where}: a program of several files needs a Main.java`);
+  // A program runs from Main, except one of classes and their JUnit tests, which the tests run.
+  if (!files.some((f) => f.path === "Main.java") && !(usesJUnit(files) && testClassesOf(files).length)) errors.push(`${where}: a program of several files needs a Main.java (or a JUnit test class)`);
   return joinFiles(files);
 }
 
@@ -256,7 +291,7 @@ const KEYS = {
   step: ["id", "slug", "title", "text", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass", "more"],
   challenge: ["task", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass"],
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
-  test: ["name", "stdin", "call", "files", "expect", "hidden"],
+  test: ["name", "stdin", "call", "files", "expect", "hidden", "junit", "replace", "outcome"],
   drillFile: ["topic", "drills"],
   drill: ["id", "type", "prompt", "pre", "body", "classes", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
 };
@@ -316,12 +351,16 @@ async function checkExamples(where, text) {
     const [, kind, extra, ...rest] = info.split(/\s+/);
     const code = blocks[i][2];
     const w = `${where}, example ${i + 1}`;
-    if (!["run", "main", "error", "fragment"].includes(kind) || (extra && !(kind === "run" && extra === "crash")) || rest.length) {
-      errors.push(`${w}: a java block must be "java run", "java run crash", "java main", "java error" or "java fragment"`);
+    if (!["run", "main", "error", "fragment", "test"].includes(kind) || (extra && !(kind === "run" && extra === "crash")) || rest.length) {
+      errors.push(`${w}: a java block must be "java run", "java run crash", "java main", "java error", "java test" or "java fragment"`);
       continue;
     }
     const crash = extra === "crash";
     if (kind === "fragment") continue;
+    if (kind === "test") {
+      await checkTestExample(w, code, blocks[i + 1]);
+      continue;
+    }
     const source = kind === "main" ? mainProgram(code, importsFor(code)) : code;
     const c = await compile(mainFile(source));
     if (kind === "error") {
@@ -373,7 +412,28 @@ async function checkExamples(where, text) {
     }
     checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, ...(files ? { files } : {}), stdout: r.stdout, exitCode: r.exitCode, ...(crash ? { stderrKey: key } : {}) }] });
   }
-  return text.replace(/^```java[ \t]+(run|main|error|fragment)([ \t]+crash)?[ \t]*$/gm, "```java");
+  return text.replace(/^```java[ \t]+(run|main|error|fragment|test)([ \t]+crash)?[ \t]*$/gm, "```java");
+}
+
+/**
+ * A ```java test example: classes and their JUnit test classes, run the way the site runs tests
+ * (ArenaTests, which uses JUnit's runner), followed by an ```output block with the report.
+ */
+async function checkTestExample(w, code, next) {
+  const own = mainFile(code);
+  const testClasses = testClassesOf(own);
+  if (!testClasses.length) return errors.push(`${w}: a "java test" example needs a test class (a file with @Test)`);
+  if (!usesJUnit(own)) return errors.push(`${w}: a "java test" example must import JUnit (org.junit)`);
+  for (const m of indentProblems(code)) errors.push(`${w}: indentation: ${m}`);
+  const files = [...own, { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }];
+  const c = await compile(files);
+  if (!c.ok) return errors.push(`${w}: does not compile:\n${c.output}`);
+  if (c.output) errors.push(`${w}: javac printed warnings:\n${c.output}`);
+  const r = await run(c, "", { mainClass: TEST_RUNNER_CLASS, args: testClasses });
+  if (r.timedOut || r.exitCode !== 0 || r.stderr) errors.push(`${w}: the tests didn't run to the end:\n${r.stderr}`);
+  if (!next || next[1].trim() !== "output") errors.push(`${w}: a "java test" example needs an output block after it, with the report:\n${r.stdout}`);
+  else if (normalizeOutput(next[2]) !== normalizeOutput(r.stdout)) errors.push(`${w}: the output block says\n${next[2]}\nbut the tests print\n${r.stdout}`);
+  checks.push({ where: w, kind: "run", files, mainClass: TEST_RUNNER_CLASS, tests: [{ stdin: "", args: testClasses, stdout: r.stdout, exitCode: r.exitCode }] });
 }
 
 // ---------------------------------------------------------------- exercises
@@ -443,6 +503,10 @@ async function buildExercise(where, raw) {
 
   const testsRaw = raw.tests?.length ? raw.tests : [{}];
   for (const t of testsRaw) checkKeys(`${where} test`, t, "test");
+  if (testsRaw.some((t) => t.junit != null)) {
+    const tests = await buildJUnitTests(where, testsRaw, { kind, seed, solution, require, forbid, style, seedMayPass: raw.seedMayPass });
+    return tests && { kind, seed, solution, hints, tests, require, forbid, ...(style ? { style } : {}) };
+  }
   if (testsRaw.every((t) => t.hidden)) errors.push(`${where}: at least one test must be visible`);
   if (testsRaw.some((t) => t.stdin) && !testsRaw.some((t) => t.hidden)) warnings.push(`${where}: reads input but has no hidden test`);
   for (const t of testsRaw) if (t.call != null && (typeof t.call !== "string" || !t.call.trim())) errors.push(`${where}: a test's call must be Java code (as text)`);
@@ -512,6 +576,61 @@ async function buildExercise(where, raw) {
  * test really prints (the task card shows that test's output too, and drops the task's copy only
  * when the two are the same).
  */
+/**
+ * Tests that run the learner's JUnit tests (`junit: GardenTest`), on the program as written or with
+ * some files swapped for other versions (`replace: { Garden.java: ... }`, for example a version with
+ * a bug). `outcome: pass` (the default) wants every test to pass; `outcome: fail` wants at least one
+ * test to fail, so the tests catch the bug.
+ */
+async function buildJUnitTests(where, testsRaw, { kind, seed, solution, require, forbid, style, seedMayPass }) {
+  if (kind !== "code") return errors.push(`${where}: tests with junit need seed and solution, not fill`), null;
+  const names = splitFiles(solution).map((f) => f.path);
+  const specs = [];
+  testsRaw.forEach((t, i) => {
+    const n = `${where} test ${i + 1}`;
+    if (t.junit == null || t.stdin != null || t.call != null || t.files != null || t.expect != null) return errors.push(`${n}: in a challenge with junit tests, every test has junit (and no stdin, call, files or expect)`);
+    if (typeof t.junit !== "string" || !names.includes(`${t.junit}.java`)) return errors.push(`${n}: junit must name a test class of the program (one of ${names.join(", ")})`);
+    const outcome = t.outcome ?? "pass";
+    if (!["pass", "fail"].includes(outcome)) return errors.push(`${n}: outcome is "pass" (every test passes) or "fail" (at least one fails)`);
+    if (typeof t.name !== "string" || !t.name.trim()) errors.push(`${n}: a junit test needs a name that says which version of the program it tests`);
+    let replace = null;
+    if (t.replace != null) {
+      if (typeof t.replace !== "object" || Array.isArray(t.replace) || Object.keys(t.replace).some((f) => !names.includes(f))) return errors.push(`${n}: replace maps files of the program (${names.join(", ")}) to other versions of them`);
+      replace = Object.fromEntries(Object.entries(t.replace).map(([f, text]) => [f, ensureNl(String(text ?? ""))]));
+    }
+    specs.push({ i, junit: t.junit, outcome, replace, name: String(t.name ?? `Test ${i + 1}`), hidden: !!t.hidden });
+  });
+  if (specs.length !== testsRaw.length) return null;
+  if (specs.every((t) => t.hidden)) errors.push(`${where}: at least one test must be visible`);
+  const filesOf = (text, replace) => [...splitFiles(text).map((f) => ({ path: f.path, text: replace?.[f.path] ?? f.text })), { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }];
+  // Runs one test on a version of the program: whether it gets the outcome it wants, and the report.
+  const runTest = async (text, t) => {
+    const files = filesOf(text, t.replace);
+    const c = await compile(files);
+    if (!c.ok) return { ok: false, compiled: false, output: c.output, files };
+    const r = await run(c, "", { mainClass: TEST_RUNNER_CLASS, args: [t.junit] });
+    const report = parseTestReport(r.stdout);
+    const ok = !r.timedOut && r.exitCode === 0 && report.complete && report.run > 0 && (t.outcome === "pass" ? report.passed === report.run : report.passed < report.run);
+    return { ok, compiled: true, r, report, files };
+  };
+  const results = await Promise.all(specs.map((t) => runTest(solution, t)));
+  specs.forEach((t, k) => {
+    const n = `${where} test ${t.i + 1} (${t.name})`;
+    const res = results[k];
+    if (!res.compiled) errors.push(`${n}: the solution doesn't compile:\n${res.output}`);
+    else if (res.r.stderr && !res.ok) errors.push(`${n}: the tests didn't run to the end:\n${res.r.stderr}`);
+    else if (!res.ok) errors.push(`${n}: the solution's tests should ${t.outcome === "pass" ? "all pass" : "catch this version (at least one test fails)"}, but they print\n${res.r.stdout}`);
+    else checks.push({ where: n, kind: "run", files: res.files, mainClass: TEST_RUNNER_CLASS, tests: [{ stdin: "", args: [t.junit], stdout: res.r.stdout, exitCode: res.r.exitCode }] });
+  });
+  // Starter code must not already pass, or the challenge would be free.
+  if (seed && !seedMayPass) {
+    const sr = await Promise.all(specs.map((t) => runTest(seed, t)));
+    const styleOk = style !== "indent" || indentProblems(seed).length === 0;
+    if (sr.every((x) => x.ok) && styleOk && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: the starter code already passes`);
+  }
+  return specs.map((t) => ({ name: t.name, stdin: "", junit: t.junit, outcome: t.outcome, ...(t.replace ? { replace: t.replace } : {}), expect: "", hidden: t.hidden }));
+}
+
 function checkTaskOutput(where, task, ex) {
   if (!ex || ex.kind === "predict" || typeof task !== "string") return;
   // Fences are read in order (an info string such as "java" opens a block too), then the plain ones kept.

@@ -8,6 +8,9 @@ import InputText from "./InputText";
  * output the program must print, with the input it gets.
  */
 export default function TaskCard({ ex, task, index, total }: { ex: Exercise; task: string; index: number; total: number }) {
+  // Tests that run the learner's JUnit tests on versions of the program.
+  const junitTests = ex.tests.filter((t) => t.junit);
+  const hiddenJUnit = junitTests.filter((t) => t.hidden).length;
   // A "What does it print?" challenge must not show its answer.
   const shown = ex.kind === "predict" ? undefined : ex.tests.find((t) => !t.hidden && t.expect);
   const others = ex.tests.filter((t) => t !== shown);
@@ -31,6 +34,25 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
         )}
       </div>
       <Markdown text={text} className="task-body" />
+      {junitTests.length > 0 && (
+        <div className="task-expect">
+          <div className="lbl">The check runs your tests on</div>
+          <ul className="task-versions">
+            {junitTests
+              .filter((t) => !t.hidden)
+              .map((t, i) => (
+                <li key={i}>
+                  {t.name}: <strong>{t.outcome === "fail" ? "at least one test must fail" : "every test must pass"}</strong>
+                </li>
+              ))}
+          </ul>
+          {hiddenJUnit > 0 && (
+            <p className="task-note">
+              {hiddenJUnit} more hidden {hiddenJUnit === 1 ? "version has a bug" : "versions have bugs"} your tests should catch.
+            </p>
+          )}
+        </div>
+      )}
       {ex.kind === "fill" && <p className="task-note">Type your answers into the highlighted blanks in the code below.</p>}
       {ex.kind === "predict" && <p className="task-note">Read the program below and type each line it prints. The answers are what Java really prints for it.</p>}
       {shown && (

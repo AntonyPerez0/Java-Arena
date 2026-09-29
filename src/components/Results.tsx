@@ -168,7 +168,7 @@ export default function Results({ result }: { result: GradeResult }) {
                         </pre>
                       </div>
                       <div>
-                        <span className="lbl">your program printed</span>
+                        <span className="lbl">{t.junit ? "your tests printed" : "your program printed"}</span>
                         <pre tabIndex={0} className="console tiny">
                           <Shown s={t.got ?? ""} />
                         </pre>

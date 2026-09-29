@@ -7,7 +7,8 @@ import { gzipSync } from 'node:zlib';
 
 const root = new URL('..', import.meta.url).pathname;
 const out = join(root, 'public', 'engine');
-const parts = ['compiler', 'runner'];
+// Libraries (JUnit for the unit testing lessons) are fetched only when a program uses them.
+const parts = ['compiler', 'runner', 'libraries'];
 
 const manifests = {};
 for (const part of parts) {
@@ -22,7 +23,7 @@ for (const part of parts) {
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
-const manifest = { version: '', files: {}, gzip: {}, compiler: [], runner: [] };
+const manifest = { version: '', files: {}, gzip: {}, compiler: [], runner: [], libraries: [] };
 const hash = createHash('sha256');
 for (const part of parts) {
   for (const entry of manifests[part].files) {
@@ -50,5 +51,5 @@ for (const part of parts) {
   if (existsSync(licenses)) cpSync(licenses, join(out, 'licenses', part), { recursive: true, dereference: true });
 }
 writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 1));
-const total = Object.keys(manifest.files).reduce((a, f) => a + (manifest.gzip[f] ?? manifest.files[f]), 0);
-console.log(`copy-engine: ${Object.keys(manifest.files).length} files, ${(total / 1e6).toFixed(1)} MB to download, version ${manifest.version}`);
+const size = (files) => files.reduce((a, f) => a + (manifest.gzip[f] ?? manifest.files[f]), 0);
+console.log(`copy-engine: ${Object.keys(manifest.files).length} files, ${(size([...manifest.compiler, ...manifest.runner]) / 1e6).toFixed(1)} MB to download, plus ${(size(manifest.libraries) / 1e6).toFixed(1)} MB of libraries when a program uses them, version ${manifest.version}`);

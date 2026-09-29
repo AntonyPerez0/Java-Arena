@@ -194,9 +194,12 @@ await test('a step that loads late gets the focus on its heading; a lesson file 
   const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
   const steps = course.modules.find((m) => m.id === 'printing').steps;
   const { ctx, page } = await newPage();
-  // The last step's file is slow; the fourth one is gone, as after a new version of the site.
+  // The last step's file comes only when the test lets it; the fourth one is gone, as after a new
+  // version of the site.
+  let release;
+  const held = new Promise((r) => (release = r));
   await page.route(`**/lessons/printing/${steps[4].slug}-*.json`, async (route) => {
-    await new Promise((r) => setTimeout(r, 1500));
+    await held;
     await route.continue();
   });
   await page.route(`**/lessons/printing/${steps[3].slug}-*.json`, (route) => route.fulfill({ status: 404, body: 'not found' }));
@@ -205,6 +208,7 @@ await test('a step that loads late gets the focus on its heading; a lesson file 
   await page.getByRole('link', { name: `Step 5: ${steps[4].title}` }).focus();
   await page.keyboard.press('Enter');
   await page.locator('#loading-h').waitFor();
+  release();
   await page.locator('h1:not(#loading-h)', { hasText: steps[4].title }).waitFor();
   const focused = await page.evaluate(() => [document.activeElement?.tagName, document.activeElement?.textContent]);
   expect(focused[0] === 'H1' && focused[1] === steps[4].title, `focus on the lesson heading: ${focused.join(' ')}`);

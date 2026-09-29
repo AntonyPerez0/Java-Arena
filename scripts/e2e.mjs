@@ -9,6 +9,7 @@ import { mkdirSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
 import { launchChromium } from './browser.mjs';
 import { serve } from './serve.mjs';
+import { indentProblems } from '../src/grader/style.js';
 
 const shotsIdx = process.argv.indexOf('--shots');
 const SHOTS = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
@@ -89,6 +90,7 @@ const PRERENDERED = {
   'learn/printing/': 'Printing',
   'learn/printing/first-program/': 'Your first Java program',
   'learn/reading-input/several-inputs/': 'Several inputs in order',
+  'playground/': 'Playground',
   'settings/': 'Settings',
   'about/': 'About and credits',
 };
@@ -126,7 +128,7 @@ await test('home page: the app starts, credits in the footer, no errors', async 
   const footer = await page.locator('footer').innerText();
   expect(footer.includes('CC BY-NC-SA 4.0') && footer.includes('not affiliated') && footer.includes('trademark of Oracle'), 'credits in the footer');
   const status = await page.locator('.status-card').innerText();
-  expect(/2 of 59 modules are online/.test(status), status);
+  expect(/\d+ of 59 modules are online/.test(status), status);
   await page.click('text=See all modules');
   await page.locator('h1', { hasText: 'The course' }).waitFor();
   expect((await page.evaluate(() => document.activeElement?.tagName)) === 'H1', 'focus moved to the new page heading');
@@ -270,6 +272,64 @@ const lessonSession = await newPage();
     await page.check('input[name="size"][value="1"]');
     await page.check('input[name="theme"][value="system"]');
   });
+  await test('"What does it print?": lines are checked against the real output, the answer isn\'t shown', async () => {
+    await page.goto(BASE + 'learn/calculating/tracing-values/');
+    await page.locator('.predict-lines').waitFor();
+    const card = await page.locator('.task-card').innerText();
+    expect(!card.includes('Expected output'), 'the task card does not show the answer');
+    await page.fill('#line-1', '10');
+    await page.fill('#line-2', '3');
+    let out = await check(page);
+    expect(out.includes('1 of 2 lines is not what the program prints'), out);
+    expect((await page.locator('#line-1').getAttribute('aria-invalid')) === 'true', 'the wrong line is marked');
+    // Another wrong answer gives the same result text: the status region is emptied and filled
+    // again, so a screen reader announces it again.
+    await page.waitForFunction(() => document.querySelector('.predict > [role="status"]')?.textContent.includes('is not what'));
+    await page.evaluate(() => {
+      const region = document.querySelector('.predict > [role="status"]');
+      window.__said = [];
+      new MutationObserver(() => window.__said.push(region.textContent)).observe(region, { childList: true, characterData: true, subtree: true });
+    });
+    await page.fill('#line-1', '11');
+    await check(page);
+    await page.waitForFunction(() => window.__said.length >= 2 && window.__said.at(-1).includes('is not what the program prints'));
+    const said = await page.evaluate(() => window.__said);
+    expect(said.includes('') && said.at(-1).startsWith('1 of 2'), JSON.stringify(said));
+    await page.fill('#line-1', '3');
+    out = await check(page);
+    expect(out.includes('Every line is right'), out);
+    expect((await page.locator('.banner-pass.big').innerText()).includes('Challenge 1 of 3 complete'), 'banner');
+    await axe(page, 'predict challenge');
+  });
+  await test('the indentation step fails badly indented code and passes it once re-indented', async () => {
+    await page.goto(BASE + 'learn/conditionals/indentation/');
+    await lessonReady(page);
+    let out = await check(page);
+    expect(out.includes('Not yet') && out.includes('Indent every line to match its braces') && out.includes('Line 2 is indented 0 spaces'), out);
+    await setCode(page, MAIN('        int temperature = 25;\n        if (temperature > 20) {\n            System.out.println("Warm day");\n        }\n        System.out.println("Have a nice day");'));
+    out = await check(page);
+    expect(out.includes('All tests passed'), out);
+  });
+  await test('elsewhere, indentation problems are a note, not a failure', async () => {
+    await page.goto(BASE + 'learn/printing/several-lines/');
+    await lessonReady(page);
+    await setCode(page, 'public class Main {\npublic static void main(String[] args) {\nSystem.out.println("Semicolons end the line,");\nSystem.out.println("braces keep the blocks in line,");\nSystem.out.println("println makes the output shine.");\n}\n}\n');
+    const out = await check(page);
+    expect(out.includes('All tests passed') && /style note \(doesn't affect passing\)/i.test(out) && out.includes('Line 2 is indented 0 spaces'), out);
+  });
+  await test('the indentation check accepts switch, multi-line headers, lambdas and other brace styles', async () => {
+    const ok = {
+      'classic switch': 'class A {\n    void f(int x) {\n        switch (x) {\n            case 1:\n                g();\n                break;\n            case 2: {\n                h();\n                break;\n            }\n            default:\n                k();\n        }\n    }\n}',
+      'switch, older style': 'class A {\n    void f(int x) {\n        switch (x) {\n        case 1:\n            g();\n            break;\n        default:\n            h();\n        }\n    }\n}',
+      'arrow switch': 'class A {\n    int f(int x) {\n        return switch (x) {\n            case 1 -> 10;\n            default -> {\n                yield 20;\n            }\n        };\n    }\n}',
+      'multi-line headers': 'class A {\n    void f() {\n        for (int i = 0;\n                i < 10;\n                i++) {\n            g();\n        }\n        try (Scanner s = new Scanner(System.in);\n             Scanner t = new Scanner(System.in)) {\n            g();\n        }\n    }\n}',
+      'lambda and anonymous class': 'class A {\n    void f() {\n        list.forEach(x -> {\n            g(x);\n        });\n        Runnable r = new Runnable() {\n            public void run() {\n                g();\n            }\n        };\n    }\n}',
+      'braces on their own lines': 'class A\n{\n    void f()\n    {\n        if (x)\n        {\n            g();\n        }\n        else\n        {\n            h();\n        }\n    }\n}',
+    };
+    for (const [name, src] of Object.entries(ok)) expect(indentProblems(src).length === 0, `${name}: ${JSON.stringify(indentProblems(src))}`);
+    const flat = indentProblems('class A {\n    void f(int x) {\n        switch (x) {\n            case 1:\n            g();\n        }\n    }\n}');
+    expect(flat.length === 1 && flat[0].line === 5 && flat[0].expected === 16, JSON.stringify(flat));
+  });
   await test('two open tabs keep each other\'s progress', async () => {
     const other = await lessonSession.ctx.newPage();
     await other.goto(BASE + 'settings/');
@@ -307,6 +367,57 @@ const lessonSession = await newPage();
   });
 }
 await lessonSession.ctx.close();
+
+console.log('Playground');
+await test('playground: run a program with input, share it, open the link elsewhere', async () => {
+  const { ctx, page, errors } = await newPage();
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, 'import java.util.Scanner;\n\n' + MAIN('        Scanner scanner = new Scanner(System.in);\n        String word = scanner.nextLine();\n        System.out.println(word + word);'));
+  await page.fill('#pg-stdin', 'na');
+  const out = await check(page);
+  expect(out.includes('nana') && out.includes('Exit code 0'), out);
+  await page.click('text=Share');
+  await page.locator('#pg-link').waitFor();
+  const link = await page.inputValue('#pg-link');
+  expect(link.includes('/playground/#code='), link);
+  await axe(page, 'playground with output');
+  await shot(page, 'playground-desktop');
+  // Another browser opens the link: it sees the program and its input, and its own program is kept.
+  const other = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await other.ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+  await other.page.goto(link);
+  await other.page.locator('.banner-info').waitFor();
+  expect((await other.page.inputValue('#pg-stdin')) === 'na', 'input came with the link');
+  expect((await editorText(other.page)).includes('word + word'), 'code came with the link');
+  await other.page.click('text=Back to my program');
+  expect((await editorText(other.page)).includes('What is your name?'), 'back to the example');
+  expect((await other.page.evaluate(() => document.activeElement?.tagName)) === 'H1', 'focus moved to the heading, not lost');
+  // A link pasted into a tab that already shows the Playground opens too (only the # part changes).
+  await other.page.evaluate((h) => (location.hash = h), new URL(link).hash);
+  await other.page.locator('.banner-info').waitFor();
+  expect((await editorText(other.page)).includes('word + word'), 'the shared program opened in the same tab');
+  // "Playground" in the menu leads back to the learner's own program.
+  await other.page.locator('footer a', { hasText: 'Playground' }).click();
+  await other.page.waitForFunction(() => !location.hash && !document.querySelector('.banner-info'));
+  expect((await editorText(other.page)).includes('What is your name?'), 'own program after the Playground link');
+  await other.ctx.close();
+  // The first browser still has its program after a reload.
+  await page.reload();
+  await page.locator('.cm-content').waitFor();
+  expect((await editorText(page)).includes('word + word'), 'the program is saved');
+  // "Delete all progress" deletes the Playground program too.
+  page.once('dialog', (d) => d.accept());
+  await page.goto(BASE + 'settings/');
+  await page.click('text=Delete all progress');
+  await page.locator('text=All progress and saved code on this device were deleted.').waitFor();
+  await page.goto(BASE + 'playground/');
+  await page.locator('.cm-content').waitFor();
+  expect((await editorText(page)).includes('What is your name?'), 'the Playground shows the example again');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
 
 console.log('Engine prototype');
 const { ctx: mainCtx, page, errors } = await newPage();
@@ -496,7 +607,7 @@ await test('offline: after one visit, pages and the engine work without a connec
 });
 
 console.log('Accessibility and layout');
-const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'settings/', 'about/', 'learn/nowhere/'];
+const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'learn/calculating/tracing-values/', 'playground/', 'settings/', 'about/', 'learn/nowhere/'];
 for (const colorScheme of ['light', 'dark']) {
   await test(`axe, ${colorScheme} theme: every page type`, async () => {
     const { ctx, page } = await newPage({ colorScheme });
@@ -544,13 +655,18 @@ for (const width of [360, 390]) {
   await test(`phone width ${width} px: no sideways scrolling, axe passes`, async () => {
     const { ctx, page } = await newPage({ viewport: { width, height: 800 }, isMobile: true, hasTouch: true, colorScheme: width === 360 ? 'dark' : 'light' });
     await ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
-    for (const p of ['', 'learn/', 'learn/printing/', 'about/']) {
+    for (const p of ['', 'learn/', 'learn/printing/', 'playground/', 'about/']) {
       await page.goto(BASE + p);
       await page.locator('#main h1').first().waitFor();
       await noOverflow(page, `${p || 'home'} ${width}`);
       await axe(page, `${p || 'home'} ${width}`);
       await shot(page, `phone-${width}-${p.replace(/\//g, '_') || 'home'}`);
     }
+    // The course list gives module titles the room they need (no empty column beside them).
+    await page.goto(BASE + 'learn/');
+    await page.locator('.module-live').first().waitFor();
+    const titleWidth = await page.locator('.module-live .module-title').nth(2).evaluate((e) => e.getBoundingClientRect().width);
+    expect(titleWidth > width * 0.45, `module title only ${Math.round(titleWidth)} px wide`);
     await page.goto(BASE + 'learn/reading-input/reading-a-line/');
     await lessonReady(page);
     await page.fill('input.blank >> nth=0', 'Scanner');

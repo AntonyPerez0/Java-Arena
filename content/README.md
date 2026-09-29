@@ -17,7 +17,8 @@ The course follows the order and topics of [Java Programming](https://java-progr
 - starter code must not already pass, and a fill-in with every blank empty must not pass;
 - every solution follows its own `require` and `forbid` rules;
 - every example program in the lesson text is compiled and run, and an `output` block after it must be exactly what it prints;
-- every step has exactly three challenges, a `**Your turn:**` task and at least one hint per challenge.
+- every step has exactly three challenges, a `**Your turn:**` task and at least one hint per challenge;
+- no key is misspelled, and every hint is a string of text (Markdown), not something YAML read as a list or mapping; quote a hint that contains `: `.
 
 `npm run content:browser` (after `npm run build`) then replays every program in the browser engine and fails if anything differs from the JDK.
 
@@ -62,6 +63,25 @@ steps:
           - pattern: ...
             message: ...
 ```
+
+Two more kinds of challenge settings:
+
+```yaml
+  - task: |
+      What does this program print?
+    predict: |                   # "What does it print?": the learner types each line the program
+      public class Main { ... }  # prints; the answers are its real output (1 to 8 lines, none empty)
+    hints: [...]
+  - task: |
+      Re-indent this program.
+    seed: |
+      ...
+    solution: |
+      ...
+    style: indent                # the indentation must match the braces to pass
+```
+
+Every solution, example and predict program must itself be indented to match its braces (4 spaces per level); the build checks it.
 
 Every Java block in lesson text says what it is:
 

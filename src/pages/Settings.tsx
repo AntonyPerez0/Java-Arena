@@ -107,9 +107,9 @@ export default function Settings() {
             type="button"
             className="btn btn-danger"
             onClick={() => {
-              if (!confirm("Delete all your progress and saved code on this device? This can't be undone.")) return;
+              if (!confirm("Delete all your progress and saved code on this device, including your Playground program? This can't be undone.")) return;
               resetProgress();
-              setMessage("All progress on this device was deleted.");
+              setMessage("All progress and saved code on this device were deleted.");
             }}
           >
             Delete all progress

@@ -3,15 +3,22 @@
 export type TestCase = { name: string; stdin: string; expect: string; hidden?: boolean };
 export type Rule = { pattern: string; flags?: string; message: string; min?: number; max?: number; raw?: boolean };
 
-/** One challenge: a fill-in (`seed` holds the [[blanks]]) or a program to write or fix. */
+/**
+ * One challenge: a fill-in (`seed` holds the [[blanks]]), a program to write or fix, or "What does it
+ * print?" (`predict`: the learner types each line of `lines`, the program's real output).
+ */
 export type Exercise = {
-  kind: "fill" | "code";
+  kind: "fill" | "code" | "predict";
   seed: string;
   solution: string;
   tests: TestCase[];
   hints: string[];
   require: Rule[];
   forbid: Rule[];
+  /** "indent": the indentation must match the braces for the challenge to pass. */
+  style?: "indent";
+  /** Predict challenges: each line the program prints. */
+  lines?: string[];
 };
 
 /** One of a step's further challenges, with its own task. */

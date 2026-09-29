@@ -87,6 +87,16 @@ export default function Results({ result }: { result: GradeResult }) {
           ))}
         </ul>
       )}
+      {result.styleProblems.length > 0 && result.status !== "compile-error" && (
+        <div className="rules style-problems">
+          <p>Indent every line to match its braces: 4 spaces for each level.</p>
+          <ul aria-label="Indentation">
+            {result.styleProblems.map((p, i) => (
+              <li key={i}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {result.tests.length > 0 && (
         <ul className="tests" aria-label="Tests">
           {result.tests.map((t, i) => (
@@ -139,6 +149,16 @@ export default function Results({ result }: { result: GradeResult }) {
             </li>
           ))}
         </ul>
+      )}
+      {result.styleNotes.length > 0 && result.status !== "compile-error" && (
+        <div className="style-notes">
+          <span className="lbl">Style note (doesn't affect passing)</span>
+          <ul>
+            {result.styleNotes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        </div>
       )}
       {warnings.length > 0 && result.status !== "compile-error" && (
         <details className="warnings">

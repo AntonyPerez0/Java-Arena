@@ -4,6 +4,7 @@ import { compile, runClasses, DEFAULT_TIME_LIMIT_MS, type Diagnostic, type RunRe
 import { explainCrash, explainDiagnostic } from "../engine/friendly";
 import type { Exercise } from "../content/types";
 import { checkRules, normalizeOutput } from "./assemble.js";
+import { indentMessages } from "./style.js";
 
 export type FriendlyDiagnostic = Diagnostic & { friendly: string | null };
 
@@ -27,6 +28,10 @@ export type GradeResult = {
   javacOutput: string;
   tests: TestResult[];
   ruleProblems: string[];
+  /** Indentation problems on a challenge that grades style (these fail it). */
+  styleProblems: string[];
+  /** Indentation notes on a challenge that doesn't grade style (shown, but not failing). */
+  styleNotes: string[];
   internalError?: string;
   compileMs: number;
 };
@@ -56,8 +61,11 @@ export function describeRun(r: RunResult | undefined): string | undefined {
 
 export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   const ruleProblems = checkRules(code, ex.require, ex.forbid) as string[];
+  const style = indentMessages(code) as string[];
+  const styleProblems = ex.style === "indent" ? style : [];
+  const styleNotes = ex.style === "indent" ? [] : style;
   const c = await compile([{ path: SOURCE, text: code }]);
-  const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", ruleProblems, compileMs: c.ms };
+  const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", ruleProblems, styleProblems, styleNotes, compileMs: c.ms };
   if (c.internalError) return { ...base, status: "internal-error", tests: [], internalError: c.internalError };
   if (!c.ok) return { ...base, status: "compile-error", tests: [] };
   const runs = await runClasses(c.classes, "Main", ex.tests.map((t) => ({ stdin: t.stdin })));
@@ -69,7 +77,7 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
     const note = pass ? undefined : describeRun(r);
     return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, expected: t.expect, got, note, stderr: !pass && r?.stderr ? r.stderr : undefined };
   });
-  const allPass = tests.every((t) => t.pass) && ruleProblems.length === 0;
+  const allPass = tests.every((t) => t.pass) && ruleProblems.length === 0 && styleProblems.length === 0;
   return { ...base, status: allPass ? "pass" : "fail", tests };
 }
 
@@ -91,4 +99,16 @@ export async function runOnly(code: string, stdin: string): Promise<FreeRun> {
   const [run] = await runClasses(c.classes, "Main", [{ stdin }]);
   if (run?.internalError) return { ...base, status: "internal-error", internalError: run.internalError };
   return { ...base, status: "ran", run, note: describeRun(run) };
+}
+
+export type PredictResult = { pass: boolean; lines: { pass: boolean; got: string }[] };
+
+/** "What does it print?": compares each typed line with the line the program really prints. */
+export function gradePredict(ex: Exercise, answers: string[]): PredictResult {
+  const want = ex.lines ?? [];
+  const lines = want.map((w, i) => {
+    const got = answers[i] ?? "";
+    return { pass: got.trim() === w.trim(), got };
+  });
+  return { pass: lines.every((l) => l.pass), lines };
 }

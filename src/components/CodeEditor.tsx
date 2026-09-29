@@ -4,6 +4,7 @@ import { java } from "@codemirror/lang-java";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { keymap, EditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
+import { indentUnit } from "@codemirror/language";
 import { linter, lintGutter, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
 import type { FriendlyDiagnostic } from "../grader/grade";
 import { useResolvedTheme } from "../lib/appearance";
@@ -17,16 +18,20 @@ type Props = {
   minHeight?: string;
   /** Accessible name for the editor. */
   label?: string;
+  /** What Control or Command plus Enter does, for the help text. */
+  runAction?: string;
 };
 
 /** The Java code editor (CodeMirror), with javac's errors marked on their lines. */
-export default function CodeEditor({ value, onChange, onRun, diagnostics = [], minHeight = "10rem", label = "Java code editor" }: Props) {
+export default function CodeEditor({ value, onChange, onRun, diagnostics = [], minHeight = "10rem", label = "Java code editor", runAction = "checks your code" }: Props) {
   const helpId = useId();
   const theme = useResolvedTheme();
   const extensions = useMemo(() => {
     const marks = diagnostics.filter((d) => d.line > 0 && d.kind !== "note" && d.file.endsWith("Main.java"));
     return [
       java(),
+      // Four spaces per level, like the lessons and the style check (CodeMirror's default is two).
+      indentUnit.of("    "),
       EditorView.lineWrapping,
       // An explicit tabindex keeps the text area a tab stop that tools like axe recognise inside the scroll area.
       EditorView.contentAttributes.of({ "aria-label": label, "aria-describedby": helpId, tabindex: "0", autocapitalize: "off", autocorrect: "off", spellcheck: "false" }),
@@ -59,7 +64,7 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
   return (
     <div className="editor">
       <p id={helpId} className="visually-hidden">
-        Tab inserts indentation. To leave the editor with the keyboard, press Escape, then Tab. Control or Command plus Enter checks your code.
+        Tab inserts indentation. To leave the editor with the keyboard, press Escape, then Tab. Control or Command plus Enter {runAction}.
       </p>
       <CodeMirror
         value={value}

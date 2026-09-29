@@ -7,6 +7,7 @@ import { getState, patchChallenge, patchStep, useStore } from "../state/store";
 import { challengeDone } from "../state/derived";
 import Markdown from "../components/Markdown";
 import Workbench from "../components/Workbench";
+import PredictBench from "../components/PredictBench";
 import TaskCard from "../components/TaskCard";
 import MoocCredit from "../components/MoocCredit";
 import NotFound from "./NotFound";
@@ -188,14 +189,25 @@ function StepView({ m, step, takeFocus }: { m: Module; step: Step; takeFocus: bo
             })}
           </nav>
           <TaskCard ex={challenges[cur]} task={challenges[cur].task} index={cur} total={challenges.length} />
-          <Workbench
-            key={`${step.id}#${cur}`}
-            ex={challenges[cur]}
-            progress={progress?.challenges[cur]}
-            onChange={(patch) => patchChallenge(step.id, cur, patch)}
-            onPass={(info) => onPass(cur, info)}
-            report={{ kind: "Lesson step", title: `${m.title}: ${step.title} (challenge ${cur + 1})`, id: `${step.id}#${cur + 1}`, path: stepPath(m, step) }}
-          />
+          {challenges[cur].kind === "predict" ? (
+            <PredictBench
+              key={`${step.id}#${cur}`}
+              ex={challenges[cur]}
+              progress={progress?.challenges[cur]}
+              onChange={(patch) => patchChallenge(step.id, cur, patch)}
+              onPass={(info) => onPass(cur, info)}
+              report={{ kind: "Lesson step", title: `${m.title}: ${step.title} (challenge ${cur + 1})`, id: `${step.id}#${cur + 1}`, path: stepPath(m, step) }}
+            />
+          ) : (
+            <Workbench
+              key={`${step.id}#${cur}`}
+              ex={challenges[cur]}
+              progress={progress?.challenges[cur]}
+              onChange={(patch) => patchChallenge(step.id, cur, patch)}
+              onPass={(info) => onPass(cur, info)}
+              report={{ kind: "Lesson step", title: `${m.title}: ${step.title} (challenge ${cur + 1})`, id: `${step.id}#${cur + 1}`, path: stepPath(m, step) }}
+            />
+          )}
           <div className="step-nav">
             {prev ? (
               <Link className="btn btn-ghost" to={prev}>

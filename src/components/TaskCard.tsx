@@ -7,7 +7,8 @@ import Markdown from "./Markdown";
  * output the program must print, with the input it gets.
  */
 export default function TaskCard({ ex, task, index, total }: { ex: Exercise; task: string; index: number; total: number }) {
-  const shown = ex.tests.find((t) => !t.hidden && t.expect);
+  // A "What does it print?" challenge must not show its answer.
+  const shown = ex.kind === "predict" ? undefined : ex.tests.find((t) => !t.hidden && t.expect);
   const others = ex.tests.filter((t) => t !== shown);
   const moreTests = others.length;
   const hiddenCount = others.filter((t) => t.hidden).length;
@@ -27,6 +28,7 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
       </div>
       <Markdown text={text} className="task-body" />
       {ex.kind === "fill" && <p className="task-note">Type your answers into the highlighted blanks in the code below.</p>}
+      {ex.kind === "predict" && <p className="task-note">Read the program below and type each line it prints. The answers are what Java really prints for it.</p>}
       {shown && (
         <div className="task-expect">
           <div className={"task-io" + (shown.stdin ? " two" : "")}>

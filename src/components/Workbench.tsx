@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Lightbulb, Play } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { Play } from "lucide-react";
 import type { Exercise } from "../content/types";
 import { grade, runOnly, type FreeRun, type GradeResult } from "../grader/grade";
 import { blankMatches, fillTemplate, parseTemplate } from "../grader/assemble.js";
@@ -8,10 +8,9 @@ import type { ReportInfo } from "../lib/site";
 import CodeEditor from "./CodeEditor";
 import FillCode from "./FillCode";
 import Results, { DiagnosticList } from "./Results";
-import Markdown from "./Markdown";
 import { CodeView } from "./highlight";
 import SymbolBar from "./SymbolBar";
-import ReportLink from "./ReportLink";
+import HintsPanel from "./HintsPanel";
 import { DownloadCard, EngineErrorCard, UnsupportedCard, useEngineAutoload, useEngineStatus } from "./Engine";
 import { engineSupported } from "../engine/client";
 
@@ -31,7 +30,8 @@ function announce(r: GradeResult): string {
   if (r.status === "internal-error") return "The Java engine couldn't check this. Try again.";
   const failed = r.tests.filter((t) => !t.pass).length;
   const rules = r.ruleProblems.length ? ` ${r.ruleProblems.length} rule${r.ruleProblems.length > 1 ? "s" : ""} not met.` : "";
-  return `${failed ? `${failed} of ${r.tests.length} tests failed.` : "All tests passed, but"}${rules} Details are below the editor.`;
+  const style = r.styleProblems.length ? " The indentation doesn't match the braces." : "";
+  return `${failed ? `${failed} of ${r.tests.length} tests failed.` : "All tests passed."}${rules}${style} Details are below the editor.`;
 }
 
 function announceRun(r: FreeRun): string {
@@ -39,8 +39,6 @@ function announceRun(r: FreeRun): string {
   if (r.status === "internal-error") return "The Java engine couldn't run this. Try again.";
   return r.note ? "The program ran and stopped with a problem. The output and an explanation are below the input box." : "The program finished. Its output is below the input box.";
 }
-
-const SOLUTION_AFTER_ATTEMPTS = 3;
 
 /** The editor (or the fill-in code), Check, Run with my input, results, hints and the solution. */
 export default function Workbench({ ex, progress, onChange, onPass, report }: Props) {
@@ -50,14 +48,11 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
   const [blanks, setBlanks] = useState<string[]>(progress?.blanks ?? blanksOf.map(() => ""));
   const [busy, setBusy] = useState<"check" | "run" | null>(null);
   const [result, setResult] = useState<GradeResult | null>(null);
-  const [showSolution, setShowSolution] = useState(false);
   const [stdin, setStdin] = useState(ex.tests[0]?.stdin ?? "");
   const [freeRun, setFreeRun] = useState<FreeRun | null>(null);
   const [showConsole, setShowConsole] = useState(false);
   // Counts finished checks (the browser tests wait on it).
   const [checks, setChecks] = useState(0);
-  // A newly shown hint or solution gets focus, so it's read out and the pressed button can disappear.
-  const [focusId, setFocusId] = useState<string | null>(null);
   const status = useEngineStatus();
   const askFirst = useEngineAutoload();
   const busyRef = useRef(false);
@@ -65,11 +60,6 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
   const hintsUsed = progress?.hintsUsed ?? 0;
   const attempts = progress?.attempts ?? 0;
   const sawSolution = !!progress?.sawSolution;
-  useEffect(() => {
-    if (!focusId) return;
-    document.getElementById(focusId)?.focus();
-    setFocusId(null);
-  }, [focusId, hintsUsed, showSolution]);
 
   const source = isFill ? fillTemplate(ex.seed, blanks) : code;
 
@@ -116,7 +106,6 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
   };
 
   const wrongBlanks = isFill && result && result.status !== "pass" ? blanksOf.map((b, i) => !blankMatches(b, blanks[i])) : [];
-  const canShowSolution = hintsUsed >= ex.hints.length || attempts >= SOLUTION_AFTER_ATTEMPTS;
   const waiting = status.state !== "ready";
   const unsupported = !engineSupported();
   const busyLabel = waiting ? (status.state === "loading" && status.stage !== "start" ? `Loading Java ${Math.round((status.loaded / Math.max(status.total, 1)) * 100)}%…` : "Starting Java…") : busy === "run" ? "Running…" : "Checking…";
@@ -204,40 +193,15 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
       </p>
       {result && <Results result={result} />}
 
-      <div className="hints">
-        {ex.hints.slice(0, hintsUsed).map((h, i) => (
-          <div key={i} className="hint" id={`hint-${i + 1}`} tabIndex={-1}>
-            <span className="hint-n">Hint {i + 1}</span>
-            <Markdown text={h} />
-          </div>
-        ))}
-        <div className="hint-actions">
-          {hintsUsed < ex.hints.length && (
-            <button type="button" className={"btn btn-hint" + (attempts >= 2 && result?.status !== "pass" ? " pulse" : "")} onClick={() => {
-                onChange({ hintsUsed: hintsUsed + 1 });
-                setFocusId(`hint-${hintsUsed + 1}`);
-              }}
-            >
-              <Lightbulb className="icon" aria-hidden="true" /> Hint ({hintsUsed + 1} of {ex.hints.length})
-            </button>
-          )}
-          {canShowSolution && !showSolution && (
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => {
-                setShowSolution(true);
-                setFocusId("solution");
-                onChange({ sawSolution: true });
-              }}
-            >
-              Show solution
-            </button>
-          )}
-        </div>
-        {!canShowSolution && <p className="muted small">The solution can be shown after all the hints or {SOLUTION_AFTER_ATTEMPTS} checks.</p>}
-        {showSolution && (
-          <div className="solution" id="solution" tabIndex={-1}>
+      <HintsPanel
+        hints={ex.hints}
+        hintsUsed={hintsUsed}
+        attempts={attempts}
+        failing={!!result && result.status !== "pass"}
+        onHint={(n) => onChange({ hintsUsed: n })}
+        onShowSolution={() => onChange({ sawSolution: true })}
+        solution={
+          <>
             <div className="lbl">A solution (typing it in yourself helps it stick)</div>
             <CodeView code={ex.solution} label="Solution" />
             {isFill && (
@@ -253,12 +217,10 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
                 Fill the blanks for me
               </button>
             )}
-          </div>
-        )}
-        <p className="report-row">
-          <ReportLink info={() => ({ ...report, code: source, result: result ? announce(result) : undefined })} />
-        </p>
-      </div>
+          </>
+        }
+        report={() => ({ ...report, code: source, result: result ? announce(result) : undefined })}
+      />
     </div>
   );
 }

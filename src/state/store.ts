@@ -205,7 +205,15 @@ export function patchSettings(patch: Partial<State["settings"]>) {
   }
 }
 
+/** Where the Playground keeps its program (separate from progress, but deleted with it). */
+export const PLAYGROUND_KEY = "java-arena-playground";
+
 export function resetProgress() {
   update((s) => ({ ...fresh(), resetAt: Date.now(), settings: s.settings }));
   write();
+  try {
+    localStorage.removeItem(PLAYGROUND_KEY);
+  } catch {
+    /* ignore */
+  }
 }

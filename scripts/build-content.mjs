@@ -17,6 +17,7 @@ import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import YAML from "yaml";
 import { checkRules, mainProgram, normalizeOutput, parseTemplate, templateSolution } from "../src/grader/assemble.js";
+import { indentMessages } from "../src/grader/style.js";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome } from "./fidelity/suite.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -195,8 +196,8 @@ function importsFor(code) {
 // Every key a lesson file may use. A misspelled key (for example "requires") is an error, not ignored.
 const KEYS = {
   module: ["id", "summary", "steps"],
-  step: ["id", "slug", "title", "text", "fill", "seed", "solution", "hints", "tests", "require", "forbid", "seedMayPass", "more"],
-  challenge: ["task", "fill", "seed", "solution", "hints", "tests", "require", "forbid", "seedMayPass"],
+  step: ["id", "slug", "title", "text", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass", "more"],
+  challenge: ["task", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass"],
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
   test: ["name", "stdin", "expect", "hidden"],
 };
@@ -271,6 +272,7 @@ async function checkExamples(where, text) {
       continue;
     }
     if (c.output) errors.push(`${w}: javac printed warnings:\n${c.output}`);
+    for (const m of indentMessages(source)) errors.push(`${w}: indentation: ${m}`);
     const hasInput = blocks[i + 1]?.[1].trim() === "input";
     const stdin = hasInput ? blocks[i + 1][2] : "";
     const r = await run(c, stdin);
@@ -290,9 +292,40 @@ async function checkExamples(where, text) {
  * Verifies one challenge and returns the shape the app uses. A challenge is either a fill-in
  * (`fill`: a program with [[blanks]]) or a code challenge (`seed`: starter code, `solution`).
  */
+/**
+ * A "What does it print?" challenge: the learner reads `predict` (a complete program) and types each
+ * line it prints. The answers are the program's real output.
+ */
+async function buildPredict(where, raw, hints) {
+  const program = ensureNl(raw.predict);
+  for (const k of ["seed", "solution", "fill", "tests", "require", "forbid", "style"]) if (raw[k] != null) errors.push(`${where}: a predict challenge can't have ${k}`);
+  for (const m of indentMessages(program)) errors.push(`${where}: the program's indentation: ${m}`);
+  const c = await compile(mainFile(program));
+  if (!c.ok) {
+    errors.push(`${where}: the program does not compile:\n${c.output}`);
+    return null;
+  }
+  if (c.output) errors.push(`${where}: javac printed warnings:\n${c.output}`);
+  const r = await run(c, "");
+  if (r.timedOut || r.exitCode !== 0 || r.stderr) errors.push(`${where}: the program fails: exit ${r.exitCode}\n${r.stderr}`);
+  const out = normalizeOutput(r.stdout);
+  const lines = out ? out.split("\n") : [];
+  if (lines.length === 0 || lines.length > 8) errors.push(`${where}: a predict program should print 1 to 8 lines (it prints ${lines.length})`);
+  if (lines.some((l) => !l.trim())) errors.push(`${where}: a predict program shouldn't print empty lines`);
+  checks.push({ where, kind: "run", files: mainFile(program), tests: [{ stdin: "", stdout: r.stdout, exitCode: 0 }] });
+  return { kind: "predict", seed: program, solution: program, hints, tests: [{ name: "Output", stdin: "", expect: out, hidden: false }], require: [], forbid: [], lines };
+}
+
 async function buildExercise(where, raw) {
+  if (raw.predict != null) {
+    const hints = raw.hints ?? [];
+    if (!Array.isArray(hints) || hints.length === 0 || hints.some((h) => typeof h !== "string")) errors.push(`${where}: needs a list of hints (as text)`);
+    return buildPredict(where, raw, hints);
+  }
   const kind = raw.fill != null ? "fill" : "code";
   if (kind === "code" && raw.seed == null) errors.push(`${where}: needs fill, or seed and solution`);
+  const style = raw.style;
+  if (style != null && style !== "indent") errors.push(`${where}: style can only be "indent"`);
   const seed = ensureNl(kind === "fill" ? raw.fill : raw.seed ?? "");
   const solution = ensureNl(kind === "fill" ? templateSolution(raw.fill) : raw.solution);
   if (!solution) {
@@ -314,6 +347,8 @@ async function buildExercise(where, raw) {
   checkRuleShape(where, forbid, "forbid");
   const ruleProblems = checkRules(solution, require, forbid);
   if (ruleProblems.length) errors.push(`${where}: the solution breaks its own rules: ${ruleProblems.join("; ")}`);
+  // Solutions show good style: every line indented to match its braces.
+  for (const m of indentMessages(solution)) errors.push(`${where}: the solution's indentation: ${m}`);
 
   const testsRaw = raw.tests?.length ? raw.tests : [{}];
   for (const t of testsRaw) checkKeys(`${where} test`, t, "test");
@@ -348,7 +383,8 @@ async function buildExercise(where, raw) {
     if (sc.ok) {
       const sr = await Promise.all(tests.map((t) => run(sc, t.stdin)));
       const passes = tests.every((t, i) => sr[i].exitCode === 0 && !sr[i].timedOut && normalizeOutput(sr[i].stdout) === t.expect);
-      if (passes && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: the starter code already passes`);
+      const styleOk = style !== "indent" || indentMessages(seed).length === 0;
+      if (passes && styleOk && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: the starter code already passes`);
     }
   }
   // A fill-in with all its blanks empty must not pass either.
@@ -360,7 +396,7 @@ async function buildExercise(where, raw) {
       if (tests.every((t, i) => er[i].exitCode === 0 && normalizeOutput(er[i].stdout) === t.expect) && checkRules(empty, require, forbid).length === 0) errors.push(`${where}: the program passes with every blank left empty`);
     }
   }
-  return { kind, seed, solution, hints, tests, require, forbid };
+  return { kind, seed, solution, hints, tests, require, forbid, ...(style ? { style } : {}) };
 }
 
 function templateEmpty(template) {

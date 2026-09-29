@@ -58,11 +58,13 @@ steps:
       ```
 
       - `ArrayList<Pet> pets = new ArrayList<>();` creates a list for `Pet` objects. Like every new list, it starts empty.
-      - `pets.add(new Pet("Rex", 4));` creates a pet and adds it in one go. The object needs no variable of its own: the list keeps it. Adding a pet that has a variable, like `kiwi`, works the same way.
+      - `pets.add(new Pet("Rex", 4));` creates a pet and adds it in one go. The object needs no variable of its own: the list refers to it. Adding a pet that has a variable, like `kiwi`, works the same way.
       - In the for-each loop, `pet` is a `Pet`: in each round, the next object in the list. `System.out.println(pet)` prints what the object's `toString` returns.
       - `pets.get(0)` is a `Pet` too, so you can call its methods straight away: `pets.get(0).getName()`.
 
-      `size()`, `get`, `remove` and the other list methods work just as they did with Strings. The list holds only pets, though: `pets.add("Rex")` doesn't compile, because a String isn't a `Pet`.
+      `size()`, `get(index)` and `remove(index)` work just as they did with Strings. The methods that look for a value, such as `contains` and `indexOf`, are different: `pets.contains(new Pet("Rex", 4))` is `false`, because the new pet is another object than the Rex in the list, even though its name and age are the same. (A later module shows how a class can change that.) To find a pet by its name or age, go through the list and ask each pet with a getter, as step 5 does.
+
+      The list takes only pets: `pets.add("Rex")` doesn't compile, because a String isn't a `Pet`.
 
       Printing an object whose class has no `toString` shows only the class name, an `@` and a code that can change from run to run. That's why the classes in this module have a `toString`.
 
@@ -353,8 +355,8 @@ steps:
       ```
 
       - The loop is the `while (true)` loop you know: read a line, stop at the empty line, and otherwise use the line.
-      - `new Task(description)` creates a new object in every round, and `add` puts it in the list. The variable `description` lasts only one round, but the list keeps every object.
-      - `tasks.get(0).markDone()` changes the first object in the list. The list holds the objects themselves, so the change shows when the list is printed. (With no tasks at all, `get(0)` would crash; a real program would check `tasks.isEmpty()` first.)
+      - `new Task(description)` creates a new object in every round, and `add` puts it in the list. The variable `description` lasts only one round, but the list still refers to every object.
+      - `tasks.get(0).markDone()` changes the first object in the list. Like the list variables in module 14, the list refers to its objects: nothing is copied, so `tasks.get(0)` is the very task that was added, and the change shows when the list is printed. (With no tasks at all, `get(0)` would crash; a real program would check `tasks.isEmpty()` first.)
 
       ### Check before you create
 
@@ -1145,11 +1147,12 @@ steps:
       - "Bo is 3, which isn't more than 3, and his name doesn't start with M. So three pets are printed, and the count is 3 of the 4."
     more:
       - task: |
-          A bird count: the input holds a species and then how many birds of it were seen, again and again, until the species is an empty line. After the empty line comes one more number: the minimum. `Sighting.java` is ready. Read the sightings into the list, then read the minimum, and print every sighting with at least that many birds, in the order they were read. If there are none, print `None`. For the input `robin`, `12`, `heron`, `2`, `sparrow`, `30`, an empty line and `10`, the program prints:
+          A yearly bird count. Each line of the input holds a species, last year's count and this year's count, separated by commas, like `robin,15,12`. The input ends with an empty line. `BirdCount.java` is ready. Read the lines into the list `counts`. Then print every species that was seen less this year than last year, with how many fewer birds, like `robin: 3 fewer`, in the order they were read. Last, print how many of the species went down, like `2 of 4 species went down`. For the input `robin,15,12`, `heron,4,6`, `sparrow,40,31`, `owl,2,2` and an empty line, the program prints:
 
           ```
-          robin: 12
-          sparrow: 30
+          robin: 3 fewer
+          sparrow: 9 fewer
+          2 of 4 species went down
           ```
         seed:
           Main.java: |
@@ -1159,30 +1162,32 @@ steps:
             public class Main {
                 public static void main(String[] args) {
                     Scanner scanner = new Scanner(System.in);
-                    ArrayList<Sighting> sightings = new ArrayList<>();
+                    ArrayList<BirdCount> counts = new ArrayList<>();
 
                 }
             }
-          Sighting.java: |
-            public class Sighting {
+          BirdCount.java: |
+            public class BirdCount {
                 private String species;
-                private int count;
+                private int lastYear;
+                private int thisYear;
 
-                public Sighting(String species, int count) {
+                public BirdCount(String species, int lastYear, int thisYear) {
                     this.species = species;
-                    this.count = count;
+                    this.lastYear = lastYear;
+                    this.thisYear = thisYear;
                 }
 
                 public String getSpecies() {
                     return this.species;
                 }
 
-                public int getCount() {
-                    return this.count;
+                public int getLastYear() {
+                    return this.lastYear;
                 }
 
-                public String toString() {
-                    return this.species + ": " + this.count;
+                public int getThisYear() {
+                    return this.thisYear;
                 }
             }
         solution:
@@ -1193,90 +1198,65 @@ steps:
             public class Main {
                 public static void main(String[] args) {
                     Scanner scanner = new Scanner(System.in);
-                    ArrayList<Sighting> sightings = new ArrayList<>();
+                    ArrayList<BirdCount> counts = new ArrayList<>();
 
                     while (true) {
-                        String species = scanner.nextLine();
-                        if (species.isEmpty()) {
+                        String line = scanner.nextLine();
+                        if (line.isEmpty()) {
                             break;
                         }
-                        int count = Integer.valueOf(scanner.nextLine());
-                        sightings.add(new Sighting(species, count));
+                        String[] parts = line.split(",");
+                        counts.add(new BirdCount(parts[0], Integer.valueOf(parts[1]), Integer.valueOf(parts[2])));
                     }
-                    int minimum = Integer.valueOf(scanner.nextLine());
 
-                    int shown = 0;
-                    for (Sighting sighting : sightings) {
-                        if (sighting.getCount() >= minimum) {
-                            System.out.println(sighting);
-                            shown++;
+                    int down = 0;
+                    for (BirdCount count : counts) {
+                        if (count.getThisYear() < count.getLastYear()) {
+                            int fewer = count.getLastYear() - count.getThisYear();
+                            System.out.println(count.getSpecies() + ": " + fewer + " fewer");
+                            down++;
                         }
                     }
-                    if (shown == 0) {
-                        System.out.println("None");
-                    }
+                    System.out.println(down + " of " + counts.size() + " species went down");
                 }
             }
-          Sighting.java: |
-            public class Sighting {
+          BirdCount.java: |
+            public class BirdCount {
                 private String species;
-                private int count;
+                private int lastYear;
+                private int thisYear;
 
-                public Sighting(String species, int count) {
+                public BirdCount(String species, int lastYear, int thisYear) {
                     this.species = species;
-                    this.count = count;
+                    this.lastYear = lastYear;
+                    this.thisYear = thisYear;
                 }
 
                 public String getSpecies() {
                     return this.species;
                 }
 
-                public int getCount() {
-                    return this.count;
+                public int getLastYear() {
+                    return this.lastYear;
                 }
 
-                public String toString() {
-                    return this.species + ": " + this.count;
+                public int getThisYear() {
+                    return this.thisYear;
                 }
             }
         hints:
-          - "First the reading loop, as in the last step. After it, one more `Integer.valueOf(scanner.nextLine())` reads the minimum."
-          - "In the loop that prints, test `sighting.getCount() >= minimum`, and count what you print. If the count is still 0 after the loop, print `None`."
+          - "Read the lines as in the last step: `split(\",\")` gives the species in `parts[0]` and the two counts, as text, in `parts[1]` and `parts[2]`."
+          - "The condition compares two getters of the same object: `count.getThisYear() < count.getLastYear()`. The difference is `count.getLastYear() - count.getThisYear()`. Count the species you print, and print the last line after the loop."
+        require:
+          - pattern: 'new\s+BirdCount\s*\('
+            message: "Create a `BirdCount` object for each line."
         tests:
-          - stdin: |
-              robin
-              12
-              heron
-              2
-              sparrow
-              30
-
-              10
-          - stdin: |
-              robin
-              12
-              heron
-              2
-              sparrow
-              30
-
-              50
+          - stdin: "robin,15,12\nheron,4,6\nsparrow,40,31\nowl,2,2\n\n"
+          - stdin: "crow,7,9\nwren,3,3\n\n"
             hidden: true
-          - stdin: |
-              crow
-              7
-              owl
-              1
-              wren
-              7
-
-              7
+          - stdin: "gull,50,8\n\n"
             hidden: true
-          - stdin: |
-              gull
-              40
-
-              41
+          - stdin: "tit,20,19\nswift,11,12\njay,6,1\nkite,2,5\nlark,9,4\n\n"
             hidden: true
       - task: |
           Write a method `printFrom(ArrayList<Friend> friends, String city)` that prints the name of every friend who lives in `city`, one per line, and then how many there were, like `2 in Lisbon`. `Friend.java` is ready. The check calls the method with the list in `main` (Ines and Mia in Lisbon, Tom in Leeds) and the city `Lisbon`, and expects:

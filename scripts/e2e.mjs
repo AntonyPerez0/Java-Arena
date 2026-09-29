@@ -577,6 +577,29 @@ await test('Casual: a miss costs a life and shows why; Continue goes on; a boss 
   await ctx.close();
 });
 
+await test('Deathmatch on a phone (360 px): reps of every type fit the screen', async () => {
+  const { ctx, page } = await newPage({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ settings: { unlockAll: true, boss: false } }));
+  await page.goto(BASE + 'deathmatch/');
+  await page.locator('.lobby .modes').waitFor();
+  await noOverflow(page, 'lobby 360');
+  await page.locator('.mode', { hasText: 'Casual' }).click();
+  const types = new Set();
+  for (let i = 1; i <= 15; i++) {
+    await page.locator('.rep').waitFor();
+    await noOverflow(page, `rep ${i} at 360`);
+    types.add((await answerRep(page, true)).type);
+    await page.waitForFunction((n) => document.querySelector('.hud-n')?.textContent === String(n), i);
+  }
+  await page.locator('.rep').waitFor();
+  await answerRep(page, false);
+  await page.locator('.death').waitFor();
+  await noOverflow(page, 'review at 360');
+  await axe(page, 'review at 360');
+  expect(types.size >= 3, `types: ${[...types]}`);
+  await ctx.close();
+});
+
 await test('Interview prep is open without any lesson done', async () => {
   if (!DRILLS.drills.some((d) => d.topic === 'interview')) return;
   const { ctx, page } = await newPage();

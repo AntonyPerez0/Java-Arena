@@ -11,16 +11,18 @@ The site is built in batches, one pull request per batch.
 | Batch | What | Status |
 |---|---|---|
 | 1 | Java engine prototype: javac 21 and a JVM running in the browser, fidelity suite, CI | done |
-| 2 | Site foundation: design, lesson content pipeline, lesson pages, modules 1 and 2 | this batch |
-| 3 | Rest of MOOC part 1 (modules 3 to 6) and the Playground | next |
-| 4 to 20 | Parts 2 to 14 of the course, practice, projects, Pro Track, tools, polish | planned |
+| 2 | Site foundation: design, lesson content pipeline, lesson pages, modules 1 and 2 | done |
+| 3 | Rest of MOOC part 1 (modules 3 to 6), the Playground, "What does it print?" challenges, an indentation check | this batch |
+| 4 | MOOC part 2 (modules 7 to 11) | next |
+| 5 to 20 | Parts 3 to 14 of the course, practice, projects, Pro Track, tools, polish | planned |
 
 The plan and the research behind it are in [`docs/research/`](docs/research/README.md), including the full curriculum map.
 
 ## The site
 
 - **Pages**: a home page, the course plan (all 59 planned modules; the ones not written yet are marked), a page per module, a lesson page per step, settings and about. React 18 with React Router; every page is also pre-rendered as plain HTML for search engines and link previews (`scripts/prerender.mjs`), with a sitemap. The design is adapted from C/C++ Arena's: light and dark themes, four text sizes, and a desktop layout where the lesson and the editor fill the window.
-- **Lessons**: each step has a short lesson and three challenges: fill-in blanks, programs to fix, or programs to write, graded by input and output tests (some hidden, so answers can't be typed in directly) plus optional rules about the code (for example "use exactly three println statements"). Hints unlock one at a time and a solution after all hints or three checks. Compile errors and crashes get plain-English explanations. On phones a row of symbol keys (including `sout` for `System.out.println();`) sits under the editor. Every challenge has a "Report a problem" link that opens a GitHub issue with the code filled in.
+- **Lessons**: each step has a short lesson and three challenges: fill-in blanks, programs to fix, programs to write, or "What does it print?" (read a program and type each line it prints). Programs are graded by input and output tests (some hidden, so answers can't be typed in directly) plus optional rules about the code (for example "use exactly three println statements"). An indentation check fails the challenges that teach indentation and shows a note everywhere else. Hints unlock one at a time and a solution after all hints or three checks. Compile errors and crashes get plain-English explanations. On phones a row of symbol keys (including `sout` for `System.out.println();`) sits under the editor. Every challenge has a "Report a problem" link that opens a GitHub issue with the code filled in.
+- **Playground**: write and run any program with your own input; it's saved in the browser and can be shared as a link that carries the program and its input.
 - **Content**: lessons are YAML files in [`content/`](content/README.md). The build compiles and runs every solution and example with the reference JDK, so the expected outputs are real, and then CI replays them in the browser engine.
 - **Progress** is saved in the browser (localStorage). The site works offline once visited (a service worker keeps the pages; the engine keeps its own copy) and can be installed as an app.
 
@@ -31,7 +33,7 @@ The plan and the research behind it are in [`docs/research/`](docs/research/READ
 - **In the page**: a persistent compile worker and a fresh run worker per run, killed when a test case exceeds the time limit. Engine files are downloaded once (asking first when the browser reports mobile data, and on phones and tablets whose browser can't tell), unpacked with `DecompressionStream`, and kept in Cache Storage, so the engine also works offline. See [`src/engine/`](src/engine/).
 - **Fidelity**: the site's expected outputs come from a real JDK 21 at build time, so the browser engine must behave identically. [`fidelity/`](fidelity/) holds 35 programs and 18 compile errors; CI runs them on the JDK and in the browser engine and fails on any difference, including cross-checks of each half (browser javac on HotSpot, and CLI javac on the browser runner).
 
-Measured locally in this batch (CI produces the same report, `fidelity/out/report.md`, as a build artifact; see also the READMEs in `engine/`): all 35 fidelity programs and all 18 compile errors identical to JDK 21 (Temurin 21.0.10+7), also when each half of the engine is checked on its own; 118 of 118 runner checks pass in Node and Chromium; the engine download is about 15.2 MB compressed (then cached); in headless Chromium on a 4-core machine a warm compile takes about 10 to 90 ms and Hello World runs in about 0.4 s from click to output. Phone numbers are not measured yet: the prototype page has a benchmark for that.
+Measured locally in this batch (CI produces the same report, `fidelity/out/report.md`, as a build artifact; see also the READMEs in `engine/`): all 35 fidelity programs and all 18 compile errors identical to JDK 21 (Temurin 21.0.10+7), also when each half of the engine is checked on its own; 118 of 118 runner checks pass in Node and Chromium; the engine download is about 15.2 MB compressed (then cached); in headless Chromium on a 4-core machine a warm compile takes about 10 to 90 ms and Hello World runs in about 0.4 s from click to output. On one real phone (Android, Firefox 155, 8 cores, the engine test page's benchmark, 29 September 2026): engine start 2.0 s on the first visit including the download, a warm compile about 20 ms, Hello World 0.5 s from tap to output, a typical lesson program 0.8 s from Check to output, 10 million loop steps 1.3 s, and an endless loop stopped 12 ms after the time limit. That is one device; other phones and browsers will differ.
 
 Licenses and the source offer for the GPL parts are in [`engine/SOURCES.md`](engine/SOURCES.md) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 

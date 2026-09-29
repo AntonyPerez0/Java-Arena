@@ -507,7 +507,8 @@ const practiceState = (extra = {}) => ({ version: 1, steps: {}, settings: { mobi
 await test('Deathmatch: with nothing finished, the lobby offers lesson 1, the placement quiz and interview prep', async () => {
   const { ctx, page, errors } = await newPage();
   await page.goto(BASE + 'deathmatch/');
-  await page.locator('.lobby').waitFor();
+  // The pre-rendered page has a .lobby too: wait for what only the app draws.
+  await page.locator('.lobby .rank-card').waitFor();
   const text = await page.locator('.lobby').innerText();
   expect(text.includes('No drills unlocked yet') && text.includes('Placement quiz'), text);
   expect((await page.locator('text=Try interview prep').count()) === (DRILLS.drills.some((d) => d.topic === 'interview') ? 1 : 0), 'interview prep offered when it has questions');
@@ -846,9 +847,11 @@ const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/',
 for (const colorScheme of ['light', 'dark']) {
   await test(`axe, ${colorScheme} theme: every page type`, async () => {
     const { ctx, page } = await newPage({ colorScheme });
+    // Practice pages load their drills after the page appears: wait for them.
+    const READY = { 'deathmatch/': '.lobby .rank-card', 'daily/': '.rep, .death', 'placement/': 'text=Start the quiz' };
     for (const p of PAGES) {
       await page.goto(BASE + p);
-      await page.locator('#main h1').first().waitFor();
+      await page.locator(READY[p] ?? '#main h1').first().waitFor();
       await axe(page, `${p || 'home'} ${colorScheme}`);
     }
     await page.goto(BASE + 'bench/');

@@ -408,9 +408,9 @@ steps:
           - "The first loop reaches index `odd.length`, one past the last index. It should stop before it: `i < odd.length`."
           - "The last index is `odd.length - 1`, and the first is 0, so the second loop goes from `odd.length - 1` down to `i >= 0`."
         require:
-          - pattern: \bodd\s*\[\s*i\s*\]
+          - pattern: \bodd\s*\[
             min: 2
-            message: "Keep both loops working on the array, with `odd[i]`."
+            message: "Keep both loops working on the array `odd`: one fills it and one prints it."
         tests:
           - stdin: "4"
           - stdin: "1"
@@ -851,23 +851,23 @@ steps:
         hidden: true
     more:
       - task: |
-          The program reads the number of runners in a race and their bib numbers in the order they finished, the winner first. Then it reads one more bib number. Search the array for it, and print the place that runner finished in (the index plus one), or that the runner didn't finish. For the input `4`, `17`, `5`, `42`, `8` and then `42` the program prints:
+          The program reads the number of students in a class, then each student's locker number: student 1's first, then student 2's, and so on. Then it reads one more locker number. Search the array for it, and print which student has that locker (the index plus one), or that the locker is free. For the input `4`, `17`, `5`, `42`, `8` and then `42` the program prints:
 
           ```
-          Bib 42 finished in place 3
+          Locker 42 belongs to student 3
           ```
 
-          For the bib `99` it would print `Bib 99 did not finish`.
+          For the locker `99` it would print `Locker 99 is free`.
         seed: |
           import java.util.Scanner;
 
           public class Main {
               public static void main(String[] args) {
                   Scanner scanner = new Scanner(System.in);
-                  int runners = Integer.valueOf(scanner.nextLine());
-                  int[] bibs = new int[runners];
-                  for (int i = 0; i < bibs.length; i++) {
-                      bibs[i] = Integer.valueOf(scanner.nextLine());
+                  int students = Integer.valueOf(scanner.nextLine());
+                  int[] lockers = new int[students];
+                  for (int i = 0; i < lockers.length; i++) {
+                      lockers[i] = Integer.valueOf(scanner.nextLine());
                   }
                   int wanted = Integer.valueOf(scanner.nextLine());
 
@@ -879,29 +879,29 @@ steps:
           public class Main {
               public static void main(String[] args) {
                   Scanner scanner = new Scanner(System.in);
-                  int runners = Integer.valueOf(scanner.nextLine());
-                  int[] bibs = new int[runners];
-                  for (int i = 0; i < bibs.length; i++) {
-                      bibs[i] = Integer.valueOf(scanner.nextLine());
+                  int students = Integer.valueOf(scanner.nextLine());
+                  int[] lockers = new int[students];
+                  for (int i = 0; i < lockers.length; i++) {
+                      lockers[i] = Integer.valueOf(scanner.nextLine());
                   }
                   int wanted = Integer.valueOf(scanner.nextLine());
-                  int place = -1;
-                  for (int i = 0; i < bibs.length; i++) {
-                      if (bibs[i] == wanted) {
-                          place = i + 1;
+                  int student = -1;
+                  for (int i = 0; i < lockers.length; i++) {
+                      if (lockers[i] == wanted) {
+                          student = i + 1;
                           break;
                       }
                   }
-                  if (place == -1) {
-                      System.out.println("Bib " + wanted + " did not finish");
+                  if (student == -1) {
+                      System.out.println("Locker " + wanted + " is free");
                   } else {
-                      System.out.println("Bib " + wanted + " finished in place " + place);
+                      System.out.println("Locker " + wanted + " belongs to student " + student);
                   }
               }
           }
         hints:
-          - "Start with `int place = -1;` to mean \"not found\". In the loop, when `bibs[i] == wanted`, store `i + 1` and `break`."
-          - "After the loop, `place == -1` means the bib wasn't in the array."
+          - "Start with `int student = -1;` to mean \"not found\". In the loop, when `lockers[i] == wanted`, store `i + 1` and `break`."
+          - "After the loop, `student == -1` means the locker number wasn't in the array."
         forbid:
           - pattern: \bArrayList\b
             message: "Search the array, without a list."
@@ -1052,9 +1052,9 @@ steps:
       16
       ```
 
-      `addBonus` changed `main`'s array. Module 10 said a parameter gets a copy of the value, and that's still true. But an array variable doesn't hold the elements themselves: it holds a **reference**, a way to find the array. The copy leads to the same array, so the method changes the elements `main` sees. It's the same with lists: a method that gets a list can change it.
+      `addBonus` changed `main`'s array. As with lists in module 14, an array variable doesn't hold the elements themselves but a reference to the array. The method gets a copy of that reference, and the copy leads to the same array, so the change shows in `main` too. (Module 10's rule still holds: the parameter is a copy, but what's copied is the reference.)
 
-      Assignment works the same way. `int[] other = scores;` doesn't copy the array: it makes a second name for the same one, and `other[0] = 1;` changes `scores[0]` too.
+      Assignment works the same way as with lists. `int[] other = scores;` doesn't copy the array: it gives the same array a second name, and `other[0] = 1;` changes `scores[0]` too.
 
       ### Returning a new array
 
@@ -1253,24 +1253,7 @@ steps:
       System.out.println(values);
       ```
 
-      This prints `[I@` followed by a code of letters and digits, which can change from one run to the next. `[I` stands for "array of int", and the code says nothing about the values. To see them, go through the array with a loop:
-
-      ```java main
-      int[] values = {3, 1, 4};
-      for (int i = 0; i < values.length; i++) {
-          System.out.print(values[i]);
-          if (i < values.length - 1) {
-              System.out.print(", ");
-          }
-      }
-      System.out.println();
-      ```
-
-      ```output
-      3, 1, 4
-      ```
-
-      Or let Java do it: `Arrays.toString` gives the values as text, in square brackets. It lives in the class `java.util.Arrays`, which needs an import line, as `Scanner` does:
+      This prints `[I@` followed by a code of letters and digits, which can change from one run to the next. `[I` stands for "array of int", and the code says nothing about the values. To see them, you can print the elements with a loop, as in the earlier steps. Or let Java do it: `Arrays.toString` gives the values as text, in square brackets. It lives in the class `java.util.Arrays`, which needs an import line, as `Scanner` does:
 
       ```java run
       import java.util.Arrays;
@@ -1367,61 +1350,73 @@ steps:
       - "The method of `Arrays` that turns an array into text is `toString`."
     more:
       - task: |
-          Write a method `joined(String[] parts, String separator)` that returns the parts as one String, with the separator between each two of them (not before the first or after the last). Build the text with a loop. The check passes the parts `{"2026", "09", "29"}` with the separator `"-"`, prints what your method returns, and expects:
+          A form stores its answers in an array of Strings, and a question left unanswered is the empty String `""`. Write a method `withoutBlanks(String[] answers)` that returns a **new** array holding only the answers that aren't empty, in the same order. An array can't grow, so count those answers first, and then create an array of exactly that size. The check passes the array `{"red", "", "green", "", "blue"}` and prints what your method returns with `Arrays.toString`:
 
           ```
-          2026-09-29
+          [red, green, blue]
           ```
         seed: |
+          import java.util.Arrays;
+
           public class Main {
               public static void main(String[] args) {
-                  String[] parts = {"2026", "09", "29"};
-                  System.out.println(joined(parts, "-"));
+                  String[] answers = {"red", "", "green", "", "blue"};
+                  System.out.println(Arrays.toString(withoutBlanks(answers)));
               }
 
-              // Write the joined method here.
+              // Write the withoutBlanks method here.
           }
         solution: |
+          import java.util.Arrays;
+
           public class Main {
               public static void main(String[] args) {
-                  String[] parts = {"2026", "09", "29"};
-                  System.out.println(joined(parts, "-"));
+                  String[] answers = {"red", "", "green", "", "blue"};
+                  System.out.println(Arrays.toString(withoutBlanks(answers)));
               }
 
-              public static String joined(String[] parts, String separator) {
-                  String result = "";
-                  for (int i = 0; i < parts.length; i++) {
-                      if (i > 0) {
-                          result += separator;
+              public static String[] withoutBlanks(String[] answers) {
+                  int count = 0;
+                  for (String answer : answers) {
+                      if (!answer.equals("")) {
+                          count++;
                       }
-                      result += parts[i];
+                  }
+                  String[] result = new String[count];
+                  int next = 0;
+                  for (String answer : answers) {
+                      if (!answer.equals("")) {
+                          result[next] = answer;
+                          next++;
+                      }
                   }
                   return result;
               }
           }
         hints:
-          - "Start from `String result = \"\";` and add `parts[i]` in each round, as with the text built in a loop in module 11."
-          - "Add the separator before every part except the first: `if (i > 0) { result += separator; }`"
+          - "The method starts `public static String[] withoutBlanks(String[] answers) {`. A first loop counts the answers where `!answer.equals(\"\")`, and then `String[] result = new String[count];` makes the new array."
+          - "A second loop copies each answer that isn't empty to `result[next]`, and then adds one to `next`, the index where the next answer goes."
         forbid:
-          - pattern: \bjoin\s*\(
-            message: "Build the text with your own loop, without Java's ready-made `join`."
-          - pattern: \bArrays\b
-            message: "Build the text with your own loop, without `Arrays`."
+          - pattern: \bArrayList\b
+            message: "Build the new array without a list: count first, then create it with the right size."
         tests:
           - call: |
-              String[] parts = {"2026", "09", "29"};
-              System.out.println(joined(parts, "-"));
+              String[] answers = {"red", "", "green", "", "blue"};
+              System.out.println(Arrays.toString(withoutBlanks(answers)));
           - call: |
-              String[] parts = {"red", "green", "blue"};
-              System.out.println(joined(parts, ", "));
+              String[] answers = {"", ""};
+              System.out.println(Arrays.toString(withoutBlanks(answers)));
             hidden: true
           - call: |
-              String[] parts = {"solo"};
-              System.out.println(joined(parts, "+"));
+              String[] answers = {"yes", "no"};
+              System.out.println(Arrays.toString(withoutBlanks(answers)));
+              System.out.println(Arrays.toString(answers));
             hidden: true
           - call: |
-              String[] parts = {"a", "b", "c", "d"};
-              System.out.println(joined(parts, ""));
+              String[] answers = {"", "only", ""};
+              String[] kept = withoutBlanks(answers);
+              System.out.println(kept.length + " " + kept[0]);
+              System.out.println(Arrays.toString(answers));
             hidden: true
       - task: |
           Read die rolls, one per line, until `0`. Each roll is a whole number from 1 to 6, and there's at least one. Count how many times each face came up, using an int array as the counters. Then print each face with its count, from 1 to 6, and last the face that came up most often. If several faces tie, print the smallest of them. For the input `4`, `2`, `6`, `4`, `1`, `4`, `2` and `0` the program prints:

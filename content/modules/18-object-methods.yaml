@@ -1,5 +1,5 @@
 id: object-methods
-summary: Methods that give something back. Object methods that return values, getters and setters, toString, parameters and `this`, methods that call the object's own methods, a class that keeps statistics, and money kept in whole cents, since doubles aren't exact.
+summary: Methods that give something back. Object methods that return values, getters and setters, toString, parameters and `this`, methods that call the object's own methods, a class that collects numbers and answers questions about them, and money kept in whole cents, since doubles aren't exact.
 steps:
   - id: object-methods-returning
     slug: returning-values
@@ -307,33 +307,7 @@ steps:
     text: |
       ### Private variables
 
-      The `Plant` of module 17 keeps its `name` and `height` private, so only the code inside the class can use them. That's what stops any other code from making a plant -25 cm tall. But it also means `main` can't even read a plant's height, for example to compare two plants:
-
-      ```java error
-      public class Main {
-          public static void main(String[] args) {
-              Plant basil = new Plant("basil", 12);
-              System.out.println(basil.height);
-          }
-      }
-      // ==== Plant.java ====
-      public class Plant {
-          private String name;
-          private int height;
-
-          public Plant(String name, int height) {
-              this.name = name;
-              this.height = height;
-          }
-      }
-      ```
-
-      ```javac
-      Main.java:4: error: height has private access in Plant
-              System.out.println(basil.height);
-                                      ^
-      1 error
-      ```
+      Module 17 kept every instance variable `private`, so that only the class's own code can change it. Private also means code outside the class can't even read it: `basil.height` in `main` doesn't compile (`height has private access in Plant`). But `main` often has a good reason to read a value, for example to compare two plants.
 
       ### Getters
 
@@ -396,11 +370,12 @@ steps:
 
       Write a setter only when other code really needs to change that value freely. A method with a meaning, such as `grow(5)`, is often better than `setHeight(...)`: it says what happens, and the class can check the value, as `cut` did in module 17. A class doesn't need a getter and a setter for every variable either, only for the ones its users need.
 
-      **Your turn:** a `Planet` has a name and a number of moons. Add two getters, `getName()` and `getMoons()`. The check creates `new Planet("Mars", 2)` and prints what both getters return:
+      **Your turn:** a `Planet` has a name and a number of moons. Add two getters, `getName()` and `getMoons()`, and a method `hasMoons()` that returns `true` when the planet has at least one moon. It isn't stored in a variable of its own: work it out from `moons`. The check creates `new Planet("Mars", 2)` and prints what the three methods return:
 
       ```
       Mars
       2
+      true
       ```
     seed:
       Planet.java: |
@@ -413,13 +388,15 @@ steps:
                 this.moons = moons;
             }
 
-            // Write the getters here.
+            // Write getName, getMoons and hasMoons here.
         }
       Main.java: |
         public class Main {
             public static void main(String[] args) {
                 Planet planet = new Planet("Mars", 2);
-                System.out.println(planet.getName() + " has " + planet.getMoons() + " moons");
+                if (planet.hasMoons()) {
+                    System.out.println(planet.getName() + " has " + planet.getMoons() + " moons");
+                }
             }
         }
     solution:
@@ -440,34 +417,42 @@ steps:
             public int getMoons() {
                 return this.moons;
             }
+
+            public boolean hasMoons() {
+                return this.moons > 0;
+            }
         }
       Main.java: |
         public class Main {
             public static void main(String[] args) {
                 Planet planet = new Planet("Mars", 2);
-                System.out.println(planet.getName() + " has " + planet.getMoons() + " moons");
+                if (planet.hasMoons()) {
+                    System.out.println(planet.getName() + " has " + planet.getMoons() + " moons");
+                }
             }
         }
     hints:
-      - "`getName` returns a String and `getMoons` an int. Neither has parameters."
-      - "`public String getName() { return this.name; }`, and the same way for the moons."
+      - "`getName` returns a String, `getMoons` an int and `hasMoons` a boolean. None of them has parameters."
+      - "`public String getName() { return this.name; }`, the same way for the moons, and `hasMoons()` returns the comparison `this.moons > 0`."
     forbid:
-      - pattern: \bpublic\s+(String|int)\s+(name|moons)\s*;
-        message: "Keep the instance variables private: the getters give access to them."
+      - pattern: \bpublic\s+(String|int|boolean)\s+(name|moons)\s*;
+        message: "Keep the instance variables private: the methods give access to them."
     tests:
       - call: |
           Planet planet = new Planet("Mars", 2);
           System.out.println(planet.getName());
           System.out.println(planet.getMoons());
+          System.out.println(planet.hasMoons());
       - call: |
           Planet planet = new Planet("Venus", 0);
           System.out.println(planet.getMoons() + " moons for " + planet.getName());
+          System.out.println(planet.hasMoons());
         hidden: true
       - call: |
           Planet earth = new Planet("Earth", 1);
           Planet mars = new Planet("Mars", 2);
           System.out.println(earth.getMoons() + mars.getMoons());
-          System.out.println(earth.getName());
+          System.out.println(earth.getName() + " " + earth.hasMoons());
         hidden: true
     more:
       - task: |
@@ -599,7 +584,7 @@ steps:
     text: |
       ### Printing an object
 
-      To show a plant, the `Plant` of module 17 had a method `printInfo()`. It works, but the text can only go straight to the screen, on a line of its own: it can't be part of a longer line, or be stored in a variable. What about printing the object itself, with `System.out.println(basil)`? It compiles, but for a class like `Plant` it prints the class name, an `@` and a code of letters and digits, something like `Plant@1b6d3586`. That tells nobody anything, and the code can change from one run to the next.
+      To show a plant, the `Plant` of module 17 had a method `printInfo()`. It works, but the text can only go straight to the screen, on a line of its own: it can't be part of a longer line, or be stored in a variable. What about printing the object itself, with `System.out.println(basil)`? It compiles, but for a class like `Plant` it prints the class name, an `@` and a code of letters and digits, something like `Plant@1b6d3586`. The code is an internal number that means nothing to a reader, and it may differ between runs and between computers. That's why no check in this course ever shows it.
 
       ### toString
 
@@ -795,10 +780,10 @@ steps:
               System.out.println(chore);
           - call: |
               Chore dishes = new Chore("Dishes");
-              Chore bins = new Chore("Take out the bins");
-              bins.markDone();
+              Chore trash = new Chore("Take out the trash");
+              trash.markDone();
               System.out.println(dishes);
-              System.out.println(bins);
+              System.out.println(trash);
             hidden: true
           - call: |
               Chore chore = new Chore("Call grandma");
@@ -852,18 +837,7 @@ steps:
     slug: this-and-parameters
     title: Parameters and this
     text: |
-      Since module 17 your constructors have set their instance variables like this:
-
-      ```java fragment
-      public Guest(String name, int nights) {
-          this.name = name;
-          this.nights = nights;
-      }
-      ```
-
-      As module 17 said, `this` is the object itself: in a constructor, the object being built, and in a method, the object the method was called on. This step takes a closer look at why the `this.` matters.
-
-      Inside this constructor there are two variables called `name`: the parameter, and the object's instance variable. A plain `name` always means the parameter, because a parameter hides an instance variable of the same name. `this.name` is the way past it to the object's own variable, so the line copies the parameter's value into the object.
+      Module 17's constructors all used lines like `this.name = name;`, where `this.name` is the object's variable and `name` the parameter. The point behind it: a parameter with the same name as an instance variable **hides** that variable. Inside the constructor or method, a plain `name` always means the parameter, and `this.name` is the only way to reach the object's own variable.
 
       ### Without this
 
@@ -1433,8 +1407,8 @@ steps:
           - "`main` then calls `hop()` directly, which makes it 3 hops."
 
   - id: object-methods-bigger-class
-    slug: a-class-that-counts
-    title: A class that keeps statistics
+    slug: a-class-that-remembers
+    title: A class that remembers
     text: |
       Objects are good at remembering. A class can collect numbers one at a time and answer questions about them whenever it's asked: how many there have been, their total, their average, the largest. This log of bike trips does that:
 
@@ -1503,25 +1477,25 @@ steps:
       - The average isn't stored: `averageKm()` works it out when it's asked, from the count and the total. `(double)` turns the total into a `double` before the division, so the decimals aren't lost (module 4).
       - `averageKm()` checks for an empty log first. With no trips there's no average, and the method returns 0.0 instead of dividing by zero.
 
-      The class does the bookkeeping, and `main` only gives it numbers and asks questions. The same class works whether the numbers are written in the code, as here, or typed in by a user.
+      The class does the bookkeeping, and `main` only gives it numbers and asks questions. The same class works whether the numbers are written in the code, as here, or typed in by a user. What a log like this remembers depends on the questions it has to answer: the challenges below keep track of other things than a count and a total.
 
-      **Your turn:** a `RainLog` collects the rainfall of each day, in millimeters. Write its methods: `add(int mm)` records one day's rain, `days()` returns how many days have been recorded, and `total()` returns all the rain together. The instance variables are ready. The check records 4, 0 and 11 mm, and prints the days and the total:
+      **Your turn:** a `RainLog` collects the rainfall of each day, in millimeters. Write its methods: `add(int mm)` records one day's rain, `dryDays()` returns how many days had no rain at all, and `wettest()` returns the most rain on a single day (0 before any rain). The instance variables are ready, and `add` keeps both of them up to date. The check records 4, 0, 11 and 0 mm:
 
       ```
-      3 days, 15 mm
+      2 dry days, wettest 11 mm
       ```
     seed:
       RainLog.java: |
         public class RainLog {
-            private int days;
-            private int total;
+            private int dryDays;
+            private int wettest;
 
             public RainLog() {
-                this.days = 0;
-                this.total = 0;
+                this.dryDays = 0;
+                this.wettest = 0;
             }
 
-            // Write add, days and total here.
+            // Write add, dryDays and wettest here.
         }
       Main.java: |
         public class Main {
@@ -1530,31 +1504,36 @@ steps:
                 log.add(4);
                 log.add(0);
                 log.add(11);
-                System.out.println(log.days() + " days, " + log.total() + " mm");
+                log.add(0);
+                System.out.println(log.dryDays() + " dry days, wettest " + log.wettest() + " mm");
             }
         }
     solution:
       RainLog.java: |
         public class RainLog {
-            private int days;
-            private int total;
+            private int dryDays;
+            private int wettest;
 
             public RainLog() {
-                this.days = 0;
-                this.total = 0;
+                this.dryDays = 0;
+                this.wettest = 0;
             }
 
             public void add(int mm) {
-                this.days++;
-                this.total = this.total + mm;
+                if (mm == 0) {
+                    this.dryDays++;
+                }
+                if (mm > this.wettest) {
+                    this.wettest = mm;
+                }
             }
 
-            public int days() {
-                return this.days;
+            public int dryDays() {
+                return this.dryDays;
             }
 
-            public int total() {
-                return this.total;
+            public int wettest() {
+                return this.wettest;
             }
         }
       Main.java: |
@@ -1564,168 +1543,194 @@ steps:
                 log.add(4);
                 log.add(0);
                 log.add(11);
-                System.out.println(log.days() + " days, " + log.total() + " mm");
+                log.add(0);
+                System.out.println(log.dryDays() + " dry days, wettest " + log.wettest() + " mm");
             }
         }
     hints:
-      - "`add` is `void`, and it changes two variables: one more day, and `mm` more rain in the total."
-      - "`days()` and `total()` return the instance variables: `return this.days;` and `return this.total;`"
+      - "`add` is `void`. It has two `if`s: one counts the day when `mm == 0`, the other stores `mm` in `this.wettest` when it's bigger."
+      - "`dryDays()` and `wettest()` return the instance variables: `return this.dryDays;` and `return this.wettest;`"
     tests:
       - call: |
           RainLog log = new RainLog();
           log.add(4);
           log.add(0);
           log.add(11);
-          System.out.println(log.days() + " days, " + log.total() + " mm");
+          log.add(0);
+          System.out.println(log.dryDays() + " dry days, wettest " + log.wettest() + " mm");
       - call: |
           RainLog log = new RainLog();
-          System.out.println(log.days());
-          System.out.println(log.total());
+          System.out.println(log.dryDays());
+          System.out.println(log.wettest());
         hidden: true
       - call: |
           RainLog spring = new RainLog();
           RainLog autumn = new RainLog();
           spring.add(25);
-          autumn.add(2);
+          spring.add(7);
+          autumn.add(0);
           autumn.add(9);
-          System.out.println(spring.days() + " " + spring.total());
-          System.out.println(autumn.days() + " " + autumn.total());
+          autumn.add(0);
+          autumn.add(0);
+          System.out.println(spring.dryDays() + " " + spring.wettest());
+          System.out.println(autumn.dryDays() + " " + autumn.wettest());
         hidden: true
     more:
       - task: |
-          Teach the `RainLog` two more answers. `average()` returns the average rain per day as a `double`, and 0.0 when no days have been recorded. `wettest()` returns the most rain on a single day, and 0 when no days have been recorded. For `wettest` the log has to remember one more thing: add an instance variable for it, and update it in `add`. The check records 4, 0 and 11 mm, and prints both answers:
+          A dry spell is a run of dry days in a row. Add a method `longestDrySpell()` that returns the most dry days in a row so far (0 when there hasn't been a dry day). The log has to remember two more things: how many dry days in a row there have been up to now, and the longest run so far. Add instance variables for them, and update them in `add`: a dry day makes the current run one day longer, and a day with rain ends it. The check records 3, 0, 0 and 5 mm and asks, then records 0, 0, 0 and 2 mm and asks again:
 
           ```
-          5.0
-          11
+          2
+          3
           ```
         seed:
           RainLog.java: |
             public class RainLog {
-                private int days;
-                private int total;
-
-                public RainLog() {
-                    this.days = 0;
-                    this.total = 0;
-                }
-
-                public void add(int mm) {
-                    this.days++;
-                    this.total = this.total + mm;
-                }
-
-                public int days() {
-                    return this.days;
-                }
-
-                public int total() {
-                    return this.total;
-                }
-
-                // Write average and wettest here.
-            }
-          Main.java: |
-            public class Main {
-                public static void main(String[] args) {
-                    RainLog log = new RainLog();
-                    log.add(4);
-                    log.add(0);
-                    log.add(11);
-                    System.out.println("Average: " + log.average() + " mm");
-                    System.out.println("Wettest: " + log.wettest() + " mm");
-                }
-            }
-        solution:
-          RainLog.java: |
-            public class RainLog {
-                private int days;
-                private int total;
+                private int dryDays;
                 private int wettest;
 
                 public RainLog() {
-                    this.days = 0;
-                    this.total = 0;
+                    this.dryDays = 0;
                     this.wettest = 0;
                 }
 
                 public void add(int mm) {
-                    this.days++;
-                    this.total = this.total + mm;
+                    if (mm == 0) {
+                        this.dryDays++;
+                    }
                     if (mm > this.wettest) {
                         this.wettest = mm;
                     }
                 }
 
-                public int days() {
-                    return this.days;
-                }
-
-                public int total() {
-                    return this.total;
-                }
-
-                public double average() {
-                    if (this.days == 0) {
-                        return 0.0;
-                    }
-                    return (double) this.total / this.days;
+                public int dryDays() {
+                    return this.dryDays;
                 }
 
                 public int wettest() {
                     return this.wettest;
+                }
+
+                // Write longestDrySpell here, and keep what it needs up to date in add.
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    RainLog log = new RainLog();
+                    log.add(3);
+                    log.add(0);
+                    log.add(0);
+                    log.add(5);
+                    log.add(0);
+                    System.out.println("Longest dry spell: " + log.longestDrySpell() + " days");
+                }
+            }
+        solution:
+          RainLog.java: |
+            public class RainLog {
+                private int dryDays;
+                private int wettest;
+                private int currentSpell;
+                private int longestSpell;
+
+                public RainLog() {
+                    this.dryDays = 0;
+                    this.wettest = 0;
+                    this.currentSpell = 0;
+                    this.longestSpell = 0;
+                }
+
+                public void add(int mm) {
+                    if (mm == 0) {
+                        this.dryDays++;
+                        this.currentSpell++;
+                        if (this.currentSpell > this.longestSpell) {
+                            this.longestSpell = this.currentSpell;
+                        }
+                    } else {
+                        this.currentSpell = 0;
+                    }
+                    if (mm > this.wettest) {
+                        this.wettest = mm;
+                    }
+                }
+
+                public int dryDays() {
+                    return this.dryDays;
+                }
+
+                public int wettest() {
+                    return this.wettest;
+                }
+
+                public int longestDrySpell() {
+                    return this.longestSpell;
                 }
             }
           Main.java: |
             public class Main {
                 public static void main(String[] args) {
                     RainLog log = new RainLog();
-                    log.add(4);
+                    log.add(3);
                     log.add(0);
-                    log.add(11);
-                    System.out.println("Average: " + log.average() + " mm");
-                    System.out.println("Wettest: " + log.wettest() + " mm");
+                    log.add(0);
+                    log.add(5);
+                    log.add(0);
+                    System.out.println("Longest dry spell: " + log.longestDrySpell() + " days");
                 }
             }
         hints:
-          - "`average()` works like the trip log's: check for no days first, then `return (double) this.total / this.days;`"
-          - "Add `private int wettest;`, set it to 0 in the constructor, and in `add` store `mm` in it when `mm` is bigger."
+          - "Add `private int currentSpell;` and `private int longestSpell;`, both 0 at the start. `longestDrySpell()` returns `this.longestSpell`."
+          - "In `add`: on a dry day, `this.currentSpell++`, and when it's now longer than `this.longestSpell`, store it there. On a day with rain, `this.currentSpell = 0;`"
         tests:
           - call: |
               RainLog log = new RainLog();
-              log.add(4);
+              log.add(3);
               log.add(0);
-              log.add(11);
-              System.out.println(log.average());
-              System.out.println(log.wettest());
-          - call: |
-              RainLog log = new RainLog();
-              System.out.println(log.average());
-              System.out.println(log.wettest());
-            hidden: true
-          - call: |
-              RainLog log = new RainLog();
-              log.add(9);
+              log.add(0);
+              log.add(5);
+              System.out.println(log.longestDrySpell());
+              log.add(0);
+              log.add(0);
+              log.add(0);
               log.add(2);
-              System.out.println(log.average());
-              System.out.println(log.wettest());
-              log.add(3);
-              System.out.println(log.days() + " " + log.total() + " " + log.wettest());
+              System.out.println(log.longestDrySpell());
+          - call: |
+              RainLog log = new RainLog();
+              System.out.println(log.longestDrySpell());
+              log.add(4);
+              log.add(6);
+              System.out.println(log.longestDrySpell());
             hidden: true
           - call: |
               RainLog log = new RainLog();
-              log.add(3);
-              log.add(4);
-              System.out.println(log.average() + " " + log.wettest());
+              log.add(0);
+              log.add(0);
+              log.add(7);
+              log.add(0);
+              System.out.println(log.longestDrySpell());
+              System.out.println(log.dryDays() + " " + log.wettest());
+            hidden: true
+          - call: |
+              RainLog log = new RainLog();
+              log.add(1);
+              log.add(0);
+              log.add(0);
+              log.add(0);
+              log.add(0);
+              System.out.println(log.longestDrySpell());
             hidden: true
       - task: |
-          Now use the finished `RainLog` in a program. Read the rain of each day, one number per line, until an empty line, and add each number to a `RainLog`. Then print the days, the total, the average and the wettest day, as the log reports them. For the input `4`, `0`, `11` and an empty line, the program prints:
+          Now use the finished `RainLog` in a program that gives a one-line verdict on the weather. Read the rain of each day, one number per line, until an empty line, and add each number to a `RainLog`. Then print one line:
+
+          - `Drought warning: ` and the longest dry spell followed by ` dry days in a row`, when the longest dry spell is 3 days or more;
+          - otherwise `Flood watch: ` and the wettest day's rain followed by ` mm in one day`, when the wettest day had 20 mm or more;
+          - otherwise `Normal weather`.
+
+          For the input `0`, `0`, `4`, `0`, `0`, `0`, `1` and an empty line, the program prints:
 
           ```
-          Days: 3
-          Total: 15 mm
-          Average: 5.0 mm
-          Wettest: 11 mm
+          Drought warning: 3 dry days in a row
           ```
         seed:
           Main.java: |
@@ -1740,41 +1745,43 @@ steps:
             }
           RainLog.java: |
             public class RainLog {
-                private int days;
-                private int total;
+                private int dryDays;
                 private int wettest;
+                private int currentSpell;
+                private int longestSpell;
 
                 public RainLog() {
-                    this.days = 0;
-                    this.total = 0;
+                    this.dryDays = 0;
                     this.wettest = 0;
+                    this.currentSpell = 0;
+                    this.longestSpell = 0;
                 }
 
                 public void add(int mm) {
-                    this.days++;
-                    this.total = this.total + mm;
+                    if (mm == 0) {
+                        this.dryDays++;
+                        this.currentSpell++;
+                        if (this.currentSpell > this.longestSpell) {
+                            this.longestSpell = this.currentSpell;
+                        }
+                    } else {
+                        this.currentSpell = 0;
+                    }
                     if (mm > this.wettest) {
                         this.wettest = mm;
                     }
                 }
 
-                public int days() {
-                    return this.days;
-                }
-
-                public int total() {
-                    return this.total;
-                }
-
-                public double average() {
-                    if (this.days == 0) {
-                        return 0.0;
-                    }
-                    return (double) this.total / this.days;
+                public int dryDays() {
+                    return this.dryDays;
                 }
 
                 public int wettest() {
                     return this.wettest;
+                }
+
+                public int longestDrySpell() {
+                    return this.longestSpell;
                 }
             }
         solution:
@@ -1792,67 +1799,77 @@ steps:
                         }
                         log.add(Integer.valueOf(line));
                     }
-                    System.out.println("Days: " + log.days());
-                    System.out.println("Total: " + log.total() + " mm");
-                    System.out.println("Average: " + log.average() + " mm");
-                    System.out.println("Wettest: " + log.wettest() + " mm");
+                    if (log.longestDrySpell() >= 3) {
+                        System.out.println("Drought warning: " + log.longestDrySpell() + " dry days in a row");
+                    } else if (log.wettest() >= 20) {
+                        System.out.println("Flood watch: " + log.wettest() + " mm in one day");
+                    } else {
+                        System.out.println("Normal weather");
+                    }
                 }
             }
           RainLog.java: |
             public class RainLog {
-                private int days;
-                private int total;
+                private int dryDays;
                 private int wettest;
+                private int currentSpell;
+                private int longestSpell;
 
                 public RainLog() {
-                    this.days = 0;
-                    this.total = 0;
+                    this.dryDays = 0;
                     this.wettest = 0;
+                    this.currentSpell = 0;
+                    this.longestSpell = 0;
                 }
 
                 public void add(int mm) {
-                    this.days++;
-                    this.total = this.total + mm;
+                    if (mm == 0) {
+                        this.dryDays++;
+                        this.currentSpell++;
+                        if (this.currentSpell > this.longestSpell) {
+                            this.longestSpell = this.currentSpell;
+                        }
+                    } else {
+                        this.currentSpell = 0;
+                    }
                     if (mm > this.wettest) {
                         this.wettest = mm;
                     }
                 }
 
-                public int days() {
-                    return this.days;
-                }
-
-                public int total() {
-                    return this.total;
-                }
-
-                public double average() {
-                    if (this.days == 0) {
-                        return 0.0;
-                    }
-                    return (double) this.total / this.days;
+                public int dryDays() {
+                    return this.dryDays;
                 }
 
                 public int wettest() {
                     return this.wettest;
                 }
+
+                public int longestDrySpell() {
+                    return this.longestSpell;
+                }
             }
         hints:
           - "A `while (true)` loop reads a line, stops with `break` when `line.isEmpty()`, and otherwise calls `log.add(Integer.valueOf(line));`."
-          - "After the loop, the log has the answers: `System.out.println(\"Days: \" + log.days());` and so on."
+          - "After the loop, ask the log: `if (log.longestDrySpell() >= 3) { ... } else if (log.wettest() >= 20) { ... } else { ... }`."
         require:
           - pattern: \blog\.add\s*\(
             message: "Add each day's rain to the log with `log.add(...)`."
-          - pattern: \blog\.(days|total|average|wettest)\s*\(
-            min: 4
-            message: "Let the log do the bookkeeping: print what `days()`, `total()`, `average()` and `wettest()` return."
+          - pattern: \blog\.longestDrySpell\s*\(
+            message: "Let the log answer: use `log.longestDrySpell()` for the drought warning."
+          - pattern: \blog\.wettest\s*\(
+            message: "Let the log answer: use `log.wettest()` for the flood watch."
         tests:
-          - stdin: "4\n0\n11\n\n"
-          - stdin: "7\n\n"
+          - stdin: "0\n0\n4\n0\n0\n0\n1\n\n"
+          - stdin: "5\n25\n0\n\n"
+            hidden: true
+          - stdin: "3\n0\n2\n0\n0\n\n"
             hidden: true
           - stdin: "\n"
             hidden: true
-          - stdin: "2\n3\n5\n8\n\n"
+          - stdin: "30\n0\n0\n0\n\n"
+            hidden: true
+          - stdin: "20\n\n"
             hidden: true
 
   - id: object-methods-money
@@ -1879,13 +1896,13 @@ steps:
       false
       ```
 
-      A `double` stores its number in binary, with a fixed number of binary digits. Most decimal fractions, 0.1 among them, can't be written exactly that way, just as 1/3 can't be written exactly as a decimal number (0.3333...). So a double holds the closest number it can, which is off by a tiny amount. Usually the difference is too small to notice, but it shows when many values are added up, and `==` can say `false` for two doubles that should be equal.
+      A `double` stores its number in binary, with a fixed number of binary digits. Most decimal fractions, 0.1 among them, can't be written exactly that way, just as 1/3 can't be written exactly as a decimal number (0.3333...). So a double holds the closest number it can, which is off by a tiny amount. Usually the difference is too small to notice, but it can show after a single sum, as in `0.1 + 0.2`, and the errors add up as more values are summed, as in the loop. And `==` can say `false` for two doubles that should be equal.
 
       For a temperature or a distance, errors that small don't matter. For money they do: a balance should never be a fraction of a cent off.
 
       ### Money in whole cents
 
-      The simple fix is to count money in its smallest unit, cents, and to keep it in an `int`: 2.50 euros is 250 cents. Adding and subtracting whole numbers is always exact. (Java also has a class for exact decimal numbers, `BigDecimal`, but whole cents in an `int` are all this course needs.)
+      The simple fix is to count money in its smallest unit, cents, and to keep it in an `int`: 2.50 euros is 250 cents. Adding and subtracting whole numbers is exact, as long as the result fits in an `int`: its largest value is 2147483647, so up to about 21 million euros in cents. (Java also has a class for exact decimal numbers, `BigDecimal`, but whole cents in an `int` are all this course needs.)
 
       To show cents as euros, divide by 100 for the euros, and take what's left with `%` for the cents. The cents always need two digits: 205 cents is `2.05`, not `2.5`, so cents below 10 get a `0` in front. This print quota for a library printer keeps its balance that way:
 
@@ -2032,11 +2049,13 @@ steps:
         hidden: true
     more:
       - task: |
-          A parking meter takes coins, in cents. Every full 50 cents buys 15 minutes, and cents that don't make a full 50 buy nothing. The meter holds at most 400 cents: it refuses a coin that would take the total over 400. Write `insert(int cents)`, which adds the coin to the money paid unless the total would go over 400, and `minutes()`, which returns the minutes the money paid buys. `toString` is ready, and it calls `minutes()`. The check inserts 100 and 20 cents and prints the meter, then inserts 200 twice and prints it again:
+          A parking meter takes only coins of 10, 20, 50, 100 and 200 cents, and every 10 cents buys 3 minutes. Write `insert(int coin)`, which adds a valid coin to the money paid and returns `true`, but returns `false` for any other value and leaves the money as it was. Also write `minutes()`, which returns the minutes the money paid buys. `toString` is ready, and it calls `minutes()`. The check inserts 100, 5 and 20 cents, printing what `insert` returns each time, and then prints the meter:
 
           ```
-          120 cents, 30 minutes
-          320 cents, 90 minutes
+          true
+          false
+          true
+          120 cents, 36 minutes
           ```
         seed:
           ParkingMeter.java: |
@@ -2058,8 +2077,9 @@ steps:
                 public static void main(String[] args) {
                     ParkingMeter meter = new ParkingMeter();
                     meter.insert(200);
-                    meter.insert(200);
-                    meter.insert(50);
+                    if (!meter.insert(2)) {
+                        System.out.println("Coin returned");
+                    }
                     System.out.println(meter);
                 }
             }
@@ -2072,14 +2092,16 @@ steps:
                     this.paid = 0;
                 }
 
-                public void insert(int cents) {
-                    if (this.paid + cents <= 400) {
-                        this.paid = this.paid + cents;
+                public boolean insert(int coin) {
+                    if (coin == 10 || coin == 20 || coin == 50 || coin == 100 || coin == 200) {
+                        this.paid = this.paid + coin;
+                        return true;
                     }
+                    return false;
                 }
 
                 public int minutes() {
-                    return this.paid / 50 * 15;
+                    return this.paid / 10 * 3;
                 }
 
                 public String toString() {
@@ -2091,45 +2113,46 @@ steps:
                 public static void main(String[] args) {
                     ParkingMeter meter = new ParkingMeter();
                     meter.insert(200);
-                    meter.insert(200);
-                    meter.insert(50);
+                    if (!meter.insert(2)) {
+                        System.out.println("Coin returned");
+                    }
                     System.out.println(meter);
                 }
             }
         hints:
-          - "`insert` has an `if`: add the coin only when `this.paid + cents <= 400`."
-          - "`minutes()` counts the full 50s with integer division: `return this.paid / 50 * 15;`"
+          - "`insert` returns a boolean. Check the coin with `||`: `if (coin == 10 || coin == 20 || ...) { ... return true; }`, and `return false;` after the `if`."
+          - "Every coin is a whole number of 10 cents, so `minutes()` can be `return this.paid / 10 * 3;`"
         forbid:
           - pattern: \b(double|float)\b
             message: "Keep the money in whole cents: no `double` is needed."
         tests:
           - call: |
               ParkingMeter meter = new ParkingMeter();
-              meter.insert(100);
-              meter.insert(20);
+              System.out.println(meter.insert(100));
+              System.out.println(meter.insert(5));
+              System.out.println(meter.insert(20));
+              System.out.println(meter);
+          - call: |
+              ParkingMeter meter = new ParkingMeter();
               System.out.println(meter);
               meter.insert(200);
-              meter.insert(200);
-              System.out.println(meter);
-          - call: |
-              ParkingMeter meter = new ParkingMeter();
-              System.out.println(meter);
-              meter.insert(49);
-              System.out.println(meter.minutes());
-            hidden: true
-          - call: |
-              ParkingMeter meter = new ParkingMeter();
-              meter.insert(400);
-              System.out.println(meter);
-              meter.insert(1);
-              System.out.println(meter);
-            hidden: true
-          - call: |
-              ParkingMeter meter = new ParkingMeter();
-              meter.insert(500);
               meter.insert(50);
-              meter.insert(350);
+              meter.insert(10);
               System.out.println(meter);
+            hidden: true
+          - call: |
+              ParkingMeter meter = new ParkingMeter();
+              System.out.println(meter.insert(30));
+              System.out.println(meter.insert(500));
+              System.out.println(meter.insert(0));
+              System.out.println(meter.insert(-10));
+              System.out.println(meter);
+            hidden: true
+          - call: |
+              ParkingMeter meter = new ParkingMeter();
+              meter.insert(50);
+              meter.insert(50);
+              System.out.println(meter.minutes());
             hidden: true
       - task: |
           A `VendingMachine` keeps the money put in as credit, in cents. Write two methods. `buy(int price)` takes the price off the credit and returns `true` when the credit covers the price; otherwise it returns `false`, and the credit stays as it was. `change()` returns the credit that's left and sets the credit to 0, as when the machine gives the coins back. The check puts in 200 cents, tries to buy two things that cost 150 cents, and asks for change twice:

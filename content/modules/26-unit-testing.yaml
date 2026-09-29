@@ -2162,3 +2162,1678 @@ steps:
                         return longest.getTitle();
                     }
                 }
+
+  - id: unit-testing-tdd
+    slug: test-driven-development
+    title: Test-driven development
+    text: |
+      So far, the code came first and its tests afterwards. **Test-driven development**, or TDD for short, turns that around: before you write a piece of code, you write a test for it. The work goes in small rounds:
+
+      1. Write one test for something the class doesn't do yet.
+      2. Run the tests and see the new one fail. A test that passes before the code even exists isn't testing anything.
+      3. Write just enough code to make it pass, and no more.
+      4. Run all the tests. They should all pass, the old ones too.
+      5. Tidy up the code if it needs it, running the tests after each change. Then start the next round.
+
+      Here's a countdown for a kitchen timer, built this way.
+
+      ### Round 1: the starting time
+
+      The first test says that a new countdown of 90 seconds has 90 seconds left. For the test to compile, `Countdown` needs a constructor and a method `secondsLeft()`, so they're written first as empty shells, with `secondsLeft()` returning 0 for now:
+
+      ```java test
+      // ==== Countdown.java ====
+      public class Countdown {
+          public Countdown(int seconds) {
+          }
+
+          public int secondsLeft() {
+              return 0;
+          }
+      }
+      // ==== CountdownTest.java ====
+      import static org.junit.Assert.*;
+
+      import org.junit.Test;
+
+      public class CountdownTest {
+          @Test
+          public void startsWithItsSeconds() {
+              Countdown countdown = new Countdown(90);
+              assertEquals(90, countdown.secondsLeft());
+          }
+      }
+      ```
+
+      ```output
+      CountdownTest: 1 test
+        startsWithItsSeconds: FAILED
+          java.lang.AssertionError: expected:<90> but was:<0>
+          at CountdownTest.startsWithItsSeconds(CountdownTest.java:9)
+      0 of 1 test passed
+      ```
+
+      The test fails, as it should. Now just enough code to pass it: the countdown keeps its seconds in an instance variable, and returns them.
+
+      ```java fragment
+      private int seconds;
+
+      public Countdown(int seconds) {
+          this.seconds = seconds;
+      }
+
+      public int secondsLeft() {
+          return this.seconds;
+      }
+      ```
+
+      Run the tests again, and `startsWithItsSeconds` passes.
+
+      ### Round 2: a tick
+
+      The next test: after one `tick()`, there's a second less.
+
+      ```java fragment
+      @Test
+      public void tickTakesOneSecond() {
+          Countdown countdown = new Countdown(90);
+          countdown.tick();
+          assertEquals(89, countdown.secondsLeft());
+      }
+      ```
+
+      It doesn't even compile, since there's no `tick` yet. That counts as failing too. An empty `public void tick() { }` makes it compile, and the test fails with `expected:<89> but was:<90>`. Then `this.seconds--;` inside `tick` makes it pass, and the first test still passes too.
+
+      ### Round 3: never below zero
+
+      A timer that has run out stays at zero. That's the next test, and it fails:
+
+      ```java test
+      // ==== Countdown.java ====
+      public class Countdown {
+          private int seconds;
+
+          public Countdown(int seconds) {
+              this.seconds = seconds;
+          }
+
+          public void tick() {
+              this.seconds--;
+          }
+
+          public int secondsLeft() {
+              return this.seconds;
+          }
+      }
+      // ==== CountdownTest.java ====
+      import static org.junit.Assert.*;
+
+      import org.junit.Test;
+
+      public class CountdownTest {
+          @Test
+          public void startsWithItsSeconds() {
+              Countdown countdown = new Countdown(90);
+              assertEquals(90, countdown.secondsLeft());
+          }
+
+          @Test
+          public void tickTakesOneSecond() {
+              Countdown countdown = new Countdown(90);
+              countdown.tick();
+              assertEquals(89, countdown.secondsLeft());
+          }
+
+          @Test
+          public void stopsAtZero() {
+              Countdown countdown = new Countdown(1);
+              countdown.tick();
+              countdown.tick();
+              assertEquals(0, countdown.secondsLeft());
+          }
+      }
+      ```
+
+      ```output
+      CountdownTest: 3 tests
+        startsWithItsSeconds: passed
+        stopsAtZero: FAILED
+          java.lang.AssertionError: expected:<0> but was:<-1>
+          at CountdownTest.stopsAtZero(CountdownTest.java:24)
+        tickTakesOneSecond: passed
+      2 of 3 tests passed
+      ```
+
+      Just enough code to pass it is one `if`:
+
+      ```java fragment
+      public void tick() {
+          if (this.seconds > 0) {
+              this.seconds--;
+          }
+      }
+      ```
+
+      Now all three tests pass. The next round could add `isDone()`, then a way to add a minute, and so on: one test, then the code for it.
+
+      ### Why work this way
+
+      - You decide what the code should do before you decide how. The test is the class's first user, so an awkward method name or parameter shows up early.
+      - Every piece of code has a test from the start, and the tests stay. When a later change breaks something that used to work, a test fails right away.
+      - The rounds are small. At any moment at most one test fails, and you know that the problem is in the few lines you just wrote.
+
+      Not everyone works test first. Many programmers write the tests right after the code, and that works too. What matters is that the tests get written, and that you have seen each one fail at least once, so you know it can.
+
+      **Your turn:** a water bottle holds a number of milliliters. `WaterBottleTest` is written already, and your job is to make its tests pass. `WaterBottle.java` has empty methods, so the tests compile and fail. Run the tests, pick one failing test, write just enough code for it, and run them again, until all of them pass:
+
+      - A new bottle is full: `left()` returns its capacity.
+      - `drink(int ml)` takes that much water, but never more than is left.
+      - `refill()` fills the bottle back up.
+
+      The checks run the tests of `WaterBottleTest` as they are given here (changing them won't help), and more tests of their own.
+    seed:
+      WaterBottle.java: |
+        public class WaterBottle {
+            public WaterBottle(int capacity) {
+            }
+
+            public void drink(int ml) {
+            }
+
+            public void refill() {
+            }
+
+            public int left() {
+                return 0;
+            }
+        }
+      WaterBottleTest.java: |
+        import static org.junit.Assert.*;
+
+        import org.junit.Test;
+
+        public class WaterBottleTest {
+            @Test
+            public void newBottleIsFull() {
+                WaterBottle bottle = new WaterBottle(750);
+                assertEquals(750, bottle.left());
+            }
+
+            @Test
+            public void drinkingTakesWater() {
+                WaterBottle bottle = new WaterBottle(750);
+                bottle.drink(200);
+                assertEquals(550, bottle.left());
+            }
+
+            @Test
+            public void cannotDrinkMoreThanIsLeft() {
+                WaterBottle bottle = new WaterBottle(500);
+                bottle.drink(300);
+                bottle.drink(300);
+                assertEquals(0, bottle.left());
+            }
+
+            @Test
+            public void refillFillsItUp() {
+                WaterBottle bottle = new WaterBottle(500);
+                bottle.drink(450);
+                bottle.refill();
+                assertEquals(500, bottle.left());
+            }
+        }
+    solution:
+      WaterBottle.java: |
+        public class WaterBottle {
+            private int capacity;
+            private int left;
+
+            public WaterBottle(int capacity) {
+                this.capacity = capacity;
+                this.left = capacity;
+            }
+
+            public void drink(int ml) {
+                if (ml > this.left) {
+                    this.left = 0;
+                } else {
+                    this.left = this.left - ml;
+                }
+            }
+
+            public void refill() {
+                this.left = this.capacity;
+            }
+
+            public int left() {
+                return this.left;
+            }
+        }
+      WaterBottleTest.java: |
+        import static org.junit.Assert.*;
+
+        import org.junit.Test;
+
+        public class WaterBottleTest {
+            @Test
+            public void newBottleIsFull() {
+                WaterBottle bottle = new WaterBottle(750);
+                assertEquals(750, bottle.left());
+            }
+
+            @Test
+            public void drinkingTakesWater() {
+                WaterBottle bottle = new WaterBottle(750);
+                bottle.drink(200);
+                assertEquals(550, bottle.left());
+            }
+
+            @Test
+            public void cannotDrinkMoreThanIsLeft() {
+                WaterBottle bottle = new WaterBottle(500);
+                bottle.drink(300);
+                bottle.drink(300);
+                assertEquals(0, bottle.left());
+            }
+
+            @Test
+            public void refillFillsItUp() {
+                WaterBottle bottle = new WaterBottle(500);
+                bottle.drink(450);
+                bottle.refill();
+                assertEquals(500, bottle.left());
+            }
+        }
+    hints:
+      - "Start with `newBottleIsFull`: the bottle needs to remember how much water it has, in an instance variable set in the constructor. `refill` needs the capacity too, so keep both: `capacity` and `left`."
+      - "In `drink`: `if (ml > this.left) { this.left = 0; } else { this.left = this.left - ml; }`. In `refill`: `this.left = this.capacity;`."
+    tests:
+      - name: Your WaterBottle with the tests given
+        junit: WaterBottleTest
+        replace:
+          WaterBottleTest.java: |
+            import static org.junit.Assert.*;
+
+            import org.junit.Test;
+
+            public class WaterBottleTest {
+                @Test
+                public void newBottleIsFull() {
+                    WaterBottle bottle = new WaterBottle(750);
+                    assertEquals(750, bottle.left());
+                }
+
+                @Test
+                public void drinkingTakesWater() {
+                    WaterBottle bottle = new WaterBottle(750);
+                    bottle.drink(200);
+                    assertEquals(550, bottle.left());
+                }
+
+                @Test
+                public void cannotDrinkMoreThanIsLeft() {
+                    WaterBottle bottle = new WaterBottle(500);
+                    bottle.drink(300);
+                    bottle.drink(300);
+                    assertEquals(0, bottle.left());
+                }
+
+                @Test
+                public void refillFillsItUp() {
+                    WaterBottle bottle = new WaterBottle(500);
+                    bottle.drink(450);
+                    bottle.refill();
+                    assertEquals(500, bottle.left());
+                }
+            }
+      - name: Your WaterBottle with more tests
+        junit: WaterBottleTest
+        hidden: true
+        replace:
+          WaterBottleTest.java: |
+            import static org.junit.Assert.*;
+
+            import org.junit.Test;
+
+            public class WaterBottleTest {
+                @Test
+                public void smallBottleStartsFull() {
+                    WaterBottle bottle = new WaterBottle(330);
+                    assertEquals(330, bottle.left());
+                }
+
+                @Test
+                public void sipsAddUp() {
+                    WaterBottle bottle = new WaterBottle(1000);
+                    bottle.drink(120);
+                    bottle.drink(80);
+                    assertEquals(800, bottle.left());
+                }
+
+                @Test
+                public void drinkingExactlyAllLeavesNothing() {
+                    WaterBottle bottle = new WaterBottle(400);
+                    bottle.drink(400);
+                    assertEquals(0, bottle.left());
+                }
+
+                @Test
+                public void refilledBottleWorksAgain() {
+                    WaterBottle bottle = new WaterBottle(600);
+                    bottle.drink(900);
+                    bottle.refill();
+                    bottle.drink(100);
+                    assertEquals(500, bottle.left());
+                }
+            }
+    more:
+      - task: |
+          The countdown from this step gets a new method, `reset()`, which starts it over from the seconds it was made with. It's in `Countdown.java` as an empty shell. Work test first:
+
+          1. In `CountdownTest`, write a new test that makes a countdown, ticks a few times, calls `reset()` and checks `secondsLeft()`. Run the tests: your new test should fail.
+          2. Then write `reset()`, and run the tests again: now all of them should pass.
+
+          The checks run your tests on your Countdown, where all should pass, and on the Countdown with the empty `reset()`, where your new test should fail. Then they run tests of their own on your `reset()`.
+        seed:
+          CountdownTest.java: |
+            import static org.junit.Assert.*;
+
+            import org.junit.Test;
+
+            public class CountdownTest {
+                @Test
+                public void startsWithItsSeconds() {
+                    Countdown countdown = new Countdown(90);
+                    assertEquals(90, countdown.secondsLeft());
+                }
+
+                @Test
+                public void tickTakesOneSecond() {
+                    Countdown countdown = new Countdown(90);
+                    countdown.tick();
+                    assertEquals(89, countdown.secondsLeft());
+                }
+
+                @Test
+                public void stopsAtZero() {
+                    Countdown countdown = new Countdown(1);
+                    countdown.tick();
+                    countdown.tick();
+                    assertEquals(0, countdown.secondsLeft());
+                }
+            }
+          Countdown.java: |
+            public class Countdown {
+                private int seconds;
+
+                public Countdown(int seconds) {
+                    this.seconds = seconds;
+                }
+
+                public void tick() {
+                    if (this.seconds > 0) {
+                        this.seconds--;
+                    }
+                }
+
+                public void reset() {
+                }
+
+                public int secondsLeft() {
+                    return this.seconds;
+                }
+            }
+        solution:
+          CountdownTest.java: |
+            import static org.junit.Assert.*;
+
+            import org.junit.Test;
+
+            public class CountdownTest {
+                @Test
+                public void startsWithItsSeconds() {
+                    Countdown countdown = new Countdown(90);
+                    assertEquals(90, countdown.secondsLeft());
+                }
+
+                @Test
+                public void tickTakesOneSecond() {
+                    Countdown countdown = new Countdown(90);
+                    countdown.tick();
+                    assertEquals(89, countdown.secondsLeft());
+                }
+
+                @Test
+                public void stopsAtZero() {
+                    Countdown countdown = new Countdown(1);
+                    countdown.tick();
+                    countdown.tick();
+                    assertEquals(0, countdown.secondsLeft());
+                }
+
+                @Test
+                public void resetStartsOver() {
+                    Countdown countdown = new Countdown(60);
+                    countdown.tick();
+                    countdown.tick();
+                    countdown.reset();
+                    assertEquals(60, countdown.secondsLeft());
+                }
+            }
+          Countdown.java: |
+            public class Countdown {
+                private int start;
+                private int seconds;
+
+                public Countdown(int seconds) {
+                    this.start = seconds;
+                    this.seconds = seconds;
+                }
+
+                public void tick() {
+                    if (this.seconds > 0) {
+                        this.seconds--;
+                    }
+                }
+
+                public void reset() {
+                    this.seconds = this.start;
+                }
+
+                public int secondsLeft() {
+                    return this.seconds;
+                }
+            }
+        hints:
+          - "The test: `Countdown countdown = new Countdown(60);`, two `countdown.tick();` calls, `countdown.reset();` and `assertEquals(60, countdown.secondsLeft());`. Run it before you touch `Countdown.java`: it fails with `expected:<60> but was:<58>`."
+          - "Once `tick` has changed `seconds`, the starting value is gone, so the countdown needs a second instance variable, say `start`, set in the constructor. Then `reset()` is `this.seconds = this.start;`."
+        require:
+          - pattern: "@Test\\b"
+            min: 4
+            message: "Write a new test, a method with `@Test` before it, for `reset()`."
+          - pattern: \.reset\s*\(\s*\)
+            message: "Call `reset()` in your new test."
+        tests:
+          - name: Your Countdown with your tests
+            junit: CountdownTest
+          - name: The Countdown with an empty reset, with your tests
+            junit: CountdownTest
+            outcome: fail
+            replace:
+              Countdown.java: |
+                public class Countdown {
+                    private int seconds;
+
+                    public Countdown(int seconds) {
+                        this.seconds = seconds;
+                    }
+
+                    public void tick() {
+                        if (this.seconds > 0) {
+                            this.seconds--;
+                        }
+                    }
+
+                    public void reset() {
+                    }
+
+                    public int secondsLeft() {
+                        return this.seconds;
+                    }
+                }
+          - name: Your Countdown with tests of reset
+            junit: CountdownTest
+            replace:
+              CountdownTest.java: |
+                import static org.junit.Assert.*;
+
+                import org.junit.Test;
+
+                public class CountdownTest {
+                    @Test
+                    public void resetStartsOver() {
+                        Countdown countdown = new Countdown(45);
+                        countdown.tick();
+                        countdown.tick();
+                        countdown.tick();
+                        countdown.reset();
+                        assertEquals(45, countdown.secondsLeft());
+                    }
+
+                    @Test
+                    public void resetAfterRunningOut() {
+                        Countdown countdown = new Countdown(2);
+                        countdown.tick();
+                        countdown.tick();
+                        countdown.tick();
+                        countdown.reset();
+                        assertEquals(2, countdown.secondsLeft());
+                    }
+
+                    @Test
+                    public void countsDownAgainAfterReset() {
+                        Countdown countdown = new Countdown(10);
+                        countdown.tick();
+                        countdown.reset();
+                        countdown.tick();
+                        assertEquals(9, countdown.secondsLeft());
+                    }
+                }
+      - task: |
+          A class roster keeps the names of the students on a course, up to a number of places. `RosterTest` is written, and your job is to write `Roster` so its tests pass, one failing test at a time:
+
+          - `new Roster(places)` makes an empty roster with that many places.
+          - `enroll(String name)` adds the student and returns `true`. It returns `false` and adds nobody when the roster is full, or when the same name is on it already.
+          - `drop(String name)` takes the student off the roster, if they're on it.
+          - `size()` returns how many are enrolled, and `isFull()` whether every place is taken.
+
+          The checks run the tests of `RosterTest` as they are given here, and more tests of their own.
+        seed:
+          Roster.java: |
+            import java.util.ArrayList;
+
+            public class Roster {
+                public Roster(int places) {
+                }
+
+                public boolean enroll(String name) {
+                    return false;
+                }
+
+                public void drop(String name) {
+                }
+
+                public int size() {
+                    return 0;
+                }
+
+                public boolean isFull() {
+                    return false;
+                }
+            }
+          RosterTest.java: |
+            import static org.junit.Assert.*;
+
+            import org.junit.Test;
+
+            public class RosterTest {
+                @Test
+                public void enrollingAddsAStudent() {
+                    Roster roster = new Roster(3);
+                    assertTrue(roster.enroll("Mia"));
+                    assertEquals(1, roster.size());
+                }
+
+                @Test
+                public void sameNameCannotEnrollTwice() {
+                    Roster roster = new Roster(3);
+                    roster.enroll("Mia");
+                    assertFalse(roster.enroll("Mia"));
+                    assertEquals(1, roster.size());
+                }
+
+                @Test
+                public void fullRosterTakesNobodyMore() {
+                    Roster roster = new Roster(2);
+                    roster.enroll("Ann");
+                    roster.enroll("Ben");
+                    assertTrue(roster.isFull());
+                    assertFalse(roster.enroll("Cy"));
+                }
+
+                @Test
+                public void droppingMakesRoom() {
+                    Roster roster = new Roster(1);
+                    roster.enroll("Ann");
+                    roster.drop("Ann");
+                    assertFalse(roster.isFull());
+                    assertTrue(roster.enroll("Ben"));
+                }
+            }
+        solution:
+          Roster.java: |
+            import java.util.ArrayList;
+
+            public class Roster {
+                private int places;
+                private ArrayList<String> names;
+
+                public Roster(int places) {
+                    this.places = places;
+                    this.names = new ArrayList<>();
+                }
+
+                public boolean enroll(String name) {
+                    if (this.isFull() || this.names.contains(name)) {
+                        return false;
+                    }
+                    this.names.add(name);
+                    return true;
+                }
+
+                public void drop(String name) {
+                    this.names.remove(name);
+                }
+
+                public int size() {
+                    return this.names.size();
+                }
+
+                public boolean isFull() {
+                    return this.names.size() >= this.places;
+                }
+            }
+          RosterTest.java: |
+            import static org.junit.Assert.*;
+
+            import org.junit.Test;
+
+            public class RosterTest {
+                @Test
+                public void enrollingAddsAStudent() {
+                    Roster roster = new Roster(3);
+                    assertTrue(roster.enroll("Mia"));
+                    assertEquals(1, roster.size());
+                }
+
+                @Test
+                public void sameNameCannotEnrollTwice() {
+                    Roster roster = new Roster(3);
+                    roster.enroll("Mia");
+                    assertFalse(roster.enroll("Mia"));
+                    assertEquals(1, roster.size());
+                }
+
+                @Test
+                public void fullRosterTakesNobodyMore() {
+                    Roster roster = new Roster(2);
+                    roster.enroll("Ann");
+                    roster.enroll("Ben");
+                    assertTrue(roster.isFull());
+                    assertFalse(roster.enroll("Cy"));
+                }
+
+                @Test
+                public void droppingMakesRoom() {
+                    Roster roster = new Roster(1);
+                    roster.enroll("Ann");
+                    roster.drop("Ann");
+                    assertFalse(roster.isFull());
+                    assertTrue(roster.enroll("Ben"));
+                }
+            }
+        hints:
+          - "The roster needs two instance variables: the number of places, and a list of names made in the constructor, `this.names = new ArrayList<>();`. `size()` is the list's size, and `isFull()` compares it with the places."
+          - "In `enroll`, turn the student away first: `if (this.isFull() || this.names.contains(name)) { return false; }`, then add the name and return `true`. The list's `contains` and `remove` compare names with `equals`, so `drop` is just `this.names.remove(name);`."
+        tests:
+          - name: Your Roster with the tests given
+            junit: RosterTest
+            replace:
+              RosterTest.java: |
+                import static org.junit.Assert.*;
+
+                import org.junit.Test;
+
+                public class RosterTest {
+                    @Test
+                    public void enrollingAddsAStudent() {
+                        Roster roster = new Roster(3);
+                        assertTrue(roster.enroll("Mia"));
+                        assertEquals(1, roster.size());
+                    }
+
+                    @Test
+                    public void sameNameCannotEnrollTwice() {
+                        Roster roster = new Roster(3);
+                        roster.enroll("Mia");
+                        assertFalse(roster.enroll("Mia"));
+                        assertEquals(1, roster.size());
+                    }
+
+                    @Test
+                    public void fullRosterTakesNobodyMore() {
+                        Roster roster = new Roster(2);
+                        roster.enroll("Ann");
+                        roster.enroll("Ben");
+                        assertTrue(roster.isFull());
+                        assertFalse(roster.enroll("Cy"));
+                    }
+
+                    @Test
+                    public void droppingMakesRoom() {
+                        Roster roster = new Roster(1);
+                        roster.enroll("Ann");
+                        roster.drop("Ann");
+                        assertFalse(roster.isFull());
+                        assertTrue(roster.enroll("Ben"));
+                    }
+                }
+          - name: Your Roster with more tests
+            junit: RosterTest
+            hidden: true
+            replace:
+              RosterTest.java: |
+                import static org.junit.Assert.*;
+
+                import org.junit.Test;
+
+                public class RosterTest {
+                    @Test
+                    public void newRosterIsEmpty() {
+                        Roster roster = new Roster(4);
+                        assertEquals(0, roster.size());
+                        assertFalse(roster.isFull());
+                    }
+
+                    @Test
+                    public void droppingSomeoneElseChangesNothing() {
+                        Roster roster = new Roster(2);
+                        roster.enroll("Eve");
+                        roster.drop("Zed");
+                        assertEquals(1, roster.size());
+                    }
+
+                    @Test
+                    public void namesAreComparedByTheirLetters() {
+                        Roster roster = new Roster(5);
+                        String start = "Li";
+                        roster.enroll(start + "am");
+                        assertFalse(roster.enroll("Liam"));
+                        roster.drop("Liam");
+                        assertEquals(0, roster.size());
+                    }
+
+                    @Test
+                    public void rosterWithNoPlacesIsFull() {
+                        Roster roster = new Roster(0);
+                        assertTrue(roster.isFull());
+                        assertFalse(roster.enroll("Kai"));
+                        assertEquals(0, roster.size());
+                    }
+                }
+
+  - id: unit-testing-review
+    slug: end-of-part-6
+    title: Putting it all together
+    text: |
+      This module's tools, side by side:
+
+      | Tool | Example |
+      | --- | --- |
+      | Input for a Scanner, written in the code | `new Scanner("12\n8\n")` |
+      | A test method | `@Test public void parkingTakesOneSpot()` |
+      | Compare with the expected value | `assertEquals(2, garage.freeSpots())` |
+      | Compare doubles, with a delta | `assertEquals(33.33, garage.percentFull(), 0.01)` |
+      | Check a boolean | `assertTrue(garage.park())`, `assertFalse(garage.park())` |
+      | The same start for every test | `@Before` |
+
+      The last one is new. When every test starts by making the same object, the test class can do that in one place: a method marked `@Before` runs before each test. It puts the object in an instance variable of the test class, and the tests use it from there.
+
+      Here it is in the tests of a poll, which reads its answers from a Scanner. The tests give it Strings, so the idea of the second step and JUnit work together:
+
+      ```java test
+      // ==== Poll.java ====
+      import java.util.Scanner;
+
+      public class Poll {
+          private int yes;
+          private int no;
+
+          public Poll() {
+              this.yes = 0;
+              this.no = 0;
+          }
+
+          public void readAnswers(Scanner scanner) {
+              while (scanner.hasNextLine()) {
+                  String answer = scanner.nextLine();
+                  if (answer.equals("yes")) {
+                      this.yes++;
+                  } else if (answer.equals("no")) {
+                      this.no++;
+                  }
+              }
+          }
+
+          public int yesVotes() {
+              return this.yes;
+          }
+
+          public int noVotes() {
+              return this.no;
+          }
+
+          public boolean passes() {
+              return this.yes > this.no;
+          }
+      }
+      // ==== PollTest.java ====
+      import static org.junit.Assert.*;
+
+      import java.util.Scanner;
+      import org.junit.Before;
+      import org.junit.Test;
+
+      public class PollTest {
+          private Poll poll;
+
+          @Before
+          public void setUp() {
+              this.poll = new Poll();
+          }
+
+          @Test
+          public void countsBothAnswers() {
+              this.poll.readAnswers(new Scanner("yes\nno\nyes\n"));
+              assertEquals(2, this.poll.yesVotes());
+              assertEquals(1, this.poll.noVotes());
+          }
+
+          @Test
+          public void otherLinesAreIgnored() {
+              this.poll.readAnswers(new Scanner("maybe\n\nyes\n"));
+              assertEquals(1, this.poll.yesVotes());
+              assertEquals(0, this.poll.noVotes());
+          }
+
+          @Test
+          public void moreYesThanNoPasses() {
+              this.poll.readAnswers(new Scanner("yes\nno\nyes\n"));
+              assertTrue(this.poll.passes());
+          }
+
+          @Test
+          public void tieDoesNotPass() {
+              this.poll.readAnswers(new Scanner("no\nyes\n"));
+              assertFalse(this.poll.passes());
+          }
+      }
+      ```
+
+      ```output
+      PollTest: 4 tests
+        countsBothAnswers: passed
+        moreYesThanNoPasses: passed
+        otherLinesAreIgnored: passed
+        tieDoesNotPass: passed
+      4 of 4 tests passed
+      ```
+
+      - `import org.junit.Before;` brings in `@Before`, and `java.util.Scanner` is imported as in any class that uses it.
+      - `private Poll poll;` is an instance variable of the test class, and `setUp()`, marked `@Before`, gives it a new Poll.
+      - JUnit makes a new PollTest object for every test, and runs `setUp()` on it before the test. So every test gets a new, empty Poll of its own: the three answers of `countsBothAnswers` never reach `tieDoesNotPass`.
+      - Each test gives `readAnswers` exactly the input it's about, from an empty line to a tie, with no typing.
+
+      ### The end of part 6
+
+      This step ends the material of the MOOC's sixth part. Part 6 put lists inside objects: a class kept a list in an instance variable, and its methods decided what could be done with it. Then programs were split in two, with the program's logic in classes of its own and a user interface class that reads the commands and prints the answers, so that each part can change without the other. This module was about knowing that it all works: reading a stack trace, troubleshooting step by step, giving code its input from a String, and unit tests with JUnit, written after the code or before it. Next, part 7 looks at different ways to structure a program, and at algorithms for sorting and searching. Part 6 closes with [the MOOC's page on complex programs](https://java-programming.mooc.fi/part-6/4-complex-programs) on its own site, for reading only.
+
+      **Your turn:** a timesheet reads the hours worked each day, one number per line, until the input ends. Empty lines are skipped, and reading goes on after them. `totalHours()` adds up the hours, and `overtimeDays()` counts the days of more than 8 hours. `TimesheetTest` makes a new Timesheet before each test with `@Before`, and has one test.
+
+      Write tests that give `read` its input as a String, and that catch a Timesheet that counts a day of exactly 8 hours as overtime. Two more versions, hidden, have bugs in how they read the lines.
+    seed:
+      TimesheetTest.java: |
+        import static org.junit.Assert.*;
+
+        import java.util.Scanner;
+        import org.junit.Before;
+        import org.junit.Test;
+
+        public class TimesheetTest {
+            private Timesheet sheet;
+
+            @Before
+            public void setUp() {
+                this.sheet = new Timesheet();
+            }
+
+            @Test
+            public void noDaysMeansNoHours() {
+                this.sheet.read(new Scanner(""));
+                assertEquals(0, this.sheet.totalHours());
+            }
+        }
+      Timesheet.java: |
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Timesheet {
+            private ArrayList<Integer> days;
+
+            public Timesheet() {
+                this.days = new ArrayList<>();
+            }
+
+            public void read(Scanner scanner) {
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    if (!line.isEmpty()) {
+                        this.days.add(Integer.valueOf(line));
+                    }
+                }
+            }
+
+            public int totalHours() {
+                int total = 0;
+                for (int hours : this.days) {
+                    total += hours;
+                }
+                return total;
+            }
+
+            public int overtimeDays() {
+                int count = 0;
+                for (int hours : this.days) {
+                    if (hours > 8) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
+    solution:
+      TimesheetTest.java: |
+        import static org.junit.Assert.*;
+
+        import java.util.Scanner;
+        import org.junit.Before;
+        import org.junit.Test;
+
+        public class TimesheetTest {
+            private Timesheet sheet;
+
+            @Before
+            public void setUp() {
+                this.sheet = new Timesheet();
+            }
+
+            @Test
+            public void noDaysMeansNoHours() {
+                this.sheet.read(new Scanner(""));
+                assertEquals(0, this.sheet.totalHours());
+            }
+
+            @Test
+            public void eightHoursIsNotOvertime() {
+                this.sheet.read(new Scanner("8\n9\n7\n"));
+                assertEquals(1, this.sheet.overtimeDays());
+            }
+
+            @Test
+            public void hoursAddUp() {
+                this.sheet.read(new Scanner("8\n9\n7\n"));
+                assertEquals(24, this.sheet.totalHours());
+            }
+
+            @Test
+            public void readingGoesOnAfterAnEmptyLine() {
+                this.sheet.read(new Scanner("6\n\n10\n"));
+                assertEquals(16, this.sheet.totalHours());
+            }
+        }
+      Timesheet.java: |
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Timesheet {
+            private ArrayList<Integer> days;
+
+            public Timesheet() {
+                this.days = new ArrayList<>();
+            }
+
+            public void read(Scanner scanner) {
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    if (!line.isEmpty()) {
+                        this.days.add(Integer.valueOf(line));
+                    }
+                }
+            }
+
+            public int totalHours() {
+                int total = 0;
+                for (int hours : this.days) {
+                    total += hours;
+                }
+                return total;
+            }
+
+            public int overtimeDays() {
+                int count = 0;
+                for (int hours : this.days) {
+                    if (hours > 8) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
+    hints:
+      - "Each test reads its own input: `this.sheet.read(new Scanner(\"8\\n9\\n7\\n\"));`, and then checks `overtimeDays()` or `totalHours()`. A day of exactly 8 hours is the limit, and an empty line in the middle of the input is the edge the hidden versions trip on."
+      - "For example, after reading `\"8\\n9\\n7\\n\"`, `assertEquals(1, this.sheet.overtimeDays());`. And after reading `\"6\\n\\n10\\n\"`, `assertEquals(16, this.sheet.totalHours());`."
+    tests:
+      - name: The Timesheet as it is
+        junit: TimesheetTest
+      - name: A Timesheet that counts a day of exactly 8 hours as overtime
+        junit: TimesheetTest
+        outcome: fail
+        replace:
+          Timesheet.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Timesheet {
+                private ArrayList<Integer> days;
+
+                public Timesheet() {
+                    this.days = new ArrayList<>();
+                }
+
+                public void read(Scanner scanner) {
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine();
+                        if (!line.isEmpty()) {
+                            this.days.add(Integer.valueOf(line));
+                        }
+                    }
+                }
+
+                public int totalHours() {
+                    int total = 0;
+                    for (int hours : this.days) {
+                        total += hours;
+                    }
+                    return total;
+                }
+
+                public int overtimeDays() {
+                    int count = 0;
+                    for (int hours : this.days) {
+                        if (hours >= 8) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+            }
+      - name: A Timesheet with a bug in reading
+        junit: TimesheetTest
+        outcome: fail
+        hidden: true
+        replace:
+          Timesheet.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Timesheet {
+                private ArrayList<Integer> days;
+
+                public Timesheet() {
+                    this.days = new ArrayList<>();
+                }
+
+                public void read(Scanner scanner) {
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine();
+                        if (line.isEmpty()) {
+                            break;
+                        }
+                        this.days.add(Integer.valueOf(line));
+                    }
+                }
+
+                public int totalHours() {
+                    int total = 0;
+                    for (int hours : this.days) {
+                        total += hours;
+                    }
+                    return total;
+                }
+
+                public int overtimeDays() {
+                    int count = 0;
+                    for (int hours : this.days) {
+                        if (hours > 8) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+            }
+      - name: Another Timesheet with a bug in reading
+        junit: TimesheetTest
+        outcome: fail
+        hidden: true
+        replace:
+          Timesheet.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Timesheet {
+                private ArrayList<Integer> days;
+
+                public Timesheet() {
+                    this.days = new ArrayList<>();
+                }
+
+                public void read(Scanner scanner) {
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine();
+                        this.days.add(Integer.valueOf(line));
+                    }
+                }
+
+                public int totalHours() {
+                    int total = 0;
+                    for (int hours : this.days) {
+                        total += hours;
+                    }
+                    return total;
+                }
+
+                public int overtimeDays() {
+                    int count = 0;
+                    for (int hours : this.days) {
+                        if (hours > 8) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+            }
+    more:
+      - task: |
+          A quiz gives 10 points for a right answer and nothing for a wrong one. Three right answers in a row give 5 bonus points, and then the count starts over. A wrong answer ends the streak. `QuizScoreTest` is right, but two of its tests fail on `QuizScore`.
+
+          Run the tests and read the report: each failing test's name says which rule is broken. Fix `QuizScore` one bug at a time, running the tests after each fix. The checks run the tests of `QuizScoreTest` as they are given here, and more tests of their own.
+        seed:
+          QuizScore.java: |
+            public class QuizScore {
+                private int points;
+                private int streak;
+
+                public QuizScore() {
+                    this.points = 0;
+                    this.streak = 0;
+                }
+
+                public void answer(boolean correct) {
+                    if (correct) {
+                        this.points += 10;
+                        this.streak++;
+                        if (this.streak > 3) {
+                            this.points += 5;
+                            this.streak = 0;
+                        }
+                    }
+                }
+
+                public int getPoints() {
+                    return this.points;
+                }
+            }
+          QuizScoreTest.java: |
+            import static org.junit.Assert.*;
+
+            import org.junit.Before;
+            import org.junit.Test;
+
+            public class QuizScoreTest {
+                private QuizScore score;
+
+                @Before
+                public void setUp() {
+                    this.score = new QuizScore();
+                }
+
+                @Test
+                public void rightAnswerGivesTenPoints() {
+                    this.score.answer(true);
+                    assertEquals(10, this.score.getPoints());
+                }
+
+                @Test
+                public void wrongAnswerGivesNothing() {
+                    this.score.answer(false);
+                    assertEquals(0, this.score.getPoints());
+                }
+
+                @Test
+                public void threeInARowGiveABonus() {
+                    this.score.answer(true);
+                    this.score.answer(true);
+                    this.score.answer(true);
+                    assertEquals(35, this.score.getPoints());
+                }
+
+                @Test
+                public void wrongAnswerEndsTheStreak() {
+                    this.score.answer(true);
+                    this.score.answer(true);
+                    this.score.answer(false);
+                    this.score.answer(true);
+                    this.score.answer(true);
+                    assertEquals(40, this.score.getPoints());
+                }
+            }
+        solution:
+          QuizScore.java: |
+            public class QuizScore {
+                private int points;
+                private int streak;
+
+                public QuizScore() {
+                    this.points = 0;
+                    this.streak = 0;
+                }
+
+                public void answer(boolean correct) {
+                    if (correct) {
+                        this.points += 10;
+                        this.streak++;
+                        if (this.streak == 3) {
+                            this.points += 5;
+                            this.streak = 0;
+                        }
+                    } else {
+                        this.streak = 0;
+                    }
+                }
+
+                public int getPoints() {
+                    return this.points;
+                }
+            }
+          QuizScoreTest.java: |
+            import static org.junit.Assert.*;
+
+            import org.junit.Before;
+            import org.junit.Test;
+
+            public class QuizScoreTest {
+                private QuizScore score;
+
+                @Before
+                public void setUp() {
+                    this.score = new QuizScore();
+                }
+
+                @Test
+                public void rightAnswerGivesTenPoints() {
+                    this.score.answer(true);
+                    assertEquals(10, this.score.getPoints());
+                }
+
+                @Test
+                public void wrongAnswerGivesNothing() {
+                    this.score.answer(false);
+                    assertEquals(0, this.score.getPoints());
+                }
+
+                @Test
+                public void threeInARowGiveABonus() {
+                    this.score.answer(true);
+                    this.score.answer(true);
+                    this.score.answer(true);
+                    assertEquals(35, this.score.getPoints());
+                }
+
+                @Test
+                public void wrongAnswerEndsTheStreak() {
+                    this.score.answer(true);
+                    this.score.answer(true);
+                    this.score.answer(false);
+                    this.score.answer(true);
+                    this.score.answer(true);
+                    assertEquals(40, this.score.getPoints());
+                }
+            }
+        hints:
+          - "`threeInARowGiveABonus` says `expected:<35> but was:<30>`: no bonus after three right answers. Look at the comparison that decides when the bonus comes: `this.streak > 3` is only true on the fourth."
+          - "`wrongAnswerEndsTheStreak` fails because nothing happens to `streak` on a wrong answer. Use `this.streak == 3` for the bonus, and add `else { this.streak = 0; }` to the `if (correct)`."
+        tests:
+          - name: Your QuizScore with the tests given
+            junit: QuizScoreTest
+            replace:
+              QuizScoreTest.java: |
+                import static org.junit.Assert.*;
+
+                import org.junit.Before;
+                import org.junit.Test;
+
+                public class QuizScoreTest {
+                    private QuizScore score;
+
+                    @Before
+                    public void setUp() {
+                        this.score = new QuizScore();
+                    }
+
+                    @Test
+                    public void rightAnswerGivesTenPoints() {
+                        this.score.answer(true);
+                        assertEquals(10, this.score.getPoints());
+                    }
+
+                    @Test
+                    public void wrongAnswerGivesNothing() {
+                        this.score.answer(false);
+                        assertEquals(0, this.score.getPoints());
+                    }
+
+                    @Test
+                    public void threeInARowGiveABonus() {
+                        this.score.answer(true);
+                        this.score.answer(true);
+                        this.score.answer(true);
+                        assertEquals(35, this.score.getPoints());
+                    }
+
+                    @Test
+                    public void wrongAnswerEndsTheStreak() {
+                        this.score.answer(true);
+                        this.score.answer(true);
+                        this.score.answer(false);
+                        this.score.answer(true);
+                        this.score.answer(true);
+                        assertEquals(40, this.score.getPoints());
+                    }
+                }
+          - name: Your QuizScore with more tests
+            junit: QuizScoreTest
+            hidden: true
+            replace:
+              QuizScoreTest.java: |
+                import static org.junit.Assert.*;
+
+                import org.junit.Before;
+                import org.junit.Test;
+
+                public class QuizScoreTest {
+                    private QuizScore score;
+
+                    @Before
+                    public void setUp() {
+                        this.score = new QuizScore();
+                    }
+
+                    @Test
+                    public void sixInARowGiveTwoBonuses() {
+                        for (int i = 0; i < 6; i++) {
+                            this.score.answer(true);
+                        }
+                        assertEquals(70, this.score.getPoints());
+                    }
+
+                    @Test
+                    public void streakCountsAgainAfterAWrongAnswer() {
+                        this.score.answer(true);
+                        this.score.answer(false);
+                        this.score.answer(true);
+                        this.score.answer(true);
+                        this.score.answer(true);
+                        assertEquals(45, this.score.getPoints());
+                    }
+
+                    @Test
+                    public void onlyWrongAnswersGiveNothing() {
+                        this.score.answer(false);
+                        this.score.answer(false);
+                        this.score.answer(false);
+                        assertEquals(0, this.score.getPoints());
+                    }
+
+                    @Test
+                    public void twoRightAnswersGiveNoBonus() {
+                        this.score.answer(true);
+                        this.score.answer(true);
+                        assertEquals(20, this.score.getPoints());
+                    }
+                }
+      - task: |
+          A packing list for a trip is read from a Scanner, one item per line, until the input ends. A line that starts with `x ` (an x and a space) is an item that's packed already, like `x tent`, and any other line is an item still to pack. Empty lines are skipped. Write `PackingList` so the tests of `PackingListTest` pass:
+
+          - `read(Scanner scanner)` reads the lines. Calling it again reads more items onto the same list.
+          - `packedCount()` returns how many items are packed, and `leftToPack()` how many are not.
+          - `isReady()` returns `true` when nothing is left to pack.
+
+          The checks run the tests of `PackingListTest` as they are given here, and more tests of their own.
+        seed:
+          PackingList.java: |
+            import java.util.Scanner;
+
+            public class PackingList {
+                public PackingList() {
+                }
+
+                public void read(Scanner scanner) {
+                }
+
+                public int packedCount() {
+                    return 0;
+                }
+
+                public int leftToPack() {
+                    return 0;
+                }
+
+                public boolean isReady() {
+                    return false;
+                }
+            }
+          PackingListTest.java: |
+            import static org.junit.Assert.*;
+
+            import java.util.Scanner;
+            import org.junit.Before;
+            import org.junit.Test;
+
+            public class PackingListTest {
+                private PackingList list;
+
+                @Before
+                public void setUp() {
+                    this.list = new PackingList();
+                }
+
+                @Test
+                public void countsPackedAndLeft() {
+                    this.list.read(new Scanner("x tent\nsleeping bag\nx stove\n"));
+                    assertEquals(2, this.list.packedCount());
+                    assertEquals(1, this.list.leftToPack());
+                }
+
+                @Test
+                public void emptyLinesAreSkipped() {
+                    this.list.read(new Scanner("boots\n\nx map\n"));
+                    assertEquals(1, this.list.packedCount());
+                    assertEquals(1, this.list.leftToPack());
+                }
+
+                @Test
+                public void readyWhenEverythingIsPacked() {
+                    this.list.read(new Scanner("x tent\nx map\n"));
+                    assertTrue(this.list.isReady());
+                }
+
+                @Test
+                public void notReadyWithSomethingLeft() {
+                    this.list.read(new Scanner("x tent\nboots\n"));
+                    assertFalse(this.list.isReady());
+                }
+            }
+        solution:
+          PackingList.java: |
+            import java.util.Scanner;
+
+            public class PackingList {
+                private int packed;
+                private int left;
+
+                public PackingList() {
+                    this.packed = 0;
+                    this.left = 0;
+                }
+
+                public void read(Scanner scanner) {
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine();
+                        if (line.startsWith("x ")) {
+                            this.packed++;
+                        } else if (!line.isEmpty()) {
+                            this.left++;
+                        }
+                    }
+                }
+
+                public int packedCount() {
+                    return this.packed;
+                }
+
+                public int leftToPack() {
+                    return this.left;
+                }
+
+                public boolean isReady() {
+                    return this.left == 0;
+                }
+            }
+          PackingListTest.java: |
+            import static org.junit.Assert.*;
+
+            import java.util.Scanner;
+            import org.junit.Before;
+            import org.junit.Test;
+
+            public class PackingListTest {
+                private PackingList list;
+
+                @Before
+                public void setUp() {
+                    this.list = new PackingList();
+                }
+
+                @Test
+                public void countsPackedAndLeft() {
+                    this.list.read(new Scanner("x tent\nsleeping bag\nx stove\n"));
+                    assertEquals(2, this.list.packedCount());
+                    assertEquals(1, this.list.leftToPack());
+                }
+
+                @Test
+                public void emptyLinesAreSkipped() {
+                    this.list.read(new Scanner("boots\n\nx map\n"));
+                    assertEquals(1, this.list.packedCount());
+                    assertEquals(1, this.list.leftToPack());
+                }
+
+                @Test
+                public void readyWhenEverythingIsPacked() {
+                    this.list.read(new Scanner("x tent\nx map\n"));
+                    assertTrue(this.list.isReady());
+                }
+
+                @Test
+                public void notReadyWithSomethingLeft() {
+                    this.list.read(new Scanner("x tent\nboots\n"));
+                    assertFalse(this.list.isReady());
+                }
+            }
+        hints:
+          - "The tests only ask for counts, so two `int` instance variables are enough: how many items are packed and how many are left. `read` goes through the lines with `while (scanner.hasNextLine())`."
+          - "For each line: `if (line.startsWith(\"x \")) { this.packed++; } else if (!line.isEmpty()) { this.left++; }`. `isReady()` is `return this.left == 0;`."
+        tests:
+          - name: Your PackingList with the tests given
+            junit: PackingListTest
+            replace:
+              PackingListTest.java: |
+                import static org.junit.Assert.*;
+
+                import java.util.Scanner;
+                import org.junit.Before;
+                import org.junit.Test;
+
+                public class PackingListTest {
+                    private PackingList list;
+
+                    @Before
+                    public void setUp() {
+                        this.list = new PackingList();
+                    }
+
+                    @Test
+                    public void countsPackedAndLeft() {
+                        this.list.read(new Scanner("x tent\nsleeping bag\nx stove\n"));
+                        assertEquals(2, this.list.packedCount());
+                        assertEquals(1, this.list.leftToPack());
+                    }
+
+                    @Test
+                    public void emptyLinesAreSkipped() {
+                        this.list.read(new Scanner("boots\n\nx map\n"));
+                        assertEquals(1, this.list.packedCount());
+                        assertEquals(1, this.list.leftToPack());
+                    }
+
+                    @Test
+                    public void readyWhenEverythingIsPacked() {
+                        this.list.read(new Scanner("x tent\nx map\n"));
+                        assertTrue(this.list.isReady());
+                    }
+
+                    @Test
+                    public void notReadyWithSomethingLeft() {
+                        this.list.read(new Scanner("x tent\nboots\n"));
+                        assertFalse(this.list.isReady());
+                    }
+                }
+          - name: Your PackingList with more tests
+            junit: PackingListTest
+            hidden: true
+            replace:
+              PackingListTest.java: |
+                import static org.junit.Assert.*;
+
+                import java.util.Scanner;
+                import org.junit.Before;
+                import org.junit.Test;
+
+                public class PackingListTest {
+                    private PackingList list;
+
+                    @Before
+                    public void setUp() {
+                        this.list = new PackingList();
+                    }
+
+                    @Test
+                    public void emptyListIsReady() {
+                        this.list.read(new Scanner(""));
+                        assertEquals(0, this.list.packedCount());
+                        assertEquals(0, this.list.leftToPack());
+                        assertTrue(this.list.isReady());
+                    }
+
+                    @Test
+                    public void anXInsideAWordIsNotPacked() {
+                        this.list.read(new Scanner("xylophone\nbox\n"));
+                        assertEquals(0, this.list.packedCount());
+                        assertEquals(2, this.list.leftToPack());
+                    }
+
+                    @Test
+                    public void readingTwiceAddsUp() {
+                        this.list.read(new Scanner("x passport\nhat\n"));
+                        this.list.read(new Scanner("x socks\n\n"));
+                        assertEquals(2, this.list.packedCount());
+                        assertEquals(1, this.list.leftToPack());
+                    }
+
+                    @Test
+                    public void onlyEmptyLinesIsReady() {
+                        this.list.read(new Scanner("\n\n"));
+                        assertEquals(0, this.list.leftToPack());
+                        assertTrue(this.list.isReady());
+                    }
+                }

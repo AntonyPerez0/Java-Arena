@@ -564,6 +564,9 @@ async function runDrill(where, program, stdin) {
   return normalizeOutput(r.stdout);
 }
 
+/** True when Markdown text has something that looks like an HTML tag or comment outside code. */
+const htmlLike = (text) => /<[a-zA-Z!\/?]/.test(text.replace(/```[\s\S]*?```/g, "").replace(/(`+)[\s\S]*?\1/g, ""));
+
 async function buildDrill(where, id, topic, d, moduleSteps) {
   checkKeys(where, d, "drill");
   if (!DRILL_TYPES.includes(d?.type)) {
@@ -579,6 +582,9 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
   } else if (d.after != null) errors.push(`${where}: interview drills are always open, so they can't have after`);
   if (d.why != null && typeof d.why !== "string") errors.push(`${where}: why must be text (quote it)`);
   if (!d.why && d.type !== "compiles" && d.type !== "boss") errors.push(`${where}: needs an explanation (why)`);
+  // Drill text is Markdown, where <tag> or <!-- --> outside backticks would be read as HTML and vanish.
+  for (const [key, text] of [["prompt", d.prompt], ["why", d.why], ...(d.choices ?? []).map((c, i) => [`choice ${i + 1}`, c])])
+    if (typeof text === "string" && htmlLike(text)) errors.push(`${where}: ${key} has text that Markdown reads as HTML; put it in backticks: ${text}`);
   const base = { id, topic, type: d.type, why: d.why ?? "", ...(after ? { after } : {}) };
   const pre = d.pre ? String(d.pre).replace(/\s*$/, "") : "";
   const body = d.body ? String(d.body).replace(/\s*$/, "") : "";

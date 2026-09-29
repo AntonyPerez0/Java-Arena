@@ -107,7 +107,7 @@ Every Java block in lesson text says what it is:
 
 ## Drills (Deathmatch, daily challenge, interview prep)
 
-`drills/<module id>.yaml` holds the practice drills of a lesson module; `drills/interview-*.yaml` (with `topic: interview`) the interview questions, which are open to everyone. Each drill has a `type`, and most show a little Java: `pre` for methods, `body` for statements run in `main` (imports such as `java.util.Scanner` are added when used). The build puts them in a complete program and checks it on the reference JDK, so no answer is typed by hand:
+`drills/<module id>.yaml` holds the practice drills of a lesson module; `drills/interview-*.yaml` (with `topic: interview`) the interview questions, which are open to everyone. Each drill has a `type`, and most show a little Java: `pre` for methods, `body` for statements run in `main` (imports such as `java.util.Scanner` are added when used). The build puts them in a complete program and checks it on the reference JDK. Predict and compiles answers are taken from the JDK, not typed by hand; a bug's fix must run and change what the program does; a choice's `answer` is written by hand, so `verify: output` should be used whenever the right choice is what the code prints. Prompts, choices and explanations are Markdown: code, and anything with `<`, goes in backticks (the build rejects text that Markdown would read as HTML):
 
 ```yaml
 topic: loops                  # the module id (the file is loops.yaml)

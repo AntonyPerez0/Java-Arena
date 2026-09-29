@@ -1,11 +1,13 @@
 // The daily challenge: one drill a day, the same for everyone on the same date (it changes at local
-// midnight). The first answer counts toward the streak, right or wrong.
-import { useMemo } from "react";
+// midnight). The first answer counts toward the streak, right or wrong. It's kept apart from
+// Deathmatch: answering it doesn't unlock the drill there or change its review schedule.
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Check, X } from "lucide-react";
 import { useDrills } from "../content/drills";
 import type { Drill } from "../content/types";
 import { localDay, update, useStore } from "../state/store";
-import { dailyStreak, recordRep, topicTitle } from "../practice/engine";
+import { dailyStreak, topicTitle } from "../practice/engine";
 import { Death, Rep } from "../practice/Reps";
 import { useTitle } from "../lib/title";
 
@@ -21,7 +23,8 @@ export function dailyDrill(drills: Drill[], day: string): Drill | null {
 export default function Daily() {
   useTitle("Daily challenge");
   const set = useDrills();
-  const day = localDay();
+  // The date the page was opened: a question answered after midnight still counts for it.
+  const [day] = useState(localDay);
   const daily = useStore((s) => s.daily);
   const drill = useMemo(() => (set && set !== "error" ? dailyDrill(set.drills, day) : null), [set, day]);
   const done = day in daily;
@@ -55,6 +58,7 @@ export default function Daily() {
         <ol className="daily-days" aria-label="The last 14 days">
           {last14.map((d) => (
             <li key={d.key} className={"dday dday-" + d.state} title={d.label}>
+              {d.state === "right" ? <Check className="icon" aria-hidden="true" /> : d.state === "wrong" ? <X className="icon" aria-hidden="true" /> : null}
               <span className="visually-hidden">
                 {d.label}: {d.state === "none" ? "not played" : d.state === "right" ? "solved" : "missed"}
               </span>
@@ -79,14 +83,13 @@ export default function Daily() {
               } catch {
                 /* ignore */
               }
-              recordRep(drill, ok);
               update((s) => ({ ...s, daily: { ...s.daily, [day]: ok } }));
               requestAnimationFrame(() => document.getElementById("death-title")?.focus());
             }}
           />
         </>
       ) : (
-        <Death drill={drill} given={given || "(answered earlier)"} title={daily[day] ? "Solved" : "Not this time"} sub={daily[day] ? `Streak: ${streak} ${streak === 1 ? "day" : "days"}. Come back tomorrow.` : "Your streak still counts. Read why, then come back tomorrow."}>
+        <Death drill={drill} given={given} title={daily[day] ? "Solved" : "Not this time"} sub={daily[day] ? `Streak: ${streak} ${streak === 1 ? "day" : "days"}. Come back tomorrow.` : "Your streak still counts. Read why, then come back tomorrow."}>
           <Link className="btn btn-primary" to="/deathmatch/">
             Keep going in Deathmatch
           </Link>

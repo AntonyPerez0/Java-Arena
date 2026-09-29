@@ -79,7 +79,7 @@ function startAndFocusCheck() {
 }
 
 /** Asks before the one-time download when the learner may be on mobile data. */
-export function DownloadCard({ what }: { what: string }) {
+export function DownloadCard({ what, now = "read the lesson now", button = "Check" }: { what: string; now?: string; button?: string }) {
   const allow = useStore((s) => s.settings.mobileData);
   const [mb, setMb] = useState<number | null>(null);
   useEffect(() => {
@@ -95,7 +95,7 @@ export function DownloadCard({ what }: { what: string }) {
       <p>
         {what} needs the Java compiler and virtual machine, which run on your device: a one-time download of {size}. After that they're saved in this browser and work offline.
       </p>
-      <p className="muted small">{data === "yes" ? "Your browser says you're on mobile data." : "Your browser can't tell whether you're on Wi-Fi or mobile data."} You can read the lesson now and download on Wi-Fi later; pressing Check also starts the download.</p>
+      <p className="muted small">{data === "yes" ? "Your browser says you're on mobile data." : "Your browser can't tell whether you're on Wi-Fi or mobile data."} You can {now} and download on Wi-Fi later; pressing {button} also starts the download.</p>
       <div className="actions">
         <button type="button" className="btn btn-primary" onClick={startAndFocusCheck}>
           Download now ({size})

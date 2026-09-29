@@ -65,7 +65,7 @@ export default function Placement() {
         {placed.length > 0 && (
           <p className="small">
             You're skipping {placed.length} {placed.length === 1 ? "module" : "modules"} after an earlier quiz.{" "}
-            <button type="button" className="linkish" onClick={() => update((s) => ({ ...s, placed: [] }))}>
+            <button type="button" className="linkish" onClick={() => update((s) => ({ ...s, placed: [], placedAt: Date.now() }))}>
               Stop skipping them
             </button>
           </p>
@@ -128,7 +128,7 @@ export default function Placement() {
             type="button"
             className="btn btn-primary btn-lg"
             onClick={() => {
-              update((s) => ({ ...s, placed: [...new Set([...s.placed, ...r.skip])] }));
+              update((s) => ({ ...s, placed: [...new Set([...s.placed, ...r.skip])], placedAt: Date.now() }));
               setApplied(true);
             }}
           >

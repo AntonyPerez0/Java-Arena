@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Skull } from "lucide-react";
 import type { Drill } from "../content/types";
-import { getState } from "../state/store";
+import { getState, useStore } from "../state/store";
 import { checkAnswer, TYPE_LABEL, topicTitle } from "./engine";
 import { CodeView, highlight } from "../components/highlight";
 import FillCode from "../components/FillCode";
@@ -23,9 +23,9 @@ type Answer = (given: string, ok: boolean) => void;
 function useKeys(handler: (key: string) => void) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (!getState().settings.keys || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!getState().settings.keys || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (t && (t.isContentEditable || t.closest("input, textarea, select"))) return;
       handler(e.key);
     };
     window.addEventListener("keydown", h);
@@ -135,6 +135,7 @@ function ChoiceRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   }, [drill.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Answers are saved by the choice's own number, not its place on screen.
   const pick = (k: number) => onAnswer(String(order[k] + 1), checkAnswer(drill, String(order[k] + 1)));
+  const keys = useStore((s) => s.settings.keys);
   useKeys((key) => {
     const n = "abcd".indexOf(key.toLowerCase());
     const k = n >= 0 ? n : parseInt(key, 10) - 1;
@@ -155,7 +156,7 @@ function ChoiceRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
           </button>
         ))}
       </div>
-      <p className="muted small">Tap an answer, or press A to D.</p>
+      <p className="muted small">{keys ? `Tap an answer, or press A to ${"ABCD"[choices.length - 1]}.` : "Tap an answer."}</p>
     </>
   );
 }
@@ -166,9 +167,23 @@ function BugRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   const lines = drill.display.split("\n");
   const pickable = lines.map(pickableLine);
   const pick = (n: number) => onAnswer(String(n), checkAnswer(drill, String(n)));
+  const keys = useStore((s) => s.settings.keys);
+  // Line numbers are typed: with 10 lines or more, "1" waits a moment for a second digit.
+  const typedNo = useRef("");
+  const wait = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(wait.current), []);
   useKeys((key) => {
-    const n = parseInt(key, 10);
-    if (n >= 1 && n <= 9 && n <= lines.length && pickable[n - 1]) pick(n);
+    if (!/^[0-9]$/.test(key)) return;
+    clearTimeout(wait.current);
+    const n = parseInt(typedNo.current + key, 10);
+    const go = () => {
+      typedNo.current = "";
+      if (n >= 1 && n <= lines.length && pickable[n - 1]) pick(n);
+    };
+    if (n * 10 <= lines.length) {
+      typedNo.current += key;
+      wait.current = setTimeout(go, 800);
+    } else go();
   });
   return (
     <>
@@ -196,13 +211,14 @@ function BugRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
           ),
         )}
       </div>
-      <p className="muted small">Tap the line, or press its number.</p>
+      <p className="muted small">{keys ? "Tap the line, or type its number." : "Tap the line."}</p>
     </>
   );
 }
 
 function CompilesRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   const say = (a: "yes" | "no") => onAnswer(a, checkAnswer(drill, a));
+  const keys = useStore((s) => s.settings.keys);
   useKeys((key) => {
     if (key === "y" || key === "Y") say("yes");
     if (key === "n" || key === "N") say("no");
@@ -212,10 +228,10 @@ function CompilesRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
       <CodeView code={drill.display} label="The code" />
       <div className="yn">
         <button type="button" className="btn btn-yes" onClick={() => say("yes")}>
-          Compiles <kbd aria-hidden="true">Y</kbd>
+          Compiles {keys && <kbd aria-hidden="true">Y</kbd>}
         </button>
         <button type="button" className="btn btn-no" onClick={() => say("no")}>
-          Compile error <kbd aria-hidden="true">N</kbd>
+          Compile error {keys && <kbd aria-hidden="true">N</kbd>}
         </button>
       </div>
       <p className="muted small">Statements shown on their own run inside a main method, with the imports they need. Warnings don't count as errors.</p>
@@ -230,6 +246,14 @@ function BossRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   const [result, setResult] = useState<GradeResult | null>(null);
   const [shots, setShots] = useState(3);
   const busyRef = useRef(false);
+  // A check still running when the rep ends (after Give up, or leaving) must not answer for it.
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
   const engine = useEngineStatus();
   const askFirst = useEngineAutoload();
   const unsupported = !engineSupported();
@@ -239,6 +263,7 @@ function BossRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
     setBusy(true);
     try {
       const r = await grade(ex, code);
+      if (!live.current) return;
       setResult(r);
       if (r.status === "pass") onAnswer("pass", true);
       else if (r.status !== "internal-error") {
@@ -248,16 +273,16 @@ function BossRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
       }
     } finally {
       busyRef.current = false;
-      setBusy(false);
+      if (live.current) setBusy(false);
     }
   };
   return (
     <>
-      <div className="boss-banner">
+      <h2 className="boss-banner" id="rep-prompt" tabIndex={-1}>
         <Skull className="icon" aria-hidden="true" /> Boss rep · {shots} {shots === 1 ? "shot" : "shots"} left
-      </div>
+      </h2>
       <Markdown text={drill.prompt} className="rep-task" />
-      {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="A boss rep" />}
+      {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="A boss rep" now="read the task now" button="Fire" />}
       {engine.state === "error" && !unsupported && <EngineErrorCard message={engine.message} />}
       <CodeEditor value={code} onChange={setCode} onRun={fire} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="12rem" label="Java code editor (Main.java)" />
       <div className="actions">
@@ -312,8 +337,14 @@ export function Death({ drill, given, title, sub, children }: { drill: Drill; gi
               <InlineMd text={drill.prompt} />
             </p>
             <dl className="answer-cmp">
-              <dt>You said</dt>
-              <dd>{choice(given) ? <InlineMd text={choice(given)!} /> : "(nothing)"}</dd>
+              {choice(given) && (
+                <>
+                  <dt>You said</dt>
+                  <dd>
+                    <InlineMd text={choice(given)!} />
+                  </dd>
+                </>
+              )}
               <dt>The answer</dt>
               <dd className="good">
                 <InlineMd text={choice(drill.answer) ?? ""} />
@@ -325,10 +356,14 @@ export function Death({ drill, given, title, sub, children }: { drill: Drill; gi
             <CodeView code={drill.type === "fill" ? fillTemplate(drill.display, [drill.answer]) : drill.display} label="The code" />
             {drill.stdin && <InputBlock stdin={drill.stdin} />}
             <dl className="answer-cmp">
-              <dt>You said</dt>
-              <dd>
-                <code>{given || "(nothing)"}</code>
-              </dd>
+              {given && (
+                <>
+                  <dt>You said</dt>
+                  <dd>
+                    <code>{given}</code>
+                  </dd>
+                </>
+              )}
               <dt>The answer</dt>
               <dd>
                 {drill.type === "compiles" ? (
@@ -350,7 +385,7 @@ export function Death({ drill, given, title, sub, children }: { drill: Drill; gi
           </div>
         )}
         <p className="report-row">
-          <ReportLink info={() => ({ kind: "Drill", title: `${topicTitle(drill.topic)}: ${TYPE_LABEL[drill.type]}`, id: drill.id, code: drill.display || drill.exercise?.seed, result: `I answered: ${given}` })} />
+          <ReportLink info={() => ({ kind: "Drill", title: `${topicTitle(drill.topic)}: ${TYPE_LABEL[drill.type]}`, id: drill.id, code: drill.display || drill.exercise?.seed, result: given ? `I answered: ${given}` : "Answered on an earlier visit" })} />
         </p>
       </div>
       <div className="death-actions">{children}</div>

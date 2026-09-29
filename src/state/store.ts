@@ -52,6 +52,8 @@ export type State = {
   daily: Record<string, boolean>;
   /** Modules the placement quiz said the learner already knows. */
   placed: string[];
+  /** When `placed` last changed, so the newer choice wins between tabs. */
+  placedAt?: number;
   /** When "Delete all progress" was last used, so another open tab doesn't bring the old progress back. */
   resetAt?: number;
   settings: {
@@ -64,8 +66,8 @@ export type State = {
     sound: boolean;
     /** Deathmatch: every module's drills, without finishing its steps first. */
     unlockAll: boolean;
-    /** Deathmatch: the chosen modules, or null for all unlocked ones. */
-    topics: string[] | null;
+    /** Deathmatch: unlocked modules left out of the rotation (newly unlocked ones join by default). */
+    topicsOff: string[];
     /** Deathmatch: a coding challenge ("boss rep") every 8th rep. */
     boss: boolean;
     /** Deathmatch: single-key shortcuts (Y and N, line numbers, A to D, R). */
@@ -94,7 +96,7 @@ const fresh = (): State => ({
   dm: freshDm(),
   daily: {},
   placed: [],
-  settings: { theme: "system", textScale: 1, mobileData: read(MOBILE_KEY) === "1", sound: false, unlockAll: false, topics: null, boss: true, keys: true },
+  settings: { theme: "system", textScale: 1, mobileData: read(MOBILE_KEY) === "1", sound: false, unlockAll: false, topicsOff: [], boss: true, keys: true },
 });
 
 /** Fill in anything an older save is missing. */
@@ -112,8 +114,9 @@ function normalize(s: Partial<State>): State {
     dm,
     daily: s.daily ?? {},
     placed: Array.isArray(s.placed) ? s.placed : [],
+    placedAt: typeof s.placedAt === "number" ? s.placedAt : undefined,
     resetAt: typeof s.resetAt === "number" ? s.resetAt : undefined,
-    settings: { ...f.settings, ...s.settings },
+    settings: { ...f.settings, ...s.settings, topicsOff: Array.isArray(s.settings?.topicsOff) ? s.settings.topicsOff : [] },
   };
 }
 
@@ -153,7 +156,11 @@ function mergeStep(a: StepProgress | undefined, b: StepProgress | undefined): St
   return { done: a.done || b.done, doneAt: times.length ? Math.min(...times) : undefined, clean: (a.done && a.clean) || (b.done && b.clean) || undefined, challenges };
 }
 
-/** Practice in both tabs counts: the drill state with more answers wins, and totals keep the higher count. */
+/**
+ * Practice from two tabs: for each drill the state with more answers wins, each total keeps the
+ * higher of the two counts (so reps made in both tabs at once can count once), and a run saved by
+ * both keeps the copy with more reps.
+ */
 function mergeDm(a: State, b: State): Pick<State, "drills" | "dm" | "daily"> {
   const drills: Record<string, DrillStat> = { ...a.drills };
   for (const [id, st] of Object.entries(b.drills)) {
@@ -164,8 +171,9 @@ function mergeDm(a: State, b: State): Pick<State, "drills" | "dm" | "daily"> {
   for (const k of Object.keys(best) as DmMode[]) best[k] = Math.max(a.dm.best[k] ?? 0, b.dm.best[k] ?? 0);
   const days = { ...a.dm.days };
   for (const [d, n] of Object.entries(b.dm.days)) days[d] = Math.max(days[d] ?? 0, n);
-  const seen = new Set<number>();
-  const runs = [...a.dm.runs, ...b.dm.runs].sort((x, y) => y.at - x.at).filter((r) => !seen.has(r.at) && seen.add(r.at)).slice(0, 50);
+  const byStart = new Map<number, RunRecord>();
+  for (const r of [...a.dm.runs, ...b.dm.runs]) if ((byStart.get(r.at)?.reps ?? -1) < r.reps) byStart.set(r.at, r);
+  const runs = [...byStart.values()].sort((x, y) => y.at - x.at).slice(0, 50);
   const dm = { best, runs, days, reps: Math.max(a.dm.reps, b.dm.reps), kills: Math.max(a.dm.kills, b.dm.kills), bossKills: Math.max(a.dm.bossKills, b.dm.bossKills) };
   // The first answer of the day is the one that counts.
   return { drills, dm, daily: { ...b.daily, ...a.daily } };
@@ -174,7 +182,8 @@ function mergeDm(a: State, b: State): Pick<State, "drills" | "dm" | "daily"> {
 /**
  * Combines the saved progress (possibly written by another tab) with this tab's: a step or challenge
  * done in either stays done, and practice in either counts. After "Delete all progress" in one tab,
- * the newer reset wins. Settings and placement skips come from `settingsFrom`.
+ * the newer reset wins. Settings come from `settingsFrom`, and placement skips from the tab that
+ * changed them last.
  */
 function merge(saved: State, local: State, settingsFrom: "saved" | "local"): State {
   const from = settingsFrom === "saved" ? saved : local;
@@ -186,7 +195,8 @@ function merge(saved: State, local: State, settingsFrom: "saved" | "local"): Sta
   }
   const steps: Record<string, StepProgress> = {};
   for (const id of new Set([...Object.keys(saved.steps), ...Object.keys(local.steps)])) steps[id] = mergeStep(saved.steps[id], local.steps[id]);
-  return { ...local, steps, ...mergeDm(saved, local), placed: from.placed, settings: from.settings };
+  const placedFrom = (saved.placedAt ?? 0) === (local.placedAt ?? 0) ? from : (saved.placedAt ?? 0) > (local.placedAt ?? 0) ? saved : local;
+  return { ...local, steps, ...mergeDm(saved, local), placed: placedFrom.placed, placedAt: placedFrom.placedAt, settings: from.settings };
 }
 
 function write() {

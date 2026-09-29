@@ -517,6 +517,26 @@ await test('Deathmatch: with nothing finished, the lobby offers lesson 1, the pl
   await ctx.close();
 });
 
+await test('Deathmatch: ranked play waits for 10 drills; Casual is open before that', async () => {
+  const first = 'printing-first-program';
+  const open = DRILLS.drills.filter((d) => d.after === first && d.type !== 'boss').length;
+  if (open >= 10) return;
+  const { ctx, page, errors } = await newPage();
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ state: { steps: { [first]: { done: true, challenges: {} } } } }));
+  await page.goto(BASE + 'deathmatch/');
+  await page.locator('.lobby .modes').waitFor();
+  expect(await page.locator('.mode-dm').isDisabled(), 'Deathmatch is closed');
+  expect((await page.locator('.mode-dm').innerText()).includes(`(${open} so far)`), await page.locator('.mode-dm').innerText());
+  expect(!(await page.locator('.mode', { hasText: 'Casual' }).isDisabled()), 'Casual is open');
+  // Enter doesn't start a closed mode.
+  await page.locator('h1').click();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  expect((await page.locator('.rep').count()) === 0, 'no run started');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('Deathmatch: a finished step unlocks its drills; right answers of every type build the streak', async () => {
   const { ctx, page, errors } = await newPage();
   // The printing module finished (its drills are open); boss reps off for the instant types first.
@@ -542,20 +562,37 @@ await test('Deathmatch: a finished step unlocks its drills; right answers of eve
   const death = await page.locator('.death').innerText();
   expect(/eliminated/i.test(death) && death.includes('a new personal best') && death.includes('Share'), death);
   await axe(page, 'eliminated');
-  expect((await page.evaluate(() => JSON.parse(localStorage.getItem('java-arena-v1')).dm.best.deathmatch)) === 12, 'best streak saved');
+  expect(await page.evaluate(() => document.activeElement?.id === 'death-title'), 'focus moves to the verdict');
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('java-arena-v1')).dm);
+  await page.waitForTimeout(400);
+  let dm = await saved();
+  expect(dm.best.deathmatch === 12 && dm.runs.length === 1 && dm.runs[0].reps === 13 && dm.runs[0].kills === 12, `saved once, with its numbers: ${JSON.stringify(dm.runs)}`);
   // Enter respawns.
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelector('.hud-n')?.textContent === '0' && !!document.querySelector('.rep'));
-  await page.keyboard.press('Escape');
-  await page.locator('.lobby').waitFor();
+  // A run left by following a link is kept too.
+  await answerRep(page, true);
+  await page.waitForFunction(() => document.querySelector('.hud-n')?.textContent === '1');
+  await page.click('#main-nav a[href$="/learn/"]');
+  await page.locator('.module-live').first().waitFor();
+  await page.waitForTimeout(400);
+  dm = await saved();
+  expect(dm.runs.length === 2 && dm.runs[0].reps === 1 && dm.runs[0].streak === 1, `the left run is saved: ${JSON.stringify(dm.runs)}`);
+  await page.goBack();
+  await page.locator('.lobby .modes').waitFor();
   expect((await page.locator('.runs').innerText()).includes('Deathmatch'), 'the run is listed');
+  await page.locator('.mode-dm').click();
+  await page.locator('.rep').waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('.lobby .modes').waitFor();
+  expect((await saved()).runs.length === 2, 'a run with no answers is not saved');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
 
 await test('Casual: a miss costs a life and shows why; Continue goes on; a boss rep is a real program', async () => {
   const { ctx, page, errors } = await newPage();
-  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ settings: { unlockAll: true, boss: true, topics: ['printing'] } }));
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ settings: { unlockAll: true, boss: true, topicsOff: [...new Set(DRILLS.drills.map((d) => d.topic))].filter((t) => t !== 'printing') } }));
   await page.goto(BASE + 'deathmatch/');
   await page.locator('.lobby .modes').waitFor();
   await page.locator('.mode', { hasText: 'Casual' }).click();
@@ -566,7 +603,8 @@ await test('Casual: a miss costs a life and shows why; Continue goes on; a boss 
   const review = await page.locator('.death').innerText();
   expect(review.includes('A life lost') && review.includes('2 lives left'), review);
   if (d.why) expect(review.includes(d.why.replace(/`/g, '').slice(0, 20)), `why shown: ${review}`);
-  await page.click('text=Continue');
+  expect(await page.evaluate(() => document.activeElement?.id === 'death-title'), 'focus moves to the verdict');
+  await page.keyboard.press('Enter');
   // Reps 2 to 7 right; the 8th is a boss rep, answered with its solution and checked by the engine.
   for (let i = 2; i <= 8; i++) {
     await page.locator('.rep').waitFor();
@@ -574,6 +612,13 @@ await test('Casual: a miss costs a life and shows why; Continue goes on; a boss 
     if (i === 8) expect(r.type === 'boss', `rep 8 is a ${r.type}`);
     await page.waitForFunction((n) => document.querySelector('.hud-n')?.textContent === String(n), i - 1, { timeout: i === 8 ? ENGINE_TIMEOUT : 10_000 });
   }
+  // The run's best streak is what counts, not the streak it ended on.
+  await page.locator('.rep').waitFor();
+  await answerRep(page, false);
+  await page.locator('.death').waitFor();
+  await page.waitForTimeout(400);
+  const dm = await page.evaluate(() => JSON.parse(localStorage.getItem('java-arena-v1')).dm);
+  expect(dm.best.casual === 7 && dm.runs[0].streak === 7 && dm.runs.length === 1, `casual best: ${JSON.stringify(dm)}`);
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
@@ -626,6 +671,8 @@ await test('daily challenge: one answer a day, kept after a reload, with the str
   expect((await page.locator('.stat-n').innerText()) === '1', 'a 1-day streak');
   expect((await page.locator('.dday-right').count()) === 1, 'today is marked');
   await axe(page, 'daily done');
+  // The daily question is kept apart from Deathmatch: it doesn't unlock the drill there.
+  expect(await page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('java-arena-v1')).drills ?? {}).length === 0), 'no drill state from the daily question');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });

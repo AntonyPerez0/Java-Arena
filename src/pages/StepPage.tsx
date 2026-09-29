@@ -98,8 +98,9 @@ function StepView({ m, step, takeFocus }: { m: Module; step: Step; takeFocus: bo
       const clean = hintsUsed === 0 && !sawSolution && Object.values(now?.challenges ?? {}).every((c) => c.hintsUsed === 0 && !c.sawSolution);
       patchStep(step.id, { done: true, doneAt: Date.now(), clean });
       const moduleDone = m.steps.every((st) => getState().steps[st.id]?.done);
-      // Finishing the step opens the Deathmatch drills that practise it.
-      const drills = moduleById.get(m.id)?.steps.find((st) => st.id === step.id)?.drills ?? 0;
+      // Finishing the step opens the Deathmatch drills that practise it (unless they were open already).
+      const openAlready = getState().settings.unlockAll || getState().placed.includes(m.id);
+      const drills = openAlready ? 0 : (moduleById.get(m.id)?.steps.find((st) => st.id === step.id)?.drills ?? 0);
       if (shown) setBanner({ text: moduleDone ? `Module complete: ${m.title}` : "Step complete", next: null, drills });
     },
     [step, m, challenges],

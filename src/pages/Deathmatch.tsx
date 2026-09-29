@@ -8,7 +8,8 @@ import { modules, stepPath } from "../content";
 import { useDrills } from "../content/drills";
 import type { Drill } from "../content/types";
 import { getState, patchSettings, useStore, type DmMode } from "../state/store";
-import { BOSS_EVERY, INTERVIEW, MODE_NAME, blip, callout, drillUnlocked, isDue, lives, pickNext, practiceStreak, rankFor, recordRep, recordRun, topicTitle, unlockedTopics } from "../practice/engine";
+import { BOSS_EVERY, INTERVIEW, MIN_RANKED, MODE_NAME, blip, callout, drillUnlocked, isDue, lives, pickNext, practiceStreak, rankFor, recordRep, recordRun, topicTitle, unlockedTopics } from "../practice/engine";
+import { engineSupported } from "../engine/client";
 import { Death, Rep } from "../practice/Reps";
 import ShareButton from "../components/ShareButton";
 import { useTitle } from "../lib/title";
@@ -40,20 +41,27 @@ export default function Deathmatch() {
 function Arena({ drills }: { drills: Drill[] }) {
   const s = useStore((x) => x);
   const unlocked = unlockedTopics(drills, s);
-  const chosen = (s.settings.topics ?? unlocked).filter((t) => unlocked.includes(t));
+  const chosen = unlocked.filter((t) => !s.settings.topicsOff.includes(t));
   const topics = chosen.length ? chosen : unlocked;
+  // Boss reps need the Java engine; in a browser that can't run it they're left out.
+  const [canRun] = useState(engineSupported);
+  const bossOn = s.settings.boss && canRun;
   const topicPool = useMemo(
-    () => drills.filter((d) => d.topic !== INTERVIEW && topics.includes(d.topic) && (s.settings.boss || d.type !== "boss") && drillUnlocked(s, d)),
+    () => drills.filter((d) => d.topic !== INTERVIEW && topics.includes(d.topic) && (bossOn || d.type !== "boss") && drillUnlocked(s, d)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [drills, topics.join(","), s.settings.boss, s.settings.unlockAll, s.steps, s.drills, s.placed],
+    [drills, topics.join(","), bossOn, s.settings.unlockAll, s.steps, s.drills, s.placed],
   );
-  const interviewPool = useMemo(() => drills.filter((d) => d.topic === INTERVIEW && (s.settings.boss || d.type !== "boss")), [drills, s.settings.boss]);
-  const dueCount = topicPool.filter((d) => isDue(s.drills[d.id])).length;
+  const interviewPool = useMemo(() => drills.filter((d) => d.topic === INTERVIEW && (bossOn || d.type !== "boss")), [drills, bossOn]);
+  // Warm-up reviews every due drill, interview questions included.
+  const warmupPool = useMemo(() => [...topicPool, ...interviewPool], [topicPool, interviewPool]);
+  const dueCount = warmupPool.filter((d) => isDue(s.drills[d.id])).length;
+  const quickCount = topicPool.filter((d) => d.type !== "boss").length;
 
-  const [phase, setPhase] = useState<Phase>("lobby");
+  const [phase, setPhaseState] = useState<Phase>("lobby");
   const [mode, setMode] = useState<DmMode>("deathmatch");
   const [drill, setDrill] = useState<Drill | null>(null);
   const [streak, setStreak] = useState(0);
+  const [runBest, setRunBest] = useState(0);
   const [reps, setReps] = useState(0);
   const [kills, setKills] = useState(0);
   const [hp, setHp] = useState(1);
@@ -66,12 +74,23 @@ function Arena({ drills }: { drills: Drill[] }) {
   const recent = useRef<string[]>([]);
   const repStart = useRef(0);
   const feedId = useRef(0);
+  // Which rep is on screen, and the phase, as of now: an answer from an earlier rep (a boss rep
+  // still being checked when the learner gave up or left) is ignored.
+  const repNo = useRef(0);
+  const phaseNow = useRef<Phase>("lobby");
+  const runAt = useRef(0);
+  const setPhase = (p: Phase) => {
+    phaseNow.current = p;
+    setPhaseState(p);
+  };
 
-  const poolFor = useCallback((m: DmMode) => (m === "interview" ? interviewPool : topicPool), [interviewPool, topicPool]);
+  const poolFor = useCallback((m: DmMode) => (m === "interview" ? interviewPool : m === "warmup" ? warmupPool : topicPool), [interviewPool, warmupPool, topicPool]);
+  const canStart = (m: DmMode) => (m === "deathmatch" ? quickCount >= MIN_RANKED : m === "warmup" ? dueCount > 0 : poolFor(m).length > 0);
 
   const nextRep = useCallback(
-    (repNo: number, m: DmMode) => {
-      const d = pickNext(poolFor(m), getState(), recent.current, repNo, m);
+    (n: number, m: DmMode) => {
+      const d = pickNext(poolFor(m), getState(), recent.current, n, m);
+      repNo.current++;
       if (!d) {
         setPhase("cleared");
         return;
@@ -84,10 +103,10 @@ function Arena({ drills }: { drills: Drill[] }) {
   );
 
   const start = (m: DmMode) => {
-    const p = poolFor(m);
-    if (!p.length || (m === "warmup" && dueCount === 0)) return;
+    if (!canStart(m)) return;
     setMode(m);
     setStreak(0);
+    setRunBest(0);
     setReps(0);
     setKills(0);
     setHp(lives(m));
@@ -96,28 +115,30 @@ function Arena({ drills }: { drills: Drill[] }) {
     setSaid(`${MODE_NAME[m]} started. ${lives(m)} ${lives(m) === 1 ? "life" : "lives"}.`);
     setStartBest(getState().dm.best[m]);
     recent.current = [];
+    runAt.current = Date.now();
     setPhase("playing");
     nextRep(0, m);
   };
 
-  const leave = () => {
-    recordRun(mode, streak, reps, kills);
-    setPhase("lobby");
-  };
+  // The run is saved after every answer, so leaving needs nothing more.
+  const leave = () => setPhase("lobby");
 
-  const answer = (given: string, ok: boolean) => {
-    if (!drill || phase !== "playing") return;
+  const answer = (rep: number, given: string, ok: boolean) => {
+    if (!drill || rep !== repNo.current || phaseNow.current !== "playing") return;
     const ms = performance.now() - repStart.current;
     recordRep(drill, ok);
     const r = reps + 1;
+    const st = ok ? streak + 1 : streak;
+    const k = kills + (ok ? 1 : 0);
+    const best = Math.max(runBest, st);
+    recordRun({ at: runAt.current, mode, streak: best, reps: r, kills: k });
     setReps(r);
+    setKills(k);
+    setRunBest(best);
     setFeed((f) => [{ id: feedId.current++, topic: drill.topic, type: drill.type, ms, ok }, ...f].slice(0, 6));
     const sound = getState().settings.sound;
     if (ok) {
-      const st = streak + 1;
-      const k = kills + 1;
       setStreak(st);
-      setKills(k);
       const c = callout(st);
       if (sound) blip(c ? "streak" : drill.type === "boss" ? "boss" : "hit");
       setFlash("hit");
@@ -136,10 +157,8 @@ function Arena({ drills }: { drills: Drill[] }) {
       setTimeout(() => setFlash(null), 300);
       setLastWrong({ drill, given });
       setHp(left);
-      if (left <= 0) {
-        recordRun(mode, streak, r, kills);
-        setPhase("dead");
-      } else {
+      if (left <= 0) setPhase("dead");
+      else {
         setPhase("review");
         if (mode !== "warmup") setStreak(0);
       }
@@ -155,24 +174,26 @@ function Arena({ drills }: { drills: Drill[] }) {
   // Keys on the review, eliminated and cleared screens, and Esc to leave a run.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       const t = e.target as HTMLElement | null;
       // Esc leaves a run from an answer box too, but not from the code editor (there it leaves the editor).
-      if (phase === "playing" && e.key === "Escape" && !t?.isContentEditable) {
-        leave();
+      if (e.key === "Escape") {
+        if (t?.isContentEditable) return;
+        if (phase === "playing" || phase === "review" || phase === "cleared") leave();
+        else if (phase === "dead") setPhase("lobby");
         return;
       }
-      const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
-      if (typing || (t?.tagName === "BUTTON" && e.key === "Enter")) return;
+      // Typing, and Enter on a link or button, do what they'd do anywhere else.
+      if (t && (t.isContentEditable || t.closest("input, textarea, select"))) return;
+      if (e.key === "Enter" && t?.closest("a, button, summary")) return;
       const letters = getState().settings.keys;
       if (phase === "dead" && (e.key === "Enter" || (letters && (e.key === "r" || e.key === "R")))) {
         e.preventDefault();
         start(mode);
-      } else if (phase === "dead" && e.key === "Escape") setPhase("lobby");
-      else if (phase === "review" && e.key === "Enter") {
+      } else if (phase === "review" && e.key === "Enter") {
         e.preventDefault();
         continueAfterReview();
       } else if (phase === "cleared" && e.key === "Enter") leave();
-      else if (phase === "playing" && e.key === "Escape") leave();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -181,13 +202,22 @@ function Arena({ drills }: { drills: Drill[] }) {
   // A new rep: keyboard focus goes to its question (typed answers focus their own box).
   useEffect(() => {
     if (phase !== "playing" || !drill) return;
-    if (drill.type === "bug" || drill.type === "compiles" || drill.type === "choice") document.getElementById("rep-prompt")?.focus({ preventScroll: false });
+    if (drill.type !== "predict" && drill.type !== "fill") document.getElementById("rep-prompt")?.focus({ preventScroll: false });
   }, [drill, phase, reps]);
 
-  if (phase === "lobby") return <Lobby drills={drills} pool={topicPool} interviewCount={interviewPool.length} unlocked={unlocked} selected={topics} dueCount={dueCount} onStart={start} />;
+  // After a miss, focus goes to the verdict, so a screen reader reads the review from the top.
+  useEffect(() => {
+    if (phase === "review" || phase === "dead") document.getElementById("death-title")?.focus();
+    else if (phase === "cleared") document.getElementById("cleared-title")?.focus();
+  }, [phase]);
 
-  const best = Math.max(startBest, mode === "warmup" ? kills : streak);
-  const newBest = mode === "deathmatch" && streak > startBest && streak > 0;
+  if (phase === "lobby") return <Lobby drills={drills} pool={topicPool} quickCount={quickCount} interviewCount={interviewPool.length} unlocked={unlocked} selected={topics} dueCount={dueCount} canRun={canRun} canStart={canStart} onStart={start} />;
+
+  const score = mode === "warmup" ? kills : runBest;
+  const best = Math.max(startBest, score);
+  const newBest = score > startBest && score > 0;
+  const rankedUp = mode === "deathmatch" && rankFor(runBest).index > rankFor(startBest).index;
+  const rep = repNo.current;
   return (
     <div className={"dm" + (flash ? " dm-flash-" + flash : "")}>
       <h1 className="visually-hidden">{MODE_NAME[mode]} run</h1>
@@ -205,12 +235,14 @@ function Arena({ drills }: { drills: Drill[] }) {
           </div>
           <div className="hud-sub">
             best {best} · reps {reps}
-            {mode !== "warmup" && s.settings.boss && poolFor(mode).some((d) => d.type === "boss") && <> · boss rep in {BOSS_EVERY - (reps % BOSS_EVERY)}</>}
+            {mode !== "warmup" && poolFor(mode).some((d) => d.type === "boss") && <> · boss rep in {BOSS_EVERY - (reps % BOSS_EVERY)}</>}
           </div>
         </div>
-        <button type="button" className="btn btn-ghost hud-quit" onClick={leave}>
-          Leave <kbd aria-hidden="true">Esc</kbd>
-        </button>
+        {(phase === "playing" || phase === "review") && (
+          <button type="button" className="btn btn-ghost hud-quit" onClick={leave}>
+            Leave <kbd aria-hidden="true">Esc</kbd>
+          </button>
+        )}
       </div>
       {shout && (
         <div className="shout" aria-hidden="true">
@@ -222,10 +254,10 @@ function Arena({ drills }: { drills: Drill[] }) {
       </p>
       <div className="dm-grid">
         <div className="dm-main">
-          {phase === "playing" && drill && <Rep key={drill.id + ":" + reps} drill={drill} onAnswer={answer} />}
+          {phase === "playing" && drill && <Rep key={drill.id + ":" + rep} drill={drill} onAnswer={(g, ok) => answer(rep, g, ok)} />}
           {phase === "review" && lastWrong && (
             <Death drill={lastWrong.drill} given={lastWrong.given} title="Hit! A life lost" sub={`${hp} ${hp === 1 ? "life" : "lives"} left${mode !== "warmup" ? ", and the streak starts again" : ""}.`}>
-              <button type="button" className="btn btn-primary" onClick={continueAfterReview} autoFocus>
+              <button type="button" className="btn btn-primary" onClick={continueAfterReview}>
                 Continue <kbd aria-hidden="true">↵</kbd>
               </button>
             </Death>
@@ -235,27 +267,29 @@ function Arena({ drills }: { drills: Drill[] }) {
               drill={lastWrong.drill}
               given={lastWrong.given}
               title="Eliminated"
-              sub={(mode === "warmup" ? `Cleared ${kills}` : `Streak ${streak}`) + (newBest ? " · a new personal best" : "") + (mode === "deathmatch" && rankFor(streak).index > rankFor(startBest).index ? ` · ranked up to ${rankFor(streak).rank.name}` : "")}
+              sub={(mode === "warmup" ? `Cleared ${kills}` : mode === "deathmatch" ? `Streak ${runBest}` : `Best streak this run: ${runBest}`) + (newBest ? " · a new personal best" : "") + (rankedUp ? ` · ranked up to ${rankFor(runBest).rank.name}` : "")}
             >
-              <button type="button" className="btn btn-primary" onClick={() => start(mode)} autoFocus>
+              <button type="button" className="btn btn-primary" onClick={() => start(mode)}>
                 Respawn <kbd aria-hidden="true">↵</kbd>
               </button>
               <button type="button" className="btn btn-ghost" onClick={() => setPhase("lobby")}>
                 Lobby <kbd aria-hidden="true">Esc</kbd>
               </button>
-              {newBest && (
+              {newBest && mode === "deathmatch" && (
                 <ShareButton
-                  card={{ kicker: "New personal best", title: `${streak} in a row`, lines: [`Rank: ${rankFor(streak).rank.name}`, "Java Deathmatch, one life"], file: "java-arena-streak.png" }}
-                  text={`New Deathmatch best on Java Arena: ${streak} in a row (${rankFor(streak).rank.name}).`}
+                  card={{ kicker: "New personal best", title: `${runBest} in a row`, lines: [`Rank: ${rankFor(runBest).rank.name}`, "Java Deathmatch, one life"], file: "java-arena-streak.png" }}
+                  text={`New Deathmatch best on Java Arena: ${runBest} in a row (${rankFor(runBest).rank.name}).`}
                 />
               )}
             </Death>
           )}
           {phase === "cleared" && (
             <div className="death cleared">
-              <h2 tabIndex={-1}>{mode === "warmup" ? "Warm-up cleared" : "No drills left"}</h2>
+              <h2 tabIndex={-1} id="cleared-title">
+                {mode === "warmup" ? "Warm-up cleared" : "No drills left"}
+              </h2>
               <p>{mode === "warmup" ? `You cleared ${kills} due ${kills === 1 ? "review" : "reviews"}. Drills you miss come back sooner; the ones you get right wait longer.` : "There are no more drills to pick from right now."}</p>
-              <button type="button" className="btn btn-primary" onClick={leave} autoFocus>
+              <button type="button" className="btn btn-primary" onClick={leave}>
                 Back to the lobby
               </button>
             </div>
@@ -279,17 +313,21 @@ function Arena({ drills }: { drills: Drill[] }) {
 }
 
 // ---------------------------------------------------------------- lobby
-function Lobby({ drills, pool, interviewCount, unlocked, selected, dueCount, onStart }: { drills: Drill[]; pool: Drill[]; interviewCount: number; unlocked: string[]; selected: string[]; dueCount: number; onStart: (m: DmMode) => void }) {
+type LobbyProps = { drills: Drill[]; pool: Drill[]; quickCount: number; interviewCount: number; unlocked: string[]; selected: string[]; dueCount: number; canRun: boolean; canStart: (m: DmMode) => boolean; onStart: (m: DmMode) => void };
+
+function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, dueCount, canRun, canStart, onStart }: LobbyProps) {
   const s = useStore((x) => x);
   const r = rankFor(s.dm.best.deathmatch);
   const days = practiceStreak(s.dm.days);
-  const setTopics = (t: string[]) => patchSettings({ topics: t.length === unlocked.length ? null : t });
+  const off = s.settings.topicsOff;
   const first = modules[0];
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (e.key === "Enter" && tag !== "BUTTON" && tag !== "INPUT" && tag !== "A" && pool.length) onStart("deathmatch");
+      const t = e.target as HTMLElement | null;
+      if (e.key !== "Enter" || e.repeat || t?.isContentEditable || t?.closest("a, button, input, textarea, select, summary")) return;
+      if (canStart("deathmatch")) onStart("deathmatch");
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
@@ -350,22 +388,22 @@ function Lobby({ drills, pool, interviewCount, unlocked, selected, dueCount, onS
           </div>
         ) : (
           <div className="modes">
-            <button type="button" className="mode mode-dm" onClick={() => onStart("deathmatch")} disabled={!pool.length}>
+            <button type="button" className="mode mode-dm" onClick={() => onStart("deathmatch")} disabled={!canStart("deathmatch")}>
               <span className="mode-name">Deathmatch</span>
-              <span className="mode-desc">One life. A single miss ends the run. Your best streak sets your rank.</span>
-              <span className="mode-best">best {s.dm.best.deathmatch} · Enter</span>
+              <span className="mode-desc">{canStart("deathmatch") ? "One life. A single miss ends the run. Your best streak sets your rank." : `Opens at ${MIN_RANKED} drills in the rotation (${quickCount} so far), so a rank can't come from a few answers learned by heart. Casual works now.`}</span>
+              <span className="mode-best">best {s.dm.best.deathmatch}{canStart("deathmatch") ? " · Enter" : ""}</span>
             </button>
-            <button type="button" className="mode" onClick={() => onStart("casual")} disabled={!pool.length}>
+            <button type="button" className="mode" onClick={() => onStart("casual")} disabled={!canStart("casual")}>
               <span className="mode-name">Casual</span>
               <span className="mode-desc">Three lives. A miss restarts the streak and shows the answer and why.</span>
               <span className="mode-best">best {s.dm.best.casual}</span>
             </button>
-            <button type="button" className="mode" onClick={() => onStart("warmup")} disabled={dueCount === 0}>
+            <button type="button" className="mode" onClick={() => onStart("warmup")} disabled={!canStart("warmup")}>
               <span className="mode-name">Warm-up</span>
               <span className="mode-desc">Spaced review: only the drills that are due again. Three lives.</span>
               <span className="mode-best">{dueCount} due now</span>
             </button>
-            <button type="button" className="mode mode-iv" onClick={() => onStart("interview")} disabled={!interviewCount}>
+            <button type="button" className="mode mode-iv" onClick={() => onStart("interview")} disabled={!canStart("interview")}>
               <span className="mode-name">Interview prep</span>
               <span className="mode-desc">{interviewCount} Java interview questions. Three lives. Open to everyone.</span>
               <span className="mode-best">best {s.dm.best.interview}</span>
@@ -380,7 +418,7 @@ function Lobby({ drills, pool, interviewCount, unlocked, selected, dueCount, onS
             Topics
           </h2>
           {unlocked.length > 1 && (
-            <button type="button" className="linkish" onClick={() => setTopics(unlocked)}>
+            <button type="button" className="linkish" onClick={() => patchSettings({ topicsOff: [] })}>
               Select all
             </button>
           )}
@@ -399,10 +437,11 @@ function Lobby({ drills, pool, interviewCount, unlocked, selected, dueCount, onS
                 className={"chip" + (on ? " chip-on" : "") + (isOpen ? "" : " chip-locked")}
                 disabled={!isOpen}
                 aria-pressed={isOpen ? on : undefined}
-                title={!isOpen ? "Finish a step of this module to unlock its drills" : open < all.length ? `${open} of ${all.length} drills unlocked: each unlocks with the step that teaches it` : `${all.length} drills`}
+                title={!isOpen ? "Finish a step of this module to unlock its drills" : open < all.length ? `${open} of ${all.length} drills unlocked: each unlocks with the step that teaches it` : n(all.length, "drill", "drills")}
                 onClick={() => {
-                  const next = on ? selected.filter((t) => t !== m.id) : [...selected, m.id];
-                  if (next.length) setTopics(next);
+                  // At least one topic stays in the rotation.
+                  if (on && selected.length > 1) patchSettings({ topicsOff: [...off, m.id] });
+                  else if (!on) patchSettings({ topicsOff: off.filter((t) => t !== m.id) });
                 }}
               >
                 {isOpen ? null : <Lock className="icon" aria-hidden="true" />}
@@ -412,16 +451,16 @@ function Lobby({ drills, pool, interviewCount, unlocked, selected, dueCount, onS
             );
           })}
         </div>
-        <p className="muted small">{pool.length} drills in the rotation.</p>
+        <p className="muted small">{n(pool.length, "drill", "drills")} in the rotation.</p>
         <div className="toggles">
           <label>
-            <input type="checkbox" checked={s.settings.boss} onChange={(e) => patchSettings({ boss: e.target.checked })} /> Boss reps (a small program every {BOSS_EVERY}th rep, run by the Java engine)
+            <input type="checkbox" checked={s.settings.boss && canRun} disabled={!canRun} onChange={(e) => patchSettings({ boss: e.target.checked })} /> Boss reps (a small program every {BOSS_EVERY}th rep, run by the Java engine){canRun ? "" : ": this browser can't run the engine, so they're off"}
           </label>
           <label>
             <input type="checkbox" checked={s.settings.sound} onChange={(e) => patchSettings({ sound: e.target.checked })} /> Sound
           </label>
           <label>
-            <input type="checkbox" checked={s.settings.unlockAll} onChange={(e) => patchSettings({ unlockAll: e.target.checked, topics: null })} /> Unlock every topic
+            <input type="checkbox" checked={s.settings.unlockAll} onChange={(e) => patchSettings({ unlockAll: e.target.checked })} /> Unlock every topic
           </label>
           <label>
             <input type="checkbox" checked={s.settings.keys} onChange={(e) => patchSettings({ keys: e.target.checked })} /> Single-key shortcuts (Y and N, line numbers, A to D, R)
@@ -434,13 +473,13 @@ function Lobby({ drills, pool, interviewCount, unlocked, selected, dueCount, onS
           <h2 className="h3" id="runs-h">
             Recent runs
           </h2>
-          <div className="table-scroll">
+          <div className="table-scroll" tabIndex={0} role="region" aria-labelledby="runs-h">
             <table className="runs">
               <thead>
                 <tr>
                   <th scope="col">When</th>
                   <th scope="col">Mode</th>
-                  <th scope="col">Streak</th>
+                  <th scope="col">Best streak</th>
                   <th scope="col">Right</th>
                   <th scope="col">Reps</th>
                 </tr>

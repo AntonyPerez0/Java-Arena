@@ -2,12 +2,14 @@
 // (Leitner boxes), runs, ranks and streaks. Adapted from C/C++ Arena's Deathmatch.
 import { moduleById, modules } from "../content";
 import type { Drill } from "../content/types";
-import { localDay, update, type DmMode, type DrillStat, type State } from "../state/store";
+import { localDay, update, type DmMode, type DrillStat, type RunRecord, type State } from "../state/store";
 
 /** A coding challenge ("boss rep") comes every BOSS_EVERY reps. */
 export const BOSS_EVERY = 8;
 /** The topic of the interview prep drills (not a lesson module). */
 export const INTERVIEW = "interview";
+/** Ranked Deathmatch needs this many quick drills in the rotation, so a streak can't be a few answers learned by heart. */
+export const MIN_RANKED = 10;
 
 const DAY = 86_400_000;
 /** Days until a drill in box 1 to 5 is due again. */
@@ -24,8 +26,8 @@ export const isDue = (st: DrillStat | undefined, now = Date.now()) => !!st && st
 
 /**
  * A drill is open once the step that teaches it is done, its module was skipped by the placement
- * quiz, or it has been practised before (so review never loses a drill). Interview drills are
- * always open.
+ * quiz, or it has been practised in Deathmatch before (so review never loses a drill). Interview
+ * drills are always open.
  */
 export function drillUnlocked(s: State, d: Drill): boolean {
   if (!d.after || s.settings.unlockAll) return true;
@@ -47,7 +49,8 @@ export function checkAnswer(d: Drill, answer: string): boolean {
     case "predict":
       return looseOutput(answer) === looseOutput(d.answer);
     case "fill": {
-      const squash = (x: string) => x.replace(/\s+/g, "");
+      // Spaces only matter between two words or numbers: "(a+b)" is "( a + b )", but "elseif" isn't "else if".
+      const squash = (x: string) => x.trim().replace(/\s+/g, " ").replace(/ (?!\w)|(?<!\w) /g, "");
       return (d.accept ?? [d.answer]).some((a) => squash(a) === squash(answer));
     }
     case "bug":
@@ -111,14 +114,18 @@ export function recordRep(d: Drill, correct: boolean) {
   });
 }
 
-export function recordRun(mode: DmMode, streak: number, reps: number, kills: number) {
-  if (reps === 0) return;
+/**
+ * Saves a run as it goes: called after every answer with the run so far (its start time is its id),
+ * so a run left by closing the tab or following a link is kept too. `streak` is the run's best.
+ */
+export function recordRun(run: RunRecord) {
+  if (run.reps === 0) return;
   update((s) => ({
     ...s,
     dm: {
       ...s.dm,
-      best: { ...s.dm.best, [mode]: Math.max(s.dm.best[mode], mode === "warmup" ? kills : streak) },
-      runs: [{ at: Date.now(), mode, streak, reps, kills }, ...s.dm.runs].slice(0, 50),
+      best: { ...s.dm.best, [run.mode]: Math.max(s.dm.best[run.mode], run.mode === "warmup" ? run.kills : run.streak) },
+      runs: [run, ...s.dm.runs.filter((r) => r.at !== run.at)].slice(0, 50),
     },
   }));
 }

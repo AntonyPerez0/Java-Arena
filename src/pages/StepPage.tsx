@@ -67,7 +67,7 @@ function StepView({ m, step, takeFocus }: { m: Module; step: Step; takeFocus: bo
   // The challenge on screen, for checks that finish after the learner switched to another one.
   const curRef = useRef(cur);
   curRef.current = cur;
-  const [banner, setBanner] = useState<{ text: string; next: number | null } | null>(null);
+  const [banner, setBanner] = useState<{ text: string; next: number | null; drills?: number } | null>(null);
 
   const goChallenge = (k: number) => {
     setCur(k);
@@ -98,7 +98,9 @@ function StepView({ m, step, takeFocus }: { m: Module; step: Step; takeFocus: bo
       const clean = hintsUsed === 0 && !sawSolution && Object.values(now?.challenges ?? {}).every((c) => c.hintsUsed === 0 && !c.sawSolution);
       patchStep(step.id, { done: true, doneAt: Date.now(), clean });
       const moduleDone = m.steps.every((st) => getState().steps[st.id]?.done);
-      if (shown) setBanner({ text: moduleDone ? `Module complete: ${m.title}` : "Step complete", next: null });
+      // Finishing the step opens the Deathmatch drills that practise it.
+      const drills = moduleById.get(m.id)?.steps.find((st) => st.id === step.id)?.drills ?? 0;
+      if (shown) setBanner({ text: moduleDone ? `Module complete: ${m.title}` : "Step complete", next: null, drills });
     },
     [step, m, challenges],
   );
@@ -146,6 +148,14 @@ function StepView({ m, step, takeFocus }: { m: Module; step: Step; takeFocus: bo
             <div className="banner banner-pass big">
               <span>
                 <Check className="icon" aria-hidden="true" /> {banner.text}
+                {banner.drills ? (
+                  <>
+                    {" · "}
+                    <Link to="/deathmatch/">
+                      {banner.drills} new {banner.drills === 1 ? "drill" : "drills"} in Deathmatch
+                    </Link>
+                  </>
+                ) : null}
               </span>
               {banner.next != null ? (
                 <button type="button" className="btn btn-primary" onClick={() => goChallenge(banner.next!)} autoFocus>

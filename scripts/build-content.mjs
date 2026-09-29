@@ -9,7 +9,9 @@
 // It also writes fidelity/out/content-checks.json: every program with its inputs and the JDK's
 // results, which scripts/content-browser.mjs replays in the browser engine.
 //
-// Usage: node scripts/build-content.mjs [--no-cache]
+// Usage: node scripts/build-content.mjs [--no-cache] [--dry] [--drill-file <name>.yaml]
+//   --dry         check only: write nothing (no cache, no generated files), so several checks can run at once
+//   --drill-file  check only this file of content/drills, or placement.yaml (with --dry, for writing drills)
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,6 +43,8 @@ delete env._JAVA_OPTIONS;
 delete env.JDK_JAVA_OPTIONS;
 
 const useCache = !process.argv.includes("--no-cache");
+const dry = process.argv.includes("--dry");
+const drillFileArg = process.argv.includes("--drill-file") ? process.argv[process.argv.indexOf("--drill-file") + 1] : null;
 const CACHE_VERSION = 2;
 let cache = {};
 if (useCache && fs.existsSync(CACHE_FILE)) {
@@ -667,7 +671,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
 
 async function buildDrills(modules) {
   const dir = path.join(ROOT, "content", "drills");
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : [];
+  const files = (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort() : []).filter((f) => !drillFileArg || f === drillFileArg);
   const byId = new Map(modules.map((m) => [m.id, m]));
   const seen = new Set();
   const out = [];
@@ -724,10 +728,12 @@ async function buildPlacement(modules) {
 
 const modules = await buildModules();
 const drills = await buildDrills(modules);
-const placement = await buildPlacement(modules);
+const placement = drillFileArg && drillFileArg !== "placement.yaml" ? [] : await buildPlacement(modules);
 
-fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
-fs.writeFileSync(CACHE_FILE, JSON.stringify({ version: CACHE_VERSION, jdk: jdkVersion, entries: cache }));
+if (!dry) {
+  fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
+  fs.writeFileSync(CACHE_FILE, JSON.stringify({ version: CACHE_VERSION, jdk: jdkVersion, entries: cache }));
+}
 fs.rmSync(TMP, { recursive: true, force: true });
 
 for (const w of warnings) console.warn("warn:", w);
@@ -737,6 +743,11 @@ if (errors.length) {
   process.exit(1);
 }
 
+if (dry) {
+  console.log(`check ok (nothing written): ${modules.length} modules, ${drills.length} drills${drillFileArg ? ` in ${drillFileArg}` : ""}, ${placement.length} placement questions`);
+  process.exit(0);
+}
+
 // The app loads a small index (every page needs it) and each module's lessons only when needed.
 const live = new Set(modules.map((m) => m.id));
 const plan = course.modules.map((m, i) => ({ id: m.id, number: i + 1, title: m.title, course: m.course, part: m.part ?? null, mooc: m.mooc ?? [], steps: m.steps, live: live.has(m.id) }));
@@ -744,7 +755,7 @@ const index = {
   jdk: jdkVersion,
   moocUrl: course.moocUrl,
   plan,
-  modules: modules.map(({ steps, ...m }) => ({ ...m, drills: drills.filter((d) => d.topic === m.id).length, steps: steps.map((s) => ({ id: s.id, slug: s.slug, title: s.title, challenges: 1 + s.more.length })) })),
+  modules: modules.map(({ steps, ...m }) => ({ ...m, drills: drills.filter((d) => d.topic === m.id).length, steps: steps.map((s) => ({ id: s.id, slug: s.slug, title: s.title, challenges: 1 + s.more.length, drills: drills.filter((d) => d.after === s.id).length })) })),
   interviewDrills: drills.filter((d) => d.topic === "interview").length,
   placementQuestions: placement.length,
 };

@@ -86,7 +86,8 @@ page("/", {
   body: `<h1>Learn Java by writing real Java</h1>
 <p>Every exercise is compiled by the real javac 21 compiler and run by a Java virtual machine, both inside your browser, on your own device. The lessons follow the University of Helsinki's Java Programming MOOC, with their own explanations and exercises.</p>
 <p>Java Arena is new: ${content.modules.length} of ${content.plan.length} modules are online so far (${stepCount} steps, ${challengeCount} challenges). The rest of the course is added in batches.</p>
-<ul>${content.modules.map((m) => `<li><a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></li>`).join("")}<li><a href="${link("/learn")}">All modules</a></li></ul>`,
+<ul>${content.modules.map((m) => `<li><a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></li>`).join("")}<li><a href="${link("/learn")}">All modules</a></li></ul>
+<p>Practice: <a href="${link("/deathmatch")}">Deathmatch drills</a>, <a href="${link("/daily")}">the daily challenge</a> and <a href="${link("/placement")}">a placement quiz</a>.</p>`,
 });
 
 page("/learn", {

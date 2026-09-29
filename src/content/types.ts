@@ -58,7 +58,7 @@ export type PlannedModule = {
 };
 
 /** A module as the course index lists it: its steps' titles and addresses, without the lessons. */
-export type StepSummary = { id: string; slug: string; title: string; challenges: number };
+export type StepSummary = { id: string; slug: string; title: string; challenges: number; /** Drills this step unlocks. */ drills: number };
 export type ModuleSummary = Omit<Module, "steps"> & { steps: StepSummary[]; drills: number };
 
 export type CourseIndex = {

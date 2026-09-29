@@ -157,6 +157,11 @@ function Arena({ drills }: { drills: Drill[] }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
+      // Esc leaves a run from an answer box too, but not from the code editor (there it leaves the editor).
+      if (phase === "playing" && e.key === "Escape" && !t?.isContentEditable) {
+        leave();
+        return;
+      }
       const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
       if (typing || (t?.tagName === "BUTTON" && e.key === "Enter")) return;
       const letters = getState().settings.keys;

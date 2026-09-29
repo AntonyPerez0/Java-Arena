@@ -40,7 +40,21 @@ const RULES: Rule[] = [
   { code: "compiler.err.unclosed.str.lit", explain: () => "This text is missing its closing quote \". Every string starts and ends with a double quote on the same line." },
   { code: "compiler.err.unclosed.char.lit", explain: () => "A char is one character between single quotes, like 'a'. Use double quotes for longer text." },
   { code: "compiler.err.empty.char.lit", explain: () => "'' is empty: a char needs exactly one character between the single quotes." },
+  {
+    code: "compiler.err.cant.apply.symbol",
+    when: /^constructor \w+ in class \w+ cannot be applied[\s\S]*required: no arguments/,
+    explain: (d) => {
+      const c = /^constructor (\w+)/.exec(d.message)?.[1];
+      return `The object is created with values, but ${c} has no constructor that takes any. A class without a constructor of its own gets an empty one, so only new ${c}() works. Write a constructor with these parameters in ${c}.`;
+    },
+  },
+  {
+    code: "compiler.err.cant.apply.symbol",
+    when: /^constructor /,
+    explain: (d) => `The values in new ${/^constructor (\w+)/.exec(d.message)?.[1]}(...) don't match the constructor's parameters. Compare their number, order and types (Java lists what it required and what it found).`,
+  },
   { code: "compiler.err.cant.apply.symbol", explain: () => "The method was called with the wrong number or types of arguments. Compare the call with the method's parameter list (Java lists what it required and what it found)." },
+  { code: "compiler.err.cant.apply.symbols", when: /^no suitable constructor found for (\w+)/, explain: (d) => `None of the constructors of ${/^no suitable constructor found for (\w+)/.exec(d.message)?.[1]} takes these values. Check the number, order and types of the values in the parentheses.` },
   { code: "compiler.err.cant.apply.symbols", explain: () => "None of the versions of this method accepts these arguments. Check the number and types of values in the parentheses." },
   { code: "compiler.err.non-static.cant.be.ref", explain: () => "main is static, so it can't use this object's methods or variables directly. Create an object first (new ...) and call the method on it, or make the method static if it doesn't need an object." },
   { code: "compiler.err.var.might.not.have.been.initialized", explain: () => "This variable is used before it has a value. Give it a starting value where you create it, for example int sum = 0;" },

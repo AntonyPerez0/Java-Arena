@@ -177,7 +177,7 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
               {freeRun.status === "internal-error" ? (
                 <div className="banner banner-fail">The Java engine couldn't run this ({freeRun.internalError}). Try again.</div>
               ) : freeRun.status === "compile-error" ? (
-                <DiagnosticList diagnostics={freeRun.diagnostics} raw={freeRun.javacOutput} />
+                <DiagnosticList diagnostics={freeRun.diagnostics} raw={freeRun.javacOutput} multiFile={freeRun.multiFile} />
               ) : (
                 <>
                   <span className="lbl">Output</span>

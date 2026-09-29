@@ -5,14 +5,14 @@ import { InlineMd } from "./Markdown";
 import InputText from "./InputText";
 
 /** javac's errors, each with its line and a plain-English explanation, then the full output on request. */
-export function DiagnosticList({ diagnostics, raw }: { diagnostics: FriendlyDiagnostic[]; raw: string }) {
+export function DiagnosticList({ diagnostics, raw, multiFile }: { diagnostics: FriendlyDiagnostic[]; raw: string; multiFile?: boolean }) {
   const [showRaw, setShowRaw] = useState(false);
   const errors = diagnostics.filter((d) => d.kind === "error");
   const shown = (errors.length ? errors : diagnostics.filter((d) => d.kind !== "note")).slice(0, 4);
   const more = (errors.length || diagnostics.length) - shown.length;
   // With several files, each message says which one it's about.
   const fileOf = (d: FriendlyDiagnostic) => d.file.split("/").pop() ?? "";
-  const named = diagnostics.some((d) => d.line > 0 && fileOf(d) !== "Main.java");
+  const named = multiFile || diagnostics.some((d) => d.line > 0 && fileOf(d) !== "Main.java");
   return (
     <div className="diags">
       {shown.map((d, i) => (
@@ -78,7 +78,7 @@ export default function Results({ result }: { result: GradeResult }) {
               <CircleX className="icon" aria-hidden="true" /> It didn't compile
             </span>
           </div>
-          <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} />
+          <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} multiFile={result.multiFile} />
         </>
       )}
       {result.status === "call-error" && (
@@ -205,7 +205,7 @@ export default function Results({ result }: { result: GradeResult }) {
           <summary>
             {warnings.length} compiler warning{warnings.length > 1 ? "s" : ""} (not errors, but worth a look)
           </summary>
-          <DiagnosticList diagnostics={warnings} raw="" />
+          <DiagnosticList diagnostics={warnings} raw="" multiFile={result.multiFile} />
         </details>
       )}
       <div className="muted small">compiled in {(result.compileMs / 1000).toFixed(2)} s</div>

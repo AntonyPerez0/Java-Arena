@@ -16,8 +16,8 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
   const calls = others.filter((t) => t.call).length;
   const files = others.filter((t) => t.files).length;
   const what = calls === 0 ? (files ? "input or files" : "input") : calls === others.length ? "calls" : "input or calls";
-  // The expected output gets its own box below, so a copy of it in the task text is dropped.
-  const text = shown ? withoutBlock(task, shown.expect) : task;
+  // The expected output (and the check's code) get boxes of their own below, so copies in the task text are dropped.
+  const text = shown ? withoutBlock(task, shown.expect, shown.call) : task;
   return (
     <section className="task-card" aria-labelledby="task-h">
       <div className="task-head">
@@ -82,8 +82,15 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
 
 const norm = (s: string) => s.replace(/[ \t]+$/gm, "").trim();
 
-/** The task without a fenced block that only repeats the expected output, which the box below shows. */
-function withoutBlock(task: string, expect: string): string {
+/** The task without fenced blocks that only repeat the expected output or the check's code, which the boxes below show. */
+function withoutBlock(task: string, expect: string, call?: string): string {
+  if (call) {
+    // "The check runs: <code> and expects: <output>", both shown again below.
+    const both = task.replace(/The check runs:\s*\n^```[^\n]*\n([\s\S]*?)^```[ \t]*\n\s*and expects:\s*\n^```[^\n]*\n([\s\S]*?)^```[ \t]*$/m, (m, code: string, body: string) =>
+      norm(code) === norm(call) && norm(body) === norm(expect) ? "The code the check runs and the output it expects are shown below." : m,
+    );
+    if (both !== task) return both.trimEnd() + "\n";
+  }
   const out = task.replace(/(:?)\s*\n^```[^\n]*\n([\s\S]*?)^```[ \t]*$/gm, (m, colon: string, body: string) => (norm(body) === norm(expect) ? (colon ? ": see the expected output below." : "") : m));
   return out === task ? task : out.trimEnd() + "\n";
 }

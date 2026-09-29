@@ -383,6 +383,8 @@ const lessonSession = await newPage();
     await check(page);
     const res = await page.locator('.results').innerText();
     expect(/didn't compile/i.test(res) && res.includes('constructor Parcel'), res);
+    // The message names the file, Main.java too, and explains the missing constructor.
+    expect(/Main\.java, line 3/i.test(res) && res.includes('Parcel has no constructor that takes any'), res);
     expect((await page.locator('.file-tab-on').innerText()).includes('Main.java') && (await page.locator('.file-tab-on .file-tab-errors').count()) === 1, 'the file with the error is shown, with its count');
     await axe(page, 'a challenge of two files, with an error');
     await page.click('#file-tab-0');

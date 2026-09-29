@@ -43,6 +43,8 @@ export type GradeResult = {
   callProblems: string[];
   internalError?: string;
   compileMs: number;
+  /** The program has several files, so each message names its file. */
+  multiFile?: boolean;
 };
 
 
@@ -93,7 +95,7 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
       else c = alone;
     } else callProblems = explainCalls(c.diagnostics, check.ranges, ex.tests, code);
   }
-  const base = { diagnostics: friendlyDiagnostics(callProblems.length ? [] : c.diagnostics), javacOutput: callProblems.length ? "" : c.output ?? "", ruleProblems, styleProblems, styleNotes, callProblems, compileMs: c.ms };
+  const base = { diagnostics: friendlyDiagnostics(callProblems.length ? [] : c.diagnostics), javacOutput: callProblems.length ? "" : c.output ?? "", ruleProblems, styleProblems, styleNotes, callProblems, compileMs: c.ms, multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", tests: [], internalError: c.internalError };
   if (callProblems.length) return { ...base, status: "call-error", tests: [] };
   if (!c.ok) return { ...base, status: "compile-error", tests: [] };
@@ -118,13 +120,15 @@ export type FreeRun = {
   run?: RunResult;
   note?: string;
   internalError?: string;
+  /** The program has several files, so each message names its file. */
+  multiFile?: boolean;
 };
 
 /** Compile and run with the learner's own input (and any files the program reads), no grading. */
 export async function runOnly(code: string, stdin: string, files?: Record<string, string>): Promise<FreeRun> {
   const own = splitFiles(code) as { path: string; text: string }[];
   const c = await compile(own);
-  const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "" };
+  const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", internalError: c.internalError };
   if (!c.ok) return { ...base, status: "compile-error" };
   const [run] = await runClasses(c.classes, "Main", [{ stdin, ...(files ? { files } : {}) }]);

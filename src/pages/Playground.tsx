@@ -257,7 +257,7 @@ export default function Playground() {
                 <div className="banner banner-fail">
                   <span>It didn't compile</span>
                 </div>
-                <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} />
+                <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} multiFile={result.multiFile} />
               </>
             ) : (
               <>

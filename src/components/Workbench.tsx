@@ -5,7 +5,7 @@ import { grade, runOnly, type FreeRun, type GradeResult } from "../grader/grade"
 import { blankMatches, fillTemplate, parseTemplate } from "../grader/assemble.js";
 import type { ChallengeProgress } from "../state/store";
 import type { ReportInfo } from "../lib/site";
-import CodeEditor from "./CodeEditor";
+import FilesEditor from "./FilesEditor";
 import FillCode from "./FillCode";
 import Results, { DiagnosticList } from "./Results";
 import { CodeView } from "./highlight";
@@ -63,6 +63,8 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
   const sawSolution = !!progress?.sawSolution;
 
   const source = isFill ? fillTemplate(ex.seed, blanks) : code;
+  // A challenge whose program reads files: "Run with my input" gets the same files as the first test.
+  const inputFiles = ex.tests.find((t) => t.files)?.files;
 
   const check = useCallback(async () => {
     if (busyRef.current) return;
@@ -90,7 +92,7 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
     busyRef.current = true;
     setBusy("run");
     try {
-      setFreeRun(await runOnly(source, stdin));
+      setFreeRun(await runOnly(source, stdin, inputFiles));
       setChecks((n) => n + 1);
     } finally {
       busyRef.current = false;
@@ -128,7 +130,7 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
           onSubmit={check}
         />
       ) : (
-        <CodeEditor
+        <FilesEditor
           value={code}
           onChange={(v) => {
             setCode(v);
@@ -166,6 +168,7 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
             Input (what the program reads)
           </label>
           <textarea id="stdin" className="stdin" rows={3} value={stdin} onChange={(e) => setStdin(e.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off" />
+          {inputFiles && <p className="muted small">The program can also read {Object.keys(inputFiles).join(" and ")}, as in the task.</p>}
           <button type="button" className="btn" onClick={runFree} aria-busy={busy === "run" || undefined}>
             <Play className="icon" aria-hidden="true" /> {busy === "run" ? busyLabel : "Run"}
           </button>

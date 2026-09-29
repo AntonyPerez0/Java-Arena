@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, CircleCheck, CircleX, X } from "lucide-react";
 import type { FriendlyDiagnostic, GradeResult } from "../grader/grade";
 import { InlineMd } from "./Markdown";
+import InputText from "./InputText";
 
 /** javac's errors, each with its line and a plain-English explanation, then the full output on request. */
 export function DiagnosticList({ diagnostics, raw }: { diagnostics: FriendlyDiagnostic[]; raw: string }) {
@@ -9,13 +10,20 @@ export function DiagnosticList({ diagnostics, raw }: { diagnostics: FriendlyDiag
   const errors = diagnostics.filter((d) => d.kind === "error");
   const shown = (errors.length ? errors : diagnostics.filter((d) => d.kind !== "note")).slice(0, 4);
   const more = (errors.length || diagnostics.length) - shown.length;
+  // With several files, each message says which one it's about.
+  const fileOf = (d: FriendlyDiagnostic) => d.file.split("/").pop() ?? "";
+  const named = diagnostics.some((d) => d.line > 0 && fileOf(d) !== "Main.java");
   return (
     <div className="diags">
       {shown.map((d, i) => (
         <div key={i} className={"diag diag-" + d.kind}>
           <div className="diag-head">
             <span className="diag-sev">{d.kind}</span>
-            {d.line > 0 && <span className="diag-line">line {d.line}</span>}
+            {d.line > 0 && (
+              <span className="diag-line">
+                {named ? `${fileOf(d)}, ` : ""}line {d.line}
+              </span>
+            )}
           </div>
           <code className="diag-msg">{d.message}</code>
           {d.friendly && (
@@ -140,10 +148,18 @@ export default function Results({ result }: { result: GradeResult }) {
                       <div>
                         <span className="lbl">input</span>
                         <pre tabIndex={0} className="console tiny">
-                          {t.stdin.replace(/\n$/, "")}
+                          <InputText text={t.stdin} />
                         </pre>
                       </div>
                     ) : null}
+                    {Object.entries(t.files ?? {}).map(([name, text]) => (
+                      <div key={name}>
+                        <span className="lbl">the file {name}</span>
+                        <pre tabIndex={0} className="console tiny">
+                          {text.replace(/\n$/, "")}
+                        </pre>
+                      </div>
+                    ))}
                     <div className="t-cmp">
                       <div>
                         <span className="lbl">expected</span>

@@ -1,7 +1,7 @@
 // The shape of src/generated/course.json and src/generated/modules/<id>.json (made by scripts/build-content.mjs).
 
 /** One test: the program's input, or `call`, code the check runs to call the learner's methods. */
-export type TestCase = { name: string; stdin: string; call?: string; expect: string; hidden?: boolean };
+export type TestCase = { name: string; stdin: string; call?: string; files?: Record<string, string>; expect: string; hidden?: boolean };
 export type Rule = { pattern: string; flags?: string; message: string; min?: number; max?: number; raw?: boolean };
 
 /**

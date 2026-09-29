@@ -32,7 +32,7 @@ for (const c of checks) {
     if (!r.ok || !inputs) return { compile: { ok: r.ok, output: r.output, internalError: r.internalError }, runs: [] };
     const runs = await window.javaArena.runClasses(r.classes, mainClass, inputs, 30_000);
     return { compile: { ok: r.ok, output: r.output }, runs: runs.map((x) => ({ stdout: x.stdout, stderr: x.stderr, exitCode: x.exitCode, timedOut: x.timedOut, internalError: x.internalError })) };
-  }, { files: c.files, mainClass: c.mainClass ?? "Main", inputs: c.kind === "run" ? c.tests.map((t) => ({ stdin: t.stdin, ...(t.args ? { args: t.args } : {}) })) : null });
+  }, { files: c.files, mainClass: c.mainClass ?? "Main", inputs: c.kind === "run" ? c.tests.map((t) => ({ stdin: t.stdin, ...(t.args ? { args: t.args } : {}), ...(t.files ? { files: t.files } : {}) })) : null });
   const problems = [];
   if (got.compile.internalError) problems.push(`engine error: ${got.compile.internalError}`);
   else if (c.kind === "error") {

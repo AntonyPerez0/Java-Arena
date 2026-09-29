@@ -20,14 +20,16 @@ type Props = {
   label?: string;
   /** What Control or Command plus Enter does, for the help text. */
   runAction?: string;
+  /** The file this editor shows: only javac's messages about it are marked. */
+  file?: string;
 };
 
 /** The Java code editor (CodeMirror), with javac's errors marked on their lines. */
-export default function CodeEditor({ value, onChange, onRun, diagnostics = [], minHeight = "10rem", label = "Java code editor", runAction = "checks your code" }: Props) {
+export default function CodeEditor({ value, onChange, onRun, diagnostics = [], minHeight = "10rem", label = "Java code editor", runAction = "checks your code", file = "Main.java" }: Props) {
   const helpId = useId();
   const theme = useResolvedTheme();
   const extensions = useMemo(() => {
-    const marks = diagnostics.filter((d) => d.line > 0 && d.kind !== "note" && d.file.endsWith("Main.java"));
+    const marks = diagnostics.filter((d) => d.line > 0 && d.kind !== "note" && d.file.split("/").pop() === file);
     return [
       java(),
       // Four spaces per level, like the lessons and the style check (CodeMirror's default is two).
@@ -59,7 +61,7 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
         ]),
       ),
     ];
-  }, [diagnostics, onRun, label, helpId]);
+  }, [diagnostics, onRun, label, helpId, file]);
 
   return (
     <div className="editor">

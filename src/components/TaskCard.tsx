@@ -1,6 +1,7 @@
 import { Target } from "lucide-react";
 import type { Exercise } from "../content/types";
 import Markdown from "./Markdown";
+import InputText from "./InputText";
 
 /**
  * What the challenge asks for, set apart from the lesson so it's obvious: the task, then the exact
@@ -13,7 +14,8 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
   const moreTests = others.length;
   const hiddenCount = others.filter((t) => t.hidden).length;
   const calls = others.filter((t) => t.call).length;
-  const what = calls === 0 ? "input" : calls === others.length ? "calls" : "input or calls";
+  const files = others.filter((t) => t.files).length;
+  const what = calls === 0 ? (files ? "input or files" : "input") : calls === others.length ? "calls" : "input or calls";
   // The expected output gets its own box below, so a copy of it in the task text is dropped.
   const text = shown ? withoutBlock(task, shown.expect) : task;
   return (
@@ -33,7 +35,7 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
       {ex.kind === "predict" && <p className="task-note">Read the program below and type each line it prints. The answers are what Java really prints for it.</p>}
       {shown && (
         <div className="task-expect">
-          <div className={"task-io" + (shown.stdin || shown.call ? " two" : "")}>
+          <div className={"task-io" + (shown.stdin || shown.call || shown.files ? " two" : "")}>
             {shown.call ? (
               <div>
                 <div className="lbl">The check runs</div>
@@ -46,10 +48,18 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
               <div>
                 <div className="lbl">Input</div>
                 <pre className="console tiny" tabIndex={0}>
-                  {shown.stdin.replace(/\n$/, "")}
+                  <InputText text={shown.stdin} />
                 </pre>
               </div>
             ) : null}
+            {Object.entries(shown.files ?? {}).map(([name, text]) => (
+              <div key={name}>
+                <div className="lbl">The file {name}</div>
+                <pre className="console tiny" tabIndex={0}>
+                  {text.replace(/\n$/, "")}
+                </pre>
+              </div>
+            ))}
             <div>
               <div className="lbl">Expected output</div>
               <pre className="console task-output" tabIndex={0}>

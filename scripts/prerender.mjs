@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { marked } from "marked";
+import { splitFiles } from "../src/grader/files.js";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const DIST = path.join(ROOT, "dist");
@@ -32,6 +33,10 @@ const LABELS = { output: "Output", input: "Input", javac: "What javac prints", c
 marked.use({
   renderer: {
     code({ text, lang }) {
+      const file = lang ? /^file\s+(\S+)$/.exec(lang) : null;
+      if (file) return `<figure class="io io-file"><figcaption>The file ${esc(file[1])}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
+      if (lang === "java" && /^\/\/ ={4} [\w$]+\.java ={4}[ \t]*$/m.test(text))
+        return splitFiles(text).map((f) => `<figure class="code-file"><figcaption>${esc(f.path)}</figcaption><pre class="code-java"><code>${esc(f.text.replace(/\n$/, ""))}</code></pre></figure>\n`).join("");
       if (lang && LABELS[lang]) return `<figure class="io io-${lang}"><figcaption>${LABELS[lang]}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       return `<pre${lang === "java" ? ' class="code-java"' : ""}><code>${esc(text)}</code></pre>\n`;
     },

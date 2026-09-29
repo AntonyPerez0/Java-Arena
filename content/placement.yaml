@@ -365,3 +365,97 @@ questions:
       booked.add(a);
       System.out.println((a == b) + " " + a.equals(b) + " " + booked.contains(b));
     why: "`a` and `b` are two objects, so `==` is false. Seat's own `equals` compares the row and the number, so they're equal, and `contains` uses `equals`, so it finds the seat equal to `b`: `false true true`."
+
+  - module: objects-with-lists
+    type: predict
+    classes: |
+      class Team {
+          private ArrayList<String> members;
+
+          public Team() {
+              this.members = new ArrayList<>();
+          }
+
+          public void join(String name) {
+              this.members.add(name);
+          }
+
+          public ArrayList<String> getMembers() {
+              return this.members;
+          }
+
+          public int size() {
+              return this.members.size();
+          }
+      }
+    body: |
+      Team red = new Team();
+      Team blue = new Team();
+      red.join("Ada");
+      blue.join("Ben");
+      ArrayList<String> list = red.getMembers();
+      list.add("Cy");
+      System.out.println(red.size() + " " + blue.size());
+    why: "Each Team makes its own list in its constructor, so red and blue never share one. `getMembers()` returns a reference to red's own list, not a copy, so adding Cy through `list` adds him to red: `2 1`."
+
+  - module: text-ui
+    type: predict
+    classes: |
+      class Score {
+          private int total;
+
+          public Score() {
+              this.total = 0;
+          }
+
+          public void add(int points) {
+              this.total = this.total + points;
+          }
+
+          public int getTotal() {
+              return this.total;
+          }
+      }
+
+      class ScoreUi {
+          private Scanner scanner;
+          private Score score;
+
+          public ScoreUi(Scanner scanner, Score score) {
+              this.scanner = scanner;
+              this.score = score;
+          }
+
+          public void start() {
+              while (true) {
+                  String command = this.scanner.nextLine();
+                  if (command.equals("quit")) {
+                      break;
+                  }
+                  if (command.equals("add")) {
+                      this.score.add(Integer.valueOf(this.scanner.nextLine()));
+                  }
+              }
+          }
+      }
+    body: |
+      Score score = new Score();
+      ScoreUi ui = new ScoreUi(new Scanner("add\n5\nadd\n10\nquit\nadd\n20\n"), score);
+      ui.start();
+      System.out.println(score.getTotal());
+    why: "The user interface reads commands until `quit`, so it adds 5 and 10 and never reads the last `add`. `score` in main and `this.score` in the UI are the same object, so main sees the total the UI built: 15."
+
+  - module: unit-testing
+    type: choice
+    prompt: "`isTeen(age)` should be true for ages 13 to 19, but it was written as shown. Which JUnit test fails on it, and so catches the bug?"
+    pre: |
+      public static boolean isTeen(int age) {
+          return age > 13 && age < 19;
+      }
+    choices:
+      - "`assertTrue(isTeen(15));`"
+      - "`assertFalse(isTeen(10));`"
+      - "`assertTrue(isTeen(13));`"
+      - "`assertFalse(isTeen(25));`"
+    answer: 3
+    why: "The mistake is at the limits, 13 and 19, where `>` and `>=` disagree. For 15, 10 and 25 the buggy method gives the right answer, so those tests pass. Only a test at a limit, such as 13, fails."

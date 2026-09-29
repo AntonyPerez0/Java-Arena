@@ -8,6 +8,10 @@ import InputText from "./InputText";
  * output the program must print, with the input it gets.
  */
 export default function TaskCard({ ex, task, index, total }: { ex: Exercise; task: string; index: number; total: number }) {
+  // Tests that run the learner's JUnit tests on versions of the program.
+  const junitTests = ex.tests.filter((t) => t.junit);
+  const hiddenBuggy = junitTests.filter((t) => t.hidden && t.outcome === "fail").length;
+  const hiddenPassing = junitTests.filter((t) => t.hidden && t.outcome !== "fail").length;
   // A "What does it print?" challenge must not show its answer.
   const shown = ex.kind === "predict" ? undefined : ex.tests.find((t) => !t.hidden && t.expect);
   const others = ex.tests.filter((t) => t !== shown);
@@ -31,6 +35,30 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
         )}
       </div>
       <Markdown text={text} className="task-body" />
+      {junitTests.length > 0 && (
+        <div className="task-expect">
+          <div className="lbl">{junitTests.some((t) => t.outcome === "fail") ? "The check runs your tests on" : "The check runs the given tests on"}</div>
+          <ul className="task-versions">
+            {junitTests
+              .filter((t) => !t.hidden)
+              .map((t, i) => (
+                <li key={i}>
+                  {t.name}: <strong>{t.outcome === "fail" ? "at least one test must fail" : "every test must pass"}</strong>
+                </li>
+              ))}
+          </ul>
+          {hiddenBuggy > 0 && (
+            <p className="task-note">
+              {hiddenBuggy} more hidden {hiddenBuggy === 1 ? "version has a bug" : "versions have bugs"} your tests should catch.
+            </p>
+          )}
+          {hiddenPassing > 0 && (
+            <p className="task-note">
+              {hiddenPassing === 1 ? "A hidden set of tests also checks" : `${hiddenPassing} hidden sets of tests also check`} your code, and every test in {hiddenPassing === 1 ? "it" : "them"} must pass.
+            </p>
+          )}
+        </div>
+      )}
       {ex.kind === "fill" && <p className="task-note">Type your answers into the highlighted blanks in the code below.</p>}
       {ex.kind === "predict" && <p className="task-note">Read the program below and type each line it prints. The answers are what Java really prints for it.</p>}
       {shown && (

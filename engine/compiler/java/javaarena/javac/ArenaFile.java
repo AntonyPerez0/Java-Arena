@@ -21,7 +21,8 @@ import javax.tools.JavaFileObject;
 
 /**
  * An in-memory file: a source file (text), a platform class file (a slice of the
- * SDK archive) or an output class file.
+ * SDK archive), a library class file (a slice of a library archive) or an output
+ * class file.
  */
 final class ArenaFile implements JavaFileObject {
     final String path;
@@ -46,6 +47,15 @@ final class ArenaFile implements JavaFileObject {
 
     static ArenaFile platformClass(String path, byte[] data, int offset, int length) {
         ArenaFile f = new ArenaFile(path, true);
+        f.data = data;
+        f.offset = offset;
+        f.length = length;
+        return f;
+    }
+
+    /** A class file of a library on the class path (a slice of a library archive). */
+    static ArenaFile libraryClass(String path, byte[] data, int offset, int length) {
+        ArenaFile f = new ArenaFile(path, false);
         f.data = data;
         f.offset = offset;
         f.length = length;

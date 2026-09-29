@@ -15,7 +15,13 @@
 //   const result = javac.compile([
 //     { path: 'Main.java', text: '...' },
 //     { path: 'shop/Item.java', text: '...' },   // files in packages use their directory path
-//   ]);
+//   ], { libraries: ['junit4'] });               // optional: libraries on the class path
+//
+//   await javac.loadLibrary('junit4', bytes);    // a library's class files, in the same
+//                                                // archive format as the SDK (gzip or not);
+//                                                // bytes like `sdk`. Returns the class count.
+//   A compile sees only the libraries named in its `libraries` option, like
+//   "javac -cp .:junit.jar:hamcrest.jar"; without it, a compile is a plain "javac".
 //
 //   result = {
 //     success,        // true when javac reported no errors (same as javac's exit code 0)
@@ -126,6 +132,11 @@ export async function createJavac(options = {}) {
     sdkMs = c - b;
     exports = instance.exports;
   }
+  // Libraries are kept as bytes too, so that recover() can load them into the new instance.
+  const libraries = new Map();
+  function loadLibraryInto(name, bytes) {
+    return exports.loadLibrary(name, new Int8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+  }
   await start();
   let broken = false;
 
@@ -134,14 +145,26 @@ export async function createJavac(options = {}) {
     // sdkMs: handing the platform classes to javac.
     loadTimings: { runtimeMs: t1 - t0, instantiateMs, sdkMs },
 
-    compile(files) {
+    async loadLibrary(name, src) {
+      const bytes = await toBytes(src).then(gunzip);
+      const count = loadLibraryInto(String(name), bytes);
+      libraries.set(String(name), bytes);
+      return count;
+    },
+
+    compile(files, options = {}) {
       if (broken) {
         throw new Error('javac: the compiler crashed earlier; call recover() and await it first');
       }
+      const names = (options.libraries ?? []).map(String);
+      const unknown = names.filter((n) => !libraries.has(n));
+      if (unknown.length) throw new Error(`javac: library not loaded: ${unknown.join(', ')}`);
       const s = performance.now();
       let json;
       try {
         exports.reset();
+        const missing = exports.useLibraries(names.join(','));
+        if (missing) throw new Error(`javac: library not loaded: ${missing}`);
         for (const f of files) exports.addSource(String(f.path), String(f.text));
         json = exports.compile();
       } catch (e) {
@@ -183,6 +206,7 @@ export async function createJavac(options = {}) {
     /** After a crash: makes a fresh compiler instance (about as long as the first load). */
     async recover() {
       await start();
+      for (const [name, bytes] of libraries) loadLibraryInto(name, bytes);
       broken = false;
     },
 

@@ -6,7 +6,8 @@
 // javac -encoding UTF-8 -d <job>/classes <files> through the JDK's own javac (the same code the
 // javac command runs, so it prints exactly what the command would) and writes <job>/result.txt:
 // the exit code on the first line, then everything javac printed, with the folder prefix removed
-// from file names so messages read "Main.java:3: error: ...".
+// from file names so messages read "Main.java:3: error: ...". A <job>/classpath.txt adds libraries
+// to the class path (with the sources' folder, as "-cp .:junit.jar" would).
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -31,6 +32,12 @@ public class JavaCheck {
                 walk.filter(p -> p.toString().endsWith(".java")).sorted().forEach(p -> files.add(p.toString()));
             }
             List<String> options = new ArrayList<>(List.of("-encoding", "UTF-8", "-d", job.resolve("classes").toString()));
+            // Libraries (such as JUnit) on the class path, next to the sources, as "javac -cp .:junit.jar".
+            Path classPath = job.resolve("classpath.txt");
+            if (Files.exists(classPath)) {
+                options.add("-cp");
+                options.add(src + java.io.File.pathSeparator + Files.readString(classPath).trim());
+            }
             options.addAll(files);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             PrintStream ps = new PrintStream(out, true, StandardCharsets.UTF_8);

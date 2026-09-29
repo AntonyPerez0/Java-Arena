@@ -65,6 +65,8 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
   const source = isFill ? fillTemplate(ex.seed, blanks) : code;
   // A challenge whose program reads files: "Run with my input" gets the same files as the first test.
   const inputFiles = ex.tests.find((t) => t.files)?.files;
+  // A challenge about JUnit tests has no input to type: its run button runs the learner's tests.
+  const testsOnly = ex.tests.some((t) => t.junit);
 
   const check = useCallback(async () => {
     if (busyRef.current) return;
@@ -152,11 +154,25 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
             </>
           )}
         </button>
-        {!isFill && (
-          <button type="button" className="btn" aria-expanded={showConsole} onClick={() => setShowConsole(!showConsole)} disabled={unsupported}>
-            {showConsole ? "Hide my input" : "Run with my input"}
-          </button>
-        )}
+        {!isFill &&
+          (testsOnly ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setShowConsole(true);
+                runFree();
+              }}
+              aria-busy={busy === "run" || undefined}
+              disabled={unsupported}
+            >
+              <Play className="icon" aria-hidden="true" /> {busy === "run" ? busyLabel : "Run my tests"}
+            </button>
+          ) : (
+            <button type="button" className="btn" aria-expanded={showConsole} onClick={() => setShowConsole(!showConsole)} disabled={unsupported}>
+              {showConsole ? "Hide my input" : "Run with my input"}
+            </button>
+          ))}
         <button type="button" className="btn btn-ghost" onClick={reset}>
           Reset
         </button>
@@ -164,14 +180,18 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
 
       {showConsole && (
         <div className="freerun">
-          <label className="lbl" htmlFor="stdin">
-            Input (what the program reads)
-          </label>
-          <textarea id="stdin" className="stdin" rows={3} value={stdin} onChange={(e) => setStdin(e.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off" />
-          {inputFiles && <p className="muted small">The program can also read {Object.keys(inputFiles).join(" and ")}, as in the task.</p>}
-          <button type="button" className="btn" onClick={runFree} aria-busy={busy === "run" || undefined}>
-            <Play className="icon" aria-hidden="true" /> {busy === "run" ? busyLabel : "Run"}
-          </button>
+          {!testsOnly && (
+            <>
+              <label className="lbl" htmlFor="stdin">
+                Input (what the program reads)
+              </label>
+              <textarea id="stdin" className="stdin" rows={3} value={stdin} onChange={(e) => setStdin(e.target.value)} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off" />
+              {inputFiles && <p className="muted small">The program can also read {Object.keys(inputFiles).join(" and ")}, as in the task.</p>}
+              <button type="button" className="btn" onClick={runFree} aria-busy={busy === "run" || undefined}>
+                <Play className="icon" aria-hidden="true" /> {busy === "run" ? busyLabel : "Run"}
+              </button>
+            </>
+          )}
           {freeRun && (
             <div className="results">
               {freeRun.status === "internal-error" ? (

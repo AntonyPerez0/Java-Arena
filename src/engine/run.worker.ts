@@ -5,7 +5,7 @@
 // program that runs too long still shows what it printed before the page killed this worker.
 // @ts-ignore - plain JavaScript module without types
 import { createRunner as createRunnerJs } from "../../engine/dist/runner/runner-host.mjs";
-import { fetchCached, type Manifest } from "./manifest";
+import { fetchCached, libraryClasses, type Manifest } from "./manifest";
 import type { RunInput, RunResult } from "./types";
 
 // runner-host.mjs is plain JavaScript; its options are documented at the top of the file.
@@ -14,11 +14,26 @@ const decoder = new TextDecoder();
 const post = (msg: unknown) => (self as unknown as Worker).postMessage(msg);
 
 let runnerPromise: Promise<any> | null = null;
+let assetBase = "";
+let assetManifest: Manifest | null = null;
+const libraryCache = new Map<string, Promise<{ path: string; bytes: Uint8Array }[]>>();
+
+/** A library's class files (such as JUnit's): from the archive the page sent, or the engine cache. */
+function library(name: string, archive?: Uint8Array) {
+  let p = libraryCache.get(name);
+  if (!p) {
+    p = (archive ? Promise.resolve(archive) : fetchCached(assetBase, assetManifest!, `${name}.bin`, () => {})).then(libraryClasses);
+    libraryCache.set(name, p);
+  }
+  return p;
+}
 
 self.onmessage = async (e: MessageEvent) => {
   const msg = e.data;
   if (msg.type === "init") {
     const { base, manifest, modules, jdkZip } = msg as { base: string; manifest: Manifest; modules: Record<string, WebAssembly.Module> | null; jdkZip: Uint8Array | null };
+    assetBase = base;
+    assetManifest = manifest;
     // The JDK image comes from the page when it has one (no Cache Storage round trip, and no
     // download when the browser can't cache); the wasm modules come compiled.
     const fetchAsset = (name: string) => (name === "jdk.zip" && jdkZip ? Promise.resolve(jdkZip) : fetchCached(base, manifest, name, () => {}));
@@ -30,11 +45,15 @@ self.onmessage = async (e: MessageEvent) => {
     return;
   }
   if (msg.type !== "run") return;
-  const { classes, mainClass, inputs, first } = msg as { classes: { path: string; bytes: Uint8Array }[]; mainClass: string; inputs: RunInput[]; first: number };
+  const { mainClass, inputs, first, libraries = [], archives = {} } = msg as { classes: { path: string; bytes: Uint8Array }[]; mainClass: string; inputs: RunInput[]; first: number; libraries?: string[]; archives?: Record<string, Uint8Array> };
+  let classes = msg.classes as { path: string; bytes: Uint8Array }[];
   let runner: any;
   try {
     if (!runnerPromise) throw new Error("the runner wasn't started");
     runner = await runnerPromise;
+    // The program's own classes win over a library's, as on a class path: the runner keeps the
+    // last class it's given for a name, so the library's go first.
+    for (const name of libraries) classes = [...(await library(name, archives[name])), ...classes];
   } catch (err: any) {
     post({ type: "fatal", message: String(err?.message ?? err) });
     return;

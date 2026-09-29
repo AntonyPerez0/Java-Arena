@@ -1,0 +1,4169 @@
+id: text-ui
+summary: Programs that take commands from the user. A loop that reads commands until the user quits, remembering what later commands need, moving the program's logic into a class of its own, a user interface class that takes a Scanner, changing how a class works inside without changing the code that uses it, adding a feature, and planning a whole program. MOOC section 6.2.
+steps:
+  - id: text-ui-command-loop
+    slug: command-loop
+    title: A loop that reads commands
+    text: |
+      Many programs work like a conversation: the user types a command, the program answers, and then it waits for the next command, until the user types the one that ends it. The shopping list at the end of module 14 was one of them. This module is about writing such programs so that they stay easy to read and to change as they grow. It starts with everything in `main`, and then splits the program into a class that does the work and a class that talks with the user.
+
+      Here's the starting point, an info desk at a swimming pool. It knows two commands, and `quit`:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Bye!");
+                      break;
+                  }
+                  if (command.equals("hours")) {
+                      System.out.println("Open every day from 7 to 21");
+                  } else if (command.equals("price")) {
+                      System.out.println("A swim costs 6 euros");
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+      ```
+
+      ```input
+      hours
+      price
+      sauna
+      quit
+      ```
+
+      ```output
+      > Open every day from 7 to 21
+      > A swim costs 6 euros
+      > Unknown command: sauna
+      > Bye!
+      ```
+
+      - `while (true)` repeats until a `break` stops it. Each round reads one command and answers it.
+      - The `quit` check comes right after reading. `break` ends the loop, and since nothing comes after the loop, the program ends too.
+      - Each command has its own `if` or `else if`. The last `else` answers everything else, so a typo like `hour` gets a message. Without it, the program would say nothing, and the user couldn't tell whether anything happened.
+      - The command is read once in each round, into `command`, and every branch compares that same variable with `equals`.
+
+      ### The prompt, and what the outputs show
+
+      `System.out.print("> ")` prints a **prompt**: a sign that the program is waiting for a command. It's printed with `print`, not `println`, so what the user types goes on the same line. In a terminal, the conversation above looks like this:
+
+      ```
+      > hours
+      Open every day from 7 to 21
+      > price
+      A swim costs 6 euros
+      > sauna
+      Unknown command: sauna
+      > quit
+      Bye!
+      ```
+
+      As in module 2, the checks on this site give the program all of its input at the start, and the output doesn't show what was typed. So each answer comes right after its `> `, as in the output block above. Every program in this module works this way:
+
+      - Before reading a command, it prints `> ` with `print`. Each `> ` in an output is one command read, and the rest of that line is the program's answer.
+      - A command that needs a value, such as a name or a number, reads it from the next line, without a prompt of its own.
+
+      **Your turn:** a display at a tram stop answers commands: `next` prints `Tram 4 in 6 minutes`, `help` prints `Commands: next, help, quit`, and `quit` prints `Goodbye` and ends the program. Anything else prints `Unknown command: ` and the command. Fill in the blanks. For the input shown, the program prints:
+
+      ```
+      > Tram 4 in 6 minutes
+      > Commands: next, help, quit
+      > Unknown command: bus
+      > Goodbye
+      ```
+    fill: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              while ([[true]]) {
+                  System.out.[[print]]("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Goodbye");
+                      [[break]];
+                  }
+                  if (command.equals("next")) {
+                      System.out.println("Tram 4 in 6 minutes");
+                  } else if (command.equals("help")) {
+                      System.out.println("Commands: next, help, quit");
+                  } [[else]] {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+    hints:
+      - "The loop and the `quit` branch have the same shape as in the swimming pool program above. The prompt stays on the line where the command is typed."
+      - "The condition is `true`, so the loop runs until `break;` stops it. The prompt is printed with `print`, not `println`, and the branch for everything else starts with `else`."
+    tests:
+      - stdin: |
+          next
+          help
+          bus
+          quit
+      - stdin: |
+          quit
+        hidden: true
+      - stdin: |
+          Next
+          next
+          next
+          stop
+          quit
+        hidden: true
+    more:
+      - task: |
+          A virtual cat answers commands. Write the command loop. Before reading each command, print the prompt `> ` with `print`. The commands:
+
+          - `feed` prints `The cat eats and purrs`
+          - `pet` prints `The cat closes its eyes`
+          - `sleep` prints `The cat curls up. Goodnight!` and ends the program
+          - anything else prints `The cat ignores "`, the command and a closing `"`, like `The cat ignores "bath"`
+
+          For the input shown, the program prints:
+
+          ```
+          > The cat eats and purrs
+          > The cat ignores "bath"
+          > The cat closes its eyes
+          > The cat curls up. Goodnight!
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  // Write the command loop here.
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  // Write the command loop here.
+                  while (true) {
+                      System.out.print("> ");
+                      String command = scanner.nextLine();
+                      if (command.equals("sleep")) {
+                          System.out.println("The cat curls up. Goodnight!");
+                          break;
+                      }
+                      if (command.equals("feed")) {
+                          System.out.println("The cat eats and purrs");
+                      } else if (command.equals("pet")) {
+                          System.out.println("The cat closes its eyes");
+                      } else {
+                          System.out.println("The cat ignores \"" + command + "\"");
+                      }
+                  }
+              }
+          }
+        hints:
+          - "Start from the swimming pool program: `while (true)`, the prompt, one `nextLine()` into `command`, and the check for `sleep` with a `break`."
+          - "A quote inside a String is written `\\\"`, so the last answer is `\"The cat ignores \\\"\" + command + \"\\\"\"`."
+        tests:
+          - stdin: |
+              feed
+              bath
+              pet
+              sleep
+          - stdin: |
+              sleep
+            hidden: true
+          - stdin: "pet\npet\n\nFeed\nfeed\nsleep\n"
+            hidden: true
+      - task: |
+          This program should answer every command, but for the input shown it prints only `> Unknown command` and `> Disconnected`. With other input it even crashes. Find out why, and fix it, so that it prints:
+
+          ```
+          > pong
+          > Server 2.4
+          > pong
+          > Disconnected
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  while (true) {
+                      System.out.print("> ");
+                      if (scanner.nextLine().equals("quit")) {
+                          System.out.println("Disconnected");
+                          break;
+                      }
+                      if (scanner.nextLine().equals("ping")) {
+                          System.out.println("pong");
+                      } else if (scanner.nextLine().equals("version")) {
+                          System.out.println("Server 2.4");
+                      } else {
+                          System.out.println("Unknown command");
+                      }
+                  }
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  while (true) {
+                      System.out.print("> ");
+                      String command = scanner.nextLine();
+                      if (command.equals("quit")) {
+                          System.out.println("Disconnected");
+                          break;
+                      }
+                      if (command.equals("ping")) {
+                          System.out.println("pong");
+                      } else if (command.equals("version")) {
+                          System.out.println("Server 2.4");
+                      } else {
+                          System.out.println("Unknown command");
+                      }
+                  }
+              }
+          }
+        hints:
+          - "Each `scanner.nextLine()` reads a new line. How many lines does one round of the loop read, when the command isn't `quit`?"
+          - "Read the command once, at the start of the round, into a variable: `String command = scanner.nextLine();`. Then compare that variable in every `if`."
+        require:
+          - pattern: \.nextLine\s*\(\s*\)
+            max: 1
+            message: "Read the command once in each round, with a single `nextLine()`, and keep it in a variable."
+        tests:
+          - stdin: |
+              ping
+              version
+              ping
+              quit
+          - stdin: |
+              version
+              quit
+            hidden: true
+          - stdin: |
+              hello
+              ping
+              ping
+              status
+              version
+              quit
+            hidden: true
+
+  - id: text-ui-remembering
+    slug: remembering
+    title: Remembering between commands
+    text: |
+      The info desk answers every command the same way, whatever came before it. Most programs have to remember something from one command to the next: a count, a total, the names typed so far. Variables do that, with one rule: a variable that must last from command to command is created **before** the loop. A variable created inside the loop's braces is made new in every round and forgotten at the end of it.
+
+      A musician logs practice sessions. `log` is followed by a line with the minutes practiced, `total` adds up all the sessions, and `longest` finds the longest one:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<Integer> sessions = new ArrayList<>();
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Keep practicing!");
+                      break;
+                  }
+                  if (command.equals("log")) {
+                      int minutes = Integer.valueOf(scanner.nextLine());
+                      sessions.add(minutes);
+                      System.out.println("Logged " + minutes + " minutes");
+                  } else if (command.equals("total")) {
+                      int total = 0;
+                      for (int minutes : sessions) {
+                          total = total + minutes;
+                      }
+                      System.out.println("Total: " + total + " minutes");
+                  } else if (command.equals("longest")) {
+                      int longest = 0;
+                      for (int minutes : sessions) {
+                          if (minutes > longest) {
+                              longest = minutes;
+                          }
+                      }
+                      System.out.println("Longest: " + longest + " minutes");
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+      ```
+
+      ```input
+      log
+      25
+      log
+      40
+      total
+      log
+      15
+      longest
+      quit
+      ```
+
+      ```output
+      > Logged 25 minutes
+      > Logged 40 minutes
+      > Total: 65 minutes
+      > Logged 15 minutes
+      > Longest: 40 minutes
+      > Keep practicing!
+      ```
+
+      - `sessions` is created before the loop, so every round adds to the same list, and `total` sees every session logged so far. Created inside the loop, it would start empty in every round, and `total` would always say 0 minutes.
+      - `log` reads the minutes from the line after the command, as the previous step described: `Integer.valueOf(scanner.nextLine())`.
+      - `total` and `longest` are created inside their own branches. They're only needed while that one answer is worked out, so they're worked out again from the list each time.
+
+      ### Small solutions, put together
+
+      The program looks long, but each part of it is something you've written before:
+
+      1. Read commands until `quit`, and answer unknown ones: the loop of the previous step.
+      2. Remember each session: add it to a list.
+      3. Add up the values of a list.
+      4. Find the largest value of a list.
+
+      That's a good way into any bigger program: list the small problems it's made of, solve them one at a time, and try each one before going on. Here you could first write the loop with only `quit` and the unknown-command answer, then `log` and `total`, and `longest` last. Each piece stays small enough to check at a glance.
+
+      ### What to remember
+
+      Remember what later commands need. A list of sessions is one way to do it. But `total` and `longest` could also be answered with two `int` variables, updated at every `log`, without keeping the sessions at all. A list is needed when a command needs every value again, for example to print all the sessions. Step 5 comes back to this choice.
+
+      **Your turn:** a small campsite has 3 tent spots. The program remembers how many spots are taken, starting from 0. Create that variable before the loop, and add the commands:
+
+      - `arrive`: a group arrives. Print `Welcome! Free spots: ` and the number of spots still free, or `Sorry, the campsite is full` when all 3 spots are taken.
+      - `depart`: a group leaves. Print `Safe travels! Free spots: ` and the number of free spots, or `Nobody is camping` when no spot is taken.
+      - `spots`: print `Free spots: ` and the number of free spots.
+      - Anything else: print `Unknown command: ` and the command.
+
+      `quit` is ready. For the input shown, the program prints:
+
+      ```
+      > Welcome! Free spots: 2
+      > Welcome! Free spots: 1
+      > Free spots: 1
+      > Welcome! Free spots: 0
+      > Sorry, the campsite is full
+      > Safe travels! Free spots: 1
+      > Lights out
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              // Create the variable for the taken spots here.
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Lights out");
+                      break;
+                  }
+                  // Handle arrive, depart, spots and unknown commands here.
+              }
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              // Create the variable for the taken spots here.
+              int taken = 0;
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Lights out");
+                      break;
+                  }
+                  // Handle arrive, depart, spots and unknown commands here.
+                  if (command.equals("arrive")) {
+                      if (taken < 3) {
+                          taken++;
+                          System.out.println("Welcome! Free spots: " + (3 - taken));
+                      } else {
+                          System.out.println("Sorry, the campsite is full");
+                      }
+                  } else if (command.equals("depart")) {
+                      if (taken > 0) {
+                          taken--;
+                          System.out.println("Safe travels! Free spots: " + (3 - taken));
+                      } else {
+                          System.out.println("Nobody is camping");
+                      }
+                  } else if (command.equals("spots")) {
+                      System.out.println("Free spots: " + (3 - taken));
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+    hints:
+      - "`int taken = 0;` goes before the loop, so the count lasts from one command to the next. Inside the loop, it would be 0 again in every round."
+      - "In the `arrive` branch, check `taken < 3` before adding one. In the `depart` branch, check `taken > 0` before taking one away. The free spots are `3 - taken`, in parentheses when it's part of a longer `+`."
+    tests:
+      - stdin: |
+          arrive
+          arrive
+          spots
+          arrive
+          arrive
+          depart
+          quit
+      - stdin: |
+          depart
+          spots
+          quit
+        hidden: true
+      - stdin: |
+          arrive
+          depart
+          depart
+          arrive
+          arrive
+          arrive
+          arrive
+          spots
+          camp
+          quit
+        hidden: true
+    more:
+      - task: |
+          A birdwatcher notes each bird seen. Write the program. Keep the sightings in a list of Strings, one entry for each bird seen, and create the list before the loop. The commands:
+
+          - `saw`: the next line is a species. Add it to the list and print `Noted: ` and the species.
+          - `count`: the next line is a species. Print the species, `: ` and how many times it was seen, spelled exactly the same, capitals included, like `robin: 2`.
+          - `total`: print `Birds seen: ` and the number of sightings.
+          - `quit`: print `Happy birding!` and end the program.
+          - Anything else: print `Unknown command: ` and the command.
+
+          Print the prompt `> ` before each command. For the input shown, the program prints:
+
+          ```
+          > Noted: robin
+          > Noted: heron
+          > Noted: robin
+          > robin: 2
+          > owl: 0
+          > Birds seen: 3
+          > Happy birding!
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  // Write the program here.
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  // Write the program here.
+                  ArrayList<String> sightings = new ArrayList<>();
+                  while (true) {
+                      System.out.print("> ");
+                      String command = scanner.nextLine();
+                      if (command.equals("quit")) {
+                          System.out.println("Happy birding!");
+                          break;
+                      }
+                      if (command.equals("saw")) {
+                          String species = scanner.nextLine();
+                          sightings.add(species);
+                          System.out.println("Noted: " + species);
+                      } else if (command.equals("count")) {
+                          String species = scanner.nextLine();
+                          int count = 0;
+                          for (String bird : sightings) {
+                              if (bird.equals(species)) {
+                                  count++;
+                              }
+                          }
+                          System.out.println(species + ": " + count);
+                      } else if (command.equals("total")) {
+                          System.out.println("Birds seen: " + sightings.size());
+                      } else {
+                          System.out.println("Unknown command: " + command);
+                      }
+                  }
+              }
+          }
+        hints:
+          - "Three small problems: the command loop, adding to a list, and counting the entries of a list that equal a given String. `total` is the list's `size()`."
+          - "For `count`, read the species with another `scanner.nextLine()`, then go through the list with a for-each loop and add one to a counter for each entry that `equals` the species."
+        require:
+          - pattern: ArrayList\s*<\s*String\s*>
+            message: "Keep the sightings in an `ArrayList<String>`."
+        tests:
+          - stdin: |
+              saw
+              robin
+              saw
+              heron
+              saw
+              robin
+              count
+              robin
+              count
+              owl
+              total
+              quit
+          - stdin: |
+              total
+              count
+              robin
+              quit
+            hidden: true
+          - stdin: |
+              saw
+              great tit
+              saw
+              Great tit
+              saw
+              great tit
+              count
+              great tit
+              watch
+              total
+              quit
+            hidden: true
+      - task: |
+          At a deli counter, customers take their place in line and are served in the order they came. Write the program. Keep the names of the waiting customers in a list, first in line first. The commands:
+
+          - `take`: the next line is a name. Add it to the end of the line, and print the name, `, you're number ` and their place in line, like `Ana, you're number 1`.
+          - `next`: print `Now serving ` and the first name in line, and take it off the line. If nobody is waiting, print `Nobody is waiting`.
+          - `queue`: print `In line: ` and the list, like `In line: [Ben, Cleo]`.
+          - `close`: print `Closed for today` and end the program.
+          - Anything else: print `Unknown command: ` and the command.
+
+          Print the prompt `> ` before each command. For the input shown, the program prints:
+
+          ```
+          > Ana, you're number 1
+          > Ben, you're number 2
+          > Now serving Ana
+          > Cleo, you're number 2
+          > In line: [Ben, Cleo]
+          > Now serving Ben
+          > Now serving Cleo
+          > Nobody is waiting
+          > Closed for today
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  // Write the program here.
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  // Write the program here.
+                  ArrayList<String> names = new ArrayList<>();
+                  while (true) {
+                      System.out.print("> ");
+                      String command = scanner.nextLine();
+                      if (command.equals("close")) {
+                          System.out.println("Closed for today");
+                          break;
+                      }
+                      if (command.equals("take")) {
+                          String name = scanner.nextLine();
+                          names.add(name);
+                          System.out.println(name + ", you're number " + names.size());
+                      } else if (command.equals("next")) {
+                          if (names.isEmpty()) {
+                              System.out.println("Nobody is waiting");
+                          } else {
+                              System.out.println("Now serving " + names.get(0));
+                              names.remove(0);
+                          }
+                      } else if (command.equals("queue")) {
+                          System.out.println("In line: " + names);
+                      } else {
+                          System.out.println("Unknown command: " + command);
+                      }
+                  }
+              }
+          }
+        hints:
+          - "Right after `names.add(name)`, the new customer is last in line, so their place is `names.size()`."
+          - "The first in line is at index 0: print `names.get(0)`, then `names.remove(0)`. Check `names.isEmpty()` first. Printing the list itself gives the `[Ben, Cleo]` form."
+        tests:
+          - stdin: |
+              take
+              Ana
+              take
+              Ben
+              next
+              take
+              Cleo
+              queue
+              next
+              next
+              next
+              close
+          - stdin: |
+              next
+              queue
+              close
+            hidden: true
+          - stdin: |
+              take
+              Mia
+              take
+              Leo
+              take
+              Mia
+              queue
+              next
+              queue
+              serve
+              close
+            hidden: true
+
+  - id: text-ui-logic-class
+    slug: logic-class
+    title: The program's logic in a class
+    text: |
+      The practice log's `main` does two jobs at once. It talks with the user: it prints the prompt, reads commands and prints answers. And it does the work: it keeps the sessions, adds them up and finds the longest. The two are woven together, and each new command makes the knot bigger. The first step toward untangling them is to move the work into a class of its own:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              PracticeLog log = new PracticeLog();
+              while (true) {
+                  System.out.print("> ");
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Keep practicing!");
+                      break;
+                  }
+                  if (command.equals("log")) {
+                      int minutes = Integer.valueOf(scanner.nextLine());
+                      log.add(minutes);
+                      System.out.println("Logged " + minutes + " minutes");
+                  } else if (command.equals("total")) {
+                      System.out.println("Total: " + log.total() + " minutes");
+                  } else if (command.equals("longest")) {
+                      System.out.println("Longest: " + log.longest() + " minutes");
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+      // ==== PracticeLog.java ====
+      import java.util.ArrayList;
+
+      public class PracticeLog {
+          private ArrayList<Integer> sessions;
+
+          public PracticeLog() {
+              this.sessions = new ArrayList<>();
+          }
+
+          public void add(int minutes) {
+              this.sessions.add(minutes);
+          }
+
+          public int total() {
+              int total = 0;
+              for (int minutes : this.sessions) {
+                  total = total + minutes;
+              }
+              return total;
+          }
+
+          public int longest() {
+              int longest = 0;
+              for (int minutes : this.sessions) {
+                  if (minutes > longest) {
+                      longest = minutes;
+                  }
+              }
+              return longest;
+          }
+      }
+      ```
+
+      ```input
+      log
+      25
+      log
+      40
+      total
+      log
+      15
+      longest
+      quit
+      ```
+
+      ```output
+      > Logged 25 minutes
+      > Logged 40 minutes
+      > Total: 65 minutes
+      > Logged 15 minutes
+      > Longest: 40 minutes
+      > Keep practicing!
+      ```
+
+      The program does exactly what it did before, but the jobs are now apart:
+
+      - `PracticeLog` is the program's **logic**: what the program knows and works out. It keeps the sessions and answers questions about them with return values. It never reads input and never prints anything.
+      - `main` is the **user interface**, or UI: the part that talks with the user. It reads the commands, calls the log's methods, and turns their answers into sentences.
+      - The loop in `main` now reads like a list of the commands. How the total is added up is no longer its business: `log.total()` says what it needs.
+
+      ### Why the split helps
+
+      - Each part can be read and changed on its own. To change what a message says, you look at the UI. To change how the longest session is found, you look at `PracticeLog`, and the UI doesn't care.
+      - The logic can be used without anyone typing anything: `PracticeLog log = new PracticeLog(); log.add(30); System.out.println(log.total());`. That's how the checks on this site test your classes, and module 26 builds on it.
+      - The same class could serve another kind of user interface, such as an app with buttons, without a change. That's why it returns numbers and doesn't print sentences: how an answer is shown is for the UI to decide.
+
+      A quick test for a logic class: could a program without a keyboard or a screen use it? If the class has a Scanner or a `System.out.println` in it, it couldn't.
+
+      **Your turn:** here's the campsite of the previous step, split in two. `Main.java` is the user interface, and it's ready. Write the logic class in `Campsite.java`:
+
+      - `Campsite(int spots)`: an empty campsite with that many tent spots.
+      - `checkIn()`: if a spot is free, one more spot is taken and the method returns `true`. If every spot is taken, nothing changes and it returns `false`.
+      - `checkOut()`: if a spot is taken, it's free again and the method returns `true`. If no spot is taken, nothing changes and it returns `false`.
+      - `freeSpots()`: returns the number of free spots.
+
+      The class doesn't print anything: `main` does. For the input shown, the program prints:
+
+      ```
+      > Welcome! Free spots: 2
+      > Welcome! Free spots: 1
+      > Free spots: 1
+      > Welcome! Free spots: 0
+      > Sorry, the campsite is full
+      > Safe travels! Free spots: 1
+      > Lights out
+      ```
+    seed:
+      Campsite.java: |
+        public class Campsite {
+            // Write the instance variables, the constructor and the methods here.
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                Campsite campsite = new Campsite(3);
+                while (true) {
+                    System.out.print("> ");
+                    String command = scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Lights out");
+                        break;
+                    }
+                    if (command.equals("arrive")) {
+                        if (campsite.checkIn()) {
+                            System.out.println("Welcome! Free spots: " + campsite.freeSpots());
+                        } else {
+                            System.out.println("Sorry, the campsite is full");
+                        }
+                    } else if (command.equals("depart")) {
+                        if (campsite.checkOut()) {
+                            System.out.println("Safe travels! Free spots: " + campsite.freeSpots());
+                        } else {
+                            System.out.println("Nobody is camping");
+                        }
+                    } else if (command.equals("spots")) {
+                        System.out.println("Free spots: " + campsite.freeSpots());
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+    solution:
+      Campsite.java: |
+        public class Campsite {
+            // Write the instance variables, the constructor and the methods here.
+            private int spots;
+            private int taken;
+
+            public Campsite(int spots) {
+                this.spots = spots;
+                this.taken = 0;
+            }
+
+            public boolean checkIn() {
+                if (this.taken >= this.spots) {
+                    return false;
+                }
+                this.taken++;
+                return true;
+            }
+
+            public boolean checkOut() {
+                if (this.taken == 0) {
+                    return false;
+                }
+                this.taken--;
+                return true;
+            }
+
+            public int freeSpots() {
+                return this.spots - this.taken;
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                Campsite campsite = new Campsite(3);
+                while (true) {
+                    System.out.print("> ");
+                    String command = scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Lights out");
+                        break;
+                    }
+                    if (command.equals("arrive")) {
+                        if (campsite.checkIn()) {
+                            System.out.println("Welcome! Free spots: " + campsite.freeSpots());
+                        } else {
+                            System.out.println("Sorry, the campsite is full");
+                        }
+                    } else if (command.equals("depart")) {
+                        if (campsite.checkOut()) {
+                            System.out.println("Safe travels! Free spots: " + campsite.freeSpots());
+                        } else {
+                            System.out.println("Nobody is camping");
+                        }
+                    } else if (command.equals("spots")) {
+                        System.out.println("Free spots: " + campsite.freeSpots());
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+    hints:
+      - "The campsite remembers two numbers: how many spots it has, given to the constructor, and how many are taken, which starts at 0. `freeSpots()` works out its answer from those two."
+      - "In `checkIn()`, return `false` first when `this.taken >= this.spots`. Otherwise add one and return `true`. `checkOut()` works the same way, with `this.taken == 0`. `freeSpots()` returns `this.spots - this.taken`."
+    forbid:
+      - pattern: \bclass\s+Campsite\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Main\b
+        message: "The Campsite class doesn't print. It returns `true` or `false`, and `main` prints the messages."
+    tests:
+      - stdin: |
+          arrive
+          arrive
+          spots
+          arrive
+          arrive
+          depart
+          quit
+      - stdin: |
+          depart
+          arrive
+          spots
+          depart
+          depart
+          quit
+        hidden: true
+      - call: |
+          Campsite tiny = new Campsite(1);
+          System.out.println(tiny.checkIn() + " " + tiny.checkIn() + " " + tiny.freeSpots());
+          System.out.println(tiny.checkOut() + " " + tiny.checkOut() + " " + tiny.freeSpots());
+        hidden: true
+      - call: |
+          Campsite big = new Campsite(5);
+          Campsite other = new Campsite(2);
+          for (int i = 0; i < 7; i++) {
+              big.checkIn();
+          }
+          other.checkIn();
+          System.out.println(big.freeSpots() + " " + other.freeSpots());
+        hidden: true
+    more:
+      - task: |
+          A thermostat's logic is ready in `Thermostat.java`. `warmer()` and `cooler()` change the target temperature by one degree and return `true`. If the target is already at its limit, 28 or 15 degrees, they change nothing and return `false`. `getTarget()` returns the target.
+
+          Write the user interface in `Main.java`: create a Thermostat with the target 21, and read commands, with the prompt `> ` before each one:
+
+          - `up`: make it one degree warmer and print the new target like `Target: 22 degrees`, or `Already at the maximum` when it can't go higher.
+          - `down`: make it one degree cooler and print the new target, or `Already at the minimum`.
+          - `show`: print the target like `Target: 21 degrees`.
+          - `off`: print `Thermostat off` and end the program.
+          - Anything else: print `Unknown command: ` and the command.
+
+          For the input shown, the program prints:
+
+          ```
+          > Target: 21 degrees
+          > Target: 22 degrees
+          > Target: 23 degrees
+          > Target: 22 degrees
+          > Unknown command: heat
+          > Thermostat off
+          ```
+        seed:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    // Create the thermostat, then write the command loop.
+                }
+            }
+          Thermostat.java: |
+            public class Thermostat {
+                private int target;
+
+                public Thermostat(int target) {
+                    this.target = target;
+                }
+
+                public boolean warmer() {
+                    if (this.target >= 28) {
+                        return false;
+                    }
+                    this.target++;
+                    return true;
+                }
+
+                public boolean cooler() {
+                    if (this.target <= 15) {
+                        return false;
+                    }
+                    this.target--;
+                    return true;
+                }
+
+                public int getTarget() {
+                    return this.target;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    // Create the thermostat, then write the command loop.
+                    Thermostat thermostat = new Thermostat(21);
+                    while (true) {
+                        System.out.print("> ");
+                        String command = scanner.nextLine();
+                        if (command.equals("off")) {
+                            System.out.println("Thermostat off");
+                            break;
+                        }
+                        if (command.equals("up")) {
+                            if (thermostat.warmer()) {
+                                System.out.println("Target: " + thermostat.getTarget() + " degrees");
+                            } else {
+                                System.out.println("Already at the maximum");
+                            }
+                        } else if (command.equals("down")) {
+                            if (thermostat.cooler()) {
+                                System.out.println("Target: " + thermostat.getTarget() + " degrees");
+                            } else {
+                                System.out.println("Already at the minimum");
+                            }
+                        } else if (command.equals("show")) {
+                            System.out.println("Target: " + thermostat.getTarget() + " degrees");
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Thermostat.java: |
+            public class Thermostat {
+                private int target;
+
+                public Thermostat(int target) {
+                    this.target = target;
+                }
+
+                public boolean warmer() {
+                    if (this.target >= 28) {
+                        return false;
+                    }
+                    this.target++;
+                    return true;
+                }
+
+                public boolean cooler() {
+                    if (this.target <= 15) {
+                        return false;
+                    }
+                    this.target--;
+                    return true;
+                }
+
+                public int getTarget() {
+                    return this.target;
+                }
+            }
+        hints:
+          - "`Thermostat thermostat = new Thermostat(21);` goes before the loop. The loop is shaped like the campsite's, with `off` in the place of `quit`."
+          - "`if (thermostat.warmer()) { ... } else { ... }` both changes the target and tells which message to print. After it, `thermostat.getTarget()` gives the new target."
+        require:
+          - pattern: new\s+Thermostat\s*\(\s*21\s*\)
+            message: "Create the thermostat with `new Thermostat(21)`."
+          - pattern: \.warmer\s*\(\s*\)
+            message: "Let the thermostat change the target: call `warmer()` for `up`."
+          - pattern: \.cooler\s*\(\s*\)
+            message: "Let the thermostat change the target: call `cooler()` for `down`."
+        tests:
+          - stdin: |
+              show
+              up
+              up
+              down
+              heat
+              off
+          - stdin: |
+              up
+              up
+              up
+              up
+              up
+              up
+              up
+              up
+              show
+              off
+            hidden: true
+          - stdin: |
+              down
+              down
+              down
+              down
+              down
+              down
+              down
+              Down
+              up
+              off
+            hidden: true
+      - task: |
+          Here's the deli counter of the previous step, with everything in `main`. It works, but the list and the work on it are tangled with the talking. Move the logic into `DeliLine.java`, so that `main` keeps only the prompt, the reading and the printing. The class needs:
+
+          - `DeliLine()`: an empty line.
+          - `take(String name)`: adds the name to the end of the line and returns their place in it, 1 for the first.
+          - `isEmpty()`: returns `true` when nobody is waiting.
+          - `next()`: takes the first name off the line and returns it. `main` only calls it when someone is waiting.
+          - `toString()`: returns the names in line, like `[Ben, Cleo]`.
+
+          Then change `main` to use a DeliLine instead of the list. The program prints exactly what it did. For the input shown:
+
+          ```
+          > Ana, you're number 1
+          > Ben, you're number 2
+          > Now serving Ana
+          > Cleo, you're number 2
+          > In line: [Ben, Cleo]
+          > Now serving Ben
+          > Now serving Cleo
+          > Nobody is waiting
+          > Closed for today
+          ```
+        seed:
+          DeliLine.java: |
+            import java.util.ArrayList;
+
+            public class DeliLine {
+                // Move the list and the work on it here.
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    ArrayList<String> names = new ArrayList<>();
+                    while (true) {
+                        System.out.print("> ");
+                        String command = scanner.nextLine();
+                        if (command.equals("close")) {
+                            System.out.println("Closed for today");
+                            break;
+                        }
+                        if (command.equals("take")) {
+                            String name = scanner.nextLine();
+                            names.add(name);
+                            System.out.println(name + ", you're number " + names.size());
+                        } else if (command.equals("next")) {
+                            if (names.isEmpty()) {
+                                System.out.println("Nobody is waiting");
+                            } else {
+                                System.out.println("Now serving " + names.get(0));
+                                names.remove(0);
+                            }
+                        } else if (command.equals("queue")) {
+                            System.out.println("In line: " + names);
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+        solution:
+          DeliLine.java: |
+            import java.util.ArrayList;
+
+            public class DeliLine {
+                // Move the list and the work on it here.
+                private ArrayList<String> names;
+
+                public DeliLine() {
+                    this.names = new ArrayList<>();
+                }
+
+                public int take(String name) {
+                    this.names.add(name);
+                    return this.names.size();
+                }
+
+                public boolean isEmpty() {
+                    return this.names.isEmpty();
+                }
+
+                public String next() {
+                    String first = this.names.get(0);
+                    this.names.remove(0);
+                    return first;
+                }
+
+                public String toString() {
+                    return this.names.toString();
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    DeliLine line = new DeliLine();
+                    while (true) {
+                        System.out.print("> ");
+                        String command = scanner.nextLine();
+                        if (command.equals("close")) {
+                            System.out.println("Closed for today");
+                            break;
+                        }
+                        if (command.equals("take")) {
+                            String name = scanner.nextLine();
+                            int place = line.take(name);
+                            System.out.println(name + ", you're number " + place);
+                        } else if (command.equals("next")) {
+                            if (line.isEmpty()) {
+                                System.out.println("Nobody is waiting");
+                            } else {
+                                System.out.println("Now serving " + line.next());
+                            }
+                        } else if (command.equals("queue")) {
+                            System.out.println("In line: " + line);
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+        hints:
+          - "The list becomes an instance variable of DeliLine, created in its constructor. Each method does what `main` did with the list: `take` adds and returns `this.names.size()`, `next` keeps `this.names.get(0)` in a variable, removes it and returns it."
+          - "`toString()` can return `this.names.toString()`, the list's own text. In `main`, create `DeliLine line = new DeliLine();` and replace each use of the list with a call, such as `line.take(name)`."
+        forbid:
+          - pattern: \bclass\s+Main\b[\s\S]*\bArrayList\b
+            message: "`main` shouldn't keep a list any more: the list belongs in DeliLine."
+          - pattern: \bclass\s+DeliLine\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Main\b
+            message: "DeliLine doesn't print. It returns its answers, and `main` prints them."
+        tests:
+          - stdin: |
+              take
+              Ana
+              take
+              Ben
+              next
+              take
+              Cleo
+              queue
+              next
+              next
+              next
+              close
+          - stdin: |
+              next
+              queue
+              take
+              Mia
+              take
+              Leo
+              take
+              Mia
+              queue
+              next
+              queue
+              serve
+              close
+            hidden: true
+          - call: |
+              DeliLine line = new DeliLine();
+              System.out.println(line.isEmpty() + " " + line);
+              System.out.println(line.take("Ana") + " " + line.take("Ben") + " " + line.take("Cleo"));
+              System.out.println(line.next() + " " + line.isEmpty() + " " + line);
+            hidden: true
+
+  - id: text-ui-ui-class
+    slug: user-interface-class
+    title: A class for the user interface
+    text: |
+      The logic of the practice log is now in `PracticeLog`, but `main` still holds the whole user interface: the loop, the reading and the printing. The next move gives the user interface a class of its own too, called `UserInterface`. Its constructor takes the two things it works with, a Scanner and the logic object, and its method `start()` runs the command loop. What's left of `main` only puts the program together:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              PracticeLog log = new PracticeLog();
+              UserInterface ui = new UserInterface(scanner, log);
+              ui.start();
+          }
+      }
+      // ==== UserInterface.java ====
+      import java.util.Scanner;
+
+      public class UserInterface {
+          private Scanner scanner;
+          private PracticeLog log;
+
+          public UserInterface(Scanner scanner, PracticeLog log) {
+              this.scanner = scanner;
+              this.log = log;
+          }
+
+          public void start() {
+              while (true) {
+                  System.out.print("> ");
+                  String command = this.scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Keep practicing!");
+                      break;
+                  }
+                  if (command.equals("log")) {
+                      int minutes = Integer.valueOf(this.scanner.nextLine());
+                      this.log.add(minutes);
+                      System.out.println("Logged " + minutes + " minutes");
+                  } else if (command.equals("total")) {
+                      System.out.println("Total: " + this.log.total() + " minutes");
+                  } else if (command.equals("longest")) {
+                      System.out.println("Longest: " + this.log.longest() + " minutes");
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+      // ==== PracticeLog.java ====
+      import java.util.ArrayList;
+
+      public class PracticeLog {
+          private ArrayList<Integer> sessions;
+
+          public PracticeLog() {
+              this.sessions = new ArrayList<>();
+          }
+
+          public void add(int minutes) {
+              this.sessions.add(minutes);
+          }
+
+          public int total() {
+              int total = 0;
+              for (int minutes : this.sessions) {
+                  total = total + minutes;
+              }
+              return total;
+          }
+
+          public int longest() {
+              int longest = 0;
+              for (int minutes : this.sessions) {
+                  if (minutes > longest) {
+                      longest = minutes;
+                  }
+              }
+              return longest;
+          }
+      }
+      ```
+
+      ```input
+      log
+      25
+      log
+      40
+      total
+      log
+      15
+      longest
+      quit
+      ```
+
+      ```output
+      > Logged 25 minutes
+      > Logged 40 minutes
+      > Total: 65 minutes
+      > Logged 15 minutes
+      > Longest: 40 minutes
+      > Keep practicing!
+      ```
+
+      - `UserInterface` keeps the Scanner and the log in instance variables. The constructor gets them as parameters, and from then on every method of the class can use them as `this.scanner` and `this.log`.
+      - `start()` holds the loop that used to be in `main`. It returns when the user quits, and then `main` ends too.
+      - `main` creates the objects, gives the user interface what it needs, and starts it. It's four lines long, and it stays that short however many commands the program gets.
+      - `PracticeLog` didn't change at all. It never knew who was calling it.
+
+      ### Why the Scanner is a parameter
+
+      The user interface could create a Scanner of its own. It's given one instead, for two reasons:
+
+      - A program should have only one Scanner reading `System.in`. A Scanner reads the input in chunks: to give you one line, it may take in more of what's waiting, and keep the rest for its next calls. A second Scanner on `System.in` would never see what the first one took in, so it could miss lines.
+      - The user interface then works with any Scanner. As module 20 showed, a Scanner can read a String, so the whole program can run from commands written in the code, without anyone typing:
+
+      ```java fragment
+      PracticeLog log = new PracticeLog();
+      UserInterface ui = new UserInterface(new Scanner("log\n30\nlog\n45\nquit\n"), log);
+      ui.start();
+      System.out.println(log.total());
+      ```
+
+      This runs `log` twice and then `quit`, so it prints the three answers, and then `75`. The log was created outside the user interface and handed to it, so `log` here and `this.log` in the user interface refer to the same PracticeLog object. That's why the code that created it can still ask it for the total after `start()` has returned. Some of the hidden checks in this module run your user interface in this way.
+
+      **Your turn:** a rain barrel in a garden collects rain, and water can be taken from it to water the plants. The logic is ready in `RainBarrel.java`: `rain(int liters)` adds water, but never more than fits, `take(int liters)` returns `false` and changes nothing if there isn't that much water, and `getLiters()` returns how much water there is. `Main.java` is ready too. Write `UserInterface.java`: its constructor takes a `Scanner` and a `RainBarrel`, and `start()` reads commands, with the prompt `> ` before each one:
+
+      - `rain`: the next line is a number of liters. Add them to the barrel and print `Barrel: ` and the liters in it, like `Barrel: 40 liters`.
+      - `water`: the next line is a number of liters. Take them from the barrel and print `Barrel: ` and the liters left, or `Not enough water`.
+      - `level`: print `Barrel: ` and the liters.
+      - `quit`: print `Bye!` and return.
+      - Anything else: print `Unknown command: ` and the command.
+
+      For the input shown, the program prints:
+
+      ```
+      > Barrel: 40 liters
+      > Barrel: 25 liters
+      > Not enough water
+      > Barrel: 100 liters
+      > Barrel: 100 liters
+      > Bye!
+      ```
+    seed:
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            // Write the instance variables, the constructor and start() here.
+        }
+      RainBarrel.java: |
+        public class RainBarrel {
+            private int capacity;
+            private int liters;
+
+            public RainBarrel(int capacity) {
+                this.capacity = capacity;
+                this.liters = 0;
+            }
+
+            public void rain(int liters) {
+                this.liters = this.liters + liters;
+                if (this.liters > this.capacity) {
+                    this.liters = this.capacity;
+                }
+            }
+
+            public boolean take(int liters) {
+                if (liters > this.liters) {
+                    return false;
+                }
+                this.liters = this.liters - liters;
+                return true;
+            }
+
+            public int getLiters() {
+                return this.liters;
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                RainBarrel barrel = new RainBarrel(100);
+                UserInterface ui = new UserInterface(scanner, barrel);
+                ui.start();
+            }
+        }
+    solution:
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            // Write the instance variables, the constructor and start() here.
+            private Scanner scanner;
+            private RainBarrel barrel;
+
+            public UserInterface(Scanner scanner, RainBarrel barrel) {
+                this.scanner = scanner;
+                this.barrel = barrel;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Bye!");
+                        break;
+                    }
+                    if (command.equals("rain")) {
+                        int liters = Integer.valueOf(this.scanner.nextLine());
+                        this.barrel.rain(liters);
+                        System.out.println("Barrel: " + this.barrel.getLiters() + " liters");
+                    } else if (command.equals("water")) {
+                        int liters = Integer.valueOf(this.scanner.nextLine());
+                        if (this.barrel.take(liters)) {
+                            System.out.println("Barrel: " + this.barrel.getLiters() + " liters");
+                        } else {
+                            System.out.println("Not enough water");
+                        }
+                    } else if (command.equals("level")) {
+                        System.out.println("Barrel: " + this.barrel.getLiters() + " liters");
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+      RainBarrel.java: |
+        public class RainBarrel {
+            private int capacity;
+            private int liters;
+
+            public RainBarrel(int capacity) {
+                this.capacity = capacity;
+                this.liters = 0;
+            }
+
+            public void rain(int liters) {
+                this.liters = this.liters + liters;
+                if (this.liters > this.capacity) {
+                    this.liters = this.capacity;
+                }
+            }
+
+            public boolean take(int liters) {
+                if (liters > this.liters) {
+                    return false;
+                }
+                this.liters = this.liters - liters;
+                return true;
+            }
+
+            public int getLiters() {
+                return this.liters;
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                RainBarrel barrel = new RainBarrel(100);
+                UserInterface ui = new UserInterface(scanner, barrel);
+                ui.start();
+            }
+        }
+    hints:
+      - "Two instance variables, `private Scanner scanner;` and `private RainBarrel barrel;`, set in the constructor `public UserInterface(Scanner scanner, RainBarrel barrel)`."
+      - "`start()` is a `public void` method with the command loop in it, like the practice log's. Read with `this.scanner.nextLine()`, and read the liters with `Integer.valueOf(this.scanner.nextLine())`."
+    forbid:
+      - pattern: new\s+Scanner\b[\s\S]*\bclass\s+RainBarrel\b
+        message: "Use the Scanner the constructor gets: `main` already made one, and one Scanner is enough."
+    tests:
+      - stdin: |
+          rain
+          40
+          water
+          15
+          water
+          30
+          rain
+          90
+          level
+          quit
+      - stdin: |
+          level
+          water
+          1
+          fill
+          rain
+          5
+          water
+          5
+          quit
+        hidden: true
+      - call: |
+          RainBarrel small = new RainBarrel(50);
+          UserInterface ui = new UserInterface(new Scanner("rain\n80\nwater\n50\nlevel\nquit\n"), small);
+          ui.start();
+          System.out.println(small.getLiters());
+        hidden: true
+    more:
+      - task: |
+          Here's the thermostat of the previous step, with its user interface in `main`. Move the user interface into `UserInterface.java`: a constructor that takes a `Scanner` and a `Thermostat`, and a method `start()` with the command loop. Then `main` only creates the Scanner, the thermostat with the target 21, and the user interface, and calls `start()`. The program prints exactly what it did. For the input shown:
+
+          ```
+          > Target: 21 degrees
+          > Target: 22 degrees
+          > Target: 23 degrees
+          > Target: 22 degrees
+          > Unknown command: heat
+          > Thermostat off
+          ```
+        seed:
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                // Move the user interface here.
+            }
+          Thermostat.java: |
+            public class Thermostat {
+                private int target;
+
+                public Thermostat(int target) {
+                    this.target = target;
+                }
+
+                public boolean warmer() {
+                    if (this.target >= 28) {
+                        return false;
+                    }
+                    this.target++;
+                    return true;
+                }
+
+                public boolean cooler() {
+                    if (this.target <= 15) {
+                        return false;
+                    }
+                    this.target--;
+                    return true;
+                }
+
+                public int getTarget() {
+                    return this.target;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Thermostat thermostat = new Thermostat(21);
+                    while (true) {
+                        System.out.print("> ");
+                        String command = scanner.nextLine();
+                        if (command.equals("off")) {
+                            System.out.println("Thermostat off");
+                            break;
+                        }
+                        if (command.equals("up")) {
+                            if (thermostat.warmer()) {
+                                System.out.println("Target: " + thermostat.getTarget() + " degrees");
+                            } else {
+                                System.out.println("Already at the maximum");
+                            }
+                        } else if (command.equals("down")) {
+                            if (thermostat.cooler()) {
+                                System.out.println("Target: " + thermostat.getTarget() + " degrees");
+                            } else {
+                                System.out.println("Already at the minimum");
+                            }
+                        } else if (command.equals("show")) {
+                            System.out.println("Target: " + thermostat.getTarget() + " degrees");
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+        solution:
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                // Move the user interface here.
+                private Scanner scanner;
+                private Thermostat thermostat;
+
+                public UserInterface(Scanner scanner, Thermostat thermostat) {
+                    this.scanner = scanner;
+                    this.thermostat = thermostat;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("off")) {
+                            System.out.println("Thermostat off");
+                            break;
+                        }
+                        if (command.equals("up")) {
+                            if (this.thermostat.warmer()) {
+                                System.out.println("Target: " + this.thermostat.getTarget() + " degrees");
+                            } else {
+                                System.out.println("Already at the maximum");
+                            }
+                        } else if (command.equals("down")) {
+                            if (this.thermostat.cooler()) {
+                                System.out.println("Target: " + this.thermostat.getTarget() + " degrees");
+                            } else {
+                                System.out.println("Already at the minimum");
+                            }
+                        } else if (command.equals("show")) {
+                            System.out.println("Target: " + this.thermostat.getTarget() + " degrees");
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Thermostat.java: |
+            public class Thermostat {
+                private int target;
+
+                public Thermostat(int target) {
+                    this.target = target;
+                }
+
+                public boolean warmer() {
+                    if (this.target >= 28) {
+                        return false;
+                    }
+                    this.target++;
+                    return true;
+                }
+
+                public boolean cooler() {
+                    if (this.target <= 15) {
+                        return false;
+                    }
+                    this.target--;
+                    return true;
+                }
+
+                public int getTarget() {
+                    return this.target;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Thermostat thermostat = new Thermostat(21);
+                    UserInterface ui = new UserInterface(scanner, thermostat);
+                    ui.start();
+                }
+            }
+        hints:
+          - "`UserInterface` gets two instance variables, the Scanner and the Thermostat, set in its constructor. The whole `while` loop moves into `public void start()`."
+          - "In the moved loop, `scanner` becomes `this.scanner` and `thermostat` becomes `this.thermostat`. `main` keeps its first two lines and then does `UserInterface ui = new UserInterface(scanner, thermostat);` and `ui.start();`."
+        forbid:
+          - pattern: \bclass\s+Main\b[\s\S]*\bwhile\b
+            message: "The command loop belongs in `start()` now: `main` only creates the objects and starts the user interface."
+        require:
+          - pattern: \.start\s*\(\s*\)
+            message: "`main` starts the user interface with `ui.start()`."
+        tests:
+          - stdin: |
+              show
+              up
+              up
+              down
+              heat
+              off
+          - stdin: |
+              up
+              up
+              up
+              up
+              up
+              up
+              up
+              up
+              show
+              off
+            hidden: true
+          - call: |
+              Thermostat cold = new Thermostat(16);
+              UserInterface ui = new UserInterface(new Scanner("down\ndown\ndown\nshow\noff\n"), cold);
+              ui.start();
+              System.out.println(cold.getTarget());
+            hidden: true
+      - task: |
+          A lemonade stand starts the day with 10 cups of lemonade. `LemonadeStand.java` is ready, and so is the `start()` method of `UserInterface.java`. But the user interface has no instance variables or constructor yet, so it doesn't compile. Add them: the constructor takes a `Scanner` and a `LemonadeStand`, and `start()` uses them as `this.scanner` and `this.stand`.
+
+          Then write `main`: create the Scanner, a stand with 10 cups and the user interface, and start it. When `start()` returns, print `Sold today: `, the number of cups sold and ` cups`. The stand knows it: ask it with `cupsSold()`. For the input shown, the program prints:
+
+          ```
+          > Sold 3 cups
+          > Sold 4 cups
+          > Cups left: 3
+          > Only 3 cups left
+          > Closing the stand
+          Sold today: 7 cups
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    // Create the objects, start the user interface, and print the cups sold.
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                // Write the instance variables and the constructor here.
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("close")) {
+                            System.out.println("Closing the stand");
+                            break;
+                        }
+                        if (command.equals("sell")) {
+                            int cups = Integer.valueOf(this.scanner.nextLine());
+                            if (this.stand.sell(cups)) {
+                                System.out.println("Sold " + cups + " cups");
+                            } else {
+                                System.out.println("Only " + this.stand.cupsLeft() + " cups left");
+                            }
+                        } else if (command.equals("left")) {
+                            System.out.println("Cups left: " + this.stand.cupsLeft());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          LemonadeStand.java: |
+            public class LemonadeStand {
+                private int cups;
+                private int sold;
+
+                public LemonadeStand(int cups) {
+                    this.cups = cups;
+                    this.sold = 0;
+                }
+
+                public boolean sell(int count) {
+                    if (count > this.cups) {
+                        return false;
+                    }
+                    this.cups = this.cups - count;
+                    this.sold = this.sold + count;
+                    return true;
+                }
+
+                public int cupsLeft() {
+                    return this.cups;
+                }
+
+                public int cupsSold() {
+                    return this.sold;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    // Create the objects, start the user interface, and print the cups sold.
+                    Scanner scanner = new Scanner(System.in);
+                    LemonadeStand stand = new LemonadeStand(10);
+                    UserInterface ui = new UserInterface(scanner, stand);
+                    ui.start();
+                    System.out.println("Sold today: " + stand.cupsSold() + " cups");
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                // Write the instance variables and the constructor here.
+                private Scanner scanner;
+                private LemonadeStand stand;
+
+                public UserInterface(Scanner scanner, LemonadeStand stand) {
+                    this.scanner = scanner;
+                    this.stand = stand;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("close")) {
+                            System.out.println("Closing the stand");
+                            break;
+                        }
+                        if (command.equals("sell")) {
+                            int cups = Integer.valueOf(this.scanner.nextLine());
+                            if (this.stand.sell(cups)) {
+                                System.out.println("Sold " + cups + " cups");
+                            } else {
+                                System.out.println("Only " + this.stand.cupsLeft() + " cups left");
+                            }
+                        } else if (command.equals("left")) {
+                            System.out.println("Cups left: " + this.stand.cupsLeft());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          LemonadeStand.java: |
+            public class LemonadeStand {
+                private int cups;
+                private int sold;
+
+                public LemonadeStand(int cups) {
+                    this.cups = cups;
+                    this.sold = 0;
+                }
+
+                public boolean sell(int count) {
+                    if (count > this.cups) {
+                        return false;
+                    }
+                    this.cups = this.cups - count;
+                    this.sold = this.sold + count;
+                    return true;
+                }
+
+                public int cupsLeft() {
+                    return this.cups;
+                }
+
+                public int cupsSold() {
+                    return this.sold;
+                }
+            }
+        hints:
+          - "The names come from `start()`: it uses `this.scanner` and `this.stand`, so those are the instance variables, a `Scanner` and a `LemonadeStand`. The constructor sets both."
+          - "`main` needs `import java.util.Scanner;` at the top. Keep the stand in a variable, give it to the user interface, and after `ui.start();` ask that same stand for `cupsSold()`."
+        require:
+          - pattern: \.cupsSold\s*\(\s*\)
+            message: "After the user interface has finished, ask the stand how many cups it sold with `cupsSold()`."
+        tests:
+          - stdin: |
+              sell
+              3
+              sell
+              4
+              left
+              sell
+              5
+              close
+          - stdin: |
+              close
+            hidden: true
+          - stdin: |
+              sell
+              10
+              sell
+              1
+              left
+              lemonade
+              close
+            hidden: true
+          - call: |
+              LemonadeStand stand = new LemonadeStand(4);
+              UserInterface ui = new UserInterface(new Scanner("sell\n4\nsell\n1\nclose\n"), stand);
+              ui.start();
+              System.out.println(stand.cupsSold() + " " + stand.cupsLeft());
+            hidden: true
+
+  - id: text-ui-changing-inside
+    slug: changing-the-inside
+    title: Changing a class without changing its users
+    text: |
+      The practice log only ever answers two questions: the total and the longest session. For that, it doesn't need to keep every session. Two `int` variables, updated at every `add`, are enough, and they take as little memory after a thousand sessions as after one. Here's `PracticeLog` rewritten that way, with `Main` and `UserInterface` exactly as they were:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              PracticeLog log = new PracticeLog();
+              UserInterface ui = new UserInterface(scanner, log);
+              ui.start();
+          }
+      }
+      // ==== PracticeLog.java ====
+      public class PracticeLog {
+          private int totalMinutes;
+          private int longestSession;
+
+          public PracticeLog() {
+              this.totalMinutes = 0;
+              this.longestSession = 0;
+          }
+
+          public void add(int minutes) {
+              this.totalMinutes = this.totalMinutes + minutes;
+              if (minutes > this.longestSession) {
+                  this.longestSession = minutes;
+              }
+          }
+
+          public int total() {
+              return this.totalMinutes;
+          }
+
+          public int longest() {
+              return this.longestSession;
+          }
+      }
+      // ==== UserInterface.java ====
+      import java.util.Scanner;
+
+      public class UserInterface {
+          private Scanner scanner;
+          private PracticeLog log;
+
+          public UserInterface(Scanner scanner, PracticeLog log) {
+              this.scanner = scanner;
+              this.log = log;
+          }
+
+          public void start() {
+              while (true) {
+                  System.out.print("> ");
+                  String command = this.scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Keep practicing!");
+                      break;
+                  }
+                  if (command.equals("log")) {
+                      int minutes = Integer.valueOf(this.scanner.nextLine());
+                      this.log.add(minutes);
+                      System.out.println("Logged " + minutes + " minutes");
+                  } else if (command.equals("total")) {
+                      System.out.println("Total: " + this.log.total() + " minutes");
+                  } else if (command.equals("longest")) {
+                      System.out.println("Longest: " + this.log.longest() + " minutes");
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+      ```
+
+      ```input
+      log
+      25
+      log
+      40
+      total
+      log
+      15
+      longest
+      quit
+      ```
+
+      ```output
+      > Logged 25 minutes
+      > Logged 40 minutes
+      > Total: 65 minutes
+      > Logged 15 minutes
+      > Longest: 40 minutes
+      > Keep practicing!
+      ```
+
+      - `PracticeLog` has no list any more. `add` adds the minutes to the total, and when the new session is longer than the longest so far, it becomes the longest.
+      - Its public methods are the same as before: `add(int minutes)`, `total()` and `longest()`, with the same parameters, the same return types and the same answers. Those methods are all the user interface ever uses, so it didn't need a single change, and the program prints what it did.
+      - The instance variables are `private`, so no other class could have used the old list. That's what `private` is for: whatever is private can change without breaking anything outside the class.
+
+      ### What must stay the same
+
+      The public methods are a promise to the rest of the program: this is what you can call, this is what it takes, and this is what it gives back. Everything inside may change: the instance variables, how an answer is worked out, the private methods. The promise breaks when a public method's name, parameters or return type change, or when its answers change meaning, for example if `total()` suddenly returned hours instead of minutes. Then every class that uses it has to change too.
+
+      A change inside has to give the same answers as before in every case, the unusual ones included. The new `longestSession` starts from 0, just as the old loop did, so even a log without any sessions answers the same, 0. That's easy to get wrong, as this step's last challenge shows.
+
+      Another change of this kind makes a class safer rather than smaller. A class that keeps two lists which must stay in step, such as the names of things in one list and their weights in another, is easy to break: remove from one list and forget the other, and every name after it gets the wrong weight. One list of objects, each with a name and a weight, can't get out of step. As long as the public methods stay the same, the class's users don't need to know about that change either.
+
+      **Your turn:** a café's tip jar program works, but `TipJar` keeps every tip in a list, only to answer three questions. Rewrite `TipJar` without the list: keep the number of tips, their total and the biggest tip in three `int` variables, and update them in `add`. Keep the public methods as they are, so that `UserInterface.java` and `Main.java` work without a change. For the input shown, the program prints:
+
+      ```
+      > Thank you!
+      > Thank you!
+      > Thank you!
+      > 3 tips
+      > Total: 450 cents
+      > Biggest: 200 cents
+      > Closed
+      ```
+    seed:
+      TipJar.java: |
+        import java.util.ArrayList;
+
+        public class TipJar {
+            private ArrayList<Integer> tips;
+
+            public TipJar() {
+                this.tips = new ArrayList<>();
+            }
+
+            public void add(int cents) {
+                this.tips.add(cents);
+            }
+
+            public int count() {
+                return this.tips.size();
+            }
+
+            public int total() {
+                int sum = 0;
+                for (int tip : this.tips) {
+                    sum = sum + tip;
+                }
+                return sum;
+            }
+
+            public int biggest() {
+                int biggest = 0;
+                for (int tip : this.tips) {
+                    if (tip > biggest) {
+                        biggest = tip;
+                    }
+                }
+                return biggest;
+            }
+        }
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            private Scanner scanner;
+            private TipJar jar;
+
+            public UserInterface(Scanner scanner, TipJar jar) {
+                this.scanner = scanner;
+                this.jar = jar;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("close")) {
+                        System.out.println("Closed");
+                        break;
+                    }
+                    if (command.equals("tip")) {
+                        this.jar.add(Integer.valueOf(this.scanner.nextLine()));
+                        System.out.println("Thank you!");
+                    } else if (command.equals("count")) {
+                        System.out.println(this.jar.count() + " tips");
+                    } else if (command.equals("total")) {
+                        System.out.println("Total: " + this.jar.total() + " cents");
+                    } else if (command.equals("biggest")) {
+                        System.out.println("Biggest: " + this.jar.biggest() + " cents");
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                TipJar jar = new TipJar();
+                UserInterface ui = new UserInterface(scanner, jar);
+                ui.start();
+            }
+        }
+    solution:
+      TipJar.java: |
+        public class TipJar {
+            private int count;
+            private int total;
+            private int biggest;
+
+            public TipJar() {
+                this.count = 0;
+                this.total = 0;
+                this.biggest = 0;
+            }
+
+            public void add(int cents) {
+                this.count++;
+                this.total = this.total + cents;
+                if (cents > this.biggest) {
+                    this.biggest = cents;
+                }
+            }
+
+            public int count() {
+                return this.count;
+            }
+
+            public int total() {
+                return this.total;
+            }
+
+            public int biggest() {
+                return this.biggest;
+            }
+        }
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            private Scanner scanner;
+            private TipJar jar;
+
+            public UserInterface(Scanner scanner, TipJar jar) {
+                this.scanner = scanner;
+                this.jar = jar;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("close")) {
+                        System.out.println("Closed");
+                        break;
+                    }
+                    if (command.equals("tip")) {
+                        this.jar.add(Integer.valueOf(this.scanner.nextLine()));
+                        System.out.println("Thank you!");
+                    } else if (command.equals("count")) {
+                        System.out.println(this.jar.count() + " tips");
+                    } else if (command.equals("total")) {
+                        System.out.println("Total: " + this.jar.total() + " cents");
+                    } else if (command.equals("biggest")) {
+                        System.out.println("Biggest: " + this.jar.biggest() + " cents");
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                TipJar jar = new TipJar();
+                UserInterface ui = new UserInterface(scanner, jar);
+                ui.start();
+            }
+        }
+    hints:
+      - "Replace the list with `private int count;`, `private int total;` and `private int biggest;`, all 0 in the constructor. A variable may have the same name as a method: `this.count` is the variable, `this.count()` the method."
+      - "`add` does all the work: `this.count++;`, adds `cents` to `this.total`, and makes `cents` the new `this.biggest` when it's bigger. The three other methods only return a variable."
+    forbid:
+      - pattern: \bArrayList\s*<
+        message: "Keep three `int` variables instead of the list: the program shouldn't need an ArrayList any more."
+    tests:
+      - stdin: |
+          tip
+          150
+          tip
+          200
+          tip
+          100
+          count
+          total
+          biggest
+          close
+      - stdin: |
+          count
+          total
+          biggest
+          tip
+          5
+          tips
+          count
+          biggest
+          close
+        hidden: true
+      - call: |
+          TipJar jar = new TipJar();
+          jar.add(50);
+          jar.add(20);
+          jar.add(50);
+          TipJar other = new TipJar();
+          other.add(300);
+          System.out.println(jar.count() + " " + jar.total() + " " + jar.biggest());
+          System.out.println(other.count() + " " + other.total() + " " + other.biggest());
+        hidden: true
+    more:
+      - task: |
+          A camping program keeps a packing list. `PackingList` keeps two lists that must stay in step: the names of the things in one, and their weights in grams in the other. Rewrite it to keep a single `ArrayList<Item>`, using the ready `Item` class. Keep its public methods, `add(String name, int grams)`, `totalGrams()` and `heaviest()`, as they are: `Main.java`, the user interface, must work without a change. When two things weigh the same, `heaviest()` returns the one packed first, as the old code did. For the input shown, the program prints:
+
+          ```
+          > Packed tent
+          > Packed stove
+          > Packed sleeping bag
+          > Total: 3800 grams
+          > Heaviest: tent
+          > Have a good trip!
+          ```
+        seed:
+          PackingList.java: |
+            import java.util.ArrayList;
+
+            public class PackingList {
+                private ArrayList<String> names;
+                private ArrayList<Integer> grams;
+
+                public PackingList() {
+                    this.names = new ArrayList<>();
+                    this.grams = new ArrayList<>();
+                }
+
+                public void add(String name, int grams) {
+                    this.names.add(name);
+                    this.grams.add(grams);
+                }
+
+                public int totalGrams() {
+                    int total = 0;
+                    for (int weight : this.grams) {
+                        total = total + weight;
+                    }
+                    return total;
+                }
+
+                public String heaviest() {
+                    if (this.names.isEmpty()) {
+                        return "nothing";
+                    }
+                    int best = 0;
+                    for (int i = 1; i < this.names.size(); i++) {
+                        if (this.grams.get(i) > this.grams.get(best)) {
+                            best = i;
+                        }
+                    }
+                    return this.names.get(best);
+                }
+            }
+          Item.java: |
+            public class Item {
+                private String name;
+                private int grams;
+
+                public Item(String name, int grams) {
+                    this.name = name;
+                    this.grams = grams;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getGrams() {
+                    return this.grams;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    PackingList packing = new PackingList();
+                    while (true) {
+                        System.out.print("> ");
+                        String command = scanner.nextLine();
+                        if (command.equals("done")) {
+                            System.out.println("Have a good trip!");
+                            break;
+                        }
+                        if (command.equals("pack")) {
+                            String name = scanner.nextLine();
+                            int grams = Integer.valueOf(scanner.nextLine());
+                            packing.add(name, grams);
+                            System.out.println("Packed " + name);
+                        } else if (command.equals("weight")) {
+                            System.out.println("Total: " + packing.totalGrams() + " grams");
+                        } else if (command.equals("heaviest")) {
+                            System.out.println("Heaviest: " + packing.heaviest());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+        solution:
+          PackingList.java: |
+            import java.util.ArrayList;
+
+            public class PackingList {
+                private ArrayList<Item> items;
+
+                public PackingList() {
+                    this.items = new ArrayList<>();
+                }
+
+                public void add(String name, int grams) {
+                    this.items.add(new Item(name, grams));
+                }
+
+                public int totalGrams() {
+                    int total = 0;
+                    for (Item item : this.items) {
+                        total = total + item.getGrams();
+                    }
+                    return total;
+                }
+
+                public String heaviest() {
+                    if (this.items.isEmpty()) {
+                        return "nothing";
+                    }
+                    Item heaviest = this.items.get(0);
+                    for (Item item : this.items) {
+                        if (item.getGrams() > heaviest.getGrams()) {
+                            heaviest = item;
+                        }
+                    }
+                    return heaviest.getName();
+                }
+            }
+          Item.java: |
+            public class Item {
+                private String name;
+                private int grams;
+
+                public Item(String name, int grams) {
+                    this.name = name;
+                    this.grams = grams;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getGrams() {
+                    return this.grams;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    PackingList packing = new PackingList();
+                    while (true) {
+                        System.out.print("> ");
+                        String command = scanner.nextLine();
+                        if (command.equals("done")) {
+                            System.out.println("Have a good trip!");
+                            break;
+                        }
+                        if (command.equals("pack")) {
+                            String name = scanner.nextLine();
+                            int grams = Integer.valueOf(scanner.nextLine());
+                            packing.add(name, grams);
+                            System.out.println("Packed " + name);
+                        } else if (command.equals("weight")) {
+                            System.out.println("Total: " + packing.totalGrams() + " grams");
+                        } else if (command.equals("heaviest")) {
+                            System.out.println("Heaviest: " + packing.heaviest());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+        hints:
+          - "`add` still takes a name and a weight, but now makes one object of them: `this.items.add(new Item(name, grams));`."
+          - "`totalGrams` adds up `item.getGrams()` with a for-each loop. `heaviest` starts from the first item, keeps the heaviest one found so far, and returns its `getName()`. An empty list still gives `nothing`."
+        require:
+          - pattern: ArrayList\s*<\s*Item\s*>
+            message: "Keep the things in one `ArrayList<Item>`."
+        forbid:
+          - pattern: ArrayList\s*<\s*(String|Integer)\s*>
+            message: "Replace the two lists with the one list of Item objects."
+        tests:
+          - stdin: |
+              pack
+              tent
+              2100
+              pack
+              stove
+              400
+              pack
+              sleeping bag
+              1300
+              weight
+              heaviest
+              done
+          - stdin: |
+              heaviest
+              weight
+              pack
+              map
+              90
+              heaviest
+              unpack
+              done
+            hidden: true
+          - call: |
+              PackingList packing = new PackingList();
+              packing.add("rope", 800);
+              packing.add("boots", 1600);
+              packing.add("lamp", 1600);
+              packing.add("cup", 150);
+              System.out.println(packing.totalGrams() + " " + packing.heaviest());
+            hidden: true
+      - task: |
+          A weather station's `Thermometer` used to keep a list of every reading. Someone rewrote it to keep only the number of readings and the lowest and highest one. The user interface didn't change, but the answers did: for the input shown, the program now says the lowest reading is 0, although no reading was 0. Fix `Thermometer`, keeping its public methods, so that the program answers as it did before. For the input shown, it prints:
+
+          ```
+          > Recorded 12
+          > Recorded 17
+          > Recorded 9
+          > Lowest: 9
+          > Highest: 17
+          > Station off
+          ```
+        seed:
+          Thermometer.java: |
+            public class Thermometer {
+                private int count;
+                private int lowest;
+                private int highest;
+
+                public Thermometer() {
+                    this.count = 0;
+                    this.lowest = 0;
+                    this.highest = 0;
+                }
+
+                public void record(int degrees) {
+                    if (degrees < this.lowest) {
+                        this.lowest = degrees;
+                    }
+                    if (degrees > this.highest) {
+                        this.highest = degrees;
+                    }
+                    this.count++;
+                }
+
+                public int count() {
+                    return this.count;
+                }
+
+                public int lowest() {
+                    return this.lowest;
+                }
+
+                public int highest() {
+                    return this.highest;
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                private Scanner scanner;
+                private Thermometer thermometer;
+
+                public UserInterface(Scanner scanner, Thermometer thermometer) {
+                    this.scanner = scanner;
+                    this.thermometer = thermometer;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Station off");
+                            break;
+                        }
+                        if (command.equals("add")) {
+                            int degrees = Integer.valueOf(this.scanner.nextLine());
+                            this.thermometer.record(degrees);
+                            System.out.println("Recorded " + degrees);
+                        } else if (command.equals("low") || command.equals("high")) {
+                            if (this.thermometer.count() == 0) {
+                                System.out.println("No readings yet");
+                            } else if (command.equals("low")) {
+                                System.out.println("Lowest: " + this.thermometer.lowest());
+                            } else {
+                                System.out.println("Highest: " + this.thermometer.highest());
+                            }
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Thermometer thermometer = new Thermometer();
+                    UserInterface ui = new UserInterface(scanner, thermometer);
+                    ui.start();
+                }
+            }
+        solution:
+          Thermometer.java: |
+            public class Thermometer {
+                private int count;
+                private int lowest;
+                private int highest;
+
+                public Thermometer() {
+                    this.count = 0;
+                    this.lowest = 0;
+                    this.highest = 0;
+                }
+
+                public void record(int degrees) {
+                    if (this.count == 0 || degrees < this.lowest) {
+                        this.lowest = degrees;
+                    }
+                    if (this.count == 0 || degrees > this.highest) {
+                        this.highest = degrees;
+                    }
+                    this.count++;
+                }
+
+                public int count() {
+                    return this.count;
+                }
+
+                public int lowest() {
+                    return this.lowest;
+                }
+
+                public int highest() {
+                    return this.highest;
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                private Scanner scanner;
+                private Thermometer thermometer;
+
+                public UserInterface(Scanner scanner, Thermometer thermometer) {
+                    this.scanner = scanner;
+                    this.thermometer = thermometer;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Station off");
+                            break;
+                        }
+                        if (command.equals("add")) {
+                            int degrees = Integer.valueOf(this.scanner.nextLine());
+                            this.thermometer.record(degrees);
+                            System.out.println("Recorded " + degrees);
+                        } else if (command.equals("low") || command.equals("high")) {
+                            if (this.thermometer.count() == 0) {
+                                System.out.println("No readings yet");
+                            } else if (command.equals("low")) {
+                                System.out.println("Lowest: " + this.thermometer.lowest());
+                            } else {
+                                System.out.println("Highest: " + this.thermometer.highest());
+                            }
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Thermometer thermometer = new Thermometer();
+                    UserInterface ui = new UserInterface(scanner, thermometer);
+                    ui.start();
+                }
+            }
+        hints:
+          - "The lowest reading starts at 0, and a reading of 9 isn't lower than 0, so it's never kept. The same goes for the highest when every reading is below 0. Whatever the start value, the first reading must become both the lowest and the highest."
+          - "In `record`, before `this.count++`, the first reading is the one that comes when `this.count == 0`. Add that to both conditions: `if (this.count == 0 || degrees < this.lowest)`."
+        tests:
+          - stdin: |
+              add
+              12
+              add
+              17
+              add
+              9
+              low
+              high
+              quit
+          - stdin: |
+              low
+              add
+              -4
+              add
+              -9
+              add
+              -2
+              high
+              low
+              quit
+            hidden: true
+          - call: |
+              Thermometer t = new Thermometer();
+              t.record(5);
+              System.out.println(t.lowest() + " " + t.highest() + " " + t.count());
+              t.record(-3);
+              t.record(0);
+              t.record(8);
+              System.out.println(t.lowest() + " " + t.highest() + " " + t.count());
+            hidden: true
+          - call: |
+              Thermometer t = new Thermometer();
+              t.record(-6);
+              t.record(-1);
+              System.out.println(t.lowest() + " " + t.highest());
+            hidden: true
+
+  - id: text-ui-new-feature
+    slug: adding-a-feature
+    title: Adding a feature
+    text: |
+      Programs grow. A musician using the practice log would like to know the length of an average session, and a new user would like to see which commands there are. With the logic and the user interface apart, each part of a new feature has a clear place:
+
+      - What the program must know or work out goes into the logic class: new instance variables, new methods.
+      - The new command, and the sentence it prints, go into the user interface: one more `else if`.
+
+      For `average`, the log needs the number of sessions, which it doesn't keep yet. So it gets one more instance variable, counted up in `add`, and a new method that divides. For `help`, nothing needs working out, so it only changes the user interface. The lines marked `// new`, and the whole `average` method, are all that changed:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              PracticeLog log = new PracticeLog();
+              UserInterface ui = new UserInterface(scanner, log);
+              ui.start();
+          }
+      }
+      // ==== PracticeLog.java ====
+      public class PracticeLog {
+          private int totalMinutes;
+          private int longestSession;
+          private int sessions; // new
+
+          public PracticeLog() {
+              this.totalMinutes = 0;
+              this.longestSession = 0;
+              this.sessions = 0; // new
+          }
+
+          public void add(int minutes) {
+              this.totalMinutes = this.totalMinutes + minutes;
+              if (minutes > this.longestSession) {
+                  this.longestSession = minutes;
+              }
+              this.sessions++; // new
+          }
+
+          public int total() {
+              return this.totalMinutes;
+          }
+
+          public int longest() {
+              return this.longestSession;
+          }
+
+          public double average() { // new
+              if (this.sessions == 0) {
+                  return 0;
+              }
+              return (double) this.totalMinutes / this.sessions;
+          }
+      }
+      // ==== UserInterface.java ====
+      import java.util.Scanner;
+
+      public class UserInterface {
+          private Scanner scanner;
+          private PracticeLog log;
+
+          public UserInterface(Scanner scanner, PracticeLog log) {
+              this.scanner = scanner;
+              this.log = log;
+          }
+
+          public void start() {
+              while (true) {
+                  System.out.print("> ");
+                  String command = this.scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Keep practicing!");
+                      break;
+                  }
+                  if (command.equals("log")) {
+                      int minutes = Integer.valueOf(this.scanner.nextLine());
+                      this.log.add(minutes);
+                      System.out.println("Logged " + minutes + " minutes");
+                  } else if (command.equals("total")) {
+                      System.out.println("Total: " + this.log.total() + " minutes");
+                  } else if (command.equals("longest")) {
+                      System.out.println("Longest: " + this.log.longest() + " minutes");
+                  } else if (command.equals("average")) { // new
+                      System.out.println("Average: " + this.log.average() + " minutes"); // new
+                  } else if (command.equals("help")) { // new
+                      System.out.println("Commands: log, total, longest, average, help, quit"); // new
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+      }
+      ```
+
+      ```input
+      log
+      30
+      log
+      45
+      average
+      help
+      quit
+      ```
+
+      ```output
+      > Logged 30 minutes
+      > Logged 45 minutes
+      > Average: 37.5 minutes
+      > Commands: log, total, longest, average, help, quit
+      > Keep practicing!
+      ```
+
+      - `average()` returns a `double`, and the cast `(double)` makes the division keep its decimals, as module 4 showed. With no sessions yet, it returns 0 instead of dividing by 0.
+      - `average()` returns a number, and that's all. The words `Average:` and `minutes` are the user interface's business, just like the words around the total.
+      - `help` changed only the user interface. A feature that only changes what is shown, such as a new message or a list of the commands, stays in the user interface. `Main` didn't change at all.
+
+      ### Try the logic first
+
+      When a feature needs new logic, write the method first, and try it with a few calls before any command uses it: `log.add(30); log.add(45); System.out.println(log.average());` should print `37.5`. When it gives the right answers, the user interface only has to call it and print the result. If something is then wrong, you know where to look.
+
+      **Your turn:** a water log helps a person drink enough during the day, and the goal is 2000 ml. `WaterLog` and `UserInterface` know the commands `drink`, `total` and `quit`. Add a feature, the command `goal`:
+
+      - In `WaterLog.java`, add the method `mlToGoal()`. It returns how many milliliters are still missing, or 0 when the goal is reached.
+      - In `UserInterface.java`, add the command `goal`. It prints `Goal reached!` when `mlToGoal()` is 0, and otherwise the missing milliliters, like `750 ml to go`.
+
+      For the input shown, the program prints:
+
+      ```
+      > Total: 500 ml
+      > 1500 ml to go
+      > Total: 1250 ml
+      > 750 ml to go
+      > Total: 2100 ml
+      > Goal reached!
+      > Cheers!
+      ```
+    seed:
+      WaterLog.java: |
+        public class WaterLog {
+            private int goal;
+            private int total;
+
+            public WaterLog(int goal) {
+                this.goal = goal;
+                this.total = 0;
+            }
+
+            public void drink(int ml) {
+                this.total = this.total + ml;
+            }
+
+            public int total() {
+                return this.total;
+            }
+        }
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            private Scanner scanner;
+            private WaterLog log;
+
+            public UserInterface(Scanner scanner, WaterLog log) {
+                this.scanner = scanner;
+                this.log = log;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Cheers!");
+                        break;
+                    }
+                    if (command.equals("drink")) {
+                        int ml = Integer.valueOf(this.scanner.nextLine());
+                        this.log.drink(ml);
+                        System.out.println("Total: " + this.log.total() + " ml");
+                    } else if (command.equals("total")) {
+                        System.out.println("Total: " + this.log.total() + " ml");
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                WaterLog log = new WaterLog(2000);
+                UserInterface ui = new UserInterface(scanner, log);
+                ui.start();
+            }
+        }
+    solution:
+      WaterLog.java: |
+        public class WaterLog {
+            private int goal;
+            private int total;
+
+            public WaterLog(int goal) {
+                this.goal = goal;
+                this.total = 0;
+            }
+
+            public void drink(int ml) {
+                this.total = this.total + ml;
+            }
+
+            public int total() {
+                return this.total;
+            }
+
+            public int mlToGoal() {
+                if (this.total >= this.goal) {
+                    return 0;
+                }
+                return this.goal - this.total;
+            }
+        }
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            private Scanner scanner;
+            private WaterLog log;
+
+            public UserInterface(Scanner scanner, WaterLog log) {
+                this.scanner = scanner;
+                this.log = log;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Cheers!");
+                        break;
+                    }
+                    if (command.equals("drink")) {
+                        int ml = Integer.valueOf(this.scanner.nextLine());
+                        this.log.drink(ml);
+                        System.out.println("Total: " + this.log.total() + " ml");
+                    } else if (command.equals("total")) {
+                        System.out.println("Total: " + this.log.total() + " ml");
+                    } else if (command.equals("goal")) {
+                        int missing = this.log.mlToGoal();
+                        if (missing == 0) {
+                            System.out.println("Goal reached!");
+                        } else {
+                            System.out.println(missing + " ml to go");
+                        }
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                WaterLog log = new WaterLog(2000);
+                UserInterface ui = new UserInterface(scanner, log);
+                ui.start();
+            }
+        }
+    hints:
+      - "`mlToGoal()` compares two instance variables that WaterLog already has, the total and the goal. It returns a number and prints nothing: the words belong to the user interface, in one more `else if`."
+      - "`if (this.total >= this.goal) { return 0; }`, and otherwise `return this.goal - this.total;`. In `start()`, add `else if (command.equals(\"goal\"))` before the last `else`, keep `this.log.mlToGoal()` in a variable, and print one of the two messages depending on whether it's 0."
+    require:
+      - pattern: \bpublic\s+int\s+mlToGoal\s*\(\s*\)
+        message: "Add the method to WaterLog as `public int mlToGoal()`."
+      - pattern: \.mlToGoal\s*\(\s*\)
+        message: "The `goal` command asks the log with `mlToGoal()`."
+    forbid:
+      - pattern: \bclass\s+WaterLog\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+UserInterface\b
+        message: "WaterLog doesn't print. `mlToGoal()` returns a number, and the user interface prints the message."
+    tests:
+      - stdin: |
+          drink
+          500
+          goal
+          drink
+          750
+          goal
+          drink
+          850
+          goal
+          quit
+      - stdin: |
+          goal
+          drink
+          2000
+          goal
+          total
+          quit
+        hidden: true
+      - call: |
+          WaterLog small = new WaterLog(1000);
+          System.out.println(small.mlToGoal());
+          small.drink(400);
+          System.out.println(small.mlToGoal());
+          small.drink(900);
+          System.out.println(small.mlToGoal() + " " + small.total());
+        hidden: true
+    more:
+      - task: |
+          A model railway program builds a train behind its engine. `Train` and `UserInterface` know the commands `attach`, which is followed by a line with the kind of car to add at the end, `detach`, which takes off the last car, and `quit`. Add the command `count`: the next line is a kind of car, and the program prints how many cars of that kind the train has, like `sleeper cars: 2`. A car counts when its kind is spelled exactly the same, capitals included.
+
+          - In `Train.java`, add the method `countOf(String kind)`, which returns the number.
+          - In `UserInterface.java`, add the command.
+
+          For the input shown, the program prints:
+
+          ```
+          > [engine]-[seats]
+          > [engine]-[seats]-[sleeper]
+          > [engine]-[seats]-[sleeper]-[dining]
+          > [engine]-[seats]-[sleeper]-[dining]-[sleeper]
+          > sleeper cars: 2
+          > cargo cars: 0
+          > [engine]-[seats]-[sleeper]-[dining]
+          > sleeper cars: 1
+          > End of the line
+          ```
+        seed:
+          Train.java: |
+            import java.util.ArrayList;
+
+            public class Train {
+                private ArrayList<String> cars;
+
+                public Train() {
+                    this.cars = new ArrayList<>();
+                }
+
+                public void attach(String kind) {
+                    this.cars.add(kind);
+                }
+
+                public boolean detach() {
+                    if (this.cars.isEmpty()) {
+                        return false;
+                    }
+                    this.cars.remove(this.cars.size() - 1);
+                    return true;
+                }
+
+                public String toString() {
+                    String text = "[engine]";
+                    for (String car : this.cars) {
+                        text = text + "-[" + car + "]";
+                    }
+                    return text;
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                private Scanner scanner;
+                private Train train;
+
+                public UserInterface(Scanner scanner, Train train) {
+                    this.scanner = scanner;
+                    this.train = train;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("End of the line");
+                            break;
+                        }
+                        if (command.equals("attach")) {
+                            this.train.attach(this.scanner.nextLine());
+                            System.out.println(this.train);
+                        } else if (command.equals("detach")) {
+                            if (this.train.detach()) {
+                                System.out.println(this.train);
+                            } else {
+                                System.out.println("No cars to detach");
+                            }
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Train train = new Train();
+                    UserInterface ui = new UserInterface(scanner, train);
+                    ui.start();
+                }
+            }
+        solution:
+          Train.java: |
+            import java.util.ArrayList;
+
+            public class Train {
+                private ArrayList<String> cars;
+
+                public Train() {
+                    this.cars = new ArrayList<>();
+                }
+
+                public void attach(String kind) {
+                    this.cars.add(kind);
+                }
+
+                public boolean detach() {
+                    if (this.cars.isEmpty()) {
+                        return false;
+                    }
+                    this.cars.remove(this.cars.size() - 1);
+                    return true;
+                }
+
+                public int countOf(String kind) {
+                    int count = 0;
+                    for (String car : this.cars) {
+                        if (car.equals(kind)) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+
+                public String toString() {
+                    String text = "[engine]";
+                    for (String car : this.cars) {
+                        text = text + "-[" + car + "]";
+                    }
+                    return text;
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                private Scanner scanner;
+                private Train train;
+
+                public UserInterface(Scanner scanner, Train train) {
+                    this.scanner = scanner;
+                    this.train = train;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("End of the line");
+                            break;
+                        }
+                        if (command.equals("attach")) {
+                            this.train.attach(this.scanner.nextLine());
+                            System.out.println(this.train);
+                        } else if (command.equals("detach")) {
+                            if (this.train.detach()) {
+                                System.out.println(this.train);
+                            } else {
+                                System.out.println("No cars to detach");
+                            }
+                        } else if (command.equals("count")) {
+                            String kind = this.scanner.nextLine();
+                            System.out.println(kind + " cars: " + this.train.countOf(kind));
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Train train = new Train();
+                    UserInterface ui = new UserInterface(scanner, train);
+                    ui.start();
+                }
+            }
+        hints:
+          - "`countOf` goes through `this.cars` with a for-each loop and counts the cars that `equals` the kind it was given. It returns the count and prints nothing."
+          - "The `count` command reads the kind with `this.scanner.nextLine()`, keeps it in a variable, and prints it with `\" cars: \"` and `this.train.countOf(kind)`."
+        require:
+          - pattern: \bpublic\s+int\s+countOf\s*\(\s*String\s+\w+\s*\)
+            message: "Add the method to Train as `public int countOf(String kind)`."
+          - pattern: \.countOf\s*\(
+            message: "The `count` command asks the train with `countOf`."
+        forbid:
+          - pattern: \bclass\s+Train\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+UserInterface\b
+            message: "Train doesn't print. `countOf` returns a number, and the user interface prints the message."
+        tests:
+          - stdin: |
+              attach
+              seats
+              attach
+              sleeper
+              attach
+              dining
+              attach
+              sleeper
+              count
+              sleeper
+              count
+              cargo
+              detach
+              count
+              sleeper
+              quit
+          - stdin: |
+              count
+              seats
+              detach
+              attach
+              cargo
+              attach
+              cargo
+              count
+              cargo
+              shunt
+              quit
+            hidden: true
+          - call: |
+              Train train = new Train();
+              train.attach("mail");
+              train.attach("seats");
+              train.attach("mail");
+              train.attach("mail");
+              System.out.println(train.countOf("mail") + " " + train.countOf("seats") + " " + train.countOf("Mail"));
+            hidden: true
+      - task: |
+          An elevator goes between the floors 0 and 9. `Elevator` and `UserInterface` know the commands `go`, which is followed by a line with a floor number, `where` and `quit`. Add the command `traveled`, which prints how many floors the elevator has moved in all, like `Floors traveled: 8`. Going from floor 5 to floor 2 is 3 floors, and going up counts just like going down.
+
+          The elevator doesn't remember that yet, so the feature needs a new instance variable in `Elevator`, updated whenever it moves, and a method `getTraveled()` that returns it. A trip to a floor that doesn't exist doesn't move the elevator. Then add the command to `UserInterface`. For the input shown, the program prints:
+
+          ```
+          > Floor 5
+          > Floor 2
+          > Floor 2
+          > No floor 12
+          > Floors traveled: 8
+          > Floor 0
+          > Floors traveled: 10
+          > Out of service
+          ```
+        seed:
+          Elevator.java: |
+            public class Elevator {
+                private int topFloor;
+                private int floor;
+
+                public Elevator(int topFloor) {
+                    this.topFloor = topFloor;
+                    this.floor = 0;
+                }
+
+                public boolean goTo(int target) {
+                    if (target < 0 || target > this.topFloor) {
+                        return false;
+                    }
+                    this.floor = target;
+                    return true;
+                }
+
+                public int getFloor() {
+                    return this.floor;
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                private Scanner scanner;
+                private Elevator elevator;
+
+                public UserInterface(Scanner scanner, Elevator elevator) {
+                    this.scanner = scanner;
+                    this.elevator = elevator;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Out of service");
+                            break;
+                        }
+                        if (command.equals("go")) {
+                            int target = Integer.valueOf(this.scanner.nextLine());
+                            if (this.elevator.goTo(target)) {
+                                System.out.println("Floor " + this.elevator.getFloor());
+                            } else {
+                                System.out.println("No floor " + target);
+                            }
+                        } else if (command.equals("where")) {
+                            System.out.println("Floor " + this.elevator.getFloor());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Elevator elevator = new Elevator(9);
+                    UserInterface ui = new UserInterface(scanner, elevator);
+                    ui.start();
+                }
+            }
+        solution:
+          Elevator.java: |
+            public class Elevator {
+                private int topFloor;
+                private int floor;
+                private int traveled;
+
+                public Elevator(int topFloor) {
+                    this.topFloor = topFloor;
+                    this.floor = 0;
+                    this.traveled = 0;
+                }
+
+                public boolean goTo(int target) {
+                    if (target < 0 || target > this.topFloor) {
+                        return false;
+                    }
+                    this.traveled = this.traveled + Math.abs(target - this.floor);
+                    this.floor = target;
+                    return true;
+                }
+
+                public int getFloor() {
+                    return this.floor;
+                }
+
+                public int getTraveled() {
+                    return this.traveled;
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                private Scanner scanner;
+                private Elevator elevator;
+
+                public UserInterface(Scanner scanner, Elevator elevator) {
+                    this.scanner = scanner;
+                    this.elevator = elevator;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Out of service");
+                            break;
+                        }
+                        if (command.equals("go")) {
+                            int target = Integer.valueOf(this.scanner.nextLine());
+                            if (this.elevator.goTo(target)) {
+                                System.out.println("Floor " + this.elevator.getFloor());
+                            } else {
+                                System.out.println("No floor " + target);
+                            }
+                        } else if (command.equals("where")) {
+                            System.out.println("Floor " + this.elevator.getFloor());
+                        } else if (command.equals("traveled")) {
+                            System.out.println("Floors traveled: " + this.elevator.getTraveled());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Elevator elevator = new Elevator(9);
+                    UserInterface ui = new UserInterface(scanner, elevator);
+                    ui.start();
+                }
+            }
+        hints:
+          - "Add `private int traveled;`, set to 0 in the constructor, and `public int getTraveled()` that returns it. The distance of one trip is `Math.abs(target - this.floor)`: the difference without its minus sign."
+          - "In `goTo`, add the distance after the check for a floor that doesn't exist, and before `this.floor = target;`: after that line, the old floor is gone."
+        require:
+          - pattern: \bpublic\s+int\s+getTraveled\s*\(\s*\)
+            message: "Add the method to Elevator as `public int getTraveled()`."
+          - pattern: \.getTraveled\s*\(\s*\)
+            message: "The `traveled` command asks the elevator with `getTraveled()`."
+        forbid:
+          - pattern: \bclass\s+Elevator\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+UserInterface\b
+            message: "Elevator doesn't print. `getTraveled()` returns a number, and the user interface prints the message."
+        tests:
+          - stdin: |
+              go
+              5
+              go
+              2
+              where
+              go
+              12
+              traveled
+              go
+              0
+              traveled
+              quit
+          - stdin: |
+              traveled
+              go
+              9
+              go
+              9
+              go
+              -1
+              traveled
+              up
+              quit
+            hidden: true
+          - call: |
+              Elevator small = new Elevator(3);
+              small.goTo(3);
+              small.goTo(1);
+              small.goTo(4);
+              small.goTo(3);
+              System.out.println(small.getTraveled() + " " + small.getFloor());
+            hidden: true
+
+  - id: text-ui-bigger-program
+    slug: bigger-program
+    title: Planning a whole program
+    text: |
+      You've now seen every piece of a program with a text user interface. When you write one from scratch, this order keeps each step small:
+
+      1. Write down the commands and what each one prints, best as a short example conversation.
+      2. Decide what the program must remember between commands. Those are the instance variables of the logic class.
+      3. For each command, decide what the logic must do or answer. Those are its public methods: parameters for what comes in, return values for what goes out, and no printing.
+      4. Write the logic class, and try it with a few calls in `main`, before there's any user interface.
+      5. Write the `UserInterface` class: a constructor that takes the Scanner and the logic object, and `start()` with the command loop, one branch per command.
+      6. Make `main` create the objects and call `start()`.
+
+      Here are the first four for a coat check at a theater. Guests leave their coat and get a ticket with the number of its hook, and the ticket gets them their coat back:
+
+      | Command | What it prints |
+      | --- | --- |
+      | `leave`, then a name | `Ana, your ticket is 1` |
+      | `collect`, then a ticket number | `Here's your coat, Ana`, or `No coat on hook 7` |
+      | `coats` | `Coats: 2` |
+      | `quit` | `Good night` |
+
+      The coat check remembers whose coat is on which hook. A list of names does that: the hook's number is one more than its index, and a hook that's free again holds `null`. A new coat goes on the first free hook, or on a new hook at the end. Before writing any user interface, `main` tries the class out:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              CoatCheck check = new CoatCheck();
+              int ana = check.leave("Ana");
+              int ben = check.leave("Ben");
+              System.out.println(ana + " " + ben + " " + check.coats());
+              System.out.println(check.collect(ana));
+              System.out.println(check.collect(ana));
+              System.out.println(check.leave("Cleo") + " " + check.coats());
+          }
+      }
+      // ==== CoatCheck.java ====
+      import java.util.ArrayList;
+
+      public class CoatCheck {
+          private ArrayList<String> hooks;
+
+          public CoatCheck() {
+              this.hooks = new ArrayList<>();
+          }
+
+          public int leave(String owner) {
+              for (int i = 0; i < this.hooks.size(); i++) {
+                  if (this.hooks.get(i) == null) {
+                      this.hooks.set(i, owner);
+                      return i + 1;
+                  }
+              }
+              this.hooks.add(owner);
+              return this.hooks.size();
+          }
+
+          public String collect(int ticket) {
+              if (ticket < 1 || ticket > this.hooks.size()) {
+                  return null;
+              }
+              String owner = this.hooks.get(ticket - 1);
+              this.hooks.set(ticket - 1, null);
+              return owner;
+          }
+
+          public int coats() {
+              int count = 0;
+              for (String owner : this.hooks) {
+                  if (owner != null) {
+                      count++;
+                  }
+              }
+              return count;
+          }
+      }
+      ```
+
+      ```output
+      1 2 2
+      Ana
+      null
+      1 2
+      ```
+
+      - `leave` returns the ticket number, and `collect` returns the owner's name. The logic answers with values, and the user interface will turn them into sentences.
+      - `collect` returns `null` when there's no coat on that hook, or no such hook at all. That's the logic's way of saying "no coat". Printing `No coat on hook 7` is up to the user interface.
+      - After Ana collects her coat, her hook is free: the second `collect(ana)` finds it empty and returns `null`. Cleo's coat then goes on hook 1, the first free one.
+      - These few lines already show that the logic works. If the whole program then misbehaves, the mistake is most likely in the user interface.
+
+      This step ends the MOOC's section 6.2. The next module is about testing: checking automatically that a logic class such as `CoatCheck` gives the right answers.
+
+      **Your turn:** steps 5 and 6 for the coat check. `CoatCheck.java` is the class above, and `Main.java` is ready. Write `UserInterface.java`: its constructor takes a `Scanner` and a `CoatCheck`, and `start()` runs the commands of the table, with the prompt `> ` before each one. Anything else prints `Unknown command: ` and the command. For the input shown, the program prints:
+
+      ```
+      > Ana, your ticket is 1
+      > Ben, your ticket is 2
+      > Coats: 2
+      > Here's your coat, Ana
+      > No coat on hook 1
+      > Cleo, your ticket is 1
+      > No coat on hook 7
+      > Coats: 2
+      > Good night
+      ```
+    seed:
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            // Write the instance variables, the constructor and start() here.
+        }
+      CoatCheck.java: |
+        import java.util.ArrayList;
+
+        public class CoatCheck {
+            private ArrayList<String> hooks;
+
+            public CoatCheck() {
+                this.hooks = new ArrayList<>();
+            }
+
+            public int leave(String owner) {
+                for (int i = 0; i < this.hooks.size(); i++) {
+                    if (this.hooks.get(i) == null) {
+                        this.hooks.set(i, owner);
+                        return i + 1;
+                    }
+                }
+                this.hooks.add(owner);
+                return this.hooks.size();
+            }
+
+            public String collect(int ticket) {
+                if (ticket < 1 || ticket > this.hooks.size()) {
+                    return null;
+                }
+                String owner = this.hooks.get(ticket - 1);
+                this.hooks.set(ticket - 1, null);
+                return owner;
+            }
+
+            public int coats() {
+                int count = 0;
+                for (String owner : this.hooks) {
+                    if (owner != null) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                CoatCheck check = new CoatCheck();
+                UserInterface ui = new UserInterface(scanner, check);
+                ui.start();
+            }
+        }
+    solution:
+      UserInterface.java: |
+        import java.util.Scanner;
+
+        public class UserInterface {
+            // Write the instance variables, the constructor and start() here.
+            private Scanner scanner;
+            private CoatCheck check;
+
+            public UserInterface(Scanner scanner, CoatCheck check) {
+                this.scanner = scanner;
+                this.check = check;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Good night");
+                        break;
+                    }
+                    if (command.equals("leave")) {
+                        String name = this.scanner.nextLine();
+                        int ticket = this.check.leave(name);
+                        System.out.println(name + ", your ticket is " + ticket);
+                    } else if (command.equals("collect")) {
+                        int ticket = Integer.valueOf(this.scanner.nextLine());
+                        String owner = this.check.collect(ticket);
+                        if (owner == null) {
+                            System.out.println("No coat on hook " + ticket);
+                        } else {
+                            System.out.println("Here's your coat, " + owner);
+                        }
+                    } else if (command.equals("coats")) {
+                        System.out.println("Coats: " + this.check.coats());
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+        }
+      CoatCheck.java: |
+        import java.util.ArrayList;
+
+        public class CoatCheck {
+            private ArrayList<String> hooks;
+
+            public CoatCheck() {
+                this.hooks = new ArrayList<>();
+            }
+
+            public int leave(String owner) {
+                for (int i = 0; i < this.hooks.size(); i++) {
+                    if (this.hooks.get(i) == null) {
+                        this.hooks.set(i, owner);
+                        return i + 1;
+                    }
+                }
+                this.hooks.add(owner);
+                return this.hooks.size();
+            }
+
+            public String collect(int ticket) {
+                if (ticket < 1 || ticket > this.hooks.size()) {
+                    return null;
+                }
+                String owner = this.hooks.get(ticket - 1);
+                this.hooks.set(ticket - 1, null);
+                return owner;
+            }
+
+            public int coats() {
+                int count = 0;
+                for (String owner : this.hooks) {
+                    if (owner != null) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                CoatCheck check = new CoatCheck();
+                UserInterface ui = new UserInterface(scanner, check);
+                ui.start();
+            }
+        }
+    hints:
+      - "The user interface keeps a `Scanner` and a `CoatCheck`, set in the constructor. For `leave`, read the name, keep the ticket that `leave` returns, and print both."
+      - "For `collect`, read the number with `Integer.valueOf(this.scanner.nextLine())`, keep what `collect` returns in a String variable, and check `if (owner == null)` to choose the message."
+    tests:
+      - stdin: |
+          leave
+          Ana
+          leave
+          Ben
+          coats
+          collect
+          1
+          collect
+          1
+          leave
+          Cleo
+          collect
+          7
+          coats
+          quit
+      - stdin: |
+          coats
+          collect
+          0
+          leave
+          Dev
+          hang
+          collect
+          1
+          coats
+          quit
+        hidden: true
+      - call: |
+          CoatCheck check = new CoatCheck();
+          check.leave("Eli");
+          UserInterface ui = new UserInterface(new Scanner("leave\nFay\ncollect\n1\nleave\nGus\ncoats\nquit\n"), check);
+          ui.start();
+          System.out.println(check.collect(1) + " " + check.collect(2));
+        hidden: true
+    more:
+      - task: |
+          A savings account program. Write the logic class, `Account.java`, and the user interface, `UserInterface.java`. `Main.java` is ready.
+
+          `Account` has a balance, 0 at the start, and a history of the changes to it, in a list: a deposit adds a positive number to the history, a withdrawal a negative one. Its methods:
+
+          - `deposit(int amount)`: adds the amount to the balance, and to the history.
+          - `withdraw(int amount)`: if the balance is too small, changes nothing and returns `false`. Otherwise takes the amount off the balance, adds `-amount` to the history, and returns `true`.
+          - `getBalance()`: returns the balance.
+          - `history()`: returns the history, an `ArrayList<Integer>`.
+
+          `UserInterface` takes a `Scanner` and an `Account`, and `start()` reads commands, with the prompt `> ` before each one:
+
+          - `deposit`, then a line with the amount: print `Balance: ` and the new balance.
+          - `withdraw`, then a line with the amount: print `Balance: ` and the new balance, or `Not enough money`.
+          - `history`: print `History: ` and the list, like `History: [50, -20]`.
+          - `quit`: print `Goodbye` and return.
+          - Anything else: print `Unknown command: ` and the command.
+
+          For the input shown, the program prints:
+
+          ```
+          > Balance: 50
+          > Balance: 30
+          > Not enough money
+          > Balance: 45
+          > History: [50, -20, 15]
+          > Goodbye
+          ```
+        seed:
+          Account.java: |
+            import java.util.ArrayList;
+
+            public class Account {
+                // Write the logic here.
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                // Write the user interface here.
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Account account = new Account();
+                    UserInterface ui = new UserInterface(scanner, account);
+                    ui.start();
+                }
+            }
+        solution:
+          Account.java: |
+            import java.util.ArrayList;
+
+            public class Account {
+                // Write the logic here.
+                private int balance;
+                private ArrayList<Integer> history;
+
+                public Account() {
+                    this.balance = 0;
+                    this.history = new ArrayList<>();
+                }
+
+                public void deposit(int amount) {
+                    this.balance = this.balance + amount;
+                    this.history.add(amount);
+                }
+
+                public boolean withdraw(int amount) {
+                    if (amount > this.balance) {
+                        return false;
+                    }
+                    this.balance = this.balance - amount;
+                    this.history.add(-amount);
+                    return true;
+                }
+
+                public int getBalance() {
+                    return this.balance;
+                }
+
+                public ArrayList<Integer> history() {
+                    return this.history;
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                // Write the user interface here.
+                private Scanner scanner;
+                private Account account;
+
+                public UserInterface(Scanner scanner, Account account) {
+                    this.scanner = scanner;
+                    this.account = account;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Goodbye");
+                            break;
+                        }
+                        if (command.equals("deposit")) {
+                            int amount = Integer.valueOf(this.scanner.nextLine());
+                            this.account.deposit(amount);
+                            System.out.println("Balance: " + this.account.getBalance());
+                        } else if (command.equals("withdraw")) {
+                            int amount = Integer.valueOf(this.scanner.nextLine());
+                            if (this.account.withdraw(amount)) {
+                                System.out.println("Balance: " + this.account.getBalance());
+                            } else {
+                                System.out.println("Not enough money");
+                            }
+                        } else if (command.equals("history")) {
+                            System.out.println("History: " + this.account.history());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Account account = new Account();
+                    UserInterface ui = new UserInterface(scanner, account);
+                    ui.start();
+                }
+            }
+        hints:
+          - "Write `Account` first: `private int balance;` and `private ArrayList<Integer> history;`, both set in the constructor. `withdraw` returns `false` first when `amount > this.balance`."
+          - "In `withdraw`, `this.history.add(-amount);` adds the amount as a negative number. The user interface prints the list itself: `\"History: \" + this.account.history()`."
+        forbid:
+          - pattern: \bclass\s+Account\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+UserInterface\b
+            message: "Account doesn't print. Its methods return their answers, and the user interface prints them."
+        tests:
+          - stdin: |
+              deposit
+              50
+              withdraw
+              20
+              withdraw
+              100
+              deposit
+              15
+              history
+              quit
+          - stdin: |
+              history
+              withdraw
+              1
+              deposit
+              10
+              withdraw
+              10
+              balance
+              history
+              quit
+            hidden: true
+          - call: |
+              Account a = new Account();
+              System.out.println(a.withdraw(1) + " " + a.getBalance() + " " + a.history());
+              a.deposit(100);
+              System.out.println(a.withdraw(100) + " " + a.getBalance() + " " + a.history());
+            hidden: true
+          - call: |
+              Account a = new Account();
+              UserInterface ui = new UserInterface(new Scanner("deposit\n70\nwithdraw\n30\nquit\n"), a);
+              ui.start();
+              System.out.println(a.getBalance());
+            hidden: true
+      - task: |
+          A library card program, all of it: `LibraryCard.java`, `UserInterface.java` and `Main.java`.
+
+          `LibraryCard` holds the titles of the books borrowed on the card, and a limit to how many books can be borrowed at a time. Its methods:
+
+          - `LibraryCard(int limit)`: a card with no books, for at most `limit` books at a time.
+          - `has(String title)`: returns `true` when that book is borrowed on the card.
+          - `isFull()`: returns `true` when `limit` books are borrowed.
+          - `borrow(String title)`: adds the book to the card. The user interface only calls it when the card isn't full and doesn't have the book.
+          - `giveBack(String title)`: removes the book and returns `true`, or returns `false` if it isn't on the card.
+          - `books()`: returns the titles, an `ArrayList<String>`, in the order they were borrowed.
+
+          `UserInterface` takes a `Scanner` and a `LibraryCard`, and `start()` reads commands, with the prompt `> ` before each one:
+
+          - `borrow`, then a line with a title: print `You already have ` and the title when the card has it, otherwise `Your card is full` when it's full, and otherwise borrow the book and print `Borrowed ` and the title.
+          - `return`, then a line with a title: give the book back and print `Returned ` and the title, or print the title and ` isn't on your card`.
+          - `books`: print `Books: ` and the list of titles.
+          - `quit`: print `See you soon` and return.
+          - Anything else: print `Unknown command: ` and the command.
+
+          `main` creates a card with the limit 3 and starts the user interface. For the input shown, the program prints:
+
+          ```
+          > Borrowed Emma
+          > Borrowed Dune
+          > You already have Emma
+          > Borrowed Ivanhoe
+          > Your card is full
+          > Returned Dune
+          > Dune isn't on your card
+          > Borrowed Beloved
+          > Books: [Emma, Ivanhoe, Beloved]
+          > See you soon
+          ```
+        seed:
+          LibraryCard.java: |
+            import java.util.ArrayList;
+
+            public class LibraryCard {
+                // Write the logic here.
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                // Write the user interface here.
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    // Create the objects and start the user interface.
+                }
+            }
+        solution:
+          LibraryCard.java: |
+            import java.util.ArrayList;
+
+            public class LibraryCard {
+                // Write the logic here.
+                private ArrayList<String> titles;
+                private int limit;
+
+                public LibraryCard(int limit) {
+                    this.titles = new ArrayList<>();
+                    this.limit = limit;
+                }
+
+                public boolean has(String title) {
+                    return this.titles.contains(title);
+                }
+
+                public boolean isFull() {
+                    return this.titles.size() >= this.limit;
+                }
+
+                public void borrow(String title) {
+                    this.titles.add(title);
+                }
+
+                public boolean giveBack(String title) {
+                    if (!this.titles.contains(title)) {
+                        return false;
+                    }
+                    this.titles.remove(title);
+                    return true;
+                }
+
+                public ArrayList<String> books() {
+                    return this.titles;
+                }
+            }
+          UserInterface.java: |
+            import java.util.Scanner;
+
+            public class UserInterface {
+                // Write the user interface here.
+                private Scanner scanner;
+                private LibraryCard card;
+
+                public UserInterface(Scanner scanner, LibraryCard card) {
+                    this.scanner = scanner;
+                    this.card = card;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("See you soon");
+                            break;
+                        }
+                        if (command.equals("borrow")) {
+                            String title = this.scanner.nextLine();
+                            if (this.card.has(title)) {
+                                System.out.println("You already have " + title);
+                            } else if (this.card.isFull()) {
+                                System.out.println("Your card is full");
+                            } else {
+                                this.card.borrow(title);
+                                System.out.println("Borrowed " + title);
+                            }
+                        } else if (command.equals("return")) {
+                            String title = this.scanner.nextLine();
+                            if (this.card.giveBack(title)) {
+                                System.out.println("Returned " + title);
+                            } else {
+                                System.out.println(title + " isn't on your card");
+                            }
+                        } else if (command.equals("books")) {
+                            System.out.println("Books: " + this.card.books());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    // Create the objects and start the user interface.
+                    Scanner scanner = new Scanner(System.in);
+                    LibraryCard card = new LibraryCard(3);
+                    UserInterface ui = new UserInterface(scanner, card);
+                    ui.start();
+                }
+            }
+        hints:
+          - "Follow the plan: `LibraryCard` first, with a list of titles and the limit as instance variables. `has` is the list's `contains`, `isFull` compares the list's `size()` with the limit, and `giveBack` checks `contains` before removing."
+          - "The `borrow` command is an `if`, `else if`, `else`: first `this.card.has(title)`, then `this.card.isFull()`, and only then `this.card.borrow(title)`. `main` is the same four lines as in the other programs with a UserInterface class, with `new LibraryCard(3)`."
+        forbid:
+          - pattern: \bclass\s+LibraryCard\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+UserInterface\b
+            message: "LibraryCard doesn't print. Its methods return their answers, and the user interface prints them."
+        tests:
+          - stdin: |
+              borrow
+              Emma
+              borrow
+              Dune
+              borrow
+              Emma
+              borrow
+              Ivanhoe
+              borrow
+              Beloved
+              return
+              Dune
+              return
+              Dune
+              borrow
+              Beloved
+              books
+              quit
+          - stdin: |
+              books
+              return
+              Emma
+              borrow
+              Persuasion
+              renew
+              books
+              return
+              Persuasion
+              books
+              quit
+            hidden: true
+          - call: |
+              LibraryCard card = new LibraryCard(2);
+              card.borrow("A");
+              System.out.println(card.has("A") + " " + card.has("B") + " " + card.isFull());
+              card.borrow("B");
+              System.out.println(card.isFull() + " " + card.books());
+              System.out.println(card.giveBack("A") + " " + card.giveBack("A") + " " + card.books());
+            hidden: true
+          - call: |
+              LibraryCard card = new LibraryCard(1);
+              UserInterface ui = new UserInterface(new Scanner("borrow\nOdyssey\nborrow\nIliad\nborrow\nOdyssey\nbooks\nquit\n"), card);
+              ui.start();
+              System.out.println(card.books());
+            hidden: true

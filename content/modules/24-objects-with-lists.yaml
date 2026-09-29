@@ -1,0 +1,4348 @@
+id: objects-with-lists
+summary: Objects that keep a list of their own. A list as an instance variable, created in the constructor; methods that add to the list, go through it, print it, empty it and remove from it; totals and searches over the objects on the list; and rules the object checks before it adds anything. The start of MOOC part 6.
+steps:
+  - id: objects-with-lists-review
+    slug: lists-review
+    title: Lists, a quick review
+    text: |
+      Part 6 starts with a tool you've used since module 13, the list, and puts it somewhere new: inside an object. First, a quick look back at what you already know.
+
+      ### A list of Strings
+
+      ```java main
+      ArrayList<String> stops = new ArrayList<>();
+      stops.add("Harbor");
+      stops.add("Market");
+      stops.add("Old Town");
+      System.out.println(stops.size() + " stops, the second is " + stops.get(1));
+      for (String stop : stops) {
+          System.out.println("Next: " + stop);
+      }
+      ```
+
+      ```output
+      3 stops, the second is Market
+      Next: Harbor
+      Next: Market
+      Next: Old Town
+      ```
+
+      - `ArrayList<String>` is a list of Strings, and `new ArrayList<>()` makes a new, empty one.
+      - `add` puts a value at the end, `size()` tells how many values there are, and `get(1)` gives the value at index 1. Indexes start at 0.
+      - The for-each loop goes through the values in order.
+
+      Module 14 added more: `contains`, `indexOf`, `remove`, `isEmpty` and `clear`. A list of whole numbers is an `ArrayList<Integer>`.
+
+      ### A list of objects
+
+      Module 19 put objects of your own classes on a list. The loop then gets one object at a time, and asks it for its values with its getters:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Book> books = new ArrayList<>();
+              books.add(new Book("Emma", 474));
+              books.add(new Book("Dracula", 418));
+              books.add(new Book("Kindred", 264));
+
+              int pages = 0;
+              for (Book book : books) {
+                  System.out.println(book);
+                  pages = pages + book.getPages();
+              }
+              System.out.println("In all: " + pages + " pages");
+          }
+      }
+      // ==== Book.java ====
+      public class Book {
+          private String title;
+          private int pages;
+
+          public Book(String title, int pages) {
+              this.title = title;
+              this.pages = pages;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int getPages() {
+              return this.pages;
+          }
+
+          public String toString() {
+              return this.title + ", " + this.pages + " pages";
+          }
+      }
+      ```
+
+      ```output
+      Emma, 474 pages
+      Dracula, 418 pages
+      Kindred, 264 pages
+      In all: 1156 pages
+      ```
+
+      ### Whose list is it?
+
+      In these programs, the list is a local variable of `main`. For one list, that's fine. Now picture a home with two bookshelves, one in the living room and one in the bedroom. `main` would need two lists, and two more variables for the rooms' names, and every method would take a list as a parameter: `printBooks(bedroom)`, `totalPages(livingRoom)`. Nothing ties a room's name to its list, and any line of the program could change any list.
+
+      Module 21 had the answer to this kind of mess: an object looks after its own data. A list is data too, so it can be an instance variable of an object:
+
+      ```java fragment
+      public class Bookshelf {
+          private String room;
+          private ArrayList<Book> books;
+
+          // a constructor, and methods that add books, print them, count them...
+      }
+      ```
+
+      Each Bookshelf then keeps its own room and its own books, and `main` only calls methods such as `shelf.add(book)`. The rest of this module builds classes like this one, a piece at a time. First, a warm-up with lists as you know them.
+
+      **Your turn:** `Runner.java` is ready: a runner has a name and a time in minutes, with the getters `getName()` and `getMinutes()`, and a toString that gives, for example, `Ada, 27 min`. In `Main.java`, write the method `printFaster(ArrayList<Runner> runners, int limit)`. It prints every runner whose time is less than `limit` minutes, one per line, in the order of the list. The check runs:
+
+      ```java fragment
+      ArrayList<Runner> runners = new ArrayList<>();
+      runners.add(new Runner("Ada", 27));
+      runners.add(new Runner("Bo", 35));
+      runners.add(new Runner("Cy", 22));
+      printFaster(runners, 30);
+      ```
+
+      and expects:
+
+      ```
+      Ada, 27 min
+      Cy, 22 min
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Runner> runners = new ArrayList<>();
+                runners.add(new Runner("Ada", 27));
+                runners.add(new Runner("Bo", 35));
+                runners.add(new Runner("Cy", 22));
+                printFaster(runners, 30);
+            }
+
+            // Write the printFaster method here.
+        }
+      Runner.java: |
+        public class Runner {
+            private String name;
+            private int minutes;
+
+            public Runner(String name, int minutes) {
+                this.name = name;
+                this.minutes = minutes;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getMinutes() {
+                return this.minutes;
+            }
+
+            public String toString() {
+                return this.name + ", " + this.minutes + " min";
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Runner> runners = new ArrayList<>();
+                runners.add(new Runner("Ada", 27));
+                runners.add(new Runner("Bo", 35));
+                runners.add(new Runner("Cy", 22));
+                printFaster(runners, 30);
+            }
+
+            public static void printFaster(ArrayList<Runner> runners, int limit) {
+                for (Runner runner : runners) {
+                    if (runner.getMinutes() < limit) {
+                        System.out.println(runner);
+                    }
+                }
+            }
+        }
+      Runner.java: |
+        public class Runner {
+            private String name;
+            private int minutes;
+
+            public Runner(String name, int minutes) {
+                this.name = name;
+                this.minutes = minutes;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getMinutes() {
+                return this.minutes;
+            }
+
+            public String toString() {
+                return this.name + ", " + this.minutes + " min";
+            }
+        }
+    hints:
+      - "The method starts `public static void printFaster(ArrayList<Runner> runners, int limit) {`. Inside it, go through the list with `for (Runner runner : runners) {`."
+      - "In the loop, `runner.getMinutes()` is this runner's time. When it's less than `limit`, print the runner: `System.out.println(runner);` uses Runner's toString."
+    require:
+      - pattern: \bpublic\s+static\s+void\s+printFaster\s*\(\s*ArrayList<Runner>\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the method as `public static void printFaster(ArrayList<Runner> runners, int limit)`."
+      - pattern: \.getMinutes\s*\(\s*\)
+        message: "Ask each runner for its time with `getMinutes()`."
+    tests:
+      - call: |
+          ArrayList<Runner> runners = new ArrayList<>();
+          runners.add(new Runner("Ada", 27));
+          runners.add(new Runner("Bo", 35));
+          runners.add(new Runner("Cy", 22));
+          printFaster(runners, 30);
+      - call: |
+          ArrayList<Runner> runners = new ArrayList<>();
+          runners.add(new Runner("Ada", 27));
+          runners.add(new Runner("Bo", 35));
+          runners.add(new Runner("Cy", 22));
+          printFaster(runners, 27);
+          System.out.println("--");
+          printFaster(runners, 40);
+        hidden: true
+      - call: |
+          ArrayList<Runner> none = new ArrayList<>();
+          printFaster(none, 50);
+          none.add(new Runner("Dee", 50));
+          printFaster(none, 50);
+          none.add(new Runner("Eli", 49));
+          printFaster(none, 50);
+          System.out.println("done");
+        hidden: true
+    more:
+      - task: |
+          What does this program print? A list is an object, so a list variable holds a reference to it, just like a variable of your own classes (module 22).
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> monday = new ArrayList<>();
+                  monday.add("swim");
+                  ArrayList<String> tuesday = monday;
+                  tuesday.add("run");
+                  monday.add("yoga");
+                  ArrayList<String> friday = new ArrayList<>();
+                  friday.add("swim");
+                  System.out.println(monday.size() + " " + tuesday.size() + " " + friday.size());
+                  System.out.println(tuesday);
+                  System.out.println(monday == tuesday);
+                  System.out.println(monday == friday);
+              }
+          }
+        hints:
+          - "`ArrayList<String> tuesday = monday;` makes no new list. It copies the reference, so `monday` and `tuesday` refer to the one list, and all three `add` calls on them go to that list."
+          - "`friday` is a new list of its own, made with `new`. It holds only `swim`. `==` asks whether two variables refer to the same object."
+      - task: |
+          Read runners until an empty line. Each line has a name and a time in minutes, separated by a space, like `Ada 27`. Make a `Runner` of each line and add it to the list `runners`. `Runner.java` is the class from the first challenge.
+
+          Then print how many runners there are, like `Runners: 3`, and after that every runner, starting from the last one read and ending with the first. For the input shown below, the program prints:
+
+          ```
+          Runners: 3
+          Cy, 22 min
+          Bo, 35 min
+          Ada, 27 min
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    ArrayList<Runner> runners = new ArrayList<>();
+
+                }
+            }
+          Runner.java: |
+            public class Runner {
+                private String name;
+                private int minutes;
+
+                public Runner(String name, int minutes) {
+                    this.name = name;
+                    this.minutes = minutes;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getMinutes() {
+                    return this.minutes;
+                }
+
+                public String toString() {
+                    return this.name + ", " + this.minutes + " min";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    ArrayList<Runner> runners = new ArrayList<>();
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.isEmpty()) {
+                            break;
+                        }
+                        String[] parts = line.split(" ");
+                        runners.add(new Runner(parts[0], Integer.valueOf(parts[1])));
+                    }
+                    System.out.println("Runners: " + runners.size());
+                    for (int i = runners.size() - 1; i >= 0; i--) {
+                        System.out.println(runners.get(i));
+                    }
+                }
+            }
+          Runner.java: |
+            public class Runner {
+                private String name;
+                private int minutes;
+
+                public Runner(String name, int minutes) {
+                    this.name = name;
+                    this.minutes = minutes;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getMinutes() {
+                    return this.minutes;
+                }
+
+                public String toString() {
+                    return this.name + ", " + this.minutes + " min";
+                }
+            }
+        hints:
+          - "Read in a `while (true)` loop and `break` at the empty line. `line.split(\" \")` splits `Ada 27` into the name and the minutes, and `Integer.valueOf(parts[1])` turns the minutes into a number: `runners.add(new Runner(parts[0], Integer.valueOf(parts[1])));`"
+          - "A for-each loop only goes forwards. To start from the last runner, loop over the indexes backwards: `for (int i = runners.size() - 1; i >= 0; i--)`, and print `runners.get(i)`."
+        tests:
+          - stdin: |+
+              Ada 27
+              Bo 35
+              Cy 22
+
+          - stdin: |+
+
+            hidden: true
+          - stdin: |+
+              Mo 41
+
+            hidden: true
+          - stdin: |+
+              Kim 30
+              Lou 18
+              Max 25
+              Nia 33
+              Oz 20
+
+            hidden: true
+
+  - id: objects-with-lists-instance-variable
+    slug: list-as-instance-variable
+    title: A list as an instance variable
+    text: |
+      A class can keep a list in an instance variable, just as it keeps a String or an int. Here a recipe has a name and a list of ingredients:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Recipe pancakes = new Recipe("Pancakes");
+              pancakes.addIngredient("flour");
+              pancakes.addIngredient("milk");
+              pancakes.addIngredient("eggs");
+
+              Recipe toast = new Recipe("Toast");
+              toast.addIngredient("bread");
+              toast.addIngredient("butter");
+
+              System.out.println(pancakes.getName() + " needs " + pancakes.ingredientCount() + " ingredients");
+              System.out.println(toast.getName() + " needs " + toast.ingredientCount() + " ingredients");
+          }
+      }
+      // ==== Recipe.java ====
+      import java.util.ArrayList;
+
+      public class Recipe {
+          private String name;
+          private ArrayList<String> ingredients;
+
+          public Recipe(String name) {
+              this.name = name;
+              this.ingredients = new ArrayList<>();
+          }
+
+          public void addIngredient(String ingredient) {
+              this.ingredients.add(ingredient);
+          }
+
+          public int ingredientCount() {
+              return this.ingredients.size();
+          }
+
+          public String getName() {
+              return this.name;
+          }
+      }
+      ```
+
+      ```output
+      Pancakes needs 3 ingredients
+      Toast needs 2 ingredients
+      ```
+
+      - `import java.util.ArrayList;` is at the top of `Recipe.java`, because Recipe uses ArrayList. Each file imports what it uses. `Main.java` needs no import here: `main` never writes `ArrayList`.
+      - `private ArrayList<String> ingredients;` declares the instance variable. Like the others, it's private, so code outside Recipe can't reach the list.
+      - The constructor makes the list: `this.ingredients = new ArrayList<>();`. The constructor runs once for each new Recipe, so each recipe gets a new, empty list of its own. The pancakes' three ingredients never mix with the toast's two.
+      - The methods use the list through `this.ingredients`, like any other instance variable. `addIngredient` passes the ingredient on to the list's `add`, and `ingredientCount` returns the list's `size()`.
+
+      `main` never touches the list itself: it asks the recipe. So the recipe's methods decide what can be done with its ingredients. This Recipe can add and count them, and nothing else. There's no way to remove an ingredient, because Recipe has no method for that.
+
+      ### Forgetting to make the list
+
+      Declaring the instance variable doesn't make a list. `private ArrayList<String> ingredients;` only says what the variable can refer to, and an instance variable of a class type is `null` until something gives it an object (module 22). If the constructor leaves out `new ArrayList<>()`, the first `add` crashes:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Recipe salad = new Recipe("Salad");
+              salad.addIngredient("lettuce");
+              System.out.println(salad.ingredientCount());
+          }
+      }
+      // ==== Recipe.java ====
+      import java.util.ArrayList;
+
+      public class Recipe {
+          private String name;
+          private ArrayList<String> ingredients;
+
+          public Recipe(String name) {
+              this.name = name;
+          }
+
+          public void addIngredient(String ingredient) {
+              this.ingredients.add(ingredient);
+          }
+
+          public int ingredientCount() {
+              return this.ingredients.size();
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NullPointerException: Cannot invoke "java.util.ArrayList.add(Object)" because "this.ingredients" is null
+      	at Recipe.addIngredient(Recipe.java:12)
+      	at Main.main(Main.java:4)
+      ```
+
+      The message names the instance variable that was null, `this.ingredients`. The first `at` line says where it happened: in `addIngredient`, line 12 of `Recipe.java`. The line below says who called it: `main`, on line 4. The fix is in neither place, though. It's the missing line in the constructor, where the recipe should have gotten its list.
+
+      **Your turn:** a photo album has a title and a list of photo names. In `PhotoAlbum.java`, add a private instance variable `photos`, a list of Strings, and make a new, empty list for it in the constructor. Then write two methods: `add(String photo)` adds the photo to the list, and `count()` returns how many photos the album holds. The check runs:
+
+      ```java fragment
+      PhotoAlbum trip = new PhotoAlbum("Summer trip");
+      trip.add("beach.jpg");
+      trip.add("tent.jpg");
+      PhotoAlbum winter = new PhotoAlbum("Winter");
+      System.out.println(trip.getTitle() + ": " + trip.count());
+      System.out.println(winter.getTitle() + ": " + winter.count());
+      ```
+
+      and expects:
+
+      ```
+      Summer trip: 2
+      Winter: 0
+      ```
+    seed:
+      PhotoAlbum.java: |
+        import java.util.ArrayList;
+
+        public class PhotoAlbum {
+            private String title;
+
+            public PhotoAlbum(String title) {
+                this.title = title;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            // Write the methods add and count here.
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                PhotoAlbum trip = new PhotoAlbum("Summer trip");
+                trip.add("beach.jpg");
+                trip.add("tent.jpg");
+                PhotoAlbum winter = new PhotoAlbum("Winter");
+                System.out.println(trip.getTitle() + ": " + trip.count());
+                System.out.println(winter.getTitle() + ": " + winter.count());
+            }
+        }
+    solution:
+      PhotoAlbum.java: |
+        import java.util.ArrayList;
+
+        public class PhotoAlbum {
+            private String title;
+            private ArrayList<String> photos;
+
+            public PhotoAlbum(String title) {
+                this.title = title;
+                this.photos = new ArrayList<>();
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public void add(String photo) {
+                this.photos.add(photo);
+            }
+
+            public int count() {
+                return this.photos.size();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                PhotoAlbum trip = new PhotoAlbum("Summer trip");
+                trip.add("beach.jpg");
+                trip.add("tent.jpg");
+                PhotoAlbum winter = new PhotoAlbum("Winter");
+                System.out.println(trip.getTitle() + ": " + trip.count());
+                System.out.println(winter.getTitle() + ": " + winter.count());
+            }
+        }
+    hints:
+      - "Declare the list next to `title`: `private ArrayList<String> photos;`. In the constructor, give it a new list: `this.photos = new ArrayList<>();`."
+      - "`add` passes the photo on to the list, `this.photos.add(photo);`, and `count` returns `this.photos.size();`."
+    require:
+      - pattern: \bprivate\s+ArrayList<String>\s+photos\s*;
+        message: "Keep the photos in a private instance variable: `private ArrayList<String> photos;`."
+      - pattern: \bnew\s+ArrayList\s*<
+        message: "Make the list in the constructor with `new ArrayList<>()`."
+    tests:
+      - call: |
+          PhotoAlbum trip = new PhotoAlbum("Summer trip");
+          trip.add("beach.jpg");
+          trip.add("tent.jpg");
+          PhotoAlbum winter = new PhotoAlbum("Winter");
+          System.out.println(trip.getTitle() + ": " + trip.count());
+          System.out.println(winter.getTitle() + ": " + winter.count());
+      - call: |
+          PhotoAlbum a = new PhotoAlbum("Cats");
+          PhotoAlbum b = new PhotoAlbum("Dogs");
+          a.add("tom.png");
+          b.add("rex.png");
+          a.add("tom.png");
+          a.add("kit.png");
+          System.out.println(a.count() + " " + b.count());
+          b.add("fido.png");
+          System.out.println(a.count() + " " + b.count());
+        hidden: true
+      - call: |
+          PhotoAlbum empty = new PhotoAlbum("Spring");
+          System.out.println(empty.count());
+          for (int i = 0; i < 7; i++) {
+              empty.add("photo" + i + ".jpg");
+          }
+          System.out.println(empty.getTitle() + " " + empty.count());
+        hidden: true
+    more:
+      - task: |
+          Now a whole class of your own. `Mailbox.java` is empty: write the class `Mailbox` in it, from the first line. A mailbox has an owner and a list of letters, which are Strings.
+
+          - The constructor `Mailbox(String owner)` keeps the owner and makes a new, empty list for the letters.
+          - `deliver(String letter)` adds a letter to the list.
+          - `count()` returns how many letters there are.
+          - `toString()` returns the owner, a colon and the list, like `Ana: [bill, magazine]`. Joining the list to a String writes it out in brackets, just as printing it does.
+
+          The check runs:
+
+          ```java fragment
+          Mailbox ana = new Mailbox("Ana");
+          Mailbox leo = new Mailbox("Leo");
+          ana.deliver("bill");
+          leo.deliver("postcard");
+          ana.deliver("magazine");
+          System.out.println(ana.count() + " " + leo.count());
+          System.out.println(ana);
+          System.out.println(leo);
+          ```
+
+          and expects:
+
+          ```
+          2 1
+          Ana: [bill, magazine]
+          Leo: [postcard]
+          ```
+        seed:
+          Mailbox.java: |
+            // Write the Mailbox class here.
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Mailbox ana = new Mailbox("Ana");
+                    Mailbox leo = new Mailbox("Leo");
+                    ana.deliver("bill");
+                    leo.deliver("postcard");
+                    ana.deliver("magazine");
+                    System.out.println(ana.count() + " " + leo.count());
+                    System.out.println(ana);
+                    System.out.println(leo);
+                }
+            }
+        solution:
+          Mailbox.java: |
+            import java.util.ArrayList;
+
+            public class Mailbox {
+                private String owner;
+                private ArrayList<String> letters;
+
+                public Mailbox(String owner) {
+                    this.owner = owner;
+                    this.letters = new ArrayList<>();
+                }
+
+                public void deliver(String letter) {
+                    this.letters.add(letter);
+                }
+
+                public int count() {
+                    return this.letters.size();
+                }
+
+                public String toString() {
+                    return this.owner + ": " + this.letters;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Mailbox ana = new Mailbox("Ana");
+                    Mailbox leo = new Mailbox("Leo");
+                    ana.deliver("bill");
+                    leo.deliver("postcard");
+                    ana.deliver("magazine");
+                    System.out.println(ana.count() + " " + leo.count());
+                    System.out.println(ana);
+                    System.out.println(leo);
+                }
+            }
+        hints:
+          - "Start with `import java.util.ArrayList;` and `public class Mailbox {`, then two private instance variables: a String for the owner and an `ArrayList<String>` for the letters. The recipe above has the same shape."
+          - "The constructor sets `this.owner = owner;` and `this.letters = new ArrayList<>();`. `deliver` calls `this.letters.add(letter);`, `count` returns `this.letters.size();`, and toString returns `this.owner + \": \" + this.letters;`."
+        require:
+          - pattern: \bprivate\s+ArrayList<String>\s+\w+\s*;
+            message: "Keep the letters in a private instance variable, a list of Strings: `private ArrayList<String> letters;`."
+          - pattern: \bnew\s+ArrayList\s*<
+            message: "Make the list in the constructor with `new ArrayList<>()`."
+        tests:
+          - call: |
+              Mailbox ana = new Mailbox("Ana");
+              Mailbox leo = new Mailbox("Leo");
+              ana.deliver("bill");
+              leo.deliver("postcard");
+              ana.deliver("magazine");
+              System.out.println(ana.count() + " " + leo.count());
+              System.out.println(ana);
+              System.out.println(leo);
+          - call: |
+              Mailbox kim = new Mailbox("Kim");
+              System.out.println(kim.count());
+              System.out.println(kim);
+              kim.deliver("ad");
+              kim.deliver("ad");
+              System.out.println(kim + " " + kim.count());
+            hidden: true
+          - call: |
+              Mailbox a = new Mailbox("A");
+              Mailbox b = new Mailbox("B");
+              Mailbox same = a;
+              same.deliver("x");
+              b.deliver("y");
+              b.deliver("z");
+              System.out.println(a + " / " + b);
+            hidden: true
+      - task: |
+          This program crashes with a NullPointerException. Read the message, find the cause and fix it in `Choir.java`. Then add a method `isEmpty()` to Choir: it returns `true` when nobody has joined the choir yet. `Main.java` is ready, and when both are done it prints:
+
+          ```
+          true
+          false
+          2
+          ```
+        seed:
+          Choir.java: |
+            import java.util.ArrayList;
+
+            public class Choir {
+                private String name;
+                private ArrayList<String> singers;
+
+                public Choir(String name) {
+                    this.name = name;
+                }
+
+                public void join(String singer) {
+                    this.singers.add(singer);
+                }
+
+                public int size() {
+                    return this.singers.size();
+                }
+
+                // Write the isEmpty method here.
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Choir choir = new Choir("Harbor Voices");
+                    System.out.println(choir.isEmpty());
+                    choir.join("Mira");
+                    choir.join("Tom");
+                    System.out.println(choir.isEmpty());
+                    System.out.println(choir.size());
+                }
+            }
+        solution:
+          Choir.java: |
+            import java.util.ArrayList;
+
+            public class Choir {
+                private String name;
+                private ArrayList<String> singers;
+
+                public Choir(String name) {
+                    this.name = name;
+                    this.singers = new ArrayList<>();
+                }
+
+                public void join(String singer) {
+                    this.singers.add(singer);
+                }
+
+                public int size() {
+                    return this.singers.size();
+                }
+
+                public boolean isEmpty() {
+                    return this.singers.isEmpty();
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Choir choir = new Choir("Harbor Voices");
+                    System.out.println(choir.isEmpty());
+                    choir.join("Mira");
+                    choir.join("Tom");
+                    System.out.println(choir.isEmpty());
+                    System.out.println(choir.size());
+                }
+            }
+        hints:
+          - "The message says `this.singers` is null: the constructor never makes the list. Add `this.singers = new ArrayList<>();` to it."
+          - "`isEmpty` can ask the list: `public boolean isEmpty() { return this.singers.isEmpty(); }`. `this.singers.size() == 0` works too."
+        require:
+          - pattern: \bsingers\s*=\s*new\s+ArrayList\s*<
+            message: "Make the list in the constructor: `this.singers = new ArrayList<>();`."
+          - pattern: \bpublic\s+boolean\s+isEmpty\s*\(\s*\)
+            message: "Write the method as `public boolean isEmpty()`."
+        tests:
+          - call: |
+              Choir choir = new Choir("Harbor Voices");
+              System.out.println(choir.isEmpty());
+              choir.join("Mira");
+              choir.join("Tom");
+              System.out.println(choir.isEmpty());
+              System.out.println(choir.size());
+          - call: |
+              Choir first = new Choir("North");
+              Choir second = new Choir("South");
+              first.join("Ann");
+              System.out.println(first.isEmpty() + " " + second.isEmpty());
+              System.out.println(first.size() + " " + second.size());
+            hidden: true
+          - call: |
+              Choir choir = new Choir("Echo");
+              System.out.println(choir.size());
+              choir.join("Kai");
+              choir.join("Kai");
+              choir.join("Lin");
+              System.out.println(choir.size() + " " + choir.isEmpty());
+            hidden: true
+
+  - id: objects-with-lists-going-through
+    slug: going-through-the-list
+    title: Methods that go through the list
+    text: |
+      An object's methods can do anything with its list that code in `main` could: go through it with a loop, look for a value, count things. Here the recipe gets two more methods:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Recipe soup = new Recipe("Tomato soup");
+              soup.addIngredient("tomatoes");
+              soup.addIngredient("onion");
+              soup.addIngredient("salt");
+              soup.printIngredients();
+              System.out.println(soup.needs("onion"));
+              System.out.println(soup.needs("milk"));
+          }
+      }
+      // ==== Recipe.java ====
+      import java.util.ArrayList;
+
+      public class Recipe {
+          private String name;
+          private ArrayList<String> ingredients;
+
+          public Recipe(String name) {
+              this.name = name;
+              this.ingredients = new ArrayList<>();
+          }
+
+          public void addIngredient(String ingredient) {
+              this.ingredients.add(ingredient);
+          }
+
+          public void printIngredients() {
+              System.out.println(this.name + ":");
+              for (String ingredient : this.ingredients) {
+                  System.out.println("- " + ingredient);
+              }
+          }
+
+          public boolean needs(String ingredient) {
+              return this.ingredients.contains(ingredient);
+          }
+      }
+      ```
+
+      ```output
+      Tomato soup:
+      - tomatoes
+      - onion
+      - salt
+      true
+      false
+      ```
+
+      - `for (String ingredient : this.ingredients)` goes through the recipe's own list. It's the loop you know from `main`; only the list is now `this.ingredients`.
+      - `printIngredients` is `void`: it prints, and returns nothing. It prints the recipe's name first, because a method can use all of its object's instance variables together.
+      - `needs` passes the question on to the list. `contains` goes through the list for you and compares with `equals` (module 23), so it finds `"onion"` however the String was made.
+
+      A method with its own name, such as `needs`, also says what the question means for a recipe. `soup.needs("onion")` reads better than a list call in `main`, and `main` doesn't need to know that the ingredients are kept in a list at all.
+
+      ### A loop of your own
+
+      `contains` answers one question: is this exact value on the list? For any other question, write the loop yourself. This method tells whether any ingredient has a word in it, so that `needsAny("cheese")` is true for a recipe with `goat cheese`:
+
+      ```java fragment
+      public boolean needsAny(String word) {
+          for (String ingredient : this.ingredients) {
+              if (ingredient.contains(word)) {
+                  return true;
+              }
+          }
+          return false;
+      }
+      ```
+
+      Here `ingredient.contains(word)` is the String method from module 16: it looks for the word inside one ingredient's name. For a pie with `goat cheese` and `spinach`, `needsAny("cheese")` is `true`, while `needs("cheese")` is `false`, since no ingredient is exactly `cheese`. The `return true` in the loop ends the method as soon as one ingredient matches, and `return false` after the loop runs only when none did (module 11).
+
+      **Your turn:** a garden keeps a list of the plants that grow in it. `Garden.java` has the list and the method `plant(String name)`. Write two more methods in it:
+
+      - `print()` prints each plant on a line of its own, starting with `* `.
+      - `grows(String name)` returns `true` when that plant is in the garden.
+
+      The check runs:
+
+      ```java fragment
+      Garden garden = new Garden();
+      garden.plant("rose");
+      garden.plant("mint");
+      garden.plant("fern");
+      garden.print();
+      System.out.println(garden.grows("mint"));
+      System.out.println(garden.grows("oak"));
+      ```
+
+      and expects:
+
+      ```
+      * rose
+      * mint
+      * fern
+      true
+      false
+      ```
+    seed:
+      Garden.java: |
+        import java.util.ArrayList;
+
+        public class Garden {
+            private ArrayList<String> plants;
+
+            public Garden() {
+                this.plants = new ArrayList<>();
+            }
+
+            public void plant(String name) {
+                this.plants.add(name);
+            }
+
+            // Write the methods print and grows here.
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Garden garden = new Garden();
+                garden.plant("rose");
+                garden.plant("mint");
+                garden.plant("fern");
+                garden.print();
+                System.out.println(garden.grows("mint"));
+                System.out.println(garden.grows("oak"));
+            }
+        }
+    solution:
+      Garden.java: |
+        import java.util.ArrayList;
+
+        public class Garden {
+            private ArrayList<String> plants;
+
+            public Garden() {
+                this.plants = new ArrayList<>();
+            }
+
+            public void plant(String name) {
+                this.plants.add(name);
+            }
+
+            public void print() {
+                for (String plant : this.plants) {
+                    System.out.println("* " + plant);
+                }
+            }
+
+            public boolean grows(String name) {
+                return this.plants.contains(name);
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Garden garden = new Garden();
+                garden.plant("rose");
+                garden.plant("mint");
+                garden.plant("fern");
+                garden.print();
+                System.out.println(garden.grows("mint"));
+                System.out.println(garden.grows("oak"));
+            }
+        }
+    hints:
+      - "`print` is a for-each loop over the garden's own list, `this.plants`. `grows` can pass its question on to one of the list's own methods."
+      - "`for (String plant : this.plants) { System.out.println(\"* \" + plant); }` prints the plants, and `return this.plants.contains(name);` answers `grows`."
+    require:
+      - pattern: \bpublic\s+void\s+print\s*\(\s*\)
+        message: "Write the method as `public void print()`."
+      - pattern: \bpublic\s+boolean\s+grows\s*\(\s*String\s+\w+\s*\)
+        message: "Write the method as `public boolean grows(String name)`."
+    tests:
+      - call: |
+          Garden garden = new Garden();
+          garden.plant("rose");
+          garden.plant("mint");
+          garden.plant("fern");
+          garden.print();
+          System.out.println(garden.grows("mint"));
+          System.out.println(garden.grows("oak"));
+      - call: |
+          Garden garden = new Garden();
+          garden.print();
+          System.out.println(garden.grows("rose"));
+          String name = "tu";
+          garden.plant(name + "lip");
+          garden.plant("tulip");
+          garden.print();
+          System.out.println(garden.grows("tulip") + " " + garden.grows("tul"));
+        hidden: true
+      - call: |
+          Garden north = new Garden();
+          Garden south = new Garden();
+          north.plant("birch");
+          south.plant("palm");
+          south.plant("cactus");
+          south.print();
+          System.out.println(north.grows("palm") + " " + south.grows("palm"));
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Look at which `contains` each method uses: the list's, or the String's.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Wardrobe wardrobe = new Wardrobe();
+                  wardrobe.hang("red scarf");
+                  wardrobe.hang("blue coat");
+                  wardrobe.hang("red coat");
+                  wardrobe.hang("scarf");
+                  System.out.println(wardrobe.has("coat"));
+                  System.out.println(wardrobe.has("scarf"));
+                  System.out.println(wardrobe.count("coat"));
+                  System.out.println(wardrobe.count("red"));
+              }
+          }
+          // ==== Wardrobe.java ====
+          import java.util.ArrayList;
+
+          public class Wardrobe {
+              private ArrayList<String> clothes;
+
+              public Wardrobe() {
+                  this.clothes = new ArrayList<>();
+              }
+
+              public void hang(String item) {
+                  this.clothes.add(item);
+              }
+
+              public boolean has(String item) {
+                  return this.clothes.contains(item);
+              }
+
+              public int count(String word) {
+                  int count = 0;
+                  for (String item : this.clothes) {
+                      if (item.contains(word)) {
+                          count++;
+                      }
+                  }
+                  return count;
+              }
+          }
+        hints:
+          - "`has` asks the list, and the list's `contains` looks for a value that equals the whole String. No item is exactly `coat`, but one is exactly `scarf`."
+          - "`count` uses the String's `contains`, which looks for the word inside each item: `blue coat` and `red coat` have `coat` in them, and `red scarf` and `red coat` have `red`."
+      - task: |
+          A guestbook keeps a name for every visit, so the same name can be in it many times. `Guestbook.java` has the list and the method `sign(String name)`. Write two more methods:
+
+          - `visits(String name)` returns how many times the name is in the guestbook. `contains` can't count, so go through the list yourself, and compare the names with `equals`.
+          - `printNames()` prints every name once, in the order of their first visits.
+
+          The check runs:
+
+          ```java fragment
+          Guestbook book = new Guestbook();
+          book.sign("Ada");
+          book.sign("Leo");
+          book.sign("Ada");
+          book.sign("Mia");
+          book.sign("Ada");
+          System.out.println(book.visits("Ada") + " " + book.visits("Leo") + " " + book.visits("Zed"));
+          book.printNames();
+          ```
+
+          and expects:
+
+          ```
+          3 1 0
+          Ada
+          Leo
+          Mia
+          ```
+        seed:
+          Guestbook.java: |
+            import java.util.ArrayList;
+
+            public class Guestbook {
+                private ArrayList<String> names;
+
+                public Guestbook() {
+                    this.names = new ArrayList<>();
+                }
+
+                public void sign(String name) {
+                    this.names.add(name);
+                }
+
+                // Write the methods visits and printNames here.
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Guestbook book = new Guestbook();
+                    book.sign("Ada");
+                    book.sign("Leo");
+                    book.sign("Ada");
+                    book.sign("Mia");
+                    book.sign("Ada");
+                    System.out.println(book.visits("Ada") + " " + book.visits("Leo") + " " + book.visits("Zed"));
+                    book.printNames();
+                }
+            }
+        solution:
+          Guestbook.java: |
+            import java.util.ArrayList;
+
+            public class Guestbook {
+                private ArrayList<String> names;
+
+                public Guestbook() {
+                    this.names = new ArrayList<>();
+                }
+
+                public void sign(String name) {
+                    this.names.add(name);
+                }
+
+                public int visits(String name) {
+                    int count = 0;
+                    for (String visitor : this.names) {
+                        if (visitor.equals(name)) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+
+                public void printNames() {
+                    ArrayList<String> printed = new ArrayList<>();
+                    for (String visitor : this.names) {
+                        if (!printed.contains(visitor)) {
+                            System.out.println(visitor);
+                            printed.add(visitor);
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Guestbook book = new Guestbook();
+                    book.sign("Ada");
+                    book.sign("Leo");
+                    book.sign("Ada");
+                    book.sign("Mia");
+                    book.sign("Ada");
+                    System.out.println(book.visits("Ada") + " " + book.visits("Leo") + " " + book.visits("Zed"));
+                    book.printNames();
+                }
+            }
+        hints:
+          - "`visits` counts in a loop: start with `int count = 0;`, go through `this.names`, and add one when `visitor.equals(name)`. Return the count after the loop."
+          - "For `printNames`, keep a local list of the names already printed. For each name in the guestbook: if `printed` doesn't contain it yet, print it and add it to `printed`."
+        require:
+          - pattern: \bpublic\s+int\s+visits\s*\(\s*String\s+\w+\s*\)
+            message: "Write the method as `public int visits(String name)`."
+          - pattern: \.equals\s*\(
+            message: "In `visits`, compare the names with `equals`."
+        tests:
+          - call: |
+              Guestbook book = new Guestbook();
+              book.sign("Ada");
+              book.sign("Leo");
+              book.sign("Ada");
+              book.sign("Mia");
+              book.sign("Ada");
+              System.out.println(book.visits("Ada") + " " + book.visits("Leo") + " " + book.visits("Zed"));
+              book.printNames();
+          - call: |
+              Guestbook book = new Guestbook();
+              String first = "Jo";
+              book.sign(first + "nas");
+              book.sign("Jonas");
+              book.sign("Kim");
+              System.out.println(book.visits("Jonas") + " " + book.visits("jonas"));
+              book.printNames();
+            hidden: true
+          - call: |
+              Guestbook book = new Guestbook();
+              System.out.println(book.visits("Ada"));
+              book.printNames();
+              book.sign("Zoe");
+              book.sign("Yan");
+              book.sign("Yan");
+              book.sign("Zoe");
+              book.sign("Xia");
+              book.printNames();
+              System.out.println(book.visits("Yan"));
+            hidden: true
+
+  - id: objects-with-lists-objects-in-list
+    slug: objects-on-the-list
+    title: Objects on the object's list
+    text: |
+      The list inside an object can hold objects of your own classes too. A bookshelf holds books, and each book has a title, an author and a number of pages. That makes a program of three files:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Bookshelf shelf = new Bookshelf("Living room");
+              shelf.add(new Book("Emma", "Austen", 474));
+              shelf.add(new Book("Persuasion", "Austen", 249));
+              shelf.add(new Book("Dracula", "Stoker", 418));
+              shelf.printAll();
+              System.out.println("By Austen:");
+              shelf.printBy("Austen");
+          }
+      }
+      // ==== Bookshelf.java ====
+      import java.util.ArrayList;
+
+      public class Bookshelf {
+          private String room;
+          private ArrayList<Book> books;
+
+          public Bookshelf(String room) {
+              this.room = room;
+              this.books = new ArrayList<>();
+          }
+
+          public void add(Book book) {
+              this.books.add(book);
+          }
+
+          public void printAll() {
+              System.out.println(this.room + ":");
+              for (Book book : this.books) {
+                  System.out.println(book);
+              }
+          }
+
+          public void printBy(String author) {
+              for (Book book : this.books) {
+                  if (book.getAuthor().equals(author)) {
+                      System.out.println(book);
+                  }
+              }
+          }
+      }
+      // ==== Book.java ====
+      public class Book {
+          private String title;
+          private String author;
+          private int pages;
+
+          public Book(String title, String author, int pages) {
+              this.title = title;
+              this.author = author;
+              this.pages = pages;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public String getAuthor() {
+              return this.author;
+          }
+
+          public int getPages() {
+              return this.pages;
+          }
+
+          public String toString() {
+              return this.title + " by " + this.author + ", " + this.pages + " pages";
+          }
+      }
+      ```
+
+      ```output
+      Living room:
+      Emma by Austen, 474 pages
+      Persuasion by Austen, 249 pages
+      Dracula by Stoker, 418 pages
+      By Austen:
+      Emma by Austen, 474 pages
+      Persuasion by Austen, 249 pages
+      ```
+
+      - The list's type names the class of its objects: `ArrayList<Book>`. Only Book objects can go on it.
+      - `add(Book book)` takes an object as its parameter (module 23) and puts it on the list.
+      - In the loops, `book` is one Book at a time, and the shelf uses it through Book's public methods. `System.out.println(book)` calls the book's toString, and `book.getAuthor()` its getter. Writing `book.author` in Bookshelf doesn't compile, because `author` is private to Book.
+      - Each class does its own job. Book knows how a book is written out, and Bookshelf knows which books it holds. `main` only makes the books and calls the shelf's methods.
+
+      ### The list holds references
+
+      The list doesn't hold copies of the books. Like any variable of a class type, each place on an `ArrayList<Book>` holds a reference to a Book object (module 22). So after
+
+      ```java fragment
+      Book emma = new Book("Emma", "Austen", 474);
+      shelf.add(emma);
+      ```
+
+      the variable `emma` and the shelf's list refer to the same Book. If Book had a method that changed the book, a change made through `emma` would show on the shelf too, and the other way around.
+
+      ### Making the object inside the method
+
+      A shelf could also take a book's values and make the Book itself. With module 21's overloading, both methods can be called `add`, and Java picks the one whose parameters match:
+
+      ```java fragment
+      public void add(String title, String author, int pages) {
+          this.books.add(new Book(title, author, pages));
+      }
+      ```
+
+      Then `shelf.add("Kindred", "Butler", 264);` works too, and `main` never has to make a Book.
+
+      **Your turn:** a parking garage keeps a list of the cars parked in it. `Car.java` is ready: a car has a license plate and a color, with the getters `getPlate()` and `getColor()`. In `Garage.java`, add a private list of cars as an instance variable, and make it in the constructor. Then write two methods: `park(Car car)` adds the car to the list, and `printColor(String color)` prints every car of that color, one per line, in the order they were parked. The check runs:
+
+      ```java fragment
+      Garage garage = new Garage();
+      garage.park(new Car("ABC-123", "red"));
+      garage.park(new Car("XYZ-789", "blue"));
+      garage.park(new Car("JKL-456", "red"));
+      garage.printColor("red");
+      ```
+
+      and expects:
+
+      ```
+      ABC-123 (red)
+      JKL-456 (red)
+      ```
+    seed:
+      Garage.java: |
+        import java.util.ArrayList;
+
+        public class Garage {
+            // Add the list of cars here.
+
+            public Garage() {
+                // Make the list here.
+            }
+
+            // Write the methods park and printColor here.
+        }
+      Car.java: |
+        public class Car {
+            private String plate;
+            private String color;
+
+            public Car(String plate, String color) {
+                this.plate = plate;
+                this.color = color;
+            }
+
+            public String getPlate() {
+                return this.plate;
+            }
+
+            public String getColor() {
+                return this.color;
+            }
+
+            public String toString() {
+                return this.plate + " (" + this.color + ")";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Garage garage = new Garage();
+                garage.park(new Car("ABC-123", "red"));
+                garage.park(new Car("XYZ-789", "blue"));
+                garage.park(new Car("JKL-456", "red"));
+                garage.printColor("red");
+            }
+        }
+    solution:
+      Garage.java: |
+        import java.util.ArrayList;
+
+        public class Garage {
+            private ArrayList<Car> cars;
+
+            public Garage() {
+                this.cars = new ArrayList<>();
+            }
+
+            public void park(Car car) {
+                this.cars.add(car);
+            }
+
+            public void printColor(String color) {
+                for (Car car : this.cars) {
+                    if (car.getColor().equals(color)) {
+                        System.out.println(car);
+                    }
+                }
+            }
+        }
+      Car.java: |
+        public class Car {
+            private String plate;
+            private String color;
+
+            public Car(String plate, String color) {
+                this.plate = plate;
+                this.color = color;
+            }
+
+            public String getPlate() {
+                return this.plate;
+            }
+
+            public String getColor() {
+                return this.color;
+            }
+
+            public String toString() {
+                return this.plate + " (" + this.color + ")";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Garage garage = new Garage();
+                garage.park(new Car("ABC-123", "red"));
+                garage.park(new Car("XYZ-789", "blue"));
+                garage.park(new Car("JKL-456", "red"));
+                garage.printColor("red");
+            }
+        }
+    hints:
+      - "The list holds Car objects: `private ArrayList<Car> cars;`, and the constructor makes it with `this.cars = new ArrayList<>();`. `park` adds the car it's given: `this.cars.add(car);`."
+      - "`printColor` goes through the cars with `for (Car car : this.cars)`, and prints a car when `car.getColor().equals(color)`."
+    require:
+      - pattern: \bprivate\s+ArrayList<Car>\s+\w+\s*;
+        message: "Keep the cars in a private instance variable of type `ArrayList<Car>`."
+      - pattern: \bpublic\s+void\s+park\s*\(\s*Car\s+\w+\s*\)
+        message: "Write the method as `public void park(Car car)`."
+      - pattern: \.getColor\s*\(\s*\)
+        message: "Ask each car for its color with `getColor()`."
+    tests:
+      - call: |
+          Garage garage = new Garage();
+          garage.park(new Car("ABC-123", "red"));
+          garage.park(new Car("XYZ-789", "blue"));
+          garage.park(new Car("JKL-456", "red"));
+          garage.printColor("red");
+      - call: |
+          Garage garage = new Garage();
+          garage.park(new Car("ABC-123", "red"));
+          garage.park(new Car("XYZ-789", "blue"));
+          garage.printColor("green");
+          garage.printColor("blu" + "e");
+          Garage other = new Garage();
+          other.printColor("blue");
+          System.out.println("done");
+        hidden: true
+      - call: |
+          Garage garage = new Garage();
+          Car van = new Car("VAN-001", "white");
+          garage.park(van);
+          garage.park(new Car("CAR-002", "black"));
+          garage.park(van);
+          garage.printColor("white");
+        hidden: true
+    more:
+      - task: |
+          What does this program print? A train keeps its wagons on a list, and the wagons are Wagon objects that can still change after they're attached.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Train train = new Train();
+                  Wagon a = new Wagon(1);
+                  Wagon b = new Wagon(2);
+                  train.attach(a);
+                  a.board(30);
+                  train.attach(b);
+                  train.attach(a);
+                  b.board(12);
+                  a.board(5);
+                  train.print();
+                  System.out.println(train.count() + " wagons");
+              }
+          }
+          // ==== Train.java ====
+          import java.util.ArrayList;
+
+          public class Train {
+              private ArrayList<Wagon> wagons;
+
+              public Train() {
+                  this.wagons = new ArrayList<>();
+              }
+
+              public void attach(Wagon wagon) {
+                  this.wagons.add(wagon);
+              }
+
+              public int count() {
+                  return this.wagons.size();
+              }
+
+              public void print() {
+                  for (Wagon wagon : this.wagons) {
+                      System.out.println(wagon);
+                  }
+              }
+          }
+          // ==== Wagon.java ====
+          public class Wagon {
+              private int number;
+              private int passengers;
+
+              public Wagon(int number) {
+                  this.number = number;
+                  this.passengers = 0;
+              }
+
+              public void board(int people) {
+                  this.passengers = this.passengers + people;
+              }
+
+              public String toString() {
+                  return "Wagon " + this.number + ": " + this.passengers + " passengers";
+              }
+          }
+        hints:
+          - "The list holds references to the wagons, not copies. Passengers who board wagon `a` after it's attached are still in the wagon the train sees, so what counts is the total when `print()` runs."
+          - "`a` is attached twice, so the list has three places, and two of them refer to the same wagon. That wagon shows up twice, with all 35 passengers both times."
+      - task: |
+          An orchestra keeps a list of its musicians. `Musician.java` is ready: a musician has a name and an instrument, with the getters `getName()` and `getInstrument()`. `Orchestra.java` has the list. Write two methods in it:
+
+          - `hire(String name, String instrument)` makes a new Musician of those values and adds it to the list.
+          - `count(String instrument)` returns how many musicians play that instrument.
+
+          The check runs:
+
+          ```java fragment
+          Orchestra orchestra = new Orchestra();
+          orchestra.hire("Ines", "violin");
+          orchestra.hire("Karl", "cello");
+          orchestra.hire("Lena", "violin");
+          System.out.println(orchestra.count("violin"));
+          System.out.println(orchestra.count("flute"));
+          ```
+
+          and expects:
+
+          ```
+          2
+          0
+          ```
+        seed:
+          Orchestra.java: |
+            import java.util.ArrayList;
+
+            public class Orchestra {
+                private ArrayList<Musician> musicians;
+
+                public Orchestra() {
+                    this.musicians = new ArrayList<>();
+                }
+
+                // Write the methods hire and count here.
+            }
+          Musician.java: |
+            public class Musician {
+                private String name;
+                private String instrument;
+
+                public Musician(String name, String instrument) {
+                    this.name = name;
+                    this.instrument = instrument;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public String getInstrument() {
+                    return this.instrument;
+                }
+
+                public String toString() {
+                    return this.name + ", " + this.instrument;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Orchestra orchestra = new Orchestra();
+                    orchestra.hire("Ines", "violin");
+                    orchestra.hire("Karl", "cello");
+                    orchestra.hire("Lena", "violin");
+                    System.out.println(orchestra.count("violin"));
+                    System.out.println(orchestra.count("flute"));
+                }
+            }
+        solution:
+          Orchestra.java: |
+            import java.util.ArrayList;
+
+            public class Orchestra {
+                private ArrayList<Musician> musicians;
+
+                public Orchestra() {
+                    this.musicians = new ArrayList<>();
+                }
+
+                public void hire(String name, String instrument) {
+                    this.musicians.add(new Musician(name, instrument));
+                }
+
+                public int count(String instrument) {
+                    int count = 0;
+                    for (Musician musician : this.musicians) {
+                        if (musician.getInstrument().equals(instrument)) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+            }
+          Musician.java: |
+            public class Musician {
+                private String name;
+                private String instrument;
+
+                public Musician(String name, String instrument) {
+                    this.name = name;
+                    this.instrument = instrument;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public String getInstrument() {
+                    return this.instrument;
+                }
+
+                public String toString() {
+                    return this.name + ", " + this.instrument;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Orchestra orchestra = new Orchestra();
+                    orchestra.hire("Ines", "violin");
+                    orchestra.hire("Karl", "cello");
+                    orchestra.hire("Lena", "violin");
+                    System.out.println(orchestra.count("violin"));
+                    System.out.println(orchestra.count("flute"));
+                }
+            }
+        hints:
+          - "`hire` makes the object and adds it in one line: `this.musicians.add(new Musician(name, instrument));`."
+          - "`count` goes through `this.musicians` and adds one to a counter when `musician.getInstrument().equals(instrument)`. It returns the counter after the loop."
+        require:
+          - pattern: \bpublic\s+void\s+hire\s*\(\s*String\s+\w+\s*,\s*String\s+\w+\s*\)
+            message: "Write the method as `public void hire(String name, String instrument)`."
+          - pattern: \bnew\s+Musician\s*\(
+            message: "`hire` makes the Musician itself, with `new Musician(...)`."
+          - pattern: \bpublic\s+int\s+count\s*\(\s*String\s+\w+\s*\)
+            message: "Write the method as `public int count(String instrument)`."
+        tests:
+          - call: |
+              Orchestra orchestra = new Orchestra();
+              orchestra.hire("Ines", "violin");
+              orchestra.hire("Karl", "cello");
+              orchestra.hire("Lena", "violin");
+              System.out.println(orchestra.count("violin"));
+              System.out.println(orchestra.count("flute"));
+          - call: |
+              Orchestra orchestra = new Orchestra();
+              System.out.println(orchestra.count("harp"));
+              String brass = "trum";
+              orchestra.hire("Olle", brass + "pet");
+              orchestra.hire("Pia", "trumpet");
+              orchestra.hire("Quin", "harp");
+              System.out.println(orchestra.count("trumpet") + " " + orchestra.count("harp") + " " + orchestra.count("Pia"));
+            hidden: true
+          - call: |
+              Orchestra small = new Orchestra();
+              Orchestra big = new Orchestra();
+              small.hire("Rui", "oboe");
+              big.hire("Sol", "oboe");
+              big.hire("Tia", "oboe");
+              System.out.println(small.count("oboe") + " " + big.count("oboe"));
+            hidden: true
+
+  - id: objects-with-lists-to-string
+    slug: printing-the-owner
+    title: Printing an object that holds a list
+    text: |
+      `System.out.println(shelf)` calls the shelf's toString (module 18). For an object that holds a list, the list belongs in that text too. The shortest way joins the list itself to the text:
+
+      ```java fragment
+      public String toString() {
+          return this.room + ": " + this.books;
+      }
+      ```
+
+      The list writes itself out in brackets, with each book's own toString and commas between them: `Hallway: [Emma by Austen, 474 pages, Dracula by Stoker, 418 pages]`. That's hard to read when the books' texts have commas of their own. A loop gives you full control over the text.
+
+      ### Building the text in a loop
+
+      This toString starts with the room and the number of books, and then adds each book on a line of its own:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Bookshelf shelf = new Bookshelf("Living room");
+              shelf.add(new Book("Emma", "Austen", 474));
+              shelf.add(new Book("Persuasion", "Austen", 249));
+              shelf.add(new Book("Dracula", "Stoker", 418));
+              System.out.println(shelf);
+              Bookshelf empty = new Bookshelf("Hallway");
+              System.out.println(empty);
+          }
+      }
+      // ==== Bookshelf.java ====
+      import java.util.ArrayList;
+
+      public class Bookshelf {
+          private String room;
+          private ArrayList<Book> books;
+
+          public Bookshelf(String room) {
+              this.room = room;
+              this.books = new ArrayList<>();
+          }
+
+          public void add(Book book) {
+              this.books.add(book);
+          }
+
+          public String toString() {
+              if (this.books.isEmpty()) {
+                  return this.room + ": no books";
+              }
+              String text = this.room + ": " + this.books.size() + " books";
+              for (Book book : this.books) {
+                  text = text + "\n" + book;
+              }
+              return text;
+          }
+      }
+      // ==== Book.java ====
+      public class Book {
+          private String title;
+          private String author;
+          private int pages;
+
+          public Book(String title, String author, int pages) {
+              this.title = title;
+              this.author = author;
+              this.pages = pages;
+          }
+
+          public String toString() {
+              return this.title + " by " + this.author + ", " + this.pages + " pages";
+          }
+      }
+      ```
+
+      ```output
+      Living room: 3 books
+      Emma by Austen, 474 pages
+      Persuasion by Austen, 249 pages
+      Dracula by Stoker, 418 pages
+      Hallway: no books
+      ```
+
+      - You met `\n` in module 20: inside a String, it's a **line break**. A String can hold several lines, and printing it prints each of them on its own line.
+      - `text` starts as the first line, and each round of the loop adds a line break and one book. `+ book` calls the book's own toString.
+      - The line break goes *before* each book, not after it, so the text doesn't end with an empty line. `println` adds the last line break itself.
+      - An empty shelf gets its own text, checked first with `isEmpty()`. Without that check it would say `Hallway: 0 books`, which is fine too. What an empty object says is part of designing the class.
+
+      toString only builds the text and returns it; it doesn't print anything. The caller decides what to do with it: `System.out.println(shelf)` prints it, and `"Found: " + shelf` makes a longer String of it.
+
+      **Your turn:** `Aquarium.java` has a name and a list of fish, and `Fish.java` is ready (its toString gives, for example, `Finn the clownfish`). Write toString for Aquarium. The first line is the aquarium's name and the number of fish, like `Reef tank: 2 fish`, and then each fish comes on a line of its own. There's no line break at the end of the text: `println` adds that. An aquarium with no fish is just `Reef tank: empty`. The check runs:
+
+      ```java fragment
+      Aquarium tank = new Aquarium("Reef tank");
+      System.out.println(tank);
+      tank.add(new Fish("Finn", "clownfish"));
+      tank.add(new Fish("Coral", "blue tang"));
+      System.out.println(tank);
+      ```
+
+      and expects:
+
+      ```
+      Reef tank: empty
+      Reef tank: 2 fish
+      Finn the clownfish
+      Coral the blue tang
+      ```
+    seed:
+      Aquarium.java: |
+        import java.util.ArrayList;
+
+        public class Aquarium {
+            private String name;
+            private ArrayList<Fish> fish;
+
+            public Aquarium(String name) {
+                this.name = name;
+                this.fish = new ArrayList<>();
+            }
+
+            public void add(Fish newFish) {
+                this.fish.add(newFish);
+            }
+
+            // Write toString here.
+        }
+      Fish.java: |
+        public class Fish {
+            private String name;
+            private String species;
+
+            public Fish(String name, String species) {
+                this.name = name;
+                this.species = species;
+            }
+
+            public String toString() {
+                return this.name + " the " + this.species;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Aquarium tank = new Aquarium("Reef tank");
+                System.out.println(tank);
+                tank.add(new Fish("Finn", "clownfish"));
+                tank.add(new Fish("Coral", "blue tang"));
+                System.out.println(tank);
+            }
+        }
+    solution:
+      Aquarium.java: |
+        import java.util.ArrayList;
+
+        public class Aquarium {
+            private String name;
+            private ArrayList<Fish> fish;
+
+            public Aquarium(String name) {
+                this.name = name;
+                this.fish = new ArrayList<>();
+            }
+
+            public void add(Fish newFish) {
+                this.fish.add(newFish);
+            }
+
+            public String toString() {
+                if (this.fish.isEmpty()) {
+                    return this.name + ": empty";
+                }
+                String text = this.name + ": " + this.fish.size() + " fish";
+                for (Fish one : this.fish) {
+                    text = text + "\n" + one;
+                }
+                return text;
+            }
+        }
+      Fish.java: |
+        public class Fish {
+            private String name;
+            private String species;
+
+            public Fish(String name, String species) {
+                this.name = name;
+                this.species = species;
+            }
+
+            public String toString() {
+                return this.name + " the " + this.species;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Aquarium tank = new Aquarium("Reef tank");
+                System.out.println(tank);
+                tank.add(new Fish("Finn", "clownfish"));
+                tank.add(new Fish("Coral", "blue tang"));
+                System.out.println(tank);
+            }
+        }
+    hints:
+      - "Check for the empty aquarium first: `if (this.fish.isEmpty()) { return this.name + \": empty\"; }`."
+      - "Then start with the first line, `String text = this.name + \": \" + this.fish.size() + \" fish\";`, add `\"\\n\"` and a fish in each round of a loop over `this.fish`, and return `text` after the loop."
+    require:
+      - pattern: \bpublic\s+String\s+toString\s*\(\s*\)
+        min: 2
+        message: "Write the method in Aquarium as `public String toString()`."
+      - pattern: \b(for|while)\s*\(
+        message: "Add the fish to the text in a loop over the list."
+    tests:
+      - call: |
+          Aquarium tank = new Aquarium("Reef tank");
+          System.out.println(tank);
+          tank.add(new Fish("Finn", "clownfish"));
+          tank.add(new Fish("Coral", "blue tang"));
+          System.out.println(tank);
+      - call: |
+          Aquarium bowl = new Aquarium("Bowl");
+          bowl.add(new Fish("Goldie", "goldfish"));
+          String text = bowl.toString();
+          System.out.println(text.length());
+          System.out.println(text);
+        hidden: true
+      - call: |
+          Aquarium pond = new Aquarium("Garden pond");
+          pond.add(new Fish("Koi", "carp"));
+          pond.add(new Fish("Spot", "carp"));
+          pond.add(new Fish("Nib", "minnow"));
+          System.out.println("[" + pond + "]");
+        hidden: true
+    more:
+      - task: |
+          What does this program print? A necklace's toString joins the colors of its beads with dashes, using an index loop.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Necklace a = new Necklace();
+                  a.add("red");
+                  a.add("blue");
+                  a.add("red");
+                  Necklace b = new Necklace();
+                  System.out.println(a);
+                  System.out.println(b);
+                  b.add("gold");
+                  System.out.println(b);
+                  System.out.println("Necklace " + a + " has " + a.size() + " beads");
+              }
+          }
+          // ==== Necklace.java ====
+          import java.util.ArrayList;
+
+          public class Necklace {
+              private ArrayList<String> beads;
+
+              public Necklace() {
+                  this.beads = new ArrayList<>();
+              }
+
+              public void add(String color) {
+                  this.beads.add(color);
+              }
+
+              public int size() {
+                  return this.beads.size();
+              }
+
+              public String toString() {
+                  String text = "";
+                  for (int i = 0; i < this.beads.size(); i++) {
+                      if (i > 0) {
+                          text = text + "-";
+                      }
+                      text = text + this.beads.get(i);
+                  }
+                  return "(" + text + ")";
+              }
+          }
+        hints:
+          - "The dash goes in front of every bead except the first one (index 0), so there's no dash at either end. An empty necklace skips the loop, and only the parentheses are left."
+          - "Joining `a` to a String with `+` calls its toString, just as `println(a)` does."
+      - task: |
+          `Bus.java` holds the bus's line number and a list of passenger names. Write its toString: the line number, a colon, and the names in the order they boarded, as you'd write them in a sentence. Commas go between the names, except that the last two are joined with `and`, like `Bus 42: Ada, Ben and Cleo`. With one passenger, it's just `Bus 42: Ada`. The check prints only buses with at least one passenger:
+
+          ```java fragment
+          Bus bus = new Bus(42);
+          bus.board("Ada");
+          System.out.println(bus);
+          bus.board("Ben");
+          System.out.println(bus);
+          bus.board("Cleo");
+          System.out.println(bus);
+          ```
+
+          and expects:
+
+          ```
+          Bus 42: Ada
+          Bus 42: Ada and Ben
+          Bus 42: Ada, Ben and Cleo
+          ```
+        seed:
+          Bus.java: |
+            import java.util.ArrayList;
+
+            public class Bus {
+                private int line;
+                private ArrayList<String> passengers;
+
+                public Bus(int line) {
+                    this.line = line;
+                    this.passengers = new ArrayList<>();
+                }
+
+                public void board(String name) {
+                    this.passengers.add(name);
+                }
+
+                // Write toString here.
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Bus bus = new Bus(42);
+                    bus.board("Ada");
+                    System.out.println(bus);
+                    bus.board("Ben");
+                    System.out.println(bus);
+                    bus.board("Cleo");
+                    System.out.println(bus);
+                }
+            }
+        solution:
+          Bus.java: |
+            import java.util.ArrayList;
+
+            public class Bus {
+                private int line;
+                private ArrayList<String> passengers;
+
+                public Bus(int line) {
+                    this.line = line;
+                    this.passengers = new ArrayList<>();
+                }
+
+                public void board(String name) {
+                    this.passengers.add(name);
+                }
+
+                public String toString() {
+                    String text = "Bus " + this.line + ": ";
+                    for (int i = 0; i < this.passengers.size(); i++) {
+                        if (i > 0 && i == this.passengers.size() - 1) {
+                            text = text + " and ";
+                        } else if (i > 0) {
+                            text = text + ", ";
+                        }
+                        text = text + this.passengers.get(i);
+                    }
+                    return text;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Bus bus = new Bus(42);
+                    bus.board("Ada");
+                    System.out.println(bus);
+                    bus.board("Ben");
+                    System.out.println(bus);
+                    bus.board("Cleo");
+                    System.out.println(bus);
+                }
+            }
+        hints:
+          - "Loop over the indexes, as the necklace does, so that you know where each name is. The first name gets nothing in front of it, the last one (when it isn't also the first) gets `and` with a space on each side, and every other one gets a comma and a space."
+          - "In `for (int i = 0; i < this.passengers.size(); i++)`: `if (i > 0 && i == this.passengers.size() - 1)` adds `\" and \"`, `else if (i > 0)` adds `\", \"`, and then the name `this.passengers.get(i)` is added."
+        require:
+          - pattern: \bpublic\s+String\s+toString\s*\(\s*\)
+            message: "Write the method as `public String toString()`."
+        tests:
+          - call: |
+              Bus bus = new Bus(42);
+              bus.board("Ada");
+              System.out.println(bus);
+              bus.board("Ben");
+              System.out.println(bus);
+              bus.board("Cleo");
+              System.out.println(bus);
+          - call: |
+              Bus night = new Bus(7);
+              for (int i = 1; i <= 5; i++) {
+                  night.board("P" + i);
+              }
+              System.out.println(night);
+            hidden: true
+          - call: |
+              Bus a = new Bus(1);
+              Bus b = new Bus(2);
+              a.board("Zoe");
+              b.board("Yan");
+              b.board("Xia");
+              b.board("Yan");
+              System.out.println(a + " / " + b);
+            hidden: true
+
+  - id: objects-with-lists-removing
+    slug: clearing-and-removing
+    title: Clearing and removing
+    text: |
+      An object's list can shrink as well as grow. There are three usual ways: empty the whole list, remove one object, or remove every object that matches a rule.
+
+      ### Emptying the list
+
+      The list's own `clear()` does it:
+
+      ```java fragment
+      public void clear() {
+          this.books.clear();
+      }
+      ```
+
+      Another way is to replace the list with a new, empty one: `this.books = new ArrayList<>();`. Either way the shelf is empty afterwards.
+
+      ### Removing one object
+
+      A method can pass an object on to the list's `remove`:
+
+      ```java fragment
+      public void remove(Book book) {
+          this.books.remove(book);
+      }
+      ```
+
+      `remove` looks for the book with `equals` (module 23). Book has no `equals` of its own, so the one every class gets finds only the very same object: the caller must give a book that's on the shelf, not a new Book with the same title. Often it's handier to remove by a value, such as the title. This method removes the first book with that title, and tells whether it found one:
+
+      ```java fragment
+      public boolean removeTitle(String title) {
+          for (int i = 0; i < this.books.size(); i++) {
+              if (this.books.get(i).getTitle().equals(title)) {
+                  this.books.remove(i);
+                  return true;
+              }
+          }
+          return false;
+      }
+      ```
+
+      `this.books.remove(i)` removes by index, since `i` is an `int` (module 14). The loop never goes on after a removal, because `return true` ends the method right away.
+
+      ### Removing every object that matches
+
+      Module 14 warned about this one: removing inside a for-each loop. It crashes inside a class just as it does in `main`:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Bookshelf shelf = new Bookshelf("Attic");
+              shelf.add(new Book("Poems", "Dickinson", 96));
+              shelf.add(new Book("Emma", "Austen", 474));
+              shelf.add(new Book("Dracula", "Stoker", 418));
+              shelf.removeShorterThan(100);
+              System.out.println(shelf);
+          }
+      }
+      // ==== Bookshelf.java ====
+      import java.util.ArrayList;
+
+      public class Bookshelf {
+          private String room;
+          private ArrayList<Book> books;
+
+          public Bookshelf(String room) {
+              this.room = room;
+              this.books = new ArrayList<>();
+          }
+
+          public void add(Book book) {
+              this.books.add(book);
+          }
+
+          public void removeShorterThan(int pages) {
+              for (Book book : this.books) {
+                  if (book.getPages() < pages) {
+                      this.books.remove(book);
+                  }
+              }
+          }
+
+          public String toString() {
+              return this.room + ": " + this.books;
+          }
+      }
+      // ==== Book.java ====
+      public class Book {
+          private String title;
+          private String author;
+          private int pages;
+
+          public Book(String title, String author, int pages) {
+              this.title = title;
+              this.author = author;
+              this.pages = pages;
+          }
+
+          public int getPages() {
+              return this.pages;
+          }
+
+          public String toString() {
+              return this.title + " by " + this.author + ", " + this.pages + " pages";
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.util.ConcurrentModificationException
+      	at Bookshelf.removeShorterThan(Bookshelf.java:17)
+      	at Main.main(Main.java:7)
+      ```
+
+      Line 17 of `Bookshelf.java` is the for-each line: the list changed while the loop was going through it. The fix is the same as in module 14, an index loop that goes backwards:
+
+      ```java fragment
+      public void removeShorterThan(int pages) {
+          for (int i = this.books.size() - 1; i >= 0; i--) {
+              if (this.books.get(i).getPages() < pages) {
+                  this.books.remove(i);
+              }
+          }
+      }
+      ```
+
+      Going from the end, a removal only moves books the loop has already checked. With this version, the attic shelf keeps Emma and Dracula.
+
+      **Your turn:** a fridge keeps a list of foods, and each food knows how many days it has left. `Food.java` is ready, with the getter `getDaysLeft()`. In `Fridge.java`, write the method `throwOutOld()`: it removes every food with less than 1 day left, and keeps the rest in their order. The check runs:
+
+      ```java fragment
+      Fridge fridge = new Fridge();
+      fridge.put(new Food("cheese", 12));
+      fridge.put(new Food("milk", 0));
+      fridge.put(new Food("yogurt", -1));
+      fridge.put(new Food("jam", 90));
+      fridge.throwOutOld();
+      System.out.println(fridge);
+      ```
+
+      and expects:
+
+      ```
+      Fridge: [cheese (12 days), jam (90 days)]
+      ```
+    seed:
+      Fridge.java: |
+        import java.util.ArrayList;
+
+        public class Fridge {
+            private ArrayList<Food> foods;
+
+            public Fridge() {
+                this.foods = new ArrayList<>();
+            }
+
+            public void put(Food food) {
+                this.foods.add(food);
+            }
+
+            // Write the throwOutOld method here.
+
+            public String toString() {
+                return "Fridge: " + this.foods;
+            }
+        }
+      Food.java: |
+        public class Food {
+            private String name;
+            private int daysLeft;
+
+            public Food(String name, int daysLeft) {
+                this.name = name;
+                this.daysLeft = daysLeft;
+            }
+
+            public int getDaysLeft() {
+                return this.daysLeft;
+            }
+
+            public String toString() {
+                return this.name + " (" + this.daysLeft + " days)";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Fridge fridge = new Fridge();
+                fridge.put(new Food("cheese", 12));
+                fridge.put(new Food("milk", 0));
+                fridge.put(new Food("yogurt", -1));
+                fridge.put(new Food("jam", 90));
+                fridge.throwOutOld();
+                System.out.println(fridge);
+            }
+        }
+    solution:
+      Fridge.java: |
+        import java.util.ArrayList;
+
+        public class Fridge {
+            private ArrayList<Food> foods;
+
+            public Fridge() {
+                this.foods = new ArrayList<>();
+            }
+
+            public void put(Food food) {
+                this.foods.add(food);
+            }
+
+            public void throwOutOld() {
+                for (int i = this.foods.size() - 1; i >= 0; i--) {
+                    if (this.foods.get(i).getDaysLeft() < 1) {
+                        this.foods.remove(i);
+                    }
+                }
+            }
+
+            public String toString() {
+                return "Fridge: " + this.foods;
+            }
+        }
+      Food.java: |
+        public class Food {
+            private String name;
+            private int daysLeft;
+
+            public Food(String name, int daysLeft) {
+                this.name = name;
+                this.daysLeft = daysLeft;
+            }
+
+            public int getDaysLeft() {
+                return this.daysLeft;
+            }
+
+            public String toString() {
+                return this.name + " (" + this.daysLeft + " days)";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Fridge fridge = new Fridge();
+                fridge.put(new Food("cheese", 12));
+                fridge.put(new Food("milk", 0));
+                fridge.put(new Food("yogurt", -1));
+                fridge.put(new Food("jam", 90));
+                fridge.throwOutOld();
+                System.out.println(fridge);
+            }
+        }
+    hints:
+      - "A for-each loop can't remove from the list it goes through. Loop over the indexes backwards: `for (int i = this.foods.size() - 1; i >= 0; i--)`."
+      - "In the loop, `this.foods.get(i).getDaysLeft()` is the food's days left. When it's less than 1, `this.foods.remove(i);` removes it by its index."
+    require:
+      - pattern: \bpublic\s+void\s+throwOutOld\s*\(\s*\)
+        message: "Write the method as `public void throwOutOld()`."
+    tests:
+      - call: |
+          Fridge fridge = new Fridge();
+          fridge.put(new Food("cheese", 12));
+          fridge.put(new Food("milk", 0));
+          fridge.put(new Food("yogurt", -1));
+          fridge.put(new Food("jam", 90));
+          fridge.throwOutOld();
+          System.out.println(fridge);
+      - call: |
+          Fridge fridge = new Fridge();
+          fridge.put(new Food("fish", 0));
+          fridge.put(new Food("soup", -3));
+          fridge.put(new Food("rice", 0));
+          fridge.throwOutOld();
+          System.out.println(fridge);
+          fridge.throwOutOld();
+          System.out.println(fridge);
+        hidden: true
+      - call: |
+          Fridge fridge = new Fridge();
+          fridge.put(new Food("eggs", 1));
+          fridge.put(new Food("salad", 2));
+          fridge.put(new Food("cream", 0));
+          fridge.throwOutOld();
+          System.out.println(fridge);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? `Toy` has no `equals` of its own, and the toybox's `remove` passes the toy on to the list's `remove`.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Toybox box = new Toybox();
+                  Toy ball = new Toy("ball");
+                  box.add(ball);
+                  box.add(new Toy("kite"));
+                  box.add(new Toy("ball"));
+                  box.remove(new Toy("kite"));
+                  System.out.println(box.count());
+                  box.remove(ball);
+                  System.out.println(box);
+                  box.empty();
+                  System.out.println(box.count());
+              }
+          }
+          // ==== Toybox.java ====
+          import java.util.ArrayList;
+
+          public class Toybox {
+              private ArrayList<Toy> toys;
+
+              public Toybox() {
+                  this.toys = new ArrayList<>();
+              }
+
+              public void add(Toy toy) {
+                  this.toys.add(toy);
+              }
+
+              public void remove(Toy toy) {
+                  this.toys.remove(toy);
+              }
+
+              public void empty() {
+                  this.toys.clear();
+              }
+
+              public int count() {
+                  return this.toys.size();
+              }
+
+              public String toString() {
+                  return "Toys: " + this.toys;
+              }
+          }
+          // ==== Toy.java ====
+          public class Toy {
+              private String name;
+
+              public Toy(String name) {
+                  this.name = name;
+              }
+
+              public String toString() {
+                  return this.name;
+              }
+          }
+        hints:
+          - "Without its own `equals`, a Toy equals only itself. `new Toy(\"kite\")` in the remove call is a different object from the kite in the box, so nothing is removed."
+          - "`box.remove(ball)` gives the very object that `ball` refers to, the first toy in the box, so that one goes. The other ball is a different object and stays. `empty()` clears the list."
+      - task: |
+          A sign-up sheet for a school trip keeps a list of names, and someone may have signed up more than once by mistake. `SignUpSheet.java` has the list, `signUp(String name)` and toString. Write two methods:
+
+          - `cancel(String name)` removes every entry of that name, and returns how many it removed.
+          - `reset()` empties the sheet.
+
+          The check runs:
+
+          ```java fragment
+          SignUpSheet sheet = new SignUpSheet();
+          sheet.signUp("Ada");
+          sheet.signUp("Ben");
+          sheet.signUp("Ada");
+          sheet.signUp("Ada");
+          sheet.signUp("Cleo");
+          System.out.println(sheet.cancel("Ada"));
+          System.out.println(sheet);
+          System.out.println(sheet.cancel("Zoe"));
+          sheet.reset();
+          System.out.println(sheet);
+          ```
+
+          and expects:
+
+          ```
+          3
+          Signed up: [Ben, Cleo]
+          0
+          Signed up: []
+          ```
+        seed:
+          SignUpSheet.java: |
+            import java.util.ArrayList;
+
+            public class SignUpSheet {
+                private ArrayList<String> names;
+
+                public SignUpSheet() {
+                    this.names = new ArrayList<>();
+                }
+
+                public void signUp(String name) {
+                    this.names.add(name);
+                }
+
+                // Write the methods cancel and reset here.
+
+                public String toString() {
+                    return "Signed up: " + this.names;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SignUpSheet sheet = new SignUpSheet();
+                    sheet.signUp("Ada");
+                    sheet.signUp("Ben");
+                    sheet.signUp("Ada");
+                    sheet.signUp("Ada");
+                    sheet.signUp("Cleo");
+                    System.out.println(sheet.cancel("Ada"));
+                    System.out.println(sheet);
+                    System.out.println(sheet.cancel("Zoe"));
+                    sheet.reset();
+                    System.out.println(sheet);
+                }
+            }
+        solution:
+          SignUpSheet.java: |
+            import java.util.ArrayList;
+
+            public class SignUpSheet {
+                private ArrayList<String> names;
+
+                public SignUpSheet() {
+                    this.names = new ArrayList<>();
+                }
+
+                public void signUp(String name) {
+                    this.names.add(name);
+                }
+
+                public int cancel(String name) {
+                    int removed = 0;
+                    for (int i = this.names.size() - 1; i >= 0; i--) {
+                        if (this.names.get(i).equals(name)) {
+                            this.names.remove(i);
+                            removed++;
+                        }
+                    }
+                    return removed;
+                }
+
+                public void reset() {
+                    this.names.clear();
+                }
+
+                public String toString() {
+                    return "Signed up: " + this.names;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SignUpSheet sheet = new SignUpSheet();
+                    sheet.signUp("Ada");
+                    sheet.signUp("Ben");
+                    sheet.signUp("Ada");
+                    sheet.signUp("Ada");
+                    sheet.signUp("Cleo");
+                    System.out.println(sheet.cancel("Ada"));
+                    System.out.println(sheet);
+                    System.out.println(sheet.cancel("Zoe"));
+                    sheet.reset();
+                    System.out.println(sheet);
+                }
+            }
+        hints:
+          - "`this.names.remove(name)` removes only the first copy. To remove them all and count them, loop over the indexes backwards, and when `this.names.get(i).equals(name)`, remove index `i` and add one to a counter."
+          - "`reset` needs one line: `this.names.clear();`."
+        require:
+          - pattern: \bpublic\s+int\s+cancel\s*\(\s*String\s+\w+\s*\)
+            message: "Write the method as `public int cancel(String name)`."
+          - pattern: \bpublic\s+void\s+reset\s*\(\s*\)
+            message: "Write the method as `public void reset()`."
+        tests:
+          - call: |
+              SignUpSheet sheet = new SignUpSheet();
+              sheet.signUp("Ada");
+              sheet.signUp("Ben");
+              sheet.signUp("Ada");
+              sheet.signUp("Ada");
+              sheet.signUp("Cleo");
+              System.out.println(sheet.cancel("Ada"));
+              System.out.println(sheet);
+              System.out.println(sheet.cancel("Zoe"));
+              sheet.reset();
+              System.out.println(sheet);
+          - call: |
+              SignUpSheet sheet = new SignUpSheet();
+              sheet.signUp("Kai");
+              sheet.signUp("Kai");
+              sheet.signUp("Lu");
+              String name = "K";
+              System.out.println(sheet.cancel(name + "ai") + " " + sheet.cancel("lu"));
+              System.out.println(sheet);
+              sheet.signUp("Mo");
+              System.out.println(sheet.cancel("Lu") + " " + sheet);
+            hidden: true
+          - call: |
+              SignUpSheet sheet = new SignUpSheet();
+              sheet.reset();
+              System.out.println(sheet.cancel("Ada"));
+              sheet.signUp("Noa");
+              sheet.signUp("Noa");
+              sheet.signUp("Noa");
+              System.out.println(sheet.cancel("Noa") + " " + sheet);
+            hidden: true
+
+  - id: objects-with-lists-totals
+    slug: totals-from-the-list
+    title: Totals from the objects on the list
+    text: |
+      A class that holds a list of objects can answer questions about all of them together: how many pages the books have in all, how long they are on average, how many pages one author wrote. Each answer is a loop over the list:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Bookshelf shelf = new Bookshelf("Study");
+              shelf.add(new Book("Emma", "Austen", 474));
+              shelf.add(new Book("Persuasion", "Austen", 249));
+              shelf.add(new Book("Dracula", "Stoker", 418));
+              shelf.add(new Book("Kindred", "Butler", 264));
+              System.out.println("Pages: " + shelf.totalPages());
+              System.out.println("Average: " + shelf.averagePages());
+              System.out.println("By Austen: " + shelf.pagesBy("Austen"));
+              Bookshelf empty = new Bookshelf("Hallway");
+              System.out.println("Pages: " + empty.totalPages());
+              System.out.println("Average: " + empty.averagePages());
+          }
+      }
+      // ==== Bookshelf.java ====
+      import java.util.ArrayList;
+
+      public class Bookshelf {
+          private String room;
+          private ArrayList<Book> books;
+
+          public Bookshelf(String room) {
+              this.room = room;
+              this.books = new ArrayList<>();
+          }
+
+          public void add(Book book) {
+              this.books.add(book);
+          }
+
+          public int totalPages() {
+              int total = 0;
+              for (Book book : this.books) {
+                  total = total + book.getPages();
+              }
+              return total;
+          }
+
+          public double averagePages() {
+              if (this.books.isEmpty()) {
+                  return 0;
+              }
+              return (double) this.totalPages() / this.books.size();
+          }
+
+          public int pagesBy(String author) {
+              int total = 0;
+              for (Book book : this.books) {
+                  if (book.getAuthor().equals(author)) {
+                      total = total + book.getPages();
+                  }
+              }
+              return total;
+          }
+      }
+      // ==== Book.java ====
+      public class Book {
+          private String title;
+          private String author;
+          private int pages;
+
+          public Book(String title, String author, int pages) {
+              this.title = title;
+              this.author = author;
+              this.pages = pages;
+          }
+
+          public String getAuthor() {
+              return this.author;
+          }
+
+          public int getPages() {
+              return this.pages;
+          }
+      }
+      ```
+
+      ```output
+      Pages: 1405
+      Average: 351.25
+      By Austen: 723
+      Pages: 0
+      Average: 0.0
+      ```
+
+      - `totalPages` is the sum pattern you know, over the shelf's own list: a local variable starts at 0, and each book adds its pages to it.
+      - `averagePages` doesn't write the loop again. It calls the object's own `totalPages()` with `this.` (module 18), and divides by the number of books. The `(double)` makes the division keep its decimals (module 4). Without it, `1405 / 4` would be `351`.
+      - The empty check comes first. With no books, the division would be 0 divided by 0, which for a `double` gives `NaN`, "not a number". Returning 0 is the choice made here, and since the method returns a `double`, it comes out as `0.0`.
+      - `pagesBy` is a total with a condition: only the books that match add their pages.
+
+      ### Counted when asked, not kept
+
+      The shelf could keep the total in an instance variable of its own, and add to it in `add`. But then every method that changes the list, such as one that removes books, would have to remember to change the total too, and one that forgets makes it wrong. Counting from the list each time can't go out of date: the list is always right, so the total is too.
+
+      **Your turn:** a trip is made of legs, and `Leg.java` is ready: a leg goes from one place to another, and `getKm()` returns its length in kilometers. In `Trip.java`, write the method `totalKm()`: it returns the length of the whole trip, the sum of its legs. A trip with no legs is 0 km. The check runs:
+
+      ```java fragment
+      Trip trip = new Trip();
+      trip.add(new Leg("Harbor", "Mill", 12));
+      trip.add(new Leg("Mill", "Pine Hill", 30));
+      trip.add(new Leg("Pine Hill", "Camp", 8));
+      System.out.println(trip.totalKm());
+      System.out.println(new Trip().totalKm());
+      ```
+
+      and expects:
+
+      ```
+      50
+      0
+      ```
+    seed:
+      Trip.java: |
+        import java.util.ArrayList;
+
+        public class Trip {
+            private ArrayList<Leg> legs;
+
+            public Trip() {
+                this.legs = new ArrayList<>();
+            }
+
+            public void add(Leg leg) {
+                this.legs.add(leg);
+            }
+
+            // Write the totalKm method here.
+        }
+      Leg.java: |
+        public class Leg {
+            private String from;
+            private String to;
+            private int km;
+
+            public Leg(String from, String to, int km) {
+                this.from = from;
+                this.to = to;
+                this.km = km;
+            }
+
+            public int getKm() {
+                return this.km;
+            }
+
+            public String toString() {
+                return this.from + " to " + this.to + ", " + this.km + " km";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Trip trip = new Trip();
+                trip.add(new Leg("Harbor", "Mill", 12));
+                trip.add(new Leg("Mill", "Pine Hill", 30));
+                trip.add(new Leg("Pine Hill", "Camp", 8));
+                System.out.println(trip.totalKm());
+                System.out.println(new Trip().totalKm());
+            }
+        }
+    solution:
+      Trip.java: |
+        import java.util.ArrayList;
+
+        public class Trip {
+            private ArrayList<Leg> legs;
+
+            public Trip() {
+                this.legs = new ArrayList<>();
+            }
+
+            public void add(Leg leg) {
+                this.legs.add(leg);
+            }
+
+            public int totalKm() {
+                int total = 0;
+                for (Leg leg : this.legs) {
+                    total = total + leg.getKm();
+                }
+                return total;
+            }
+        }
+      Leg.java: |
+        public class Leg {
+            private String from;
+            private String to;
+            private int km;
+
+            public Leg(String from, String to, int km) {
+                this.from = from;
+                this.to = to;
+                this.km = km;
+            }
+
+            public int getKm() {
+                return this.km;
+            }
+
+            public String toString() {
+                return this.from + " to " + this.to + ", " + this.km + " km";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Trip trip = new Trip();
+                trip.add(new Leg("Harbor", "Mill", 12));
+                trip.add(new Leg("Mill", "Pine Hill", 30));
+                trip.add(new Leg("Pine Hill", "Camp", 8));
+                System.out.println(trip.totalKm());
+                System.out.println(new Trip().totalKm());
+            }
+        }
+    hints:
+      - "The method returns a whole number: `public int totalKm() {`. Start a local total at 0 before the loop."
+      - "In `for (Leg leg : this.legs)`, add each leg's length: `total = total + leg.getKm();`. Return the total after the loop."
+    require:
+      - pattern: \bpublic\s+int\s+totalKm\s*\(\s*\)
+        message: "Write the method as `public int totalKm()`."
+      - pattern: \.getKm\s*\(\s*\)
+        message: "Ask each leg for its length with `getKm()`."
+    tests:
+      - call: |
+          Trip trip = new Trip();
+          trip.add(new Leg("Harbor", "Mill", 12));
+          trip.add(new Leg("Mill", "Pine Hill", 30));
+          trip.add(new Leg("Pine Hill", "Camp", 8));
+          System.out.println(trip.totalKm());
+          System.out.println(new Trip().totalKm());
+      - call: |
+          Trip trip = new Trip();
+          trip.add(new Leg("A", "B", 140));
+          System.out.println(trip.totalKm());
+          trip.add(new Leg("B", "A", 140));
+          System.out.println(trip.totalKm());
+          System.out.println(trip.totalKm());
+        hidden: true
+      - call: |
+          Trip first = new Trip();
+          Trip second = new Trip();
+          first.add(new Leg("X", "Y", 5));
+          second.add(new Leg("Y", "Z", 7));
+          second.add(new Leg("Z", "W", 9));
+          System.out.println(first.totalKm() + " " + second.totalKm());
+        hidden: true
+    more:
+      - task: |
+          `Squad.java` has a method `averageGoals()`, but it has two bugs. For a squad whose players scored 3 and 4 goals it returns `3.0`, not `3.5`, and for a squad with no players it crashes. Fix it, so it returns the average with its decimals, and 0 for a squad with no players. `Player.java` and `Main.java` are ready, and when the method is fixed the program prints:
+
+          ```
+          3.5
+          0.0
+          ```
+        seed:
+          Squad.java: |
+            import java.util.ArrayList;
+
+            public class Squad {
+                private ArrayList<Player> players;
+
+                public Squad() {
+                    this.players = new ArrayList<>();
+                }
+
+                public void add(Player player) {
+                    this.players.add(player);
+                }
+
+                public int totalGoals() {
+                    int total = 0;
+                    for (Player player : this.players) {
+                        total = total + player.getGoals();
+                    }
+                    return total;
+                }
+
+                public double averageGoals() {
+                    return this.totalGoals() / this.players.size();
+                }
+            }
+          Player.java: |
+            public class Player {
+                private String name;
+                private int goals;
+
+                public Player(String name, int goals) {
+                    this.name = name;
+                    this.goals = goals;
+                }
+
+                public int getGoals() {
+                    return this.goals;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Squad squad = new Squad();
+                    squad.add(new Player("Ana", 3));
+                    squad.add(new Player("Bo", 4));
+                    System.out.println(squad.averageGoals());
+                    Squad empty = new Squad();
+                    System.out.println(empty.averageGoals());
+                }
+            }
+        solution:
+          Squad.java: |
+            import java.util.ArrayList;
+
+            public class Squad {
+                private ArrayList<Player> players;
+
+                public Squad() {
+                    this.players = new ArrayList<>();
+                }
+
+                public void add(Player player) {
+                    this.players.add(player);
+                }
+
+                public int totalGoals() {
+                    int total = 0;
+                    for (Player player : this.players) {
+                        total = total + player.getGoals();
+                    }
+                    return total;
+                }
+
+                public double averageGoals() {
+                    if (this.players.isEmpty()) {
+                        return 0;
+                    }
+                    return (double) this.totalGoals() / this.players.size();
+                }
+            }
+          Player.java: |
+            public class Player {
+                private String name;
+                private int goals;
+
+                public Player(String name, int goals) {
+                    this.name = name;
+                    this.goals = goals;
+                }
+
+                public int getGoals() {
+                    return this.goals;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Squad squad = new Squad();
+                    squad.add(new Player("Ana", 3));
+                    squad.add(new Player("Bo", 4));
+                    System.out.println(squad.averageGoals());
+                    Squad empty = new Squad();
+                    System.out.println(empty.averageGoals());
+                }
+            }
+        hints:
+          - "`this.totalGoals()` and `this.players.size()` are both `int` values, so the division drops the decimals before the result becomes a `double`. With no players, it divides by zero, and an `int` division by zero crashes."
+          - "Check `if (this.players.isEmpty()) { return 0; }` first. Then `return (double) this.totalGoals() / this.players.size();`: the cast turns the total into a `double` before the division, as in the lesson's `averagePages`."
+        tests:
+          - name: The program
+          - call: |
+              Squad squad = new Squad();
+              squad.add(new Player("Cy", 1));
+              squad.add(new Player("Di", 2));
+              squad.add(new Player("Ed", 2));
+              squad.add(new Player("Fa", 2));
+              System.out.println(squad.averageGoals());
+              squad.add(new Player("Gu", 3));
+              System.out.println(squad.averageGoals());
+            hidden: true
+          - call: |
+              Squad squad = new Squad();
+              System.out.println(squad.averageGoals());
+              squad.add(new Player("Hu", 7));
+              System.out.println(squad.averageGoals() + " " + squad.totalGoals());
+            hidden: true
+      - task: |
+          A workout is a list of exercises. `Exercise.java` is ready: an exercise has a name, a number of minutes, and the calories it burns in a minute, with the getters `getMinutes()` and `getCaloriesPerMinute()`. In `Workout.java`, write three methods:
+
+          - `totalMinutes()` returns the minutes of all the exercises together.
+          - `totalCalories()` returns the calories of all the exercises together. Each exercise burns its minutes times its calories per minute.
+          - `averageMinutes()` returns the average length of an exercise as a `double`, or 0 for a workout with no exercises.
+
+          The check runs:
+
+          ```java fragment
+          Workout workout = new Workout();
+          workout.add(new Exercise("rowing", 20, 8));
+          workout.add(new Exercise("cycling", 15, 7));
+          workout.add(new Exercise("stretching", 10, 3));
+          System.out.println(workout.totalMinutes());
+          System.out.println(workout.totalCalories());
+          System.out.println(workout.averageMinutes());
+          System.out.println(new Workout().averageMinutes());
+          ```
+
+          and expects:
+
+          ```
+          45
+          295
+          15.0
+          0.0
+          ```
+        seed:
+          Workout.java: |
+            import java.util.ArrayList;
+
+            public class Workout {
+                private ArrayList<Exercise> exercises;
+
+                public Workout() {
+                    this.exercises = new ArrayList<>();
+                }
+
+                public void add(Exercise exercise) {
+                    this.exercises.add(exercise);
+                }
+
+                // Write the methods totalMinutes, totalCalories and averageMinutes here.
+            }
+          Exercise.java: |
+            public class Exercise {
+                private String name;
+                private int minutes;
+                private int caloriesPerMinute;
+
+                public Exercise(String name, int minutes, int caloriesPerMinute) {
+                    this.name = name;
+                    this.minutes = minutes;
+                    this.caloriesPerMinute = caloriesPerMinute;
+                }
+
+                public int getMinutes() {
+                    return this.minutes;
+                }
+
+                public int getCaloriesPerMinute() {
+                    return this.caloriesPerMinute;
+                }
+
+                public String toString() {
+                    return this.name + ", " + this.minutes + " min";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Workout workout = new Workout();
+                    workout.add(new Exercise("rowing", 20, 8));
+                    workout.add(new Exercise("cycling", 15, 7));
+                    workout.add(new Exercise("stretching", 10, 3));
+                    System.out.println(workout.totalMinutes());
+                    System.out.println(workout.totalCalories());
+                    System.out.println(workout.averageMinutes());
+                    System.out.println(new Workout().averageMinutes());
+                }
+            }
+        solution:
+          Workout.java: |
+            import java.util.ArrayList;
+
+            public class Workout {
+                private ArrayList<Exercise> exercises;
+
+                public Workout() {
+                    this.exercises = new ArrayList<>();
+                }
+
+                public void add(Exercise exercise) {
+                    this.exercises.add(exercise);
+                }
+
+                public int totalMinutes() {
+                    int total = 0;
+                    for (Exercise exercise : this.exercises) {
+                        total = total + exercise.getMinutes();
+                    }
+                    return total;
+                }
+
+                public int totalCalories() {
+                    int total = 0;
+                    for (Exercise exercise : this.exercises) {
+                        total = total + exercise.getMinutes() * exercise.getCaloriesPerMinute();
+                    }
+                    return total;
+                }
+
+                public double averageMinutes() {
+                    if (this.exercises.isEmpty()) {
+                        return 0;
+                    }
+                    return (double) this.totalMinutes() / this.exercises.size();
+                }
+            }
+          Exercise.java: |
+            public class Exercise {
+                private String name;
+                private int minutes;
+                private int caloriesPerMinute;
+
+                public Exercise(String name, int minutes, int caloriesPerMinute) {
+                    this.name = name;
+                    this.minutes = minutes;
+                    this.caloriesPerMinute = caloriesPerMinute;
+                }
+
+                public int getMinutes() {
+                    return this.minutes;
+                }
+
+                public int getCaloriesPerMinute() {
+                    return this.caloriesPerMinute;
+                }
+
+                public String toString() {
+                    return this.name + ", " + this.minutes + " min";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Workout workout = new Workout();
+                    workout.add(new Exercise("rowing", 20, 8));
+                    workout.add(new Exercise("cycling", 15, 7));
+                    workout.add(new Exercise("stretching", 10, 3));
+                    System.out.println(workout.totalMinutes());
+                    System.out.println(workout.totalCalories());
+                    System.out.println(workout.averageMinutes());
+                    System.out.println(new Workout().averageMinutes());
+                }
+            }
+        hints:
+          - "Both totals are loops over `this.exercises` that add to a local total. For the calories, add `exercise.getMinutes() * exercise.getCaloriesPerMinute()` in each round."
+          - "`averageMinutes` first returns 0 when `this.exercises.isEmpty()`. Otherwise it returns `(double) this.totalMinutes() / this.exercises.size();`: without the `(double)`, 25 / 2 would be 12."
+        require:
+          - pattern: \bpublic\s+int\s+totalMinutes\s*\(\s*\)
+            message: "Write the method as `public int totalMinutes()`."
+          - pattern: \bpublic\s+int\s+totalCalories\s*\(\s*\)
+            message: "Write the method as `public int totalCalories()`."
+          - pattern: \bpublic\s+double\s+averageMinutes\s*\(\s*\)
+            message: "Write the method as `public double averageMinutes()`."
+        tests:
+          - call: |
+              Workout workout = new Workout();
+              workout.add(new Exercise("rowing", 20, 8));
+              workout.add(new Exercise("cycling", 15, 7));
+              workout.add(new Exercise("stretching", 10, 3));
+              System.out.println(workout.totalMinutes());
+              System.out.println(workout.totalCalories());
+              System.out.println(workout.averageMinutes());
+              System.out.println(new Workout().averageMinutes());
+          - call: |
+              Workout workout = new Workout();
+              System.out.println(workout.totalMinutes() + " " + workout.totalCalories());
+              workout.add(new Exercise("running", 25, 11));
+              workout.add(new Exercise("walking", 10, 4));
+              System.out.println(workout.totalMinutes() + " " + workout.totalCalories());
+              System.out.println(workout.averageMinutes());
+            hidden: true
+          - call: |
+              Workout workout = new Workout();
+              workout.add(new Exercise("plank", 1, 5));
+              workout.add(new Exercise("squats", 2, 6));
+              workout.add(new Exercise("jumping", 2, 10));
+              System.out.println(workout.averageMinutes());
+              System.out.println(workout.totalCalories());
+            hidden: true
+
+  - id: objects-with-lists-finding
+    slug: finding-an-object
+    title: Finding an object on the list
+    text: |
+      A method can also go through the list to find one object and return it: the largest, or the first one that matches. Its return type is then the class of the objects. When there's nothing to return, it returns `null`, "no object" (module 22):
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Bookshelf shelf = new Bookshelf("Study");
+              shelf.add(new Book("Emma", "Austen", 474));
+              shelf.add(new Book("Kindred", "Butler", 264));
+              shelf.add(new Book("Middlemarch", "Eliot", 880));
+              System.out.println("Thickest: " + shelf.thickest());
+              Book found = shelf.find("Kindred");
+              if (found != null) {
+                  System.out.println("Found it, by " + found.getAuthor());
+              }
+              if (shelf.find("Ulysses") == null) {
+                  System.out.println("No Ulysses here");
+              }
+              Bookshelf hall = new Bookshelf("Hallway");
+              System.out.println(hall.thickest());
+          }
+      }
+      // ==== Bookshelf.java ====
+      import java.util.ArrayList;
+
+      public class Bookshelf {
+          private String room;
+          private ArrayList<Book> books;
+
+          public Bookshelf(String room) {
+              this.room = room;
+              this.books = new ArrayList<>();
+          }
+
+          public void add(Book book) {
+              this.books.add(book);
+          }
+
+          public Book thickest() {
+              if (this.books.isEmpty()) {
+                  return null;
+              }
+              Book thickest = this.books.get(0);
+              for (Book book : this.books) {
+                  if (book.getPages() > thickest.getPages()) {
+                      thickest = book;
+                  }
+              }
+              return thickest;
+          }
+
+          public Book find(String title) {
+              for (Book book : this.books) {
+                  if (book.getTitle().equals(title)) {
+                      return book;
+                  }
+              }
+              return null;
+          }
+      }
+      // ==== Book.java ====
+      public class Book {
+          private String title;
+          private String author;
+          private int pages;
+
+          public Book(String title, String author, int pages) {
+              this.title = title;
+              this.author = author;
+              this.pages = pages;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public String getAuthor() {
+              return this.author;
+          }
+
+          public int getPages() {
+              return this.pages;
+          }
+
+          public String toString() {
+              return this.title + " by " + this.author + ", " + this.pages + " pages";
+          }
+      }
+      ```
+
+      ```output
+      Thickest: Middlemarch by Eliot, 880 pages
+      Found it, by Butler
+      No Ulysses here
+      null
+      ```
+
+      - `thickest` keeps the thickest book so far in a local variable of type Book, starting with the first book on the list. Each book with more pages takes its place. This is module 13's search for the largest value, with objects: the pages decide, but the whole Book is kept.
+      - Starting from `this.books.get(0)` needs a first book, so the empty check comes first. Without it, `get(0)` on an empty list would crash with an IndexOutOfBoundsException.
+      - With `>`, a book takes the kept one's place only when it's thicker, so of two equally thick books, the first one wins. With `>=`, the last one would.
+      - `find` returns the book as soon as it finds it, which also ends the loop. `return null` after the loop runs only when no book matched.
+
+      ### Checking the result
+
+      A method that may return `null` puts a job on its caller: check before using the result. `found.getAuthor()` would crash with a NullPointerException if `found` were `null`, so `main` checks `found != null` first. Printing a `null` is fine, though: `System.out.println(hall.thickest())` prints `null`.
+
+      The method returns the object itself, not a copy. `shelf.find("Emma") == shelf.find("Emma")` is `true`: both calls return a reference to the one Book on the shelf. So if Book could change, a change made through the returned reference would change the book on the shelf.
+
+      **Your turn:** a hotel keeps a list of its rooms. `Room.java` is ready: a room has a number and a number of beds, with the getter `getBeds()`. In `Hotel.java`, write the method `findRoom(int people)`: it returns the first room on the list with at least that many beds, or `null` when there's no such room. The check runs:
+
+      ```java fragment
+      Hotel hotel = new Hotel();
+      hotel.add(new Room(101, 1));
+      hotel.add(new Room(102, 2));
+      hotel.add(new Room(201, 4));
+      System.out.println(hotel.findRoom(2));
+      System.out.println(hotel.findRoom(3));
+      System.out.println(hotel.findRoom(5));
+      ```
+
+      and expects:
+
+      ```
+      Room 102, 2 beds
+      Room 201, 4 beds
+      null
+      ```
+    seed:
+      Hotel.java: |
+        import java.util.ArrayList;
+
+        public class Hotel {
+            private ArrayList<Room> rooms;
+
+            public Hotel() {
+                this.rooms = new ArrayList<>();
+            }
+
+            public void add(Room room) {
+                this.rooms.add(room);
+            }
+
+            // Write the findRoom method here.
+        }
+      Room.java: |
+        public class Room {
+            private int number;
+            private int beds;
+
+            public Room(int number, int beds) {
+                this.number = number;
+                this.beds = beds;
+            }
+
+            public int getNumber() {
+                return this.number;
+            }
+
+            public int getBeds() {
+                return this.beds;
+            }
+
+            public String toString() {
+                return "Room " + this.number + ", " + this.beds + " beds";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Hotel hotel = new Hotel();
+                hotel.add(new Room(101, 1));
+                hotel.add(new Room(102, 2));
+                hotel.add(new Room(201, 4));
+                System.out.println(hotel.findRoom(2));
+                System.out.println(hotel.findRoom(3));
+                System.out.println(hotel.findRoom(5));
+            }
+        }
+    solution:
+      Hotel.java: |
+        import java.util.ArrayList;
+
+        public class Hotel {
+            private ArrayList<Room> rooms;
+
+            public Hotel() {
+                this.rooms = new ArrayList<>();
+            }
+
+            public void add(Room room) {
+                this.rooms.add(room);
+            }
+
+            public Room findRoom(int people) {
+                for (Room room : this.rooms) {
+                    if (room.getBeds() >= people) {
+                        return room;
+                    }
+                }
+                return null;
+            }
+        }
+      Room.java: |
+        public class Room {
+            private int number;
+            private int beds;
+
+            public Room(int number, int beds) {
+                this.number = number;
+                this.beds = beds;
+            }
+
+            public int getNumber() {
+                return this.number;
+            }
+
+            public int getBeds() {
+                return this.beds;
+            }
+
+            public String toString() {
+                return "Room " + this.number + ", " + this.beds + " beds";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Hotel hotel = new Hotel();
+                hotel.add(new Room(101, 1));
+                hotel.add(new Room(102, 2));
+                hotel.add(new Room(201, 4));
+                System.out.println(hotel.findRoom(2));
+                System.out.println(hotel.findRoom(3));
+                System.out.println(hotel.findRoom(5));
+            }
+        }
+    hints:
+      - "The method's return type is the class of what it finds. Go through the rooms and return the first one that's big enough. If the loop ends without returning, no room was."
+      - "`public Room findRoom(int people) {`, then in `for (Room room : this.rooms)`, `if (room.getBeds() >= people) { return room; }`. After the loop: `return null;`."
+    require:
+      - pattern: \bpublic\s+Room\s+findRoom\s*\(\s*int\s+\w+\s*\)
+        message: "Write the method as `public Room findRoom(int people)`."
+    tests:
+      - call: |
+          Hotel hotel = new Hotel();
+          hotel.add(new Room(101, 1));
+          hotel.add(new Room(102, 2));
+          hotel.add(new Room(201, 4));
+          System.out.println(hotel.findRoom(2));
+          System.out.println(hotel.findRoom(3));
+          System.out.println(hotel.findRoom(5));
+      - call: |
+          Hotel hotel = new Hotel();
+          System.out.println(hotel.findRoom(1));
+          Room single = new Room(7, 1);
+          hotel.add(single);
+          hotel.add(new Room(8, 1));
+          System.out.println(hotel.findRoom(1) == single);
+          System.out.println(hotel.findRoom(1).getNumber());
+        hidden: true
+      - call: |
+          Hotel hotel = new Hotel();
+          hotel.add(new Room(301, 6));
+          hotel.add(new Room(302, 3));
+          System.out.println(hotel.findRoom(3));
+          System.out.println(hotel.findRoom(6));
+          System.out.println(hotel.findRoom(7));
+        hidden: true
+    more:
+      - task: |
+          What does this program print? `find` and `oldest` both return a Horse from the stable's list, or `null`.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Stable stable = new Stable();
+                  stable.add(new Horse("Storm", 7));
+                  stable.add(new Horse("Pepper", 6));
+                  Horse pepper = stable.find("Pepper");
+                  pepper.birthday();
+                  pepper.birthday();
+                  System.out.println(stable.oldest());
+                  System.out.println(stable.find("Ghost"));
+                  System.out.println(stable.find("Storm") == stable.oldest());
+              }
+          }
+          // ==== Stable.java ====
+          import java.util.ArrayList;
+
+          public class Stable {
+              private ArrayList<Horse> horses;
+
+              public Stable() {
+                  this.horses = new ArrayList<>();
+              }
+
+              public void add(Horse horse) {
+                  this.horses.add(horse);
+              }
+
+              public Horse find(String name) {
+                  for (Horse horse : this.horses) {
+                      if (horse.getName().equals(name)) {
+                          return horse;
+                      }
+                  }
+                  return null;
+              }
+
+              public Horse oldest() {
+                  if (this.horses.isEmpty()) {
+                      return null;
+                  }
+                  Horse oldest = this.horses.get(0);
+                  for (Horse horse : this.horses) {
+                      if (horse.getAge() > oldest.getAge()) {
+                          oldest = horse;
+                      }
+                  }
+                  return oldest;
+              }
+          }
+          // ==== Horse.java ====
+          public class Horse {
+              private String name;
+              private int age;
+
+              public Horse(String name, int age) {
+                  this.name = name;
+                  this.age = age;
+              }
+
+              public String getName() {
+                  return this.name;
+              }
+
+              public int getAge() {
+                  return this.age;
+              }
+
+              public void birthday() {
+                  this.age++;
+              }
+
+              public String toString() {
+                  return this.name + ", " + this.age + " years";
+              }
+          }
+        hints:
+          - "`find` returns the Horse object on the list, not a copy. So the two birthdays through `pepper` make the stable's Pepper 8, older than Storm."
+          - "There's no horse called Ghost, so `find` returns `null`, and printing it prints `null`. Storm isn't the oldest any more, so the two calls return different objects."
+      - task: |
+          An election has a list of candidates. `Candidate.java` is ready: a candidate has a name and a number of votes that starts at 0, with `getName()`, `getVotes()` and `addVote()`. In `Election.java`, write two methods:
+
+          - `vote(String name)` gives one vote to the candidate with that name. A name that isn't a candidate's does nothing.
+          - `leader()` returns the candidate with the most votes. When there are no candidates, or when two or more share the most votes, there's no leader, and it returns `null`.
+
+          The check runs:
+
+          ```java fragment
+          Election election = new Election();
+          election.add(new Candidate("Ines"));
+          election.add(new Candidate("Omar"));
+          election.add(new Candidate("Yuki"));
+          System.out.println(election.leader());
+          election.vote("Omar");
+          election.vote("Ines");
+          election.vote("Omar");
+          election.vote("Zed");
+          System.out.println(election.leader());
+          ```
+
+          and expects:
+
+          ```
+          null
+          Omar, 2 votes
+          ```
+        seed:
+          Election.java: |
+            import java.util.ArrayList;
+
+            public class Election {
+                private ArrayList<Candidate> candidates;
+
+                public Election() {
+                    this.candidates = new ArrayList<>();
+                }
+
+                public void add(Candidate candidate) {
+                    this.candidates.add(candidate);
+                }
+
+                // Write the methods vote and leader here.
+            }
+          Candidate.java: |
+            public class Candidate {
+                private String name;
+                private int votes;
+
+                public Candidate(String name) {
+                    this.name = name;
+                    this.votes = 0;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getVotes() {
+                    return this.votes;
+                }
+
+                public void addVote() {
+                    this.votes++;
+                }
+
+                public String toString() {
+                    return this.name + ", " + this.votes + " votes";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Election election = new Election();
+                    election.add(new Candidate("Ines"));
+                    election.add(new Candidate("Omar"));
+                    election.add(new Candidate("Yuki"));
+                    System.out.println(election.leader());
+                    election.vote("Omar");
+                    election.vote("Ines");
+                    election.vote("Omar");
+                    election.vote("Zed");
+                    System.out.println(election.leader());
+                }
+            }
+        solution:
+          Election.java: |
+            import java.util.ArrayList;
+
+            public class Election {
+                private ArrayList<Candidate> candidates;
+
+                public Election() {
+                    this.candidates = new ArrayList<>();
+                }
+
+                public void add(Candidate candidate) {
+                    this.candidates.add(candidate);
+                }
+
+                public void vote(String name) {
+                    for (Candidate candidate : this.candidates) {
+                        if (candidate.getName().equals(name)) {
+                            candidate.addVote();
+                        }
+                    }
+                }
+
+                public Candidate leader() {
+                    Candidate best = null;
+                    boolean shared = false;
+                    for (Candidate candidate : this.candidates) {
+                        if (best == null || candidate.getVotes() > best.getVotes()) {
+                            best = candidate;
+                            shared = false;
+                        } else if (candidate.getVotes() == best.getVotes()) {
+                            shared = true;
+                        }
+                    }
+                    if (shared) {
+                        return null;
+                    }
+                    return best;
+                }
+            }
+          Candidate.java: |
+            public class Candidate {
+                private String name;
+                private int votes;
+
+                public Candidate(String name) {
+                    this.name = name;
+                    this.votes = 0;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getVotes() {
+                    return this.votes;
+                }
+
+                public void addVote() {
+                    this.votes++;
+                }
+
+                public String toString() {
+                    return this.name + ", " + this.votes + " votes";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Election election = new Election();
+                    election.add(new Candidate("Ines"));
+                    election.add(new Candidate("Omar"));
+                    election.add(new Candidate("Yuki"));
+                    System.out.println(election.leader());
+                    election.vote("Omar");
+                    election.vote("Ines");
+                    election.vote("Omar");
+                    election.vote("Zed");
+                    System.out.println(election.leader());
+                }
+            }
+        hints:
+          - "`vote` goes through the candidates, and calls `candidate.addVote()` on the one whose name `equals` the name given. The vote changes the Candidate object on the list itself."
+          - "In `leader`, keep the best candidate so far (starting at `null`) and a boolean `shared`. A candidate with more votes than the best becomes the best, and `shared` goes back to false; one with just as many votes sets `shared` to true. After the loop, return `null` if `shared` is true, and the best one otherwise."
+        require:
+          - pattern: \bpublic\s+void\s+vote\s*\(\s*String\s+\w+\s*\)
+            message: "Write the method as `public void vote(String name)`."
+          - pattern: \bpublic\s+Candidate\s+leader\s*\(\s*\)
+            message: "Write the method as `public Candidate leader()`."
+          - pattern: \.addVote\s*\(\s*\)
+            message: "Give the vote with the candidate's `addVote()`."
+        tests:
+          - call: |
+              Election election = new Election();
+              election.add(new Candidate("Ines"));
+              election.add(new Candidate("Omar"));
+              election.add(new Candidate("Yuki"));
+              System.out.println(election.leader());
+              election.vote("Omar");
+              election.vote("Ines");
+              election.vote("Omar");
+              election.vote("Zed");
+              System.out.println(election.leader());
+          - call: |
+              Election election = new Election();
+              System.out.println(election.leader());
+              Candidate solo = new Candidate("Solo");
+              election.add(solo);
+              System.out.println(election.leader() == solo);
+              election.vote("So" + "lo");
+              System.out.println(solo);
+            hidden: true
+          - call: |
+              Election election = new Election();
+              election.add(new Candidate("Ann"));
+              election.add(new Candidate("Bea"));
+              election.add(new Candidate("Cal"));
+              election.vote("Ann");
+              election.vote("Cal");
+              System.out.println(election.leader());
+              election.vote("Cal");
+              System.out.println(election.leader());
+              election.vote("Bea");
+              election.vote("Bea");
+              System.out.println(election.leader());
+              election.vote("Bea");
+              System.out.println(election.leader());
+            hidden: true
+          - call: |
+              Election election = new Election();
+              election.add(new Candidate("Dov"));
+              election.add(new Candidate("Eve"));
+              election.vote("Eve");
+              election.vote("Eve");
+              election.vote("Dov");
+              election.vote("Dov");
+              election.vote("Dov");
+              System.out.println(election.leader());
+            hidden: true
+
+  - id: objects-with-lists-rules
+    slug: rules-for-adding
+    title: Rules the owner enforces
+    text: |
+      So far every `add` put its object on the list, no questions asked. But the object that owns the list can also have rules about what goes on it. A parking garage has a fixed number of spots, and the same car can't be parked in it twice:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              ParkingGarage garage = new ParkingGarage(2);
+              System.out.println(garage.park(new Car("ABC-123")));
+              System.out.println(garage.park(new Car("ABC-123")));
+              System.out.println(garage.park(new Car("XYZ-789")));
+              System.out.println(garage.park(new Car("JKL-456")));
+              garage.leave("ABC-123");
+              System.out.println(garage.park(new Car("JKL-456")));
+              System.out.println(garage);
+          }
+      }
+      // ==== ParkingGarage.java ====
+      import java.util.ArrayList;
+
+      public class ParkingGarage {
+          private int spots;
+          private ArrayList<Car> cars;
+
+          public ParkingGarage(int spots) {
+              this.spots = spots;
+              this.cars = new ArrayList<>();
+          }
+
+          public boolean park(Car car) {
+              if (this.cars.size() >= this.spots) {
+                  return false;
+              }
+              if (this.isParked(car.getPlate())) {
+                  return false;
+              }
+              this.cars.add(car);
+              return true;
+          }
+
+          public boolean isParked(String plate) {
+              for (Car car : this.cars) {
+                  if (car.getPlate().equals(plate)) {
+                      return true;
+                  }
+              }
+              return false;
+          }
+
+          public void leave(String plate) {
+              for (int i = this.cars.size() - 1; i >= 0; i--) {
+                  if (this.cars.get(i).getPlate().equals(plate)) {
+                      this.cars.remove(i);
+                  }
+              }
+          }
+
+          public String toString() {
+              return this.cars.size() + "/" + this.spots + " spots taken: " + this.cars;
+          }
+      }
+      // ==== Car.java ====
+      public class Car {
+          private String plate;
+
+          public Car(String plate) {
+              this.plate = plate;
+          }
+
+          public String getPlate() {
+              return this.plate;
+          }
+
+          public String toString() {
+              return this.plate;
+          }
+      }
+      ```
+
+      ```output
+      true
+      false
+      true
+      false
+      true
+      2/2 spots taken: [XYZ-789, JKL-456]
+      ```
+
+      - `park` checks its rules first, and adds the car only when all of them hold: there's a free spot, and no car with the same plate is parked. Each rule that fails returns `false` right away.
+      - The `boolean` it returns tells the caller whether the car got in. `main` prints it here; a real program could print `Garage full` instead.
+      - `park` uses another method of the same object, `this.isParked(...)`. Small methods like this one can be useful to the caller too: `garage.isParked("ABC-123")`.
+      - After `leave`, there's a free spot again, and the car that was turned away gets in.
+
+      The rules always hold because the list is private. The only way onto the list is through `park`, and `park` checks every car. No other part of the program can put a car in past the rules, however it's written.
+
+      ### Don't hand out the list
+
+      Suppose ParkingGarage had a getter for its list:
+
+      ```java fragment
+      public ArrayList<Car> getCars() {
+          return this.cars;
+      }
+      ```
+
+      It returns a reference to the garage's own list, not a copy (module 22). With it, `garage.getCars().add(new Car("NEW-001"));` puts a car straight on the list, past every rule, even into a full garage. So keep the list to the class, and give the class methods for what the rest of the program needs: `park`, `leave`, `isParked`, a toString.
+
+      ### The module's tools
+
+      | Tool | Example |
+      | --- | --- |
+      | A list as an instance variable | `private ArrayList<Book> books;` |
+      | Made in the constructor | `this.books = new ArrayList<>();` |
+      | A loop over the object's list | `for (Book book : this.books)` |
+      | A toString built in a loop | `text = text + "\n" + book;` |
+      | Removing while going through | an index loop that goes backwards |
+      | A total from the objects | `total = total + book.getPages();` |
+      | A search that may find nothing | returns the object, or `null` |
+      | A rule checked before adding | `if (this.cars.size() >= this.spots)` |
+
+      **Your turn:** a day plan holds meetings, and two meetings can't be at the same time. A meeting has a title, and a start and an end hour: `new Meeting("Review", 10, 12)` is from 10 to 12. `Meeting.java` is ready, with the getters `getStart()` and `getEnd()`. In `DayPlan.java`, write the method `add(Meeting meeting)`. It adds the meeting only when it doesn't overlap any meeting already on the plan, and returns `true` when the meeting was added, `false` when it wasn't.
+
+      Two meetings overlap when each one starts before the other one ends. A meeting from 9 to 10 and one from 10 to 12 don't overlap: the first ends just as the second starts. The check runs:
+
+      ```java fragment
+      DayPlan plan = new DayPlan();
+      System.out.println(plan.add(new Meeting("Standup", 9, 10)));
+      System.out.println(plan.add(new Meeting("Review", 10, 12)));
+      System.out.println(plan.add(new Meeting("Lunch talk", 11, 13)));
+      System.out.println(plan.add(new Meeting("Call", 8, 9)));
+      System.out.println(plan);
+      ```
+
+      and expects:
+
+      ```
+      true
+      true
+      false
+      true
+      Booked: [Standup (9 to 10), Review (10 to 12), Call (8 to 9)]
+      ```
+    seed:
+      DayPlan.java: |
+            import java.util.ArrayList;
+
+            public class DayPlan {
+                private ArrayList<Meeting> meetings;
+
+                public DayPlan() {
+                    this.meetings = new ArrayList<>();
+                }
+
+                // Write the add method here.
+
+                public String toString() {
+                    return "Booked: " + this.meetings;
+                }
+            }
+      Meeting.java: |
+            public class Meeting {
+                private String title;
+                private int start;
+                private int end;
+
+                public Meeting(String title, int start, int end) {
+                    this.title = title;
+                    this.start = start;
+                    this.end = end;
+                }
+
+                public int getStart() {
+                    return this.start;
+                }
+
+                public int getEnd() {
+                    return this.end;
+                }
+
+                public String toString() {
+                    return this.title + " (" + this.start + " to " + this.end + ")";
+                }
+            }
+      Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    DayPlan plan = new DayPlan();
+                    System.out.println(plan.add(new Meeting("Standup", 9, 10)));
+                    System.out.println(plan.add(new Meeting("Review", 10, 12)));
+                    System.out.println(plan.add(new Meeting("Lunch talk", 11, 13)));
+                    System.out.println(plan.add(new Meeting("Call", 8, 9)));
+                    System.out.println(plan);
+                }
+            }
+    solution:
+      DayPlan.java: |
+            import java.util.ArrayList;
+
+            public class DayPlan {
+                private ArrayList<Meeting> meetings;
+
+                public DayPlan() {
+                    this.meetings = new ArrayList<>();
+                }
+
+                public boolean add(Meeting meeting) {
+                    for (Meeting other : this.meetings) {
+                        if (meeting.getStart() < other.getEnd() && other.getStart() < meeting.getEnd()) {
+                            return false;
+                        }
+                    }
+                    this.meetings.add(meeting);
+                    return true;
+                }
+
+                public String toString() {
+                    return "Booked: " + this.meetings;
+                }
+            }
+      Meeting.java: |
+            public class Meeting {
+                private String title;
+                private int start;
+                private int end;
+
+                public Meeting(String title, int start, int end) {
+                    this.title = title;
+                    this.start = start;
+                    this.end = end;
+                }
+
+                public int getStart() {
+                    return this.start;
+                }
+
+                public int getEnd() {
+                    return this.end;
+                }
+
+                public String toString() {
+                    return this.title + " (" + this.start + " to " + this.end + ")";
+                }
+            }
+      Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    DayPlan plan = new DayPlan();
+                    System.out.println(plan.add(new Meeting("Standup", 9, 10)));
+                    System.out.println(plan.add(new Meeting("Review", 10, 12)));
+                    System.out.println(plan.add(new Meeting("Lunch talk", 11, 13)));
+                    System.out.println(plan.add(new Meeting("Call", 8, 9)));
+                    System.out.println(plan);
+                }
+            }
+    hints:
+      - "Check the rule before adding: go through the meetings already booked, and return `false` as soon as one of them overlaps the new one. Only after the loop, when none did, add the meeting and return `true`."
+      - "In `for (Meeting other : this.meetings)`, the two overlap when `meeting.getStart() < other.getEnd() && other.getStart() < meeting.getEnd()`. With `<`, a meeting that starts just as another ends still fits."
+    require:
+      - pattern: \bpublic\s+boolean\s+add\s*\(\s*Meeting\s+\w+\s*\)
+        message: "Write the method as `public boolean add(Meeting meeting)`."
+      - pattern: \.getStart\s*\(\s*\)
+        message: "Ask the meetings when they start with `getStart()`."
+      - pattern: \.getEnd\s*\(\s*\)
+        message: "Ask the meetings when they end with `getEnd()`."
+    tests:
+      - call: |
+          DayPlan plan = new DayPlan();
+          System.out.println(plan.add(new Meeting("Standup", 9, 10)));
+          System.out.println(plan.add(new Meeting("Review", 10, 12)));
+          System.out.println(plan.add(new Meeting("Lunch talk", 11, 13)));
+          System.out.println(plan.add(new Meeting("Call", 8, 9)));
+          System.out.println(plan);
+      - call: |
+          DayPlan plan = new DayPlan();
+          System.out.println(plan);
+          System.out.println(plan.add(new Meeting("Workshop", 9, 12)));
+          System.out.println(plan.add(new Meeting("Chat", 10, 11)));
+          System.out.println(plan.add(new Meeting("All day", 8, 18)));
+          System.out.println(plan.add(new Meeting("Workshop again", 9, 12)));
+          System.out.println(plan.add(new Meeting("Early", 7, 9)));
+          System.out.println(plan);
+        hidden: true
+      - call: |
+          DayPlan plan = new DayPlan();
+          System.out.println(plan.add(new Meeting("Late", 16, 17)));
+          System.out.println(plan.add(new Meeting("Before", 14, 16)));
+          System.out.println(plan.add(new Meeting("Across", 15, 17)));
+          System.out.println(plan.add(new Meeting("After", 17, 18)));
+          System.out.println(plan);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? The dinner table lets a guest sit only when there's a free chair, but it also has a getter that returns its list.
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  DinnerTable table = new DinnerTable(2);
+                  System.out.println(table.seat("Ada"));
+                  System.out.println(table.seat("Ben"));
+                  System.out.println(table.seat("Cleo"));
+                  ArrayList<String> guests = table.getGuests();
+                  guests.add("Dan");
+                  System.out.println(table);
+              }
+          }
+          // ==== DinnerTable.java ====
+          import java.util.ArrayList;
+
+          public class DinnerTable {
+              private int chairs;
+              private ArrayList<String> guests;
+
+              public DinnerTable(int chairs) {
+                  this.chairs = chairs;
+                  this.guests = new ArrayList<>();
+              }
+
+              public boolean seat(String guest) {
+                  if (this.guests.size() >= this.chairs) {
+                      return false;
+                  }
+                  this.guests.add(guest);
+                  return true;
+              }
+
+              public ArrayList<String> getGuests() {
+                  return this.guests;
+              }
+
+              public String toString() {
+                  return this.guests.size() + " guests, " + this.chairs + " chairs: " + this.guests;
+              }
+          }
+        hints:
+          - "`seat` checks the chairs: Ada and Ben get the two chairs, and Cleo is turned away."
+          - "`getGuests()` returns a reference to the table's own list, not a copy. So `guests.add(\"Dan\")` adds Dan to the table's list, and `seat`'s rule is never asked."
+      - task: |
+          A five-a-side team keeps a roster of its players, and each player has a shirt number. `Player.java` is ready, with `getName()` and `getNumber()`, and a toString like `#7 Ada`. `Roster.java` has the team's name, the most players it may have, and the list. Write three methods in it:
+
+          - `add(Player player)` adds the player and returns `true`, except when the roster is already full, or when a player on it already has the same shirt number. Then it adds nothing and returns `false`.
+          - `remove(int number)` removes the player with that shirt number and returns `true`, or returns `false` when there's no such player.
+          - `toString()` gives the team's name and how many players it has of the most it may have, like `Otters: 2/3 players`, and then each player on a line of its own.
+
+          The check runs:
+
+          ```java fragment
+          Roster roster = new Roster("Otters", 3);
+          System.out.println(roster.add(new Player("Ada", 7)));
+          System.out.println(roster.add(new Player("Ben", 7)));
+          System.out.println(roster.add(new Player("Ben", 9)));
+          System.out.println(roster.add(new Player("Cleo", 4)));
+          System.out.println(roster.add(new Player("Dan", 11)));
+          System.out.println(roster.remove(9));
+          System.out.println(roster.remove(5));
+          System.out.println(roster);
+          ```
+
+          and expects:
+
+          ```
+          true
+          false
+          true
+          true
+          false
+          true
+          false
+          Otters: 2/3 players
+          #7 Ada
+          #4 Cleo
+          ```
+        seed:
+          Roster.java: |
+            import java.util.ArrayList;
+
+            public class Roster {
+                private String team;
+                private int maxPlayers;
+                private ArrayList<Player> players;
+
+                public Roster(String team, int maxPlayers) {
+                    this.team = team;
+                    this.maxPlayers = maxPlayers;
+                    this.players = new ArrayList<>();
+                }
+
+                // Write the methods add, remove and toString here.
+            }
+          Player.java: |
+            public class Player {
+                private String name;
+                private int number;
+
+                public Player(String name, int number) {
+                    this.name = name;
+                    this.number = number;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getNumber() {
+                    return this.number;
+                }
+
+                public String toString() {
+                    return "#" + this.number + " " + this.name;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Roster roster = new Roster("Otters", 3);
+                    System.out.println(roster.add(new Player("Ada", 7)));
+                    System.out.println(roster.add(new Player("Ben", 7)));
+                    System.out.println(roster.add(new Player("Ben", 9)));
+                    System.out.println(roster.add(new Player("Cleo", 4)));
+                    System.out.println(roster.add(new Player("Dan", 11)));
+                    System.out.println(roster.remove(9));
+                    System.out.println(roster.remove(5));
+                    System.out.println(roster);
+                }
+            }
+        solution:
+          Roster.java: |
+            import java.util.ArrayList;
+
+            public class Roster {
+                private String team;
+                private int maxPlayers;
+                private ArrayList<Player> players;
+
+                public Roster(String team, int maxPlayers) {
+                    this.team = team;
+                    this.maxPlayers = maxPlayers;
+                    this.players = new ArrayList<>();
+                }
+
+                public boolean add(Player player) {
+                    if (this.players.size() >= this.maxPlayers) {
+                        return false;
+                    }
+                    for (Player other : this.players) {
+                        if (other.getNumber() == player.getNumber()) {
+                            return false;
+                        }
+                    }
+                    this.players.add(player);
+                    return true;
+                }
+
+                public boolean remove(int number) {
+                    for (int i = 0; i < this.players.size(); i++) {
+                        if (this.players.get(i).getNumber() == number) {
+                            this.players.remove(i);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                public String toString() {
+                    String text = this.team + ": " + this.players.size() + "/" + this.maxPlayers + " players";
+                    for (Player player : this.players) {
+                        text = text + "\n" + player;
+                    }
+                    return text;
+                }
+            }
+          Player.java: |
+            public class Player {
+                private String name;
+                private int number;
+
+                public Player(String name, int number) {
+                    this.name = name;
+                    this.number = number;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getNumber() {
+                    return this.number;
+                }
+
+                public String toString() {
+                    return "#" + this.number + " " + this.name;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Roster roster = new Roster("Otters", 3);
+                    System.out.println(roster.add(new Player("Ada", 7)));
+                    System.out.println(roster.add(new Player("Ben", 7)));
+                    System.out.println(roster.add(new Player("Ben", 9)));
+                    System.out.println(roster.add(new Player("Cleo", 4)));
+                    System.out.println(roster.add(new Player("Dan", 11)));
+                    System.out.println(roster.remove(9));
+                    System.out.println(roster.remove(5));
+                    System.out.println(roster);
+                }
+            }
+        hints:
+          - "`add` checks two rules before it adds: `this.players.size() >= this.maxPlayers` means full, and a loop over the players looks for one whose `getNumber()` is the new player's number. Either one returns `false`. Shirt numbers are `int` values, so `==` compares them."
+          - "`remove` loops over the indexes, and when `this.players.get(i).getNumber() == number`, removes index `i` and returns `true` at once. For toString, start with the first line and add `\"\\n\" + player` for each player, as in step 5."
+        require:
+          - pattern: \bpublic\s+boolean\s+add\s*\(\s*Player\s+\w+\s*\)
+            message: "Write the method as `public boolean add(Player player)`."
+          - pattern: \bpublic\s+boolean\s+remove\s*\(\s*int\s+\w+\s*\)
+            message: "Write the method as `public boolean remove(int number)`."
+          - pattern: \bpublic\s+String\s+toString\s*\(\s*\)
+            min: 2
+            message: "Write the method in Roster as `public String toString()`."
+        tests:
+          - call: |
+              Roster roster = new Roster("Otters", 3);
+              System.out.println(roster.add(new Player("Ada", 7)));
+              System.out.println(roster.add(new Player("Ben", 7)));
+              System.out.println(roster.add(new Player("Ben", 9)));
+              System.out.println(roster.add(new Player("Cleo", 4)));
+              System.out.println(roster.add(new Player("Dan", 11)));
+              System.out.println(roster.remove(9));
+              System.out.println(roster.remove(5));
+              System.out.println(roster);
+          - call: |
+              Roster roster = new Roster("Lynx", 5);
+              System.out.println(roster);
+              System.out.println(roster.remove(1));
+              System.out.println(roster.add(new Player("Eva", 1)) + " " + roster.add(new Player("Eva", 2)) + " " + roster.add(new Player("Fin", 1)));
+              System.out.println(roster);
+            hidden: true
+          - call: |
+              Roster roster = new Roster("Crows", 2);
+              roster.add(new Player("Gus", 3));
+              roster.add(new Player("Hal", 5));
+              System.out.println(roster.add(new Player("Ivy", 8)));
+              System.out.println(roster.remove(3));
+              System.out.println(roster.add(new Player("Ivy", 8)));
+              System.out.println(roster.add(new Player("Jo", 3)));
+              System.out.println(roster);
+            hidden: true
+          - call: |
+              Roster roster = new Roster("Moles", 4);
+              roster.add(new Player("Kit", 2));
+              roster.add(new Player("Lev", 6));
+              roster.add(new Player("Max", 9));
+              System.out.println(roster.remove(6) + " " + roster.remove(6));
+              System.out.println(roster);
+            hidden: true

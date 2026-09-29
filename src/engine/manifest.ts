@@ -8,6 +8,8 @@ export type Manifest = {
   /** The files each half of the engine needs. */
   compiler: string[];
   runner: string[];
+  /** Libraries a program may use (such as junit4.bin), fetched the first time one does. */
+  libraries?: string[];
 };
 
 /** Each engine version is saved in its own Cache Storage cache: this prefix plus the version. */
@@ -105,4 +107,29 @@ export async function saveManifest(manifestUrl: string, manifest: Manifest) {
   } catch {
     /* no Cache Storage: nothing was saved for offline use anyway */
   }
+}
+
+/**
+ * The class files in a library archive (engine/libraries/build.mjs): a gzip stream of entries,
+ * each "short nameLength, UTF-8 name, int dataLength, data".
+ */
+export async function libraryClasses(archive: Uint8Array): Promise<{ path: string; bytes: Uint8Array }[]> {
+  let data = archive;
+  if (data[0] === 0x1f && data[1] === 0x8b) {
+    const stream = new Blob([archive as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new DecompressionStream("gzip"));
+    data = new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const decoder = new TextDecoder();
+  const classes: { path: string; bytes: Uint8Array }[] = [];
+  for (let p = 0; p < data.length; ) {
+    const n = view.getUint16(p);
+    const path = decoder.decode(data.subarray(p + 2, p + 2 + n));
+    p += 2 + n;
+    const length = view.getUint32(p);
+    p += 4;
+    if (path.endsWith(".class")) classes.push({ path, bytes: data.subarray(p, p + length) });
+    p += length;
+  }
+  return classes;
 }

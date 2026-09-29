@@ -48,6 +48,9 @@ export default function About() {
         <li>
           The Java engine includes OpenJDK code under GPL 2.0 with the Classpath Exception, and other open-source parts under their own licenses. Details, sources and the written offer: <A href={`${REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md`}>third-party notices</A> and <A href={`${REPO_URL}/blob/main/engine/SOURCES.md`}>engine sources</A>. The license texts are also published with the engine files, for example <a href={import.meta.env.BASE_URL + "engine/licenses/compiler/OpenJDK-LICENSE.txt"}>OpenJDK's license</a> and <a href={import.meta.env.BASE_URL + "engine/licenses/runner/THIRD_PARTY_LICENSES.txt"}>the runner's third-party licenses</a>.
         </li>
+        <li>
+          The unit testing lessons run <A href="https://github.com/junit-team/junit4">JUnit</A> 4.13.2 (Eclipse Public License 1.0, <a href={import.meta.env.BASE_URL + "engine/licenses/libraries/JUnit-4.13.2-LICENSE.txt"}>license</a>; its source code is at the JUnit link) with <A href="https://github.com/hamcrest/JavaHamcrest">Hamcrest</A> Core 1.3 (BSD, <a href={import.meta.env.BASE_URL + "engine/licenses/libraries/Hamcrest-Core-1.3-LICENSE.txt"}>license</a>), unchanged. They're downloaded only when a program uses JUnit.
+        </li>
       </ul>
       <p>Java and OpenJDK are trademarks or registered trademarks of Oracle and/or its affiliates.</p>
 

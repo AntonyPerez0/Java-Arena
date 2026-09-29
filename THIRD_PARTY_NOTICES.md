@@ -15,6 +15,8 @@ Java Arena's own code is MIT licensed (see [LICENSE](LICENSE) for its scope). Th
 | [Ristretto](https://github.com/theseus-rs/ristretto), with Java Arena's patches | `runner.core*.wasm`, `runner.js` | MIT or Apache-2.0 |
 | The Rust crates compiled into Ristretto | `runner.core.wasm` | Mostly MIT and/or Apache-2.0; every crate's license text is in `engine/dist/runner/licenses/THIRD_PARTY_LICENSES.txt` |
 | [jco](https://github.com/bytecodealliance/jco) runtime helpers generated into `runner.js` | `runner.js` | Apache-2.0 WITH LLVM-exception |
+| [JUnit](https://github.com/junit-team/junit4) 4.13.2 (downloaded only when a program uses JUnit) | `junit4.bin` (its class files, unchanged) | Eclipse Public License 1.0; source: https://github.com/junit-team/junit4 tag `r4.13.2` or `junit-4.13.2-sources.jar` on Maven Central |
+| [Hamcrest](https://github.com/hamcrest/JavaHamcrest) Core 1.3, which JUnit uses | `junit4.bin` (its class files, unchanged) | BSD 3-Clause |
 
 The source code of the GPL-licensed parts, and how to rebuild everything, is described in [engine/SOURCES.md](engine/SOURCES.md).
 

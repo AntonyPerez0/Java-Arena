@@ -74,6 +74,7 @@ function Arena({ drills }: { drills: Drill[] }) {
   const recent = useRef<string[]>([]);
   const repStart = useRef(0);
   const feedId = useRef(0);
+  const shoutTimer = useRef<ReturnType<typeof setTimeout>>();
   // Which rep is on screen, and the phase, as of now: an answer from an earlier rep (a boss rep
   // still being checked when the learner gave up or left) is ignored.
   const repNo = useRef(0);
@@ -145,12 +146,15 @@ function Arena({ drills }: { drills: Drill[] }) {
       setSaid(`Correct. ${mode === "warmup" ? `${k} cleared` : `Streak ${st}`}.${c ? " " + c : ""}`);
       if (c) {
         setShout(c);
-        setTimeout(() => setShout(null), 1100);
+        clearTimeout(shoutTimer.current);
+        shoutTimer.current = setTimeout(() => setShout(null), 1100);
       }
       setTimeout(() => setFlash(null), 220);
       nextRep(r, mode);
     } else {
       if (sound) blip("miss");
+      clearTimeout(shoutTimer.current);
+      setShout(null);
       const left = hp - 1;
       setFlash("miss");
       setSaid(left <= 0 ? "Wrong. Eliminated. The answer and why are below." : `Wrong. ${left} ${left === 1 ? "life" : "lives"} left. The answer and why are below.`);

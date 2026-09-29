@@ -1,0 +1,1414 @@
+id: references
+summary: What a variable really holds. A primitive variable holds its value, while a variable of a class type holds a reference to an object. What that means for assigning one variable to another, for `==` and for method parameters, and the value `null`, which refers to no object at all, with the NullPointerException that comes from using it.
+steps:
+  - id: references-primitives
+    slug: primitive-variables
+    title: Primitive variables
+    text: |
+      Every Java variable is one of two kinds, and the kind decides what `=` copies, what a method can change, and what `==` compares. This module is about the difference, starting with the simpler kind.
+
+      ### The primitive types
+
+      Java has eight **primitive types**. Four of them you've used all along:
+
+      | Type | Holds | Examples |
+      |---|---|---|
+      | `int` | whole numbers, from about -2.1 billion to 2.1 billion | `42`, `-7` |
+      | `double` | numbers with a decimal point | `3.75`, `-0.5` |
+      | `boolean` | true or false | `true`, `false` |
+      | `char` | one character, in single quotes | `'A'`, `'?'` |
+
+      You'll rarely need the other four: `long` holds whole numbers too big for an `int`, `float` is a less precise decimal number, and `byte` and `short` hold whole numbers with small ranges. All eight names start with a small letter.
+
+      Every other type is a **reference type**: `String`, `Scanner`, `ArrayList`, arrays such as `int[]`, and every class you write. Those are the next step.
+
+      ### A primitive variable holds its value
+
+      A primitive variable holds the value itself. Picture a box with a number in it. Assigning one variable to another copies the value into the other box, and after that the two boxes have nothing to do with each other:
+
+      ```java main
+      int planned = 12;
+      int done = planned;
+      done = done - 5;
+      planned++;
+      System.out.println("Planned: " + planned);
+      System.out.println("Done: " + done);
+      ```
+
+      ```output
+      Planned: 13
+      Done: 7
+      ```
+
+      - `int done = planned;` copies the value 12 into `done`. It doesn't tie `done` to `planned` in any way.
+      - Changing `done` doesn't touch `planned`, and changing `planned` doesn't touch `done`.
+
+      The same goes for a value worked out from other variables. `int total = a + b;` stores the sum as it is at that moment, and if `a` changes later, `total` keeps the old sum.
+
+      ### Swapping two values
+
+      Assigning puts a new value in the box, and the old one is gone. That's why swapping the values of two variables takes three steps and a third variable:
+
+      ```java main
+      int left = 3;
+      int right = 8;
+      int temp = left;
+      left = right;
+      right = temp;
+      System.out.println(left + " " + right);
+      ```
+
+      ```output
+      8 3
+      ```
+
+      With only `left = right;` and `right = left;`, the first line overwrites the 3, and both variables end up 8. `temp` keeps a copy of the old value until it's needed.
+
+      **Your turn:** what does this program print? Keep track of each variable's value on paper, line by line.
+    predict: |
+      public class Main {
+          public static void main(String[] args) {
+              int first = 7;
+              int second = first;
+              first = first * 2;
+              second++;
+              int sum = first + second;
+              first = 1;
+              char grade = 'B';
+              char copy = grade;
+              grade = 'A';
+              System.out.println(first);
+              System.out.println(second);
+              System.out.println(sum);
+              System.out.println(grade + " " + copy);
+          }
+      }
+    hints:
+      - "`int second = first;` copies 7 into `second`. Doubling `first` afterwards doesn't change `second`, and `second++` makes it 8."
+      - "`sum` is worked out once, from 14 and 8. Setting `first` to 1 later doesn't change it. The chars work the same way: `copy` keeps the `'B'` it was given."
+    more:
+      - task: |
+          In a game, the player starts with some lives. The program reads the starting number, then one event per line until `end`: `hit` takes a life and `heart` gives one. The first line and the two prints at the end are ready. Declare `lives` as a copy of `start`, and change only `lives` in the loop, so that `start` still holds the starting number at the end. For the input `3`, `hit`, `hit`, `heart`, `hit` and `end`, one per line, the program prints:
+
+          ```
+          Lives at the start: 3
+          Lives now: 1
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int start = Integer.valueOf(scanner.nextLine());
+                  // Declare lives here, then read the events.
+
+                  System.out.println("Lives at the start: " + start);
+                  System.out.println("Lives now: " + lives);
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int start = Integer.valueOf(scanner.nextLine());
+                  int lives = start;
+                  while (true) {
+                      String event = scanner.nextLine();
+                      if (event.equals("end")) {
+                          break;
+                      }
+                      if (event.equals("hit")) {
+                          lives--;
+                      } else if (event.equals("heart")) {
+                          lives++;
+                      }
+                  }
+                  System.out.println("Lives at the start: " + start);
+                  System.out.println("Lives now: " + lives);
+              }
+          }
+        hints:
+          - "`int lives = start;` copies the starting number. From then on the two variables are separate, so changing `lives` leaves `start` as it was."
+          - "In a `while (true)` loop, read a line and `break` at `end`. For `hit` do `lives--;`, for `heart` do `lives++;`."
+        require:
+          - pattern: \bint\s+lives\s*=\s*start\s*;
+            message: "Start `lives` as a copy of the starting number: `int lives = start;`."
+        tests:
+          - stdin: |
+              3
+              hit
+              hit
+              heart
+              hit
+              end
+          - stdin: |
+              5
+              end
+            hidden: true
+          - stdin: |
+              1
+              heart
+              heart
+              hit
+              heart
+              end
+            hidden: true
+          - stdin: |
+              4
+              hit
+              hit
+              hit
+              end
+            hidden: true
+      - task: |
+          The program reads two whole numbers, the ends of a range, and prints every number from the smaller one up to the larger one. The user may type the ends in either order. The loop is ready, and it counts from `low` up to `high`: when `low` is the larger number, swap the values of `low` and `high` before the loop, with a third variable as in the example. For the input `6` and `3` the program prints:
+
+          ```
+          3
+          4
+          5
+          6
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int low = Integer.valueOf(scanner.nextLine());
+                  int high = Integer.valueOf(scanner.nextLine());
+                  // Swap the values here when low is larger than high.
+
+                  for (int i = low; i <= high; i++) {
+                      System.out.println(i);
+                  }
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int low = Integer.valueOf(scanner.nextLine());
+                  int high = Integer.valueOf(scanner.nextLine());
+                  if (low > high) {
+                      int temp = low;
+                      low = high;
+                      high = temp;
+                  }
+                  for (int i = low; i <= high; i++) {
+                      System.out.println(i);
+                  }
+              }
+          }
+        hints:
+          - "Swap only when it's needed: `if (low > high) { ... }`."
+          - "Inside the `if`, three lines: `int temp = low;`, then `low = high;`, then `high = temp;`."
+        require:
+          - pattern: \blow\s*=\s*high\s*;
+            message: "Swap the values of the two variables: one of the three lines is `low = high;`."
+          - pattern: for\s*\(\s*int\s+i\s*=\s*low\s*;\s*i\s*<=\s*high\s*;
+            message: "Keep the loop as it is: it counts from `low` up to `high`."
+        tests:
+          - stdin: |
+              6
+              3
+          - stdin: |
+              2
+              5
+            hidden: true
+          - stdin: |
+              4
+              4
+            hidden: true
+          - stdin: |
+              -1
+              -3
+            hidden: true
+
+  - id: references-objects
+    slug: reference-variables
+    title: Reference variables
+    text: |
+      Module 14 showed that a list variable doesn't hold the list itself, but a **reference** to it: where the list is in the computer's memory. That's true of every variable whose type is a class, not only of lists. A `Bike` variable doesn't hold a bike. It holds a reference that leads to a Bike object, and the object itself is somewhere else in memory.
+
+      `new` creates the object and gives back a reference to it, and `=` stores that reference in the variable. Picture the variable holding an arrow that points at the object.
+
+      ### Two variables, one object
+
+      Assigning one reference variable to another copies the reference (the arrow), not the object. Both variables then point at the same object, and a change made through one of them shows through the other:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Bike mine = new Bike("blue", 120);
+              Bike borrowed = mine;
+              borrowed.ride(35);
+              System.out.println(mine);
+              System.out.println(borrowed);
+          }
+      }
+      // ==== Bike.java ====
+      public class Bike {
+          private String color;
+          private int km;
+
+          public Bike(String color, int km) {
+              this.color = color;
+              this.km = km;
+          }
+
+          public void ride(int km) {
+              this.km = this.km + km;
+          }
+
+          public String toString() {
+              return "The " + this.color + " bike, " + this.km + " km";
+          }
+      }
+      ```
+
+      ```output
+      The blue bike, 155 km
+      The blue bike, 155 km
+      ```
+
+      - There's only one `new`, so there's only one bike. `Bike borrowed = mine;` gives it a second name. It's like lending your bike to a friend: they don't get a bike of their own, they ride yours.
+      - `borrowed.ride(35)` changes that one bike, and `mine` shows the new kilometers too.
+
+      For two separate bikes you need two `new`s. `Bike borrowed = new Bike("blue", 120);` builds a second bike that only looks the same, and riding it leaves yours alone.
+
+      ### Pointing somewhere else, and ==
+
+      For objects, `==` compares the references: it's `true` when both sides point at the very same object. And assigning a new reference to a variable changes where that variable points, while the object it pointed at before stays as it was:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Bike mine = new Bike("blue", 120);
+              Bike borrowed = mine;
+              System.out.println(mine == borrowed);
+              borrowed = new Bike("blue", 120);
+              System.out.println(mine == borrowed);
+              borrowed.ride(10);
+              System.out.println(mine);
+              System.out.println(borrowed);
+          }
+      }
+      // ==== Bike.java ====
+      public class Bike {
+          private String color;
+          private int km;
+
+          public Bike(String color, int km) {
+              this.color = color;
+              this.km = km;
+          }
+
+          public void ride(int km) {
+              this.km = this.km + km;
+          }
+
+          public String toString() {
+              return "The " + this.color + " bike, " + this.km + " km";
+          }
+      }
+      ```
+
+      ```output
+      true
+      false
+      The blue bike, 120 km
+      The blue bike, 130 km
+      ```
+
+      - At first both variables point at the same bike, so `mine == borrowed` is `true`.
+      - `borrowed = new Bike("blue", 120);` points `borrowed` at a new bike. The two bikes have the same color and kilometers, but they're two objects, so now `mine == borrowed` is `false`.
+      - `borrowed.ride(10)` rides the new bike, and `mine` still points at the old one, unchanged.
+
+      Keep the two apart: `borrowed.ride(10)` changes the object that `borrowed` points at, while `borrowed = ...` changes the variable, and no object changes. When no variable points at an object any more, the program can't reach it, and Java's **garbage collector** frees its memory some time later.
+
+      Whether two different objects hold the same values is a question for a method called `equals`, which your own classes get in module 23. It's the same reason Strings are compared with `equals`, not with `==`.
+
+      ### Strings are objects too
+
+      A String variable holds a reference as well. But a String can never be changed once it exists: `toUpperCase()` and `trim()` return their result, and `+` makes a new String, while the String you started with stays as it was. So two variables that share one String never notice each other:
+
+      ```java main
+      String first = "tea";
+      String second = first;
+      second = second + " with milk";
+      System.out.println(first);
+      System.out.println(second);
+      ```
+
+      ```output
+      tea
+      tea with milk
+      ```
+
+      `second + " with milk"` makes a new String, and `second` is pointed at it. `first` still points at `"tea"`.
+
+      **Your turn:** what does this program print? Count the `new`s first: that's how many batteries there are.
+    predict: |
+      public class Main {
+          public static void main(String[] args) {
+              Battery phone = new Battery(100);
+              Battery camera = new Battery(100);
+              Battery spare = phone;
+              phone.use(30);
+              spare.use(20);
+              camera.use(5);
+              spare = camera;
+              spare.use(10);
+              System.out.println(phone);
+              System.out.println(camera);
+              System.out.println(phone == spare);
+          }
+      }
+      // ==== Battery.java ====
+      public class Battery {
+          private int percent;
+
+          public Battery(int percent) {
+              this.percent = percent;
+          }
+
+          public void use(int amount) {
+              this.percent = this.percent - amount;
+          }
+
+          public String toString() {
+              return this.percent + "%";
+          }
+      }
+    hints:
+      - "There are two batteries. At first `spare` points at the phone's battery, so both `phone.use(30)` and `spare.use(20)` use that one."
+      - "`spare = camera;` points `spare` at the camera's battery, so `spare.use(10)` uses the camera's. After that, `phone` and `spare` point at different batteries."
+    more:
+      - task: |
+          Ana and Ben each have a piggy bank. The program reads how much Ana puts in hers and then how much Ben puts in his, and prints both piggy banks. But it prints the same piggy bank twice, with both amounts in it. Find the line that leaves Ben without a piggy bank of his own, and fix it. For the input `5` and `3` the program prints:
+
+          ```
+          Ana: 5 euros
+          Ben: 3 euros
+          ```
+        seed:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    PiggyBank ana = new PiggyBank("Ana");
+                    PiggyBank ben = ana;
+                    ana.deposit(Integer.valueOf(scanner.nextLine()));
+                    ben.deposit(Integer.valueOf(scanner.nextLine()));
+                    System.out.println(ana);
+                    System.out.println(ben);
+                }
+            }
+          PiggyBank.java: |
+            public class PiggyBank {
+                private String owner;
+                private int euros;
+
+                public PiggyBank(String owner) {
+                    this.owner = owner;
+                    this.euros = 0;
+                }
+
+                public void deposit(int euros) {
+                    this.euros = this.euros + euros;
+                }
+
+                public String toString() {
+                    return this.owner + ": " + this.euros + " euros";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    PiggyBank ana = new PiggyBank("Ana");
+                    PiggyBank ben = new PiggyBank("Ben");
+                    ana.deposit(Integer.valueOf(scanner.nextLine()));
+                    ben.deposit(Integer.valueOf(scanner.nextLine()));
+                    System.out.println(ana);
+                    System.out.println(ben);
+                }
+            }
+          PiggyBank.java: |
+            public class PiggyBank {
+                private String owner;
+                private int euros;
+
+                public PiggyBank(String owner) {
+                    this.owner = owner;
+                    this.euros = 0;
+                }
+
+                public void deposit(int euros) {
+                    this.euros = this.euros + euros;
+                }
+
+                public String toString() {
+                    return this.owner + ": " + this.euros + " euros";
+                }
+            }
+        hints:
+          - "`PiggyBank ben = ana;` doesn't build a piggy bank. It copies the reference, so `ben` points at Ana's."
+          - "Build Ben his own with `new`: `PiggyBank ben = new PiggyBank(\"Ben\");`."
+        require:
+          - pattern: \bnew\s+PiggyBank\s*\(
+            min: 2
+            message: "Ben needs a piggy bank of his own: create it with `new PiggyBank(\"Ben\")`."
+        tests:
+          - stdin: |
+              5
+              3
+          - stdin: |
+              10
+              0
+            hidden: true
+          - stdin: |
+              0
+              12
+            hidden: true
+          - stdin: |
+              7
+              7
+            hidden: true
+      - task: |
+          In a quiz, two teams answer in turns, red first. The program reads the points for each answer, one per line, until `end`: the first answer is red's, the second blue's, the third red's again, and so on. `Main` already has a variable `current` that points at the team whose turn it is. For each answer, add the points with `current.addPoints(...)`, then point `current` at the other team, using `==` to see which team it points at now. At the end, print both teams. For the input `3`, `2`, `4`, `1` and `end`, one per line, the program prints:
+
+          ```
+          Red: 7 points
+          Blue: 3 points
+          ```
+        seed:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Team red = new Team("Red");
+                    Team blue = new Team("Blue");
+                    Team current = red;
+
+                    System.out.println(red);
+                    System.out.println(blue);
+                }
+            }
+          Team.java: |
+            public class Team {
+                private String name;
+                private int points;
+
+                public Team(String name) {
+                    this.name = name;
+                    this.points = 0;
+                }
+
+                public void addPoints(int points) {
+                    this.points = this.points + points;
+                }
+
+                public String toString() {
+                    return this.name + ": " + this.points + " points";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    Team red = new Team("Red");
+                    Team blue = new Team("Blue");
+                    Team current = red;
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.equals("end")) {
+                            break;
+                        }
+                        current.addPoints(Integer.valueOf(line));
+                        if (current == red) {
+                            current = blue;
+                        } else {
+                            current = red;
+                        }
+                    }
+                    System.out.println(red);
+                    System.out.println(blue);
+                }
+            }
+          Team.java: |
+            public class Team {
+                private String name;
+                private int points;
+
+                public Team(String name) {
+                    this.name = name;
+                    this.points = 0;
+                }
+
+                public void addPoints(int points) {
+                    this.points = this.points + points;
+                }
+
+                public String toString() {
+                    return this.name + ": " + this.points + " points";
+                }
+            }
+        hints:
+          - "In a `while (true)` loop: read a line, `break` at `end`, and otherwise `current.addPoints(Integer.valueOf(line));`. The points go to whichever team `current` points at."
+          - "Then pass the turn: `if (current == red) { current = blue; } else { current = red; }`. That only changes where `current` points, and both teams keep their points."
+        require:
+          - pattern: \bcurrent\.addPoints\s*\(
+            message: "Add the points to the team whose turn it is: `current.addPoints(...)`."
+          - pattern: \bcurrent\s*==|==\s*current\b
+            message: "Use `==` to see which team `current` points at, as in `if (current == red)`."
+        forbid:
+          - pattern: \b(red|blue)\.addPoints\s*\(
+            message: "Add the points through `current`, not through `red` or `blue` directly."
+        tests:
+          - stdin: |
+              3
+              2
+              4
+              1
+              end
+          - stdin: |
+              5
+              end
+            hidden: true
+          - stdin: |
+              end
+            hidden: true
+          - stdin: |
+              1
+              2
+              3
+              end
+            hidden: true
+
+  - id: references-parameters
+    slug: values-and-references-as-parameters
+    title: Values and references as parameters
+    text: |
+      Module 10's rule is still the whole story: a parameter gets a copy of the argument. What gets copied depends on the kind of variable. For a primitive it's the value, and for an object it's the reference.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int km = 120;
+              Bike bike = new Bike("blue", 120);
+              addToNumber(km);
+              addToBike(bike);
+              System.out.println(km);
+              System.out.println(bike);
+          }
+
+          public static void addToNumber(int km) {
+              km = km + 50;
+          }
+
+          public static void addToBike(Bike bike) {
+              bike.ride(50);
+          }
+      }
+      // ==== Bike.java ====
+      public class Bike {
+          private String color;
+          private int km;
+
+          public Bike(String color, int km) {
+              this.color = color;
+              this.km = km;
+          }
+
+          public void ride(int km) {
+              this.km = this.km + km;
+          }
+
+          public String toString() {
+              return "The " + this.color + " bike, " + this.km + " km";
+          }
+      }
+      ```
+
+      ```output
+      120
+      The blue bike, 170 km
+      ```
+
+      - `addToNumber` gets a copy of the number 120. It changes its own copy, and `main`'s `km` stays 120.
+      - `addToBike` gets a copy of the reference. The copy points at the same bike as `main`'s variable, so `bike.ride(50)` rides `main`'s bike. That's also why a method can change a list or an array it's given, as in modules 14 and 15.
+
+      ### A new object for the parameter
+
+      A method can change the object its parameter points at, but it can't change which object the caller's variable points at. Giving the parameter a new object only moves the parameter's own arrow:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Bike bike = new Bike("blue", 120);
+              replace(bike);
+              System.out.println(bike);
+          }
+
+          public static void replace(Bike bike) {
+              bike = new Bike("green", 0);
+              bike.ride(5);
+              System.out.println("In the method: " + bike);
+          }
+      }
+      // ==== Bike.java ====
+      public class Bike {
+          private String color;
+          private int km;
+
+          public Bike(String color, int km) {
+              this.color = color;
+              this.km = km;
+          }
+
+          public void ride(int km) {
+              this.km = this.km + km;
+          }
+
+          public String toString() {
+              return "The " + this.color + " bike, " + this.km + " km";
+          }
+      }
+      ```
+
+      ```output
+      In the method: The green bike, 5 km
+      The blue bike, 120 km
+      ```
+
+      After `bike = new Bike("green", 0);` the parameter points at a new green bike, and `ride(5)` rides that one. `main`'s variable was never touched, so it still points at the blue bike. When a method should give the caller a new object, it returns it, as `findOldest` in module 19 returned a Pet.
+
+      In short:
+
+      | The parameter's type | The method gets | What the method can change |
+      |---|---|---|
+      | primitive (`int`, `double`, `boolean`, `char`, ...) | a copy of the value | only its own copy |
+      | a class (an object) | a copy of the reference | the object's state, through its methods, but not which object the caller's variable points at |
+
+      **Your turn:** `Jug.java` is ready. In `Main`, write a method `pourAll(Jug from, Jug to)` that pours all the water from one jug into the other: `to` gets everything `from` had, and `from` ends up empty. It returns nothing, since it changes the two jugs themselves. The check runs:
+
+      ```java fragment
+      Jug big = new Jug(300);
+      Jug small = new Jug(150);
+      pourAll(small, big);
+      System.out.println(big + " and " + small);
+      ```
+
+      and expects:
+
+      ```
+      450 ml and 0 ml
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Jug big = new Jug(300);
+                Jug small = new Jug(150);
+                pourAll(small, big);
+                System.out.println(big + " and " + small);
+            }
+
+            // Write the pourAll method here.
+        }
+      Jug.java: |
+        public class Jug {
+            private int milliliters;
+
+            public Jug(int milliliters) {
+                this.milliliters = milliliters;
+            }
+
+            public int getMilliliters() {
+                return this.milliliters;
+            }
+
+            public void add(int milliliters) {
+                this.milliliters = this.milliliters + milliliters;
+            }
+
+            public void empty() {
+                this.milliliters = 0;
+            }
+
+            public String toString() {
+                return this.milliliters + " ml";
+            }
+        }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Jug big = new Jug(300);
+                Jug small = new Jug(150);
+                pourAll(small, big);
+                System.out.println(big + " and " + small);
+            }
+
+            public static void pourAll(Jug from, Jug to) {
+                to.add(from.getMilliliters());
+                from.empty();
+            }
+        }
+      Jug.java: |
+        public class Jug {
+            private int milliliters;
+
+            public Jug(int milliliters) {
+                this.milliliters = milliliters;
+            }
+
+            public int getMilliliters() {
+                return this.milliliters;
+            }
+
+            public void add(int milliliters) {
+                this.milliliters = this.milliliters + milliliters;
+            }
+
+            public void empty() {
+                this.milliliters = 0;
+            }
+
+            public String toString() {
+                return this.milliliters + " ml";
+            }
+        }
+    hints:
+      - "The method changes the jugs through their methods, so it returns nothing: `public static void pourAll(Jug from, Jug to) {`."
+      - "Order matters: first `to.add(from.getMilliliters());`, and only then `from.empty();`. Emptying first would pour 0 ml."
+    tests:
+      - call: |
+          Jug big = new Jug(300);
+          Jug small = new Jug(150);
+          pourAll(small, big);
+          System.out.println(big + " and " + small);
+      - call: |
+          Jug a = new Jug(0);
+          Jug b = new Jug(80);
+          pourAll(b, a);
+          System.out.println(a + " and " + b);
+        hidden: true
+      - call: |
+          Jug a = new Jug(200);
+          Jug b = new Jug(100);
+          Jug c = new Jug(50);
+          pourAll(a, b);
+          pourAll(b, c);
+          System.out.println(a + ", " + b + ", " + c);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Watch which aquarium each `add` goes to.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int fish = 3;
+                  Aquarium tank = new Aquarium(5);
+                  stock(tank, fish);
+                  System.out.println(fish);
+                  System.out.println(tank);
+                  swapTank(tank);
+                  System.out.println(tank);
+              }
+
+              public static void stock(Aquarium tank, int fish) {
+                  tank.add(fish);
+                  fish = 0;
+              }
+
+              public static void swapTank(Aquarium tank) {
+                  tank.add(1);
+                  tank = new Aquarium(20);
+                  tank.add(1);
+              }
+          }
+          // ==== Aquarium.java ====
+          public class Aquarium {
+              private int fish;
+
+              public Aquarium(int fish) {
+                  this.fish = fish;
+              }
+
+              public void add(int count) {
+                  this.fish = this.fish + count;
+              }
+
+              public String toString() {
+                  return "Aquarium with " + this.fish + " fish";
+              }
+          }
+        hints:
+          - "`stock` adds 3 fish to `main`'s aquarium through the reference, so it has 8. `fish = 0;` changes only the method's own copy of the number, so `main`'s `fish` is still 3."
+          - "In `swapTank`, the first `tank.add(1)` still goes to `main`'s aquarium. After `tank = new Aquarium(20);` the parameter points at a new aquarium, and the second `add` goes there."
+      - task: |
+          At the end of each day, `endOfDay` prints the day's steps and should set the step counter back to 0 for the next day. But the second day's total includes the first day's steps too. Fix `endOfDay`: `StepCounter` has a method for this. The program then prints:
+
+          ```
+          Today: 6500 steps
+          Today: 3000 steps
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    StepCounter counter = new StepCounter();
+                    counter.walk(4000);
+                    counter.walk(2500);
+                    endOfDay(counter);
+                    counter.walk(3000);
+                    endOfDay(counter);
+                }
+
+                public static void endOfDay(StepCounter counter) {
+                    System.out.println("Today: " + counter.getSteps() + " steps");
+                    counter = new StepCounter();
+                }
+            }
+          StepCounter.java: |
+            public class StepCounter {
+                private int steps;
+
+                public StepCounter() {
+                    this.steps = 0;
+                }
+
+                public void walk(int steps) {
+                    this.steps = this.steps + steps;
+                }
+
+                public int getSteps() {
+                    return this.steps;
+                }
+
+                public void reset() {
+                    this.steps = 0;
+                }
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    StepCounter counter = new StepCounter();
+                    counter.walk(4000);
+                    counter.walk(2500);
+                    endOfDay(counter);
+                    counter.walk(3000);
+                    endOfDay(counter);
+                }
+
+                public static void endOfDay(StepCounter counter) {
+                    System.out.println("Today: " + counter.getSteps() + " steps");
+                    counter.reset();
+                }
+            }
+          StepCounter.java: |
+            public class StepCounter {
+                private int steps;
+
+                public StepCounter() {
+                    this.steps = 0;
+                }
+
+                public void walk(int steps) {
+                    this.steps = this.steps + steps;
+                }
+
+                public int getSteps() {
+                    return this.steps;
+                }
+
+                public void reset() {
+                    this.steps = 0;
+                }
+            }
+        hints:
+          - "`counter = new StepCounter();` only points the parameter at a new counter. `main`'s variable still points at the old one, with all its steps."
+          - "Reset the counter itself, through the parameter: replace that line with `counter.reset();`."
+        require:
+          - pattern: \bcounter\.reset\s*\(\s*\)
+            message: "Set the counter itself back to 0 with its `reset()` method."
+        forbid:
+          - pattern: '[;{}]\s*counter\s*=\s*new\b'
+            message: "Giving the parameter a new StepCounter doesn't change `main`'s counter. Reset the counter the parameter points at."
+        tests:
+          - name: The program
+          - call: |
+              StepCounter c = new StepCounter();
+              c.walk(100);
+              endOfDay(c);
+              endOfDay(c);
+            hidden: true
+          - call: |
+              StepCounter c = new StepCounter();
+              endOfDay(c);
+              c.walk(7);
+              c.walk(8);
+              endOfDay(c);
+              System.out.println(c.getSteps());
+            hidden: true
+
+  - id: references-null
+    slug: null-and-nullpointerexception
+    title: null and NullPointerException
+    text: |
+      A reference variable can also point at no object at all. Its value is then `null`:
+
+      ```java main
+      String nickname = null;
+      System.out.println(nickname);
+      System.out.println("Nickname: " + nickname);
+      ```
+
+      ```output
+      null
+      Nickname: null
+      ```
+
+      `null` is a value of its own, written without quotes. Printing it, or joining it to a String with `+`, shows the word `null`. Only reference variables can be `null`: `int count = null;` doesn't compile, because an `int` always holds a number.
+
+      ### Calling a method on null
+
+      A method call needs an object to run on. When the variable is `null` there's none, and the program crashes with a **NullPointerException**:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Bike bike = null;
+              System.out.println("Ready to ride");
+              bike.ride(10);
+              System.out.println(bike);
+          }
+      }
+      // ==== Bike.java ====
+      public class Bike {
+          private String color;
+          private int km;
+
+          public Bike(String color, int km) {
+              this.color = color;
+              this.km = km;
+          }
+
+          public void ride(int km) {
+              this.km = this.km + km;
+          }
+
+          public String toString() {
+              return "The " + this.color + " bike, " + this.km + " km";
+          }
+      }
+      ```
+
+      ```output
+      Ready to ride
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NullPointerException: Cannot invoke "Bike.ride(int)" because "<local1>" is null
+      	at Main.main(Main.java:5)
+      ```
+
+      The message says what the program tried to do, call `ride(int)` on a Bike, and what was null. `<local1>` is a local variable, here `bike`: the compiled program keeps local variables by number, not by name. For an instance variable, the message names it, as in `"this.owner" is null`. The line number tells you where to look.
+
+      Nobody writes `Bike bike = null;` and then calls a method on it on purpose. In real programs the null comes from somewhere less obvious:
+
+      - **A search that found nothing.** A method that looks for an object often returns `null` when nothing matches.
+      - **An instance variable that was never set.** An instance variable of a class type starts as `null` and stays that way until the constructor or a method gives it an object. A missing `this.` in the constructor (module 18) leaves it `null` too.
+      - **An array element that was never filled.** `new Bike[3]` makes an array of three `null`s, not three bikes.
+
+      The crash happens where the null is used, which can be far from where it came from. So after reading the message, ask where that variable was supposed to get its object.
+
+      ### Checking for null
+
+      When a variable may be `null`, check it before calling its methods. `==` and `!=` tell whether a reference is `null`:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Bike> bikes = new ArrayList<>();
+              bikes.add(new Bike("blue", 120));
+              bikes.add(new Bike("red", 45));
+
+              Bike found = find(bikes, "red");
+              if (found != null) {
+                  found.ride(5);
+                  System.out.println(found);
+              }
+
+              Bike missing = find(bikes, "yellow");
+              if (missing == null) {
+                  System.out.println("No yellow bike");
+              }
+          }
+
+          public static Bike find(ArrayList<Bike> bikes, String color) {
+              for (Bike bike : bikes) {
+                  if (bike.getColor().equals(color)) {
+                      return bike;
+                  }
+              }
+              return null;
+          }
+      }
+      // ==== Bike.java ====
+      public class Bike {
+          private String color;
+          private int km;
+
+          public Bike(String color, int km) {
+              this.color = color;
+              this.km = km;
+          }
+
+          public String getColor() {
+              return this.color;
+          }
+
+          public void ride(int km) {
+              this.km = this.km + km;
+          }
+
+          public String toString() {
+              return "The " + this.color + " bike, " + this.km + " km";
+          }
+      }
+      ```
+
+      ```output
+      The red bike, 50 km
+      No yellow bike
+      ```
+
+      - `find` returns the first bike of the color, or `null` when the loop finds none. Returning `null` is a common way to say "not found", and then every caller has to check for it.
+      - `found` points at the red bike in the list, not at a copy of it, so `found.ride(5)` rides the bike in the list.
+
+      A null check can share a condition with a test on the object, because `&&` looks at its right side only when its left side is `true`. In `if (bike != null && bike.getColor().equals("red"))`, `getColor()` is never called on `null`. In the same way, `||` looks at its right side only when its left side is `false`.
+
+      **Your turn:** `Coat.java` is ready, and the method `find` returns the coat with the given ticket number, or `null` when no coat has it. The program reads a ticket number and hands out the coat, but it crashes when the ticket isn't found. Check what `find` returned before using it, and when it's `null`, print `No coat with ticket` and the number. With the input `7` the program prints `Here is your gray wool coat`, and with the input `5` it prints:
+
+      ```
+      No coat with ticket 5
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Coat> coats = new ArrayList<>();
+                coats.add(new Coat(12, "red raincoat"));
+                coats.add(new Coat(7, "gray wool coat"));
+                coats.add(new Coat(31, "green parka"));
+
+                Scanner scanner = new Scanner(System.in);
+                int ticket = Integer.valueOf(scanner.nextLine());
+                Coat coat = find(coats, ticket);
+                System.out.println("Here is your " + coat.getDescription());
+            }
+
+            public static Coat find(ArrayList<Coat> coats, int ticket) {
+                for (Coat coat : coats) {
+                    if (coat.getTicket() == ticket) {
+                        return coat;
+                    }
+                }
+                return null;
+            }
+        }
+      Coat.java: |
+        public class Coat {
+            private int ticket;
+            private String description;
+
+            public Coat(int ticket, String description) {
+                this.ticket = ticket;
+                this.description = description;
+            }
+
+            public int getTicket() {
+                return this.ticket;
+            }
+
+            public String getDescription() {
+                return this.description;
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Coat> coats = new ArrayList<>();
+                coats.add(new Coat(12, "red raincoat"));
+                coats.add(new Coat(7, "gray wool coat"));
+                coats.add(new Coat(31, "green parka"));
+
+                Scanner scanner = new Scanner(System.in);
+                int ticket = Integer.valueOf(scanner.nextLine());
+                Coat coat = find(coats, ticket);
+                if (coat == null) {
+                    System.out.println("No coat with ticket " + ticket);
+                } else {
+                    System.out.println("Here is your " + coat.getDescription());
+                }
+            }
+
+            public static Coat find(ArrayList<Coat> coats, int ticket) {
+                for (Coat coat : coats) {
+                    if (coat.getTicket() == ticket) {
+                        return coat;
+                    }
+                }
+                return null;
+            }
+        }
+      Coat.java: |
+        public class Coat {
+            private int ticket;
+            private String description;
+
+            public Coat(int ticket, String description) {
+                this.ticket = ticket;
+                this.description = description;
+            }
+
+            public int getTicket() {
+                return this.ticket;
+            }
+
+            public String getDescription() {
+                return this.description;
+            }
+        }
+    hints:
+      - "For the ticket 5, `find` returns `null`, and `coat.getDescription()` then has no coat to run on. Check first: `if (coat == null) { ... } else { ... }`."
+      - "When it's `null`, print `\"No coat with ticket \" + ticket`. Otherwise print the line that's already there."
+    require:
+      - pattern: (==|!=)\s*null\b|\bnull\s*(==|!=)
+        message: "Check whether `find` returned `null`, with `coat == null` or `coat != null`, before calling a method on it."
+    tests:
+      - stdin: "5"
+      - stdin: "7"
+      - stdin: "12"
+        hidden: true
+      - stdin: "31"
+        hidden: true
+      - stdin: "0"
+        hidden: true
+    more:
+      - task: |
+          A profile shows its nickname when it has one, and the full name otherwise. The program crashes on Tom, who never set a nickname: his `nickname` is still `null`, not the empty String `""`. Read the crash message, then fix `Profile.java` so the program prints:
+
+          ```
+          Mia
+          Tom Berg
+          ```
+        seed:
+          Profile.java: |
+            public class Profile {
+                private String name;
+                private String nickname;
+
+                public Profile(String name) {
+                    this.name = name;
+                }
+
+                public void setNickname(String nickname) {
+                    this.nickname = nickname;
+                }
+
+                public String getDisplayName() {
+                    if (this.nickname.isEmpty()) {
+                        return this.name;
+                    }
+                    return this.nickname;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Profile maria = new Profile("Maria Lopez");
+                    maria.setNickname("Mia");
+                    Profile tom = new Profile("Tom Berg");
+                    System.out.println(maria.getDisplayName());
+                    System.out.println(tom.getDisplayName());
+                }
+            }
+        solution:
+          Profile.java: |
+            public class Profile {
+                private String name;
+                private String nickname;
+
+                public Profile(String name) {
+                    this.name = name;
+                }
+
+                public void setNickname(String nickname) {
+                    this.nickname = nickname;
+                }
+
+                public String getDisplayName() {
+                    if (this.nickname == null) {
+                        return this.name;
+                    }
+                    return this.nickname;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Profile maria = new Profile("Maria Lopez");
+                    maria.setNickname("Mia");
+                    Profile tom = new Profile("Tom Berg");
+                    System.out.println(maria.getDisplayName());
+                    System.out.println(tom.getDisplayName());
+                }
+            }
+        hints:
+          - "The message says `\"this.nickname\" is null`: the constructor never gives `nickname` a value, so for Tom it's still `null`, and `isEmpty()` has no String to run on."
+          - "Ask whether there's a nickname at all: `if (this.nickname == null)`. (Giving `nickname` a starting value of `\"\"` in the constructor would work too.)"
+        tests:
+          - name: The program
+          - call: |
+              Profile p = new Profile("Ana Silva");
+              System.out.println(p.getDisplayName());
+              p.setNickname("Nana");
+              System.out.println(p.getDisplayName());
+            hidden: true
+          - call: |
+              Profile p = new Profile("Li Wei");
+              p.setNickname("Wei");
+              System.out.println(p.getDisplayName());
+            hidden: true
+      - task: |
+          A small car park keeps its spots in an array: `spots[0]` is spot 1, `spots[1]` is spot 2, and so on, and an empty spot is `null`. `Car.java` is ready. In `Main`, write a method `printSpots(Car[] spots)` that prints every spot, with the plate of the car in it or `free`. The check runs:
+
+          ```java fragment
+          Car[] spots = new Car[4];
+          spots[0] = new Car("KLM-204");
+          spots[2] = new Car("XT-9981");
+          printSpots(spots);
+          ```
+
+          and expects:
+
+          ```
+          Spot 1: KLM-204
+          Spot 2: free
+          Spot 3: XT-9981
+          Spot 4: free
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Car[] spots = new Car[4];
+                    spots[0] = new Car("KLM-204");
+                    spots[2] = new Car("XT-9981");
+                    printSpots(spots);
+                }
+
+                // Write the printSpots method here.
+            }
+          Car.java: |
+            public class Car {
+                private String plate;
+
+                public Car(String plate) {
+                    this.plate = plate;
+                }
+
+                public String getPlate() {
+                    return this.plate;
+                }
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Car[] spots = new Car[4];
+                    spots[0] = new Car("KLM-204");
+                    spots[2] = new Car("XT-9981");
+                    printSpots(spots);
+                }
+
+                public static void printSpots(Car[] spots) {
+                    for (int i = 0; i < spots.length; i++) {
+                        if (spots[i] == null) {
+                            System.out.println("Spot " + (i + 1) + ": free");
+                        } else {
+                            System.out.println("Spot " + (i + 1) + ": " + spots[i].getPlate());
+                        }
+                    }
+                }
+            }
+          Car.java: |
+            public class Car {
+                private String plate;
+
+                public Car(String plate) {
+                    this.plate = plate;
+                }
+
+                public String getPlate() {
+                    return this.plate;
+                }
+            }
+        hints:
+          - "Loop over the indexes, `for (int i = 0; i < spots.length; i++)`, so you know each spot's number: `i + 1`."
+          - "Check `spots[i] == null` before calling `getPlate()`: on an empty spot the call would crash. Put `(i + 1)` in parentheses in the printed line, or `+` joins the digits as text."
+        require:
+          - pattern: (==|!=)\s*null\b|\bnull\s*(==|!=)
+            message: "Check each spot with `== null` or `!= null` before calling a method on it."
+        tests:
+          - call: |
+              Car[] spots = new Car[4];
+              spots[0] = new Car("KLM-204");
+              spots[2] = new Car("XT-9981");
+              printSpots(spots);
+          - call: |
+              Car[] spots = new Car[2];
+              printSpots(spots);
+            hidden: true
+          - call: |
+              Car[] spots = new Car[3];
+              spots[0] = new Car("AB-12");
+              spots[1] = new Car("CD-345");
+              spots[2] = new Car("EF-6789");
+              printSpots(spots);
+            hidden: true
+          - call: |
+              Car[] spots = new Car[5];
+              spots[4] = new Car("ZZ-1");
+              printSpots(spots);
+            hidden: true

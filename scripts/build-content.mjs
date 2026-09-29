@@ -273,6 +273,8 @@ function checkRuleShape(where, list, kind) {
         errors.push(`${where}: bad ${kind} pattern ${r.pattern}: ${e.message}`);
       }
       if (kind === "forbid" && (r.min != null || r.max != null)) errors.push(`${where}: forbid rules can't have min or max`);
+      // Safari before 16.4 can't read a lookbehind, and the check would fail there.
+      if (/\(\?<[=!]/.test(r.pattern)) errors.push(`${where}: ${kind} pattern ${r.pattern} uses a lookbehind, which older Safari can't read; match the text before it instead`);
     }
   }
 }

@@ -680,7 +680,7 @@ for (const width of [360, 390]) {
   await test(`phone width ${width} px: no sideways scrolling, axe passes`, async () => {
     const { ctx, page } = await newPage({ viewport: { width, height: 800 }, isMobile: true, hasTouch: true, colorScheme: width === 360 ? 'dark' : 'light' });
     await ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
-    for (const p of ['', 'learn/', 'learn/printing/', 'playground/', 'about/']) {
+    for (const p of ['', 'learn/', 'learn/printing/', 'learn/return-values/drawing-shapes/', 'playground/', 'about/']) {
       await page.goto(BASE + p);
       await page.locator('#main h1').first().waitFor();
       await noOverflow(page, `${p || 'home'} ${width}`);

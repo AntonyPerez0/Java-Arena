@@ -85,16 +85,15 @@ function outOfBounds(m: string, kind: "list" | "array" | "string"): string | nul
   const b = /^Index (-?\d+) out of bounds for length (\d+)$/.exec(m);
   if (!b) return null;
   const [i, n] = [Number(b[1]), Number(b[2])];
-  const thing = kind === "list" ? "list" : kind === "array" ? "array" : "string";
   const size = kind === "list" ? "size()" : kind === "array" ? "length" : "length()";
-  const asked = kind === "string" ? `the character at position ${i}` : `index ${i}`;
-  if (n === 0) return `The program asked for ${asked} of an empty ${thing}, which has no ${kind === "string" ? "positions" : "indexes"} at all.${kind === "list" ? " Check size() before reading, or add values first." : ""}`;
-  const has = kind === "list" ? plural(n, "value", "values") : kind === "array" ? `length ${n}` : `length ${n}`;
-  const range = `${kind === "string" ? "Positions" : "Indexes"} go from 0 to ${size} - 1, here 0 to ${n - 1}.`;
+  const asked = kind === "string" ? `the character at index ${i}` : `index ${i}`;
+  if (n === 0) return `The program asked for ${asked} of an empty ${kind}, which has no indexes at all.${kind === "list" ? " Check size() before reading, or add values first." : ""}`;
+  const of = kind === "list" ? `a list with ${plural(n, "value", "values")}` : kind === "array" ? `an array of length ${n}` : `a string of length ${n}`;
   let hint = "";
-  if (i < 0) hint = kind === "string" ? " Positions start at 0; -1 often comes from indexOf when the text isn't found." : " Indexes start at 0; -1 often comes from indexOf when the value isn't found.";
-  else if (i === n) hint = ` ${kind === "string" ? "Position" : "Index"} ${n} is one past the end: a loop with <= ${size} instead of < ${size} is a common cause.`;
-  return `The program asked for ${asked} of ${kind === "list" ? "a list with" : kind === "array" ? "an array of" : "a string of"} ${has}. ${range}${hint}`;
+  if (i === -1) hint = kind === "array" ? " Indexes start at 0; -1 is often what a search gives back when it finds nothing." : " Indexes start at 0; -1 is what indexOf gives back when it finds nothing.";
+  else if (i < 0) hint = " Indexes start at 0, so a negative index never works.";
+  else if (i === n) hint = ` Index ${n} is one past the end: a loop with <= ${size} instead of < ${size}, or one counting down that starts at ${size}, is a common cause.`;
+  return `The program asked for ${asked} of ${of}. Its indexes go from 0 to ${size} - 1, here 0 to ${n - 1}.${hint}`;
 }
 
 /** What a helpful NullPointerException message says was null, in plain words. */
@@ -113,8 +112,9 @@ function explainNull(m: string): string {
   const call = /^Cannot invoke "(?:[\w$]+\.)*([\w$]+)\.([\w$]+)\((.*?)\)" because (.+) is null$/.exec(m);
   if (call) {
     const [, type, method, , because] = call;
-    if (/^(Integer|Double|Long|Boolean|Character)$/.test(type) && /Value$/.test(method))
-      return `The program used an ${type} that is null as a plain ${type === "Integer" ? "int" : type.toLowerCase()} (it was ${nullThing(because)}). null means "no value": a list, a map or a variable that was never set may have given it.`;
+    const primitive: Record<string, string> = { Integer: "int", Double: "double", Long: "long", Boolean: "boolean", Character: "char" };
+    if (primitive[type] && /Value$/.test(method))
+      return `The program used ${/^[AEIOU]/.test(type) ? "an" : "a"} ${type} that is null as a plain ${primitive[type]} (it was ${nullThing(because)}). null means "no value": a list, a map or a variable that was never set may have given it.`;
     return `The program called ${method}() on ${/^[AEIOU]/.test(type) ? "an" : "a"} ${type} that is null: ${nullThing(because)} holds no object, so there is nothing to call ${method}() on. Check where that value was supposed to be set.`;
   }
   const arr = /^Cannot (?:load from \w+ array|store to \w+ array|read the array length) because (.+) is null$/.exec(m);
@@ -126,13 +126,15 @@ function explainNull(m: string): string {
 }
 
 function explainNumber(m: string): string {
+  if (m === "empty String") return "The program tried to turn empty text into a number. An empty line read with nextLine(), or an empty piece after split, can cause this.";
   const text = /^For input string: "(.*)"(?: under radix \d+)?$/s.exec(m)?.[1];
   if (text == null) return /null/.test(m) ? "The program tried to turn null into a number." : `The program tried to turn text into a number, but the text isn't a number: ${m}.`;
   if (text === "") return "The program tried to turn empty text into a number. An empty line read with nextLine(), or an empty piece after split, can cause this.";
-  if (text !== text.trim()) return `The program tried to turn "${text}" into a number, but the text has a space at its start or end, and Integer.valueOf doesn't skip spaces. trim() removes them: Integer.valueOf(text.trim()).`;
-  if (/^-?\d+\.\d+$/.test(text)) return `The program tried to turn "${text}" into a whole number, but it has a decimal point. Double.valueOf reads numbers with decimals.`;
-  if (/^-?\d+,\d+$/.test(text)) return `The program tried to turn "${text}" into a number, but Java writes decimals with a point, not a comma: ${text.replace(",", ".")}.`;
-  if (/^[-+]?\d{10,}$/.test(text)) return `The program tried to turn "${text}" into an int, but it's too big: an int goes up to 2147483647. A long can hold bigger whole numbers.`;
+  const bare = text.trim();
+  if (bare !== text && /^[-+]?\d+$/.test(bare)) return `The program tried to turn "${text}" into a number, but the text has a space at its start or end, and Integer.valueOf doesn't skip spaces. trim() removes them: Integer.valueOf(text.trim()).`;
+  if (/^[-+]?\d+\.\d+$/.test(bare)) return `The program tried to turn "${text}" into a whole number, but it has a decimal point. Double.valueOf reads numbers with decimals.`;
+  if (/[,;]/.test(bare)) return `The program tried to turn "${text}" into a number, but a comma or semicolon can't be part of a number. If it separates values (like "Ada,36"), split the text at it first and turn only the number part into a number. A decimal number is written with a point, such as 3.5.`;
+  if (/^[-+]?\d+$/.test(bare)) return `The program tried to turn "${text}" into an int, but it's outside the range an int can hold, -2147483648 to 2147483647. A long can hold bigger whole numbers.`;
   return `The program tried to turn the text "${text}" into a number, but it isn't one.`;
 }
 
@@ -140,8 +142,8 @@ function explainStringIndex(m: string): string {
   const plain = outOfBounds(m, "string");
   if (plain) return plain;
   const r = /^Range \[(-?\d+), (-?\d+)\) out of bounds for length (\d+)$/.exec(m) ?? /^begin (-?\d+), end (-?\d+), length (\d+)$/.exec(m);
-  if (r) return `The program asked for a part of a string of length ${r[3]}, from position ${r[1]} up to ${r[2]}. With substring, both positions must be between 0 and ${r[3]}, and the first can't be larger than the second.`;
-  return `The program used a position that isn't inside the string. ${m}. Positions go from 0 to length() - 1.`;
+  if (r) return `The program asked for a part of a string of length ${r[3]}, from index ${r[1]} up to ${r[2]}. With substring, both indexes must be between 0 and ${r[3]}, and the first can't be larger than the second.`;
+  return `The program used an index that isn't inside the string. ${m}. A string's indexes go from 0 to length() - 1.`;
 }
 
 const EXCEPTIONS: [RegExp, (message: string) => string][] = [
@@ -152,7 +154,7 @@ const EXCEPTIONS: [RegExp, (message: string) => string][] = [
     /IndexOutOfBoundsException$/,
     (m) => {
       const add = /^Index: (-?\d+), Size: (\d+)$/.exec(m);
-      if (add) return `The program tried to add at index ${add[1]} of a list with ${plural(Number(add[2]), "value", "values")}. add(index, value) takes an index from 0 to size(), here 0 to ${add[2]}.`;
+      if (add) return `The program used index ${add[1]} of a list with ${plural(Number(add[2]), "value", "values")}. Its indexes go from 0 to size() - 1; add(index, value) can also add at index size(), the end.`;
       return outOfBounds(m, "list") ?? `The program asked a list for an index it doesn't have. ${m}. Indexes go from 0 to size() - 1.`;
     },
   ],

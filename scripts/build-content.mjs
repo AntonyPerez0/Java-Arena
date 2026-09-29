@@ -47,6 +47,10 @@ const useCache = !process.argv.includes("--no-cache");
 const dry = process.argv.includes("--dry");
 const drillFileArg = process.argv.includes("--drill-file") ? process.argv[process.argv.indexOf("--drill-file") + 1] : null;
 const moduleFileArg = process.argv.includes("--module-file") ? process.argv[process.argv.indexOf("--module-file") + 1] : null;
+if (process.argv.includes("--module-file") && !/\.ya?ml$/.test(moduleFileArg ?? "")) {
+  console.error("--module-file needs a file name, such as 13-lists.yaml.");
+  process.exit(2);
+}
 if ((drillFileArg || moduleFileArg) && !dry) {
   console.error("--drill-file and --module-file check part of the content, so they need --dry.");
   process.exit(2);
@@ -263,10 +267,10 @@ async function checkExamples(where, text) {
   for (let i = 0; i < blocks.length; i++) {
     const info = blocks[i][1].trim();
     if (!/^java\b/.test(info)) continue;
-    const [, kind, extra] = info.split(/\s+/);
+    const [, kind, extra, ...rest] = info.split(/\s+/);
     const code = blocks[i][2];
     const w = `${where}, example ${i + 1}`;
-    if (!["run", "main", "error", "fragment"].includes(kind) || (extra && !(kind === "run" && extra === "crash"))) {
+    if (!["run", "main", "error", "fragment"].includes(kind) || (extra && !(kind === "run" && extra === "crash")) || rest.length) {
       errors.push(`${w}: a java block must be "java run", "java run crash", "java main", "java error" or "java fragment"`);
       continue;
     }
@@ -309,6 +313,7 @@ async function checkExamples(where, text) {
       next++;
       if (normalizeOutput(out[2]) !== normalizeOutput(r.stdout)) errors.push(`${w}: the output block says\n${out[2]}\nbut it prints\n${r.stdout}`);
     } else if (normalizeOutput(r.stdout)) warnings.push(`${w}: prints something but has no output block`);
+    if (!crash && blocks[next]?.[1].trim() === "crash") errors.push(`${w}: a crash block follows it, but only a "java run crash" example is checked against one`);
     if (crash) {
       const shown = blocks[next];
       if (!shown || shown[1].trim() !== "crash") errors.push(`${w}: a "java run crash" block needs a crash block after it (and after its output block), with what Java prints:\n${key}`);
@@ -316,7 +321,7 @@ async function checkExamples(where, text) {
     }
     checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, stdout: r.stdout, exitCode: r.exitCode, ...(crash ? { stderrKey: key } : {}) }] });
   }
-  return text.replace(/^```java (run|main|error|fragment)( crash)?[ \t]*$/gm, "```java");
+  return text.replace(/^```java[ \t]+(run|main|error|fragment)([ \t]+crash)?[ \t]*$/gm, "```java");
 }
 
 // ---------------------------------------------------------------- exercises

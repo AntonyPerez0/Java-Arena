@@ -145,7 +145,7 @@ steps:
       answer.equals("yes")    // right: do they have the same characters?
       ```
 
-      What makes `==` tricky is that it sometimes seems to work. Java may reuse one String object for equal texts written in the code, and whether two strings end up as the same object depends on where they came from and on Java's own internals. So a program that compares text with `==` can pass a quick test and then fail on real input. With `equals`, the result depends only on the text. (For `int`, `double` and `char` values, which aren't objects, `==` is the right tool.)
+      What makes `==` tricky is that it sometimes seems to work. Java may reuse one String object for equal texts written in the code, and whether two strings end up as the same object depends on where they came from and on Java's own internals. So a program that compares text with `==` can pass a quick test and then fail on real input. With `equals`, the result depends only on the text. (For `int` and `char` values, which aren't objects, `==` is the right tool.)
 
       ### Ignoring capitals
 
@@ -330,7 +330,7 @@ steps:
           - "`previous` keeps the last word. In each round, read a new word and compare it with `previous` before you overwrite it."
           - "`if (word.equals(previous)) { ... break; }`, and after the `if`, `previous = word;`."
         forbid:
-          - pattern: ==|!=
+          - pattern: \b(word|previous)\s*(==|!=)|(==|!=)\s*(word|previous)\b|(==|!=)\s*""|""\s*(==|!=)
             message: "Compare the words with `equals`: `==` checks whether two strings are the same object, not whether they hold the same text."
         tests:
           - stdin: |
@@ -439,7 +439,7 @@ steps:
 
       ### Past the end
 
-      The indices of `"cat"` are 0, 1 and 2. Asking for index 3 crashes the program with a `StringIndexOutOfBoundsException`. The usual cause is a loop that uses `<=` where it should use `<`:
+      The indexes of `"cat"` are 0, 1 and 2. Asking for index 3 crashes the program with a `StringIndexOutOfBoundsException`. The usual cause is a loop that uses `<=` where it should use `<`:
 
       ```java run crash
       public class Main {
@@ -642,7 +642,7 @@ steps:
           }
       }
     hints:
-      - "`sun` is at the indices 0, 1 and 2. The end index is the first one that's *not* included."
+      - "`sun` is at the indexes 0, 1 and 2. The end index is the first one that's *not* included."
       - "`flower` starts at index 3 and goes on to the end, so it needs only the start."
     tests:
       - expect: |
@@ -1143,11 +1143,12 @@ steps:
       }
       ```
 
-      **Your turn:** read lines in the form `runner,minutes` until the line `end`. Then print how many runners there were and their average time, as a decimal number. For the input `Aino,42`, `Bruno,38`, `Chen,46` and `end` the program prints:
+      **Your turn:** read lines in the form `runner,minutes` until the line `end`. Then print how many runners there were, how many of them finished in under an hour (less than 60 minutes), and their average time as a decimal number. For the input `Aino,42`, `Bruno,65`, `Chen,49` and `end` the program prints:
 
       ```
       Runners: 3
-      Average: 42.0
+      Under an hour: 2
+      Average: 52.0
       ```
     seed: |
       import java.util.Scanner;
@@ -1165,6 +1166,7 @@ steps:
           public static void main(String[] args) {
               Scanner scanner = new Scanner(System.in);
               int count = 0;
+              int underHour = 0;
               int sum = 0;
               while (true) {
                   String line = scanner.nextLine();
@@ -1172,15 +1174,21 @@ steps:
                       break;
                   }
                   String[] parts = line.split(",");
-                  sum += Integer.valueOf(parts[1]);
+                  int minutes = Integer.valueOf(parts[1]);
+                  sum += minutes;
                   count++;
+                  if (minutes < 60) {
+                      underHour++;
+                  }
               }
               System.out.println("Runners: " + count);
+              System.out.println("Under an hour: " + underHour);
               System.out.println("Average: " + (double) sum / count);
           }
       }
     hints:
-      - "Before the loop, `int count = 0;` and `int sum = 0;`. In the loop, stop at `end`; otherwise split the line, add `Integer.valueOf(parts[1])` to the sum and count the runner."
+      - "Before the loop, three counters start at 0: all runners, runners under an hour, and the sum of the times. In the loop, stop at `end`; otherwise split the line and turn `parts[1]` into a number."
+      - "Add the minutes to the sum and count the runner; if the minutes are less than 60, count them in the second counter too."
       - "After the loop, `(double) sum / count` keeps the decimals."
     require:
       - pattern: \.split\s*\(
@@ -1191,23 +1199,23 @@ steps:
     tests:
       - stdin: |
           Aino,42
-          Bruno,38
-          Chen,46
+          Bruno,65
+          Chen,49
           end
       - stdin: |
           Dana,50
           end
         hidden: true
       - stdin: |
-          Eero,30
-          Fay,31
+          Eero,70
+          Fay,61
           end
         hidden: true
       - stdin: |
           Gus,40
-          Hana,45
-          Ilse,41
-          Juno,39
+          Hana,60
+          Ilse,59
+          Juno,75
           end
         hidden: true
     more:
@@ -1398,7 +1406,7 @@ steps:
 
       - Each line is split into an array of two parts. The name goes into one list and the score into the other, so the same index points to the same person in both lists.
       - `trim()` lets the program accept `Kai, 55` as well as `Kai,55`.
-      - The last loop goes through the indices, so it can look up the name and the score of the same person.
+      - The last loop goes through the indexes, so it can look up the name and the score of the same person.
 
       ### The end of part 3
 
@@ -1555,7 +1563,7 @@ steps:
           }
         hints:
           - "The first loop is like the ones in the last step: stop at an empty line, split, and add `parts[0]` to `names` and `parts[1]` to `cities`."
-          - "Then read the city to look for, and loop over the indices: when `cities.get(i).equals(wanted)`, print `names.get(i)`. Count the matches, so that at the end you know whether there were none."
+          - "Then read the city to look for, and loop over the indexes: when `cities.get(i).equals(wanted)`, print `names.get(i)`. Count the matches, so that at the end you know whether there were none."
         require:
           - pattern: \.split\s*\(
             message: "Cut each line into its parts with `split`."
@@ -1564,6 +1572,8 @@ steps:
         forbid:
           - pattern: (==|!=)\s*""|""\s*(==|!=)
             message: "Check for the empty line with `isEmpty()` or `equals(\"\")`, not `==`."
+          - pattern: \bwanted\s*(==|!=)|(==|!=)\s*wanted\b
+            message: "Compare the cities with `equals`, not `==`."
         tests:
           - stdin: "Aino,Oulu\nBen,Turku\nCarla,Oulu\n\nOulu\n"
           - stdin: "Aino,Oulu\nBen,Turku\n\nTampere\n"

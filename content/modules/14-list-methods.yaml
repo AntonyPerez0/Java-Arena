@@ -217,52 +217,95 @@ steps:
 
   - id: list-methods-sum-average
     slug: sums-and-averages
-    title: Sums, averages and counts
+    title: Totals, flags and joined text
     text: |
-      The last module added up a list with an index loop. A for-each loop does it with less code. A sum starts at 0 and adds each value; a count starts at 0 and goes up by one when a value fits a condition. One loop can do both:
+      In the last module you added up a list with an index loop. With a for-each loop it's shorter, because there's no index to keep track of:
 
       ```java main
-      ArrayList<Integer> temperatures = new ArrayList<>();
-      temperatures.add(14);
-      temperatures.add(19);
-      temperatures.add(12);
-      temperatures.add(16);
+      ArrayList<Integer> pages = new ArrayList<>();
+      pages.add(12);
+      pages.add(30);
+      pages.add(18);
 
-      int sum = 0;
-      int warmDays = 0;
-      for (int temperature : temperatures) {
-          sum += temperature;
-          if (temperature >= 15) {
-              warmDays++;
-          }
+      int total = 0;
+      for (int count : pages) {
+          total += count;
       }
-
-      System.out.println("Sum: " + sum);
-      System.out.println("Warm days: " + warmDays);
-      System.out.println("Average: " + (double) sum / temperatures.size());
+      System.out.println("Pages read: " + total);
+      System.out.println("Per day: " + (double) total / pages.size());
       ```
 
       ```output
-      Sum: 61
-      Warm days: 2
-      Average: 15.25
+      Pages read: 60
+      Per day: 20.0
       ```
 
-      ### The average needs a double
+      Averages and counts work just as before; only the loop is new. This step adds two more things a loop over a list often has to work out: a yes-or-no answer about all the values, and one line of text made from them.
 
-      The number of values is `temperatures.size()`, an `int`. With `sum` an `int` too, `sum / temperatures.size()` is whole-number division: 61 / 4 gives 15, and the .25 is lost. As before, the cast `(double)` in front of `sum` keeps the decimals.
+      ### Does every value pass? A flag
 
-      An empty list has no average, because its size is 0. When the list might be empty, check `temperatures.size() > 0` before dividing.
+      Some questions are about the whole list: is every value valid? Is any value negative? A `boolean` variable answers them. It's called a **flag**: it starts with the answer that holds until some value proves otherwise, and the loop changes it when a value does.
 
-      ### Going through the list twice
+      ```java main
+      ArrayList<Integer> ages = new ArrayList<>();
+      ages.add(19);
+      ages.add(23);
+      ages.add(17);
+      ages.add(30);
 
-      Values kept in a list can be looked at as often as you like. To count the days warmer than the average, one loop works out the average first, and a second loop compares each value with it. Numbers read one by one without a list can be added up, but once the reading loop is over they're gone.
+      boolean allAdults = true;
+      for (int age : ages) {
+          if (age < 18) {
+              allAdults = false;
+          }
+      }
 
-      **Your turn:** the program reads how many kilometers you cycled each day until the line `end`, into the list `rides`. Add a for-each loop that adds up the values, then print the total and the average per day. For the input 4, 0, 12 and 5 the program prints:
+      if (allAdults) {
+          System.out.println("Everyone is 18 or over");
+      } else {
+          System.out.println("Someone is under 18");
+      }
+      ```
+
+      ```output
+      Someone is under 18
+      ```
+
+      One age under 18 is enough to make the flag `false`, and nothing sets it back to `true`. That's why the `if` in the loop has no `else`: with `else { allAdults = true; }`, only the last age would decide, and here the 30 would hide the 17.
+
+      For "is there any ...?", turn it around: start the flag at `false`, and set it to `true` when a value matches.
+
+      ### Joining values into one line
+
+      Text can be built in a loop, as in module 11: start from `""` and add each value with `+=`. To put a separator between the values, but not in front of the first one, check whether the text is still empty:
+
+      ```java main
+      ArrayList<String> stops = new ArrayList<>();
+      stops.add("Home");
+      stops.add("Park");
+      stops.add("School");
+
+      String route = "";
+      for (String stop : stops) {
+          if (!route.equals("")) {
+              route += " > ";
+          }
+          route += stop;
+      }
+      System.out.println(route);
+      ```
+
+      ```output
+      Home > Park > School
+      ```
+
+      In the first round `route` is still empty, so no separator goes in. From then on, each stop gets one in front of it.
+
+      **Your turn:** a delivery van takes parcels of at most 25 kg each, and at most 100 kg in all. The program reads parcel weights until `0`, into the list `parcels`. Add one for-each loop that adds up the weights and keeps a flag that says whether every parcel is 25 kg or less. Print the total, and then `Ready to go` when both rules hold, or `Repack the van` when either one is broken. For the input 20, 18, 25 and 9 the program prints:
 
       ```
-      Total: 21 km
-      Average: 5.25 km per day
+      Total: 72 kg
+      Ready to go
       ```
     seed: |
       import java.util.ArrayList;
@@ -271,16 +314,16 @@ steps:
       public class Main {
           public static void main(String[] args) {
               Scanner scanner = new Scanner(System.in);
-              ArrayList<Integer> rides = new ArrayList<>();
+              ArrayList<Integer> parcels = new ArrayList<>();
               while (true) {
-                  String line = scanner.nextLine();
-                  if (line.equals("end")) {
+                  int weight = Integer.valueOf(scanner.nextLine());
+                  if (weight == 0) {
                       break;
                   }
-                  rides.add(Integer.valueOf(line));
+                  parcels.add(weight);
               }
 
-              // Add up the values with a for-each loop, and print the total and the average.
+              // Add up the weights and check every parcel here.
           }
       }
     solution: |
@@ -290,58 +333,69 @@ steps:
       public class Main {
           public static void main(String[] args) {
               Scanner scanner = new Scanner(System.in);
-              ArrayList<Integer> rides = new ArrayList<>();
+              ArrayList<Integer> parcels = new ArrayList<>();
               while (true) {
-                  String line = scanner.nextLine();
-                  if (line.equals("end")) {
+                  int weight = Integer.valueOf(scanner.nextLine());
+                  if (weight == 0) {
                       break;
                   }
-                  rides.add(Integer.valueOf(line));
+                  parcels.add(weight);
               }
 
               int total = 0;
-              for (int kilometers : rides) {
-                  total += kilometers;
+              boolean allLight = true;
+              for (int weight : parcels) {
+                  total += weight;
+                  if (weight > 25) {
+                      allLight = false;
+                  }
               }
-              System.out.println("Total: " + total + " km");
-              System.out.println("Average: " + (double) total / rides.size() + " km per day");
+              System.out.println("Total: " + total + " kg");
+              if (allLight && total <= 100) {
+                  System.out.println("Ready to go");
+              } else {
+                  System.out.println("Repack the van");
+              }
           }
       }
     hints:
-      - "`int total = 0;` before the loop, and `total += kilometers;` inside `for (int kilometers : rides)`."
-      - "The average is `(double) total / rides.size()`. Without the cast, 21 / 4 gives 5."
+      - "Before the loop: `int total = 0;` and `boolean allLight = true;`. Inside it, add the weight, and set the flag to `false` when the weight is over 25."
+      - "After the loop, both rules at once: `if (allLight && total <= 100)`."
     require:
       - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
-        message: "Add up the values with a for-each loop."
+        message: "Go through the parcels with a for-each loop."
+      - pattern: \bboolean\b
+        message: "Keep the answer to \"is every parcel light enough?\" in a `boolean` flag."
     tests:
       - stdin: |
-          4
+          20
+          18
+          25
+          9
           0
-          12
-          5
-          end
       - stdin: |
+          30
+          5
+          0
+        hidden: true
+      - stdin: |
+          25
+          25
+          25
+          25
           1
-          2
-          2
-          end
+          0
         hidden: true
       - stdin: |
           10
-          20
-          end
-        hidden: true
-      - stdin: |
-          3
-          end
+          0
         hidden: true
     more:
       - task: |
-          The program reads quiz scores from 0 to 10 until the line `end`, into the list `scores`. With one for-each loop, count the scores of 8 or more and the scores below 4, and print both counts. For the input 9, 3, 7, 10 and 5 the program prints:
+          Read whole numbers until `0`, and print them as one addition with its result: the numbers with ` + ` between them, then ` = ` and the sum. Build the line with a for-each loop. There's always at least one number. For the input 4, 7 and 2 the program prints:
 
           ```
-          8 or more: 2
-          Below 4: 1
+          4 + 7 + 2 = 13
           ```
         seed: |
           import java.util.ArrayList;
@@ -350,16 +404,8 @@ steps:
           public class Main {
               public static void main(String[] args) {
                   Scanner scanner = new Scanner(System.in);
-                  ArrayList<Integer> scores = new ArrayList<>();
-                  while (true) {
-                      String line = scanner.nextLine();
-                      if (line.equals("end")) {
-                          break;
-                      }
-                      scores.add(Integer.valueOf(line));
-                  }
+                  ArrayList<Integer> numbers = new ArrayList<>();
 
-                  // Count the high and the low scores here.
               }
           }
         solution: |
@@ -369,61 +415,58 @@ steps:
           public class Main {
               public static void main(String[] args) {
                   Scanner scanner = new Scanner(System.in);
-                  ArrayList<Integer> scores = new ArrayList<>();
+                  ArrayList<Integer> numbers = new ArrayList<>();
                   while (true) {
-                      String line = scanner.nextLine();
-                      if (line.equals("end")) {
+                      int number = Integer.valueOf(scanner.nextLine());
+                      if (number == 0) {
                           break;
                       }
-                      scores.add(Integer.valueOf(line));
+                      numbers.add(number);
                   }
 
-                  int high = 0;
-                  int low = 0;
-                  for (int score : scores) {
-                      if (score >= 8) {
-                          high++;
+                  String line = "";
+                  int sum = 0;
+                  for (int number : numbers) {
+                      if (!line.equals("")) {
+                          line += " + ";
                       }
-                      if (score < 4) {
-                          low++;
-                      }
+                      line += number;
+                      sum += number;
                   }
-                  System.out.println("8 or more: " + high);
-                  System.out.println("Below 4: " + low);
+                  System.out.println(line + " = " + sum);
               }
           }
         hints:
-          - "Two counters, both starting at 0 before the loop."
-          - "Inside `for (int score : scores)`, one `if` for `score >= 8` and another for `score < 4`."
+          - "Two things to keep while going through the list: the text so far (starting at `\"\"`) and the sum (starting at 0)."
+          - "As with the route in the lesson: add `\" + \"` only when the text isn't empty any more, then add the number."
         require:
           - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
-            message: "Go through the scores with a for-each loop."
+            message: "Build the line with a for-each loop."
         tests:
-          - stdin: |
-              9
-              3
-              7
-              10
-              5
-              end
           - stdin: |
               4
-              8
-              end
+              7
+              2
+              0
+          - stdin: |
+              5
+              0
             hidden: true
           - stdin: |
-              0
+              10
+              -3
+              8
               1
-              2
-              end
+              0
             hidden: true
       - task: |
-          Read plant heights in centimeters until the line `end` (there's always at least one). Print the average height, then how many plants are taller than the average. That takes two for-each loops over the list: one for the average, and one that compares each height with it. For the input 18, 30, 12 and 30 the program prints:
+          Read the names of your dinner guests until the line `end` (there's at least one). Print them on one line the way you'd write them in a sentence: a comma between the names, but `and` before the last one. For the input `Ada`, `Ben`, `Cleo` and `Dev` the program prints:
 
           ```
-          Average: 22.5
-          Taller than average: 2
+          Guests: Ada, Ben, Cleo and Dev
           ```
+
+          Two guests are `Ada and Ben`, and a single guest is just the name.
         seed: |
           import java.util.ArrayList;
           import java.util.Scanner;
@@ -431,7 +474,7 @@ steps:
           public class Main {
               public static void main(String[] args) {
                   Scanner scanner = new Scanner(System.in);
-                  ArrayList<Integer> heights = new ArrayList<>();
+                  ArrayList<String> guests = new ArrayList<>();
 
               }
           }
@@ -442,61 +485,50 @@ steps:
           public class Main {
               public static void main(String[] args) {
                   Scanner scanner = new Scanner(System.in);
-                  ArrayList<Integer> heights = new ArrayList<>();
+                  ArrayList<String> guests = new ArrayList<>();
                   while (true) {
-                      String line = scanner.nextLine();
-                      if (line.equals("end")) {
+                      String name = scanner.nextLine();
+                      if (name.equals("end")) {
                           break;
                       }
-                      heights.add(Integer.valueOf(line));
+                      guests.add(name);
                   }
 
-                  int sum = 0;
-                  for (int height : heights) {
-                      sum += height;
-                  }
-                  double average = (double) sum / heights.size();
-
-                  int taller = 0;
-                  for (int height : heights) {
-                      if (height > average) {
-                          taller++;
+                  String line = "";
+                  for (int i = 0; i < guests.size(); i++) {
+                      if (i == guests.size() - 1 && i > 0) {
+                          line += " and ";
+                      } else if (i > 0) {
+                          line += ", ";
                       }
+                      line += guests.get(i);
                   }
-                  System.out.println("Average: " + average);
-                  System.out.println("Taller than average: " + taller);
+                  System.out.println("Guests: " + line);
               }
           }
         hints:
-          - "Read the heights into the list as in the other challenges, then work out `double average = (double) sum / heights.size();` after the first loop."
-          - "The second loop counts the heights where `height > average`."
-        require:
-          - pattern: 'for\s*\(\s*\w+\s+\w+\s*:'
-            min: 2
-            message: "Use two for-each loops: one for the sum, one for the count."
+          - "What goes in front of a name depends on where it is: nothing for the first, ` and ` for the last, `, ` for the others. That's a job for an index loop."
+          - "The last index is `guests.size() - 1`. Check for it first, and only when `i > 0`, so a single guest gets nothing in front."
         tests:
           - stdin: |
-              18
-              30
-              12
-              30
+              Ada
+              Ben
+              Cleo
+              Dev
               end
           - stdin: |
-              5
-              5
-              5
+              Mo
               end
             hidden: true
           - stdin: |
-              10
-              11
+              Ada
+              Ben
               end
             hidden: true
           - stdin: |
-              1
-              2
-              3
-              10
+              Kai
+              Lin
+              Uma
               end
             hidden: true
 
@@ -745,7 +777,7 @@ steps:
       - `list.remove(index)` removes the value at that index.
       - `list.remove(value)` removes the first copy of that value. If the value isn't in the list, nothing happens.
 
-      Either way, the list gets one shorter, and every value after the removed one moves down one place: its index goes down by 1.
+      When a value is removed, the list gets one shorter, and every value after it moves down one place: its index goes down by 1.
 
       ```java main
       ArrayList<String> queue = new ArrayList<>();
@@ -797,7 +829,7 @@ steps:
 
       ### Don't remove inside a for-each
 
-      A for-each loop doesn't allow its list to change while it runs. When it moves on to the next value, it notices that the list changed and stops the program:
+      A for-each loop doesn't allow its list to grow or shrink while it runs. When it moves on to the next value, it notices that the size changed and stops the program:
 
       ```java run crash
       import java.util.ArrayList;
@@ -1116,66 +1148,78 @@ steps:
 
       The checks in this step build a list, fill it, and call your method with it, just as `main` does above.
 
-      **Your turn:** write a method `total(ArrayList<Integer> prices)` that returns the sum of the prices in the list. The check builds a list of 4, 12 and 3, and prints what `total` returns:
+      **Your turn:** write a method `groupPrice(ArrayList<Integer> ages)` that returns what a group pays for museum tickets: 12 for each person aged 12 or over, 5 for each child from 3 to 11, and nothing for a child under 3. The check builds a list of the ages 34, 8, 2 and 40, and prints what `groupPrice` returns:
 
       ```
-      19
+      29
       ```
     seed: |
       import java.util.ArrayList;
 
       public class Main {
           public static void main(String[] args) {
-              ArrayList<Integer> prices = new ArrayList<>();
-              prices.add(4);
-              prices.add(12);
-              prices.add(3);
-              System.out.println(total(prices));
+              ArrayList<Integer> ages = new ArrayList<>();
+              ages.add(34);
+              ages.add(8);
+              ages.add(2);
+              ages.add(40);
+              System.out.println(groupPrice(ages));
           }
 
-          // Write the total method here.
+          // Write the groupPrice method here.
       }
     solution: |
       import java.util.ArrayList;
 
       public class Main {
           public static void main(String[] args) {
-              ArrayList<Integer> prices = new ArrayList<>();
-              prices.add(4);
-              prices.add(12);
-              prices.add(3);
-              System.out.println(total(prices));
+              ArrayList<Integer> ages = new ArrayList<>();
+              ages.add(34);
+              ages.add(8);
+              ages.add(2);
+              ages.add(40);
+              System.out.println(groupPrice(ages));
           }
 
-          public static int total(ArrayList<Integer> prices) {
-              int sum = 0;
-              for (int price : prices) {
-                  sum += price;
+          public static int groupPrice(ArrayList<Integer> ages) {
+              int price = 0;
+              for (int age : ages) {
+                  if (age >= 12) {
+                      price += 12;
+                  } else if (age >= 3) {
+                      price += 5;
+                  }
               }
-              return sum;
+              return price;
           }
       }
     hints:
-      - "The method starts `public static int total(ArrayList<Integer> prices) {`."
-      - "Add up the prices in a for-each loop, and `return` the sum after the loop."
+      - "The method starts `public static int groupPrice(ArrayList<Integer> ages) {`."
+      - "Start a total at 0. In a for-each loop over the ages, add 12 when `age >= 12`, else 5 when `age >= 3`, and nothing otherwise. Return the total after the loop."
     tests:
       - call: |
-          ArrayList<Integer> prices = new ArrayList<>();
-          prices.add(4);
-          prices.add(12);
-          prices.add(3);
-          System.out.println(total(prices));
+          ArrayList<Integer> ages = new ArrayList<>();
+          ages.add(34);
+          ages.add(8);
+          ages.add(2);
+          ages.add(40);
+          System.out.println(groupPrice(ages));
       - call: |
-          ArrayList<Integer> prices = new ArrayList<>();
-          System.out.println(total(prices));
+          ArrayList<Integer> ages = new ArrayList<>();
+          System.out.println(groupPrice(ages));
         hidden: true
       - call: |
-          ArrayList<Integer> prices = new ArrayList<>();
-          prices.add(250);
-          prices.add(99);
-          prices.add(1);
-          prices.add(40);
-          System.out.println(total(prices));
+          ArrayList<Integer> ages = new ArrayList<>();
+          ages.add(3);
+          ages.add(11);
+          ages.add(12);
+          ages.add(2);
+          System.out.println(groupPrice(ages));
+        hidden: true
+      - call: |
+          ArrayList<Integer> ages = new ArrayList<>();
+          ages.add(70);
+          System.out.println(groupPrice(ages));
         hidden: true
     more:
       - task: |
@@ -1365,7 +1409,7 @@ steps:
       [12, 27]
       ```
 
-      `list.set(index, value)` puts a new value at an index, in place of the old one. `raiseAll` returns nothing, and still `main`'s list changed. That's handy when changing the list is the method's job. When it isn't, it's a nasty surprise, so a method that only needs to read a list (like `total` in the last step) should leave it alone.
+      `list.set(index, value)` puts a new value at an index, in place of the old one. `raiseAll` returns nothing, and still `main`'s list changed. That's handy when changing the list is the method's job. When it isn't, it's a nasty surprise, so a method that only needs to read a list (like `groupPrice` in the last step) should leave it alone.
 
       ### A real copy
 

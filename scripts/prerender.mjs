@@ -28,7 +28,7 @@ const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const link = (p) => BASE + p.replace(/^\//, "").replace(/^([^.?#]*[^/.?#])$/, "$1/");
 const canonical = (route) => (route === "/" ? `${SITE}/` : `${SITE}${route.replace(/\/$/, "")}/`);
 
-const LABELS = { output: "Output", input: "Input", javac: "What javac prints" };
+const LABELS = { output: "Output", input: "Input", javac: "What javac prints", crash: "The program crashes with" };
 marked.use({
   renderer: {
     code({ text, lang }) {

@@ -1,0 +1,343 @@
+topic: larger-programs
+drills:
+  - type: predict
+    after: planning
+    classes: |
+      class Shelf {
+          private ArrayList<Integer> pages;
+
+          public Shelf() {
+              this.pages = new ArrayList<>();
+          }
+
+          public void add(int bookPages) {
+              this.pages.add(bookPages);
+          }
+
+          public int count() {
+              return this.pages.size();
+          }
+
+          public int totalPages() {
+              return 0;
+          }
+      }
+    body: |
+      Shelf shelf = new Shelf();
+      shelf.add(320);
+      shelf.add(180);
+      System.out.println(shelf.count() + " " + shelf.totalPages());
+    why: "`count()` is written, and returns the list's size, 2. `totalPages()` is still a placeholder: it compiles, but it returns 0 whatever the list holds. A test drive shows that at once, as long as you know what the right answer (500) would be."
+
+  - type: predict
+    after: statistics-from-input
+    stdin: |
+      5
+      -3
+      8
+      0
+      4
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int count = 0;
+      int total = 0;
+      while (true) {
+          int value = Integer.valueOf(scanner.nextLine());
+          if (value == 0) {
+              break;
+          }
+          if (value < 0) {
+              continue;
+          }
+          count++;
+          total += value;
+      }
+      System.out.println(count + " " + total);
+    why: "-3 breaks the rule, so `continue` skips it before it's counted. 0 is the stop value: `break` ends the loop, so it's never counted either, and the 4 after it is never read. That leaves 5 and 8: 2 values, 13 in all."
+
+  - type: predict
+    after: statistics-from-input
+    body: |
+      int part = 3;
+      int whole = 4;
+      System.out.println(part / whole * 100);
+      System.out.println(100 * part / whole);
+      System.out.println(100.0 * part / whole);
+    why: "With two `int` values, `3 / 4` is 0, and 0 times 100 is 0. Multiplying first gives `300 / 4`, which is 75. Starting with `100.0` makes the whole calculation a double, so it prints `75.0`, and it would keep any decimals."
+
+  - type: predict
+    after: commands-and-bad-input
+    pre: |
+      public static int toNumber(String text) {
+          try {
+              return Integer.valueOf(text);
+          } catch (Exception e) {
+              return -1;
+          }
+      }
+    body: |
+      System.out.println(toNumber("12") + " " + toNumber("1.5") + " " + toNumber(" 4"));
+    why: "`Integer.valueOf` only accepts a whole number written with digits (and a sign), nothing else. `1.5` isn't a whole number, and ` 4` starts with a space, so both throw a NumberFormatException, and the `catch` block returns -1 for them."
+
+  - type: predict
+    after: questions-about-a-file
+    body: |
+      Scanner scanner = new Scanner("Ada,4\nBen\n\nCleo,7,x\nDev,2\n");
+      int lines = 0;
+      int total = 0;
+      while (scanner.hasNextLine()) {
+          String[] parts = scanner.nextLine().split(",");
+          lines++;
+          if (parts.length < 2) {
+              continue;
+          }
+          total += Integer.valueOf(parts[1]);
+      }
+      System.out.println(lines + " " + total);
+    why: "Every line is counted, the empty one too: 5. `Ben` and the empty line each split into one part, so they're skipped. `Cleo,7,x` has three parts, which passes the check, and its `parts[1]` is 7. So the total is 4 + 7 + 2 = 13."
+
+  - type: fill
+    after: statistics-from-input
+    prompt: "Fill in the blank, the start of an expression, so that the average keeps its decimals."
+    body: |
+      int total = 7;
+      int count = 2;
+      double average = [[(double)‖1.0 *]] total / count;
+      System.out.println(average);
+    why: "`total / count` divides two `int` values, so it would give 3, and the double would hold 3.0. `(double) total` turns the total into 7.0 before the division, and a double divided by an int gives 3.5."
+
+  - type: fill
+    after: questions-about-a-file
+    prompt: Fill in the blank, so the program finds the lightest tent that sleeps at least 3 people.
+    classes: |
+      class Tent {
+          private String name;
+          private int people;
+          private int grams;
+
+          public Tent(String name, int people, int grams) {
+              this.name = name;
+              this.people = people;
+              this.grams = grams;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public int getPeople() {
+              return this.people;
+          }
+
+          public int getGrams() {
+              return this.grams;
+          }
+      }
+    body: |
+      ArrayList<Tent> tents = new ArrayList<>();
+      tents.add(new Tent("Ridge", 2, 1400));
+      tents.add(new Tent("Nomad", 3, 2100));
+      tents.add(new Tent("Summit", 4, 1900));
+      Tent lightest = [[null]];
+      for (Tent tent : tents) {
+          if (tent.getPeople() >= 3 && (lightest == null || tent.getGrams() < lightest.getGrams())) {
+              lightest = tent;
+          }
+      }
+      System.out.println(lightest.getName());
+    why: "The best match starts from `null`, which means \"no tent found yet\", so the first tent that fits always takes its place. Starting from `tents.get(0)` would be wrong here: Ridge is the lightest tent of all, but it only sleeps 2, so no tent that fits could ever beat it."
+
+  - type: bug
+    after: statistics-from-input
+    prompt: "The program should print the share of games of 200 or more as `66.66666666666667%`, but it prints `66.0%`. The counts should stay `int` values. Which line is wrong?"
+    stdin: |
+      250
+      120
+      210
+      end
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int games = 0;
+      int high = 0;
+      while (true) {
+          String line = scanner.nextLine();
+          if (line.equals("end")) {
+              break;
+          }
+          games++;
+          if (Integer.valueOf(line) >= 200) {
+              high++;
+          }
+      }
+      double share = 100 * high / games; // BUG
+      System.out.println(share + "%");
+    fix: double share = 100.0 * high / games;
+    why: "`100 * high / games` is worked out with `int` values: 200 / 3 is 66, and only then is it stored in the double, as 66.0. Starting with `100.0` makes the calculation a double from the start, so the decimals stay."
+
+  - type: bug
+    after: commands-and-bad-input
+    prompt: "Points from 0 to 10 are valid, so `ten` should get the message `Points must be a whole number from 0 to 10`. Which line is wrong?"
+    pre: |
+      public static int toNumber(String text) {
+          try {
+              return Integer.valueOf(text);
+          } catch (Exception e) {
+              return 0; // BUG
+          }
+      }
+    body: |
+      int points = toNumber("ten");
+      if (points < 0 || points > 10) {
+          System.out.println("Points must be a whole number from 0 to 10");
+      } else {
+          System.out.println("Added " + points + " points");
+      }
+    fix: return -1;
+    why: "The value returned for text that isn't a number must be one that no valid input can have, so that the range check catches it. 0 is valid points, so `ten` passes as 0. -1 isn't, so the check turns it into the message."
+
+  - type: bug
+    after: questions-about-a-file
+    prompt: "Each line has a station's name, its bikes and its free docks. The program should print `Bikes: 10`. Which line is wrong?"
+    body: |
+      Scanner scanner = new Scanner("Harbor,3,12\nLibrary,7,2\n");
+      int bikes = 0;
+      while (scanner.hasNextLine()) {
+          String[] parts = scanner.nextLine().split(",");
+          bikes += Integer.valueOf(parts[2]); // BUG
+      }
+      System.out.println("Bikes: " + bikes);
+    fix: bikes += Integer.valueOf(parts[1]);
+    why: "The parts are numbered from 0: `parts[0]` is the name, `parts[1]` the bikes and `parts[2]` the free docks. With `parts[2]`, the program adds up the docks, 12 + 2, and prints `Bikes: 14`."
+
+  - type: compiles
+    after: planning
+    classes: |
+      class Shelf {
+          private int books;
+
+          public Shelf() {
+              this.books = 0;
+          }
+
+          public int count() {
+              return this.books;
+          }
+
+          public int totalPages() {
+          }
+      }
+    body: |
+      Shelf shelf = new Shelf();
+      System.out.println(shelf.count());
+    why: "No. `totalPages()` promises to return an `int`, and its empty body returns nothing: javac says `missing return statement`, although `main` never calls it. That's why a method that isn't written yet gets a placeholder such as `return 0;`."
+
+  - type: compiles
+    after: commands-and-bad-input
+    body: |
+      try {
+          int hours = Integer.valueOf("7");
+      } catch (Exception e) {
+          System.out.println("Not a number");
+      }
+      System.out.println(hours);
+    why: "No. `hours` is created inside the `try` block's braces, so it only exists there: javac says `cannot find symbol`. Use the number inside the `try` block, or return it from a helper method such as `toNumber`."
+
+  - type: choice
+    after: planning
+    prompt: "A description names a thing with values of its own, questions about all of them, and what the user types. In which order is it best to build the parts?"
+    choices:
+      - "The data class, then the logic class, then the part that reads input and prints"
+      - "The part that reads input first, since the program starts there"
+      - "All three at once, and then run the program for the first time"
+    answer: 1
+    why: "Each part uses the ones before it: the logic keeps objects of the data class, and the input part calls the logic. Built in that order, each piece can be tried with a test drive as soon as it's written, so a mistake shows up while the code around it is still small."
+
+  - type: choice
+    after: statistics-from-input
+    prompt: "No valid values were read, so the total and the count are both 0. What does this print?"
+    body: |
+      int total = 0;
+      int count = 0;
+      System.out.println((double) total / count);
+    choices:
+      - "`0.0`"
+      - "`NaN`"
+      - "`Infinity`"
+      - "It crashes with an ArithmeticException"
+    answer: 2
+    verify: output
+    why: "Dividing 0.0 by 0 has no answer, and a double shows that as `NaN`, short for \"not a number\". It doesn't crash, which makes it easy to miss. (`total / count` with two `int` values would crash with an ArithmeticException.) That's why a program checks `count == 0` before working out an average."
+
+  - type: boss
+    after: statistics-from-input
+    prompt: |
+      A café asks its guests to rate their visit from 1 to 10. Read ratings until `end`, one per line. A number outside 1 to 10 is skipped. Print `Ratings: ` and the number of valid ratings. Then, if there's at least one, print `Average: ` and their average (calculated with `(double)`), and `Happy guests: ` and the share of ratings of 8 or more, calculated as `100.0 * happy / ratings`, followed by `%`. With no valid ratings, print `No ratings` after the count. For the input `9`, `7`, `11`, `10`, `4` and `end`, the program prints:
+
+      ```
+      Ratings: 4
+      Average: 7.5
+      Happy guests: 50.0%
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int ratings = 0;
+              int total = 0;
+              int happy = 0;
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.equals("end")) {
+                      break;
+                  }
+                  int rating = Integer.valueOf(line);
+                  if (rating < 1 || rating > 10) {
+                      continue;
+                  }
+                  ratings++;
+                  total += rating;
+                  if (rating >= 8) {
+                      happy++;
+                  }
+              }
+              System.out.println("Ratings: " + ratings);
+              if (ratings == 0) {
+                  System.out.println("No ratings");
+              } else {
+                  System.out.println("Average: " + (double) total / ratings);
+                  System.out.println("Happy guests: " + 100.0 * happy / ratings + "%");
+              }
+          }
+      }
+    hints:
+      - "Read each line as a String and check for `end` first. Then turn it into a number, and `continue` when it's below 1 or above 10."
+      - "Three counts before the loop: the valid ratings, their total and the ratings of 8 or more. Check `ratings == 0` before dividing."
+    tests:
+      - stdin: |
+          9
+          7
+          11
+          10
+          4
+          end
+      - stdin: |
+          end
+        hidden: true
+      - stdin: |
+          0
+          8
+          8
+          1
+          end
+        hidden: true

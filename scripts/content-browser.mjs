@@ -3,6 +3,7 @@
 // wrote to fidelity/out/content-checks.json: every solution on every test input, every example,
 // and javac's exact message for every example that must not compile.
 // Usage: npm run build && node scripts/content-browser.mjs
+// CONTENT_ONLY=<regular expression> replays only the programs whose place matches (while working on something).
 import { readFileSync, existsSync } from "node:fs";
 import { launchChromium } from "./browser.mjs";
 import { serve } from "./serve.mjs";
@@ -14,7 +15,10 @@ if (!existsSync(file)) {
   console.error("content-browser: run scripts/build-content.mjs first");
   process.exit(1);
 }
-const { jdk, checks } = JSON.parse(readFileSync(file, "utf8"));
+const all = JSON.parse(readFileSync(file, "utf8"));
+const only = process.env.CONTENT_ONLY ? new RegExp(process.env.CONTENT_ONLY, "i") : null;
+const { jdk } = all;
+const checks = only ? all.checks.filter((c) => only.test(c.where)) : all.checks;
 
 const { server, url } = await serve();
 const browser = await launchChromium();

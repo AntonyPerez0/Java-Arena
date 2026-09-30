@@ -524,19 +524,38 @@ questions:
 
   - module: recap
     type: predict
-    body: |
-      String[] parts = "12,5,x,8".split(",");
-      int total = 0;
-      String joined = "";
-      for (String part : parts) {
-          if (part.equals("x")) {
-              continue;
+    classes: |
+      class Plank {
+          private String wood;
+          private int length;
+
+          public Plank(String wood, int length) {
+              this.wood = wood;
+              this.length = length;
           }
-          total += Integer.valueOf(part);
-          joined += part;
+
+          public void cut(int piece) {
+              this.length -= piece;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Plank)) {
+                  return false;
+              }
+              Plank other = (Plank) compared;
+              return this.wood.equals(other.wood) && this.length == other.length;
+          }
       }
-      System.out.println(total + " " + joined);
-    why: "`split` gives four Strings. `continue` skips the `x` before it's used. The other parts are added up as numbers (12 + 5 + 8 = 25) and joined as text (`1258`), because `+=` on a String joins and on an int adds."
+    body: |
+      ArrayList<Plank> rack = new ArrayList<>();
+      rack.add(new Plank("oak", 100));
+      Plank piece = rack.get(0);
+      piece.cut(40);
+      System.out.println(rack.contains(new Plank("oak", 100)) + " " + rack.contains(new Plank("oak", 60)) + " " + (piece == rack.get(0)));
+    why: "`get` gives the plank in the list itself, not a copy, so cutting `piece` cuts the plank in the rack: it's now 60 cm. `contains` compares with `equals`, which looks at the wood and the length, so a new oak plank of 100 cm isn't found, while a new one of 60 cm is, although it's another object. `piece == rack.get(0)` is true: both are the same object."
 
   - module: hash-maps
     type: predict

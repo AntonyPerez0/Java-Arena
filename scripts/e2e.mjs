@@ -844,22 +844,27 @@ await test('Deathmatch: ranked play waits for 10 drills; Casual is open before t
   await ctx.close();
 });
 
-await test('Deathmatch: a finished step unlocks its drills; right answers of every type build the streak', async () => {
-  const { ctx, page, errors } = await newPage();
-  // The printing module finished (its drills are open); boss reps off for the instant types first.
-  const steps = Object.fromEntries(['printing-first-program', 'printing-several-lines', 'printing-print-and-println', 'printing-comments', 'printing-compiler-errors'].map((id) => [id, { done: true, challenges: {} }]));
-  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ state: { steps }, settings: { boss: false } }));
-  // The drills are picked at random: a seeded Math.random picks the same 12 every run, so the
-  // check for four types can't fail by chance (unseeded, it failed about one run in a hundred).
-  await ctx.addInitScript(() => {
-    let a = 20260930;
+/** Replaces Math.random in the page with a seeded generator (mulberry32), so random picks repeat. */
+function seedRandom(ctx, seed = 20260930) {
+  return ctx.addInitScript((start) => {
+    let a = start;
     Math.random = () => {
       a = (a + 0x6d2b79f5) | 0;
       let t = Math.imul(a ^ (a >>> 15), 1 | a);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-  });
+  }, seed);
+}
+
+await test('Deathmatch: a finished step unlocks its drills; right answers of every type build the streak', async () => {
+  const { ctx, page, errors } = await newPage();
+  // The printing module finished (its drills are open); boss reps off for the instant types first.
+  const steps = Object.fromEntries(['printing-first-program', 'printing-several-lines', 'printing-print-and-println', 'printing-comments', 'printing-compiler-errors'].map((id) => [id, { done: true, challenges: {} }]));
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ state: { steps }, settings: { boss: false } }));
+  // A seeded Math.random picks the same 12 drills every run, so the check for four types can't
+  // fail by chance (unseeded, it failed about one run in a hundred).
+  await seedRandom(ctx);
   await page.goto(BASE + 'deathmatch/');
   await page.locator('.lobby .modes').waitFor();
   await axe(page, 'deathmatch lobby');
@@ -950,6 +955,7 @@ await test('Casual: a miss costs a life and shows why; Continue goes on; a boss 
 await test('Deathmatch on a phone (360 px): reps of every type fit the screen', async () => {
   const { ctx, page } = await newPage({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
   await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ settings: { unlockAll: true, boss: false } }));
+  await seedRandom(ctx);
   await page.goto(BASE + 'deathmatch/');
   await page.locator('.lobby .modes').waitFor();
   await noOverflow(page, 'lobby 360');

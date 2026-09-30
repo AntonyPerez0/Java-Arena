@@ -1404,117 +1404,156 @@ steps:
           - "`equals` ignores capitals, so `OAKDALE` is equal to `Oakdale`, and the list's `contains`, which uses only `equals`, finds it."
           - "`\"OAKDALE\"` and `\"Oakdale\"` have different hash codes, so the map looks for the typed station with the wrong hash code and never calls `equals`. A new `Oakdale` has the same hash code as the key, and is found."
       - task: |
-          A ticket machine looks up fares, however the station is typed. Write the class `FareTable`, which keeps the fares, in cents, in a `HashMap<String, Integer>` whose keys are tidied station names. It has:
-
-          - a constructor without parameters, which creates the map
-          - `setFare(String station, int cents)`, which sets the fare to a station, replacing an old fare
-          - `fareTo(String station)`, which returns the fare to a station, or -1 if the station has no fare
-
-          Tidy every name with `trim` and `toLowerCase`, in both methods. The check runs:
+          Here's the stamp from the last challenge of step 3, done right. A dealer's price list is a `HashMap<Stamp, Integer>`, with prices in cents. A stamp has a country, a year and a condition, `mint` or `used`, and this dealer pays the same for either condition. In `Stamp.java`, write `equals` and `hashCode`: two stamps are equal when the country and the year match, whatever the condition. Then, in `Main.java`, write the method `albumValue(HashMap<Stamp, Integer> prices, ArrayList<Stamp> album)`, which returns what the stamps of an album are worth together: the price of each stamp, or 0 for a stamp that isn't on the list. The check runs:
 
           ```java fragment
-          FareTable fares = new FareTable();
-          fares.setFare("Oakdale", 450);
-          fares.setFare("River Street", 280);
-          System.out.println(fares.fareTo("oakdale"));
-          System.out.println(fares.fareTo("  RIVER STREET "));
-          System.out.println(fares.fareTo("Hillside"));
+          HashMap<Stamp, Integer> prices = new HashMap<>();
+          prices.put(new Stamp("Chile", 1970, "mint"), 250);
+          prices.put(new Stamp("Peru", 1985, "mint"), 400);
+          ArrayList<Stamp> album = new ArrayList<>();
+          album.add(new Stamp("Chile", 1970, "used"));
+          album.add(new Stamp("Peru", 1985, "mint"));
+          album.add(new Stamp("Chile", 1971, "mint"));
+          System.out.println(albumValue(prices, album));
           ```
 
           and expects:
 
           ```
-          450
-          280
-          -1
+          650
           ```
         seed:
-          FareTable.java: |
-            import java.util.HashMap;
+          Stamp.java: |
+            public class Stamp {
+                private String country;
+                private int year;
+                private String condition;
 
-            public class FareTable {
+                public Stamp(String country, int year, String condition) {
+                    this.country = country;
+                    this.year = year;
+                    this.condition = condition;
+                }
 
+                // Write the equals and hashCode methods here.
+
+                public String toString() {
+                    return this.country + " " + this.year + " (" + this.condition + ")";
+                }
             }
           Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+
             public class Main {
                 public static void main(String[] args) {
-                    FareTable fares = new FareTable();
-                    fares.setFare("Oakdale", 450);
-                    fares.setFare("River Street", 280);
-                    System.out.println(fares.fareTo("oakdale"));
-                    System.out.println(fares.fareTo("  RIVER STREET "));
-                    System.out.println(fares.fareTo("Hillside"));
+                    HashMap<Stamp, Integer> prices = new HashMap<>();
+                    prices.put(new Stamp("Chile", 1970, "mint"), 250);
+                    prices.put(new Stamp("Peru", 1985, "mint"), 400);
+                    ArrayList<Stamp> album = new ArrayList<>();
+                    album.add(new Stamp("Chile", 1970, "used"));
+                    album.add(new Stamp("Peru", 1985, "mint"));
+                    album.add(new Stamp("Chile", 1971, "mint"));
+                    System.out.println(albumValue(prices, album));
                 }
+
+                // Write the method albumValue here.
             }
         solution:
-          FareTable.java: |
-            import java.util.HashMap;
+          Stamp.java: |
+            import java.util.Objects;
 
-            public class FareTable {
-                private HashMap<String, Integer> fares;
+            public class Stamp {
+                private String country;
+                private int year;
+                private String condition;
 
-                public FareTable() {
-                    this.fares = new HashMap<>();
+                public Stamp(String country, int year, String condition) {
+                    this.country = country;
+                    this.year = year;
+                    this.condition = condition;
                 }
 
-                public void setFare(String station, int cents) {
-                    this.fares.put(tidy(station), cents);
-                }
-
-                public int fareTo(String station) {
-                    String key = tidy(station);
-                    if (this.fares.containsKey(key)) {
-                        return this.fares.get(key);
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
                     }
-                    return -1;
+                    if (!(compared instanceof Stamp)) {
+                        return false;
+                    }
+                    Stamp other = (Stamp) compared;
+                    return this.country.equals(other.country) && this.year == other.year;
                 }
 
-                private String tidy(String name) {
-                    return name.trim().toLowerCase();
+                public int hashCode() {
+                    return Objects.hash(this.country, this.year);
+                }
+
+                public String toString() {
+                    return this.country + " " + this.year + " (" + this.condition + ")";
                 }
             }
           Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+
             public class Main {
                 public static void main(String[] args) {
-                    FareTable fares = new FareTable();
-                    fares.setFare("Oakdale", 450);
-                    fares.setFare("River Street", 280);
-                    System.out.println(fares.fareTo("oakdale"));
-                    System.out.println(fares.fareTo("  RIVER STREET "));
-                    System.out.println(fares.fareTo("Hillside"));
+                    HashMap<Stamp, Integer> prices = new HashMap<>();
+                    prices.put(new Stamp("Chile", 1970, "mint"), 250);
+                    prices.put(new Stamp("Peru", 1985, "mint"), 400);
+                    ArrayList<Stamp> album = new ArrayList<>();
+                    album.add(new Stamp("Chile", 1970, "used"));
+                    album.add(new Stamp("Peru", 1985, "mint"));
+                    album.add(new Stamp("Chile", 1971, "mint"));
+                    System.out.println(albumValue(prices, album));
+                }
+
+                public static int albumValue(HashMap<Stamp, Integer> prices, ArrayList<Stamp> album) {
+                    int total = 0;
+                    for (Stamp stamp : album) {
+                        total += prices.getOrDefault(stamp, 0);
+                    }
+                    return total;
                 }
             }
         hints:
-          - "The class has one instance variable, `private HashMap<String, Integer> fares;`, which the constructor creates. A small helper method `tidy(String name)` that returns `name.trim().toLowerCase()` keeps both methods tidying the same way."
-          - "`setFare` puts `tidy(station)` with the cents. `fareTo` tidies the name, and returns `this.fares.get(key)` when `containsKey(key)` is true, or -1 otherwise."
+          - "`equals` and `hashCode` leave the condition out, as the paint shop's Color leaves the name out: `equals` compares the country and the year, and `hashCode` gives `Objects.hash` the same two values (with `import java.util.Objects;` at the top)."
+          - "`albumValue` goes through the album and adds up `prices.getOrDefault(stamp, 0)` for each stamp. A used Chile 1970 is equal to the mint one on the list, and has the same hash code, so the map finds its price."
         require:
-          - pattern: HashMap<String,\s*Integer>
-            message: "Keep the fares in a `HashMap<String, Integer>`."
-          - pattern: \.trim\s*\(
-            message: "Remove the spaces at the ends of the names with `trim()`."
-          - pattern: \.toLowerCase\s*\(
-            message: "Make the names lower case with `toLowerCase()`."
+          - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+            message: "Write the header exactly as `public boolean equals(Object compared)`, so that the map uses your method."
+          - pattern: \bpublic\s+int\s+hashCode\s*\(\s*\)
+            message: "Write the header exactly as `public int hashCode()`, so that the map uses your method."
+          - pattern: \bpublic\s+static\s+int\s+albumValue\s*\(\s*HashMap<Stamp,\s*Integer>\s+\w+\s*,\s*ArrayList<Stamp>\s+\w+\s*\)
+            message: "Write the method as `public static int albumValue(HashMap<Stamp, Integer> prices, ArrayList<Stamp> album)`."
         tests:
           - call: |
-              FareTable fares = new FareTable();
-              fares.setFare("Oakdale", 450);
-              fares.setFare("River Street", 280);
-              System.out.println(fares.fareTo("oakdale"));
-              System.out.println(fares.fareTo("  RIVER STREET "));
-              System.out.println(fares.fareTo("Hillside"));
+              HashMap<Stamp, Integer> prices = new HashMap<>();
+              prices.put(new Stamp("Chile", 1970, "mint"), 250);
+              prices.put(new Stamp("Peru", 1985, "mint"), 400);
+              ArrayList<Stamp> album = new ArrayList<>();
+              album.add(new Stamp("Chile", 1970, "used"));
+              album.add(new Stamp("Peru", 1985, "mint"));
+              album.add(new Stamp("Chile", 1971, "mint"));
+              System.out.println(albumValue(prices, album));
           - call: |
-              FareTable fares = new FareTable();
-              fares.setFare(" Hillside", 300);
-              fares.setFare("HILLSIDE ", 320);
-              System.out.println(fares.fareTo("hillside"));
-              fares.setFare("Depot", 0);
-              System.out.println(fares.fareTo("depot") + " " + fares.fareTo("Dep"));
+              HashMap<Stamp, Integer> prices = new HashMap<>();
+              prices.put(new Stamp("Japan", 1964, "used"), 120);
+              ArrayList<Stamp> album = new ArrayList<>();
+              System.out.println(albumValue(prices, album));
+              album.add(new Stamp("Japan", 1964, "mint"));
+              album.add(new Stamp("Japan", 1964, "used"));
+              album.add(new Stamp("Japan", 1965, "used"));
+              album.add(new Stamp("Chile", 1964, "used"));
+              System.out.println(albumValue(prices, album));
             hidden: true
           - call: |
-              FareTable fares = new FareTable();
-              System.out.println(fares.fareTo("Oakdale"));
-              fares.setFare("oak dale", 100);
-              System.out.println(fares.fareTo("Oakdale") + " " + fares.fareTo("OAK DALE"));
+              Stamp mint = new Stamp("Peru", 1985, "mint");
+              String start = "Pe";
+              Stamp used = new Stamp(start + "ru", 1985, "used");
+              System.out.println(mint.equals(used) + " " + (mint.hashCode() == used.hashCode()));
+              System.out.println(mint.equals(new Stamp("Peru", 1986, "mint")) + " " + mint.equals("Peru 1985 (mint)"));
             hidden: true
 
   - id: equals-hashcode-objects-as-keys

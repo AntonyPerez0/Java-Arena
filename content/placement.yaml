@@ -521,3 +521,88 @@ questions:
           }
       }
     why: "The check skips the rest of the command before its hours line is read, so the next round reads `3` as a command. A command should read all of its lines before checking any of them."
+
+  - module: recap
+    type: predict
+    classes: |
+      class Plank {
+          private String wood;
+          private int length;
+
+          public Plank(String wood, int length) {
+              this.wood = wood;
+              this.length = length;
+          }
+
+          public void cut(int piece) {
+              this.length -= piece;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Plank)) {
+                  return false;
+              }
+              Plank other = (Plank) compared;
+              return this.wood.equals(other.wood) && this.length == other.length;
+          }
+      }
+    body: |
+      ArrayList<Plank> rack = new ArrayList<>();
+      rack.add(new Plank("oak", 100));
+      Plank piece = rack.get(0);
+      piece.cut(40);
+      System.out.println(rack.contains(new Plank("oak", 100)) + " " + rack.contains(new Plank("oak", 60)) + " " + (piece == rack.get(0)));
+    why: "`get` gives the plank in the list itself, not a copy, so cutting `piece` cuts the plank in the rack: it's now 60 cm. `contains` compares with `equals`, which looks at the wood and the length, so a new oak plank of 100 cm isn't found, while a new one of 60 cm is, although it's another object. `piece == rack.get(0)` is true: both are the same object."
+
+  - module: hash-maps
+    type: predict
+    body: |
+      HashMap<String, Integer> stock = new HashMap<>();
+      stock.put("tea", 4);
+      stock.put("rice", 2);
+      stock.put("tea", 7);
+      System.out.println(stock.size() + " " + stock.get("tea") + " " + stock.get("oats"));
+    why: "A key has at most one value, so the second `put` for tea replaces 4 with 7 and the map keeps 2 keys. `get` gives `null` for a key that isn't in the map."
+
+  - module: equals-hashcode
+    type: predict
+    classes: |
+      class Seat {
+          private int number;
+
+          public Seat(int number) {
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.number == other.number;
+          }
+      }
+    body: |
+      ArrayList<Seat> list = new ArrayList<>();
+      HashMap<Seat, String> map = new HashMap<>();
+      list.add(new Seat(7));
+      map.put(new Seat(7), "Ada");
+      System.out.println(list.contains(new Seat(7)) + " " + map.containsKey(new Seat(7)));
+    why: "A list's `contains` uses only `equals`, so it finds the equal seat. A HashMap looks at the hash code first, and Seat has no `hashCode` of its own: each new Seat gets Java's default one, which in practice is a different number for each object, so `containsKey` never gets as far as `equals`."
+
+  - module: grouping
+    type: predict
+    body: |
+      HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+      String[] joins = {"Debate", "Amira", "Art", "Leo", "Debate", "Jonas"};
+      for (int i = 0; i < joins.length; i += 2) {
+          if (!clubs.containsKey(joins[i])) {
+              clubs.put(joins[i], new ArrayList<>());
+          }
+          clubs.get(joins[i]).add(joins[i + 1]);
+      }
+      System.out.println(clubs.get("Debate") + " " + clubs.size());
+    why: "Each club gets its own list the first time it's seen, and later names are added to that list, not put in its place. Debate holds both Amira and Jonas, and the map has two keys, Debate and Art."

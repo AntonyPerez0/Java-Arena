@@ -1,0 +1,279 @@
+topic: recap
+drills:
+  - type: predict
+    after: input-and-loops
+    body: |
+      int cars = 2;
+      int bikes = 3;
+      System.out.println("Vehicles: " + cars + bikes);
+      System.out.println("Vehicles: " + (cars + bikes));
+      System.out.println(cars + bikes + " vehicles");
+    why: "`+` works from left to right. `\"Vehicles: \" + cars` is already text, so `+ bikes` joins the 3 to it: `Vehicles: 23`. The parentheses add the numbers first. On the last line, the two ints come first, so they're added up before the text joins them."
+
+  - type: predict
+    after: methods-lists-arrays
+    pre: |
+      public static void addFee(int[] prices, int price) {
+          prices[0] += 50;
+          price += 50;
+      }
+    body: |
+      int[] prices = {300, 450};
+      int price = 300;
+      addFee(prices, price);
+      System.out.println(prices[0] + " " + price);
+    why: "The method gets a copy of the int `price`, so adding to the copy changes nothing in `main` (module 10). An array is an object, and the method gets a reference to the caller's own array, so `prices[0] += 50` changes it (module 15)."
+
+  - type: predict
+    after: text
+    body: |
+      String[] parts = "oak,,120".split(",");
+      System.out.println(parts.length + " [" + parts[1] + "]");
+    why: "Two commas next to each other have an empty part between them, and `split` keeps it. So there are 3 parts, and `parts[1]` is the empty String `\"\"`, which prints as nothing between the brackets."
+
+  - type: predict
+    after: classes-and-objects
+    classes: |
+      class Stall {
+          private int number;
+
+          public Stall(int number) {
+              this.number = number;
+          }
+      }
+    body: |
+      ArrayList<Stall> stalls = new ArrayList<>();
+      Stall first = new Stall(3);
+      stalls.add(first);
+      System.out.println(stalls.contains(first) + " " + stalls.contains(new Stall(3)));
+    why: "`contains` compares with `equals`. Stall has no `equals` of its own, and the one every class gets only asks whether it's the very same object. `first` is in the list, but `new Stall(3)` is another object, so it's not found. With an `equals` that compares the numbers, both would be `true`."
+
+  - type: predict
+    after: putting-it-together
+    classes: |
+      class Plank {
+          private int length;
+
+          public Plank(int length) {
+              this.length = length;
+          }
+
+          public int getLength() {
+              return this.length;
+          }
+
+          public void cut(int piece) {
+              this.length -= piece;
+          }
+      }
+    body: |
+      ArrayList<Plank> rack = new ArrayList<>();
+      rack.add(new Plank(100));
+      rack.add(new Plank(80));
+      Plank piece = rack.get(1);
+      piece.cut(30);
+      System.out.println(rack.get(1).getLength() + " " + rack.size());
+    why: "`rack.get(1)` gives a reference to the plank in the list, not a copy of it. So `piece` and `rack.get(1)` are the same plank, and the cut shows in the list: 50. `get` doesn't remove anything, so the rack still holds 2 planks."
+
+  - type: fill
+    after: methods-lists-arrays
+    prompt: Fill in the method's return type.
+    pre: |
+      public static [[ArrayList<String>]] longNames(ArrayList<String> names, int least) {
+          ArrayList<String> result = new ArrayList<>();
+          for (String name : names) {
+              if (name.length() >= least) {
+                  result.add(name);
+              }
+          }
+          return result;
+      }
+    body: |
+      ArrayList<String> farms = new ArrayList<>();
+      farms.add("Hill Farm");
+      farms.add("Oak");
+      farms.add("Green Acre");
+      System.out.println(longNames(farms, 5));
+    why: "The return type says what the method gives back. It returns `result`, an `ArrayList<String>`, so that's the type in the header, written with the type of its values in angle brackets."
+
+  - type: fill
+    after: classes-and-objects
+    prompt: Fill in the blank, so that equals checks what kind of object it was given.
+    classes: |
+      class Plank {
+          private String wood;
+          private int length;
+
+          public Plank(String wood, int length) {
+              this.wood = wood;
+              this.length = length;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared [[instanceof]] Plank)) {
+                  return false;
+              }
+              Plank other = (Plank) compared;
+              return this.wood.equals(other.wood) && this.length == other.length;
+          }
+      }
+    body: |
+      Plank oak = new Plank("oak", 90);
+      System.out.println(oak.equals(new Plank("oak", 90)) + " " + oak.equals("oak"));
+    why: "`compared instanceof Plank` is true when the object is a Plank. Anything else, such as the String `\"oak\"`, can't be equal to a plank, so the method returns `false` before the cast, which would crash on a String."
+
+  - type: bug
+    after: input-and-loops
+    prompt: "The loop should stop at `done` and print `Routes: 2`, but the program crashes when the input runs out. Which line is wrong?"
+    stdin: |
+      5
+      7
+      done
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      int routes = 0;
+      while (true) {
+          String line = scanner.nextLine();
+          if (line == "done") { // BUG
+              break;
+          }
+          routes++;
+      }
+      System.out.println("Routes: " + routes);
+    fix: if (line.equals("done")) {
+    why: "`==` on two Strings asks whether they're the very same object, and the line the Scanner read is never the same object as the text `\"done\"` in the program. So the loop never stops, and it crashes when there's no line left to read. Text is compared with `equals` (module 6)."
+
+  - type: bug
+    after: classes-and-objects
+    prompt: "The program should print `oak, 120 cm`, but it prints `oak, 0 cm`. Which line is wrong?"
+    classes: |
+      class Plank {
+          private String wood;
+          private int length;
+
+          public Plank(String wood, int length) {
+              this.wood = wood;
+              length = length; // BUG
+          }
+
+          public String toString() {
+              return this.wood + ", " + this.length + " cm";
+          }
+      }
+    body: |
+      System.out.println(new Plank("oak", 120));
+    fix: this.length = length;
+    why: "Inside the constructor, `length` alone is the parameter, so `length = length;` copies the parameter onto itself. The instance variable keeps its starting value, 0. `this.length` is the object's own variable (module 18)."
+
+  - type: compiles
+    after: methods-lists-arrays
+    pre: |
+      public static int indexOf(int[] values, int wanted) {
+          for (int i = 0; i < values.length; i++) {
+              if (values[i] == wanted) {
+                  return i;
+              }
+          }
+      }
+    body: |
+      int[] stalls = {3, 7, 12};
+      System.out.println(indexOf(stalls, 7));
+    why: "No. javac says `missing return statement`. When the loop ends without finding the value, the method reaches its end with nothing to return, though it promised an `int`. A search returns `-1` after the loop (module 28)."
+
+  - type: compiles
+    after: classes-and-objects
+    classes: |
+      class Plank {
+          private int length;
+
+          public Plank(int length) {
+              this.length = length;
+          }
+
+          public int getLength() {
+              return this.length;
+          }
+      }
+    body: |
+      Plank plank = new Plank(120);
+      System.out.println(plank.length);
+    why: "No. javac says `length has private access in Plank`. A private instance variable can only be used inside its own class. Other classes read it with the getter: `plank.getLength()`."
+
+  - type: choice
+    after: input-and-loops
+    prompt: "The ferry's deck holds 8 cars, and 20 cars are waiting. What does this print?"
+    body: |
+      int cars = 20;
+      System.out.println(cars / 8 + " full trips, " + cars % 8 + " cars on the last trip");
+    choices:
+      - "`2 full trips, 4 cars on the last trip`"
+      - "`2.5 full trips, 4 cars on the last trip`"
+      - "`2 full trips, 0 cars on the last trip`"
+      - "`3 full trips, 4 cars on the last trip`"
+    answer: 1
+    verify: output
+    why: "With two ints, `/` drops the decimals: 20 / 8 is 2, not 2.5. `%` gives what's left over after those 2 full trips of 8 cars: 20 - 16 = 4. Together they say that 20 cars need 3 trips, and the last one isn't full."
+
+  - type: choice
+    after: classes-and-objects
+    prompt: "Which header makes a list's `contains` and `indexOf` use a Plank's own equals?"
+    choices:
+      - "`public boolean equals(Object compared)`"
+      - "`public boolean equals(Plank compared)`"
+      - "`public boolean equals(Plank first, Plank second)`"
+    answer: 1
+    why: "The list methods call `equals` with an `Object` parameter, so only a method with exactly that header replaces the `equals` that every class gets. A method that takes a Plank compiles, but it's a second method with the same name (module 21), and the list never calls it."
+
+  - type: boss
+    after: text
+    prompt: |
+      A school play's rehearsals for the week are written on one line: each rehearsal is a day and its minutes, separated by a space, and the rehearsals are separated by commas, like `Mon 90,Wed 45,Fri 120`. Write the method `rehearsalMinutes(String week)`, which returns the minutes of the week added up. The check runs `System.out.println(rehearsalMinutes("Mon 90,Wed 45,Fri 120"));` and expects:
+
+      ```
+      255
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(rehearsalMinutes("Mon 90,Wed 45,Fri 120"));
+          }
+
+          // Write the method rehearsalMinutes here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(rehearsalMinutes("Mon 90,Wed 45,Fri 120"));
+          }
+
+          public static int rehearsalMinutes(String week) {
+              int total = 0;
+              String[] rehearsals = week.split(",");
+              for (String rehearsal : rehearsals) {
+                  String[] parts = rehearsal.split(" ");
+                  total += Integer.valueOf(parts[1]);
+              }
+              return total;
+          }
+      }
+    hints:
+      - "Split the week at the commas first: each part is one rehearsal, like `Wed 45`. Then split each rehearsal at the space, and its second part, at index 1, is the minutes."
+      - "Add up `Integer.valueOf(parts[1])` in a loop, and return the total after the loop. The method starts `public static int rehearsalMinutes(String week) {`."
+    require:
+      - pattern: \bpublic\s+static\s+int\s+rehearsalMinutes\s*\(\s*String\s+\w+\s*\)
+        message: "Write the method as `public static int rehearsalMinutes(String week)`."
+      - pattern: \.split\s*\(
+        message: "Take the line apart with `split`."
+    tests:
+      - call: System.out.println(rehearsalMinutes("Mon 90,Wed 45,Fri 120"));
+      - call: |
+          System.out.println(rehearsalMinutes("Sat 180"));
+          System.out.println(rehearsalMinutes("Mon 30,Tue 30,Wed 30,Thu 30,Fri 30"));
+        hidden: true
+      - call: |
+          String day = "Sun";
+          System.out.println(rehearsalMinutes(day + " 5,Mon 1005"));
+        hidden: true

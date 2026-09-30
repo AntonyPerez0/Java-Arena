@@ -279,10 +279,12 @@ function codeOf(where, value) {
 }
 
 /** Imports a ```java main example gets automatically, when it uses these classes. */
-const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", Collections: "java.util.Collections", HashMap: "java.util.HashMap", Random: "java.util.Random" };
+const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", Collections: "java.util.Collections", HashMap: "java.util.HashMap", Objects: "java.util.Objects", Random: "java.util.Random" };
 function importsFor(code) {
+  // Comments and string and char literals don't count, and neither does a class of the program's own.
+  const java = code.replace(/"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, " ");
   const lines = Object.entries(AUTO_IMPORTS)
-    .filter(([name]) => new RegExp(`\\b${name}\\b`).test(code))
+    .filter(([name]) => new RegExp(`\\b${name}\\b`).test(java) && !new RegExp(`\\b(class|interface|enum|record)\\s+${name}\\b`).test(java))
     .map(([, full]) => `import ${full};\n`);
   return lines.length ? lines.join("") + "\n" : "";
 }

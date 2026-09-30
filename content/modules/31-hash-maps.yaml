@@ -1,0 +1,1750 @@
+id: hash-maps
+summary: Finding a value by a key instead of by an index. HashMap with its keys and values, put, get and getOrDefault, one value per key, containsKey and remove, tidy keys, objects as values, a hash map inside a class, counting, and going through the keys and values in an order you choose. MOOC section 8.2.
+steps:
+  - id: hash-maps-keys-and-values
+    slug: keys-and-values
+    title: Keys and values
+    text: |
+      A list keeps its values in a row, and you find a value by its index: `get(0)`, `get(1)` and so on. Often, though, you want a value by something else. Tickets and luggage tags name airports by three-letter codes: `ACC` is Accra, `LIS` is Lisbon. With the codes in one list and the cities in another, finding the city of `LIS` takes a linear search (module 28): go through the codes until one matches, then take the city at the same index.
+
+      A **hash map** is made for this. It holds **pairs**: each **key** (here, a code) is linked to a **value** (here, a city), and you get a value by giving its key.
+
+      ```java run
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, String> airports = new HashMap<>();
+              airports.put("ACC", "Accra");
+              airports.put("LIS", "Lisbon");
+              airports.put("YVR", "Vancouver");
+
+              System.out.println(airports.get("LIS"));
+              System.out.println(airports.get("YVR"));
+              System.out.println(airports.get("XYZ"));
+          }
+      }
+      ```
+
+      ```output
+      Lisbon
+      Vancouver
+      null
+      ```
+
+      - `HashMap` is in `java.util`, so it needs an import line, like `ArrayList`.
+      - `HashMap<String, String>` has two types in its angle brackets: first the type of the keys, then the type of the values.
+      - `put(key, value)` adds a pair to the map. `get(key)` gives the value linked to that key.
+      - When the key isn't in the map, `get` gives `null` (module 22): this map has no airport with the code `XYZ`. Nothing crashes, but the program has to be ready for that `null`.
+
+      Why "hash"? From each key, the map works out a number, the key's **hash code**, and uses it to decide where to keep the pair. To find the key again, `get` works out the same number and looks right there, instead of going through the pairs one by one. So finding a value by its key usually takes about the same short time whether the map holds ten pairs or a million. (Module 32 says more about hash codes, and part 12 of the course builds a small hash map to show how one works inside.)
+
+      ### Numbers as values
+
+      Keys and values can be of other types, but as with the values of a list, they must be class types: `Integer`, not `int`. A pantry counts its jars:
+
+      ```java main
+      HashMap<String, Integer> jars = new HashMap<>();
+      jars.put("marmalade", 3);
+      jars.put("plum jam", 5);
+      jars.put("pickles", 4);
+
+      int jam = jars.get("plum jam");
+      System.out.println("Plum jam: " + jam);
+      System.out.println("Marmalade and pickles: " + (jars.get("marmalade") + jars.get("pickles")));
+      System.out.println("Salsa: " + jars.get("salsa"));
+      ```
+
+      ```output
+      Plum jam: 5
+      Marmalade and pickles: 7
+      Salsa: null
+      ```
+
+      An `Integer` from the map turns into an `int` by itself, as one from a list does. But `null` isn't a number, so the `null` of a missing key can't become an `int`. Storing it in an `int` variable crashes the program:
+
+      ```java run crash
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, Integer> jars = new HashMap<>();
+              jars.put("marmalade", 3);
+              int salsa = jars.get("salsa");
+              System.out.println("Salsa: " + salsa);
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NullPointerException: Cannot invoke "java.lang.Integer.intValue()" because the return value of "java.util.HashMap.get(Object)" is null
+      	at Main.main(Main.java:7)
+      ```
+
+      To turn an `Integer` into an `int`, Java calls the Integer's `intValue()` method, and `get` gave no Integer to call it on.
+
+      ### A value for missing keys: getOrDefault
+
+      `getOrDefault(key, fallback)` gives the value of the key, or the fallback when the key isn't in the map. For counts, 0 is the natural fallback: no salsa in the map means no jars of salsa.
+
+      ```java main
+      HashMap<String, Integer> jars = new HashMap<>();
+      jars.put("marmalade", 3);
+      int marmalade = jars.getOrDefault("marmalade", 0);
+      int salsa = jars.getOrDefault("salsa", 0);
+      System.out.println(marmalade + " jars of marmalade, " + salsa + " jars of salsa");
+      ```
+
+      ```output
+      3 jars of marmalade, 0 jars of salsa
+      ```
+
+      - The fallback has the type of the values. For a `HashMap<String, String>`, it's a String, such as `"unknown"`.
+      - `getOrDefault` only reads. It doesn't add the key to the map: after it, the map still has no salsa.
+
+      **Your turn:** a travel desk looks up airport codes. Fill in the blanks. The program reads one airport code. If the map has it, the program prints the code and its city, like `NBO is in Nairobi`. If it doesn't, it prints `No airport with the code ` and the code. For the input `NBO`, it prints:
+
+      ```
+      NBO is in Nairobi
+      ```
+    fill: |
+      import java.util.HashMap;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              HashMap<String, String> airports = new HashMap<>();
+              airports.[[put]]("KEF", "Reykjavik");
+              airports.put("NBO", "Nairobi");
+              airports.put("AKL", "Auckland");
+              airports.put("CPT", "Cape Town");
+
+              String code = scanner.nextLine();
+              String city = airports.[[get]](code);
+              if (city == [[null]]) {
+                  System.out.println("No airport with the code " + code);
+              } else {
+                  System.out.println(code + " is in " + city);
+              }
+          }
+      }
+    hints:
+      - "`put(key, value)` adds a pair to the map, like the three lines after it. `get(key)` gives the value linked to a key."
+      - "For a code that isn't in the map, `get` gives `null`, so that's what `city` is compared with."
+    tests:
+      - stdin: NBO
+      - stdin: CPT
+        hidden: true
+      - stdin: KEF
+        hidden: true
+      - stdin: XYZ
+        hidden: true
+      - stdin: Nairobi
+        hidden: true
+    more:
+      - task: |
+          What does this program print? One of the foods isn't in the pantry.
+        predict: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, Integer> jars = new HashMap<>();
+                  jars.put("plum jam", 4);
+                  jars.put("marmalade", 2);
+                  jars.put("mustard", 6);
+                  System.out.println(jars.get("marmalade"));
+                  System.out.println(jars.get("ketchup"));
+                  System.out.println(jars.getOrDefault("mustard", 0));
+                  System.out.println(jars.getOrDefault("ketchup", 0));
+                  System.out.println(jars.getOrDefault("plum jam", 10) + jars.get("marmalade"));
+              }
+          }
+        hints:
+          - "`get` gives the value of a key that's in the map, and `null` for one that isn't: there's no ketchup."
+          - "`getOrDefault` uses the fallback only for a missing key. Plum jam is in the map, so the last line adds its 4 jars, not 10, to the 2 jars of marmalade."
+      - task: |
+          Chat apps turn shortcodes such as `:tada:` into emoji. Write the method `expand(HashMap<String, String> emoji, String message)`. The map links shortcodes to the names of their emoji. The method returns the message with every word that is a shortcode in the map replaced by the emoji's name in square brackets. Other words stay as they are. The words of a message are separated by single spaces. The check runs:
+
+          ```java fragment
+          HashMap<String, String> emoji = new HashMap<>();
+          emoji.put(":tada:", "party popper");
+          emoji.put(":rocket:", "rocket");
+          emoji.put(":coffee:", "hot beverage");
+          System.out.println(expand(emoji, "Launch day :rocket: :tada:"));
+          System.out.println(expand(emoji, ":coffee: first, then :eyes: code"));
+          ```
+
+          and expects:
+
+          ```
+          Launch day [rocket] [party popper]
+          [hot beverage] first, then :eyes: code
+          ```
+        seed: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, String> emoji = new HashMap<>();
+                  emoji.put(":tada:", "party popper");
+                  emoji.put(":rocket:", "rocket");
+                  emoji.put(":coffee:", "hot beverage");
+                  System.out.println(expand(emoji, "Launch day :rocket: :tada:"));
+                  System.out.println(expand(emoji, ":coffee: first, then :eyes: code"));
+              }
+
+              // Write the method expand here.
+          }
+        solution: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, String> emoji = new HashMap<>();
+                  emoji.put(":tada:", "party popper");
+                  emoji.put(":rocket:", "rocket");
+                  emoji.put(":coffee:", "hot beverage");
+                  System.out.println(expand(emoji, "Launch day :rocket: :tada:"));
+                  System.out.println(expand(emoji, ":coffee: first, then :eyes: code"));
+              }
+
+              public static String expand(HashMap<String, String> emoji, String message) {
+                  String result = "";
+                  for (String word : message.split(" ")) {
+                      String name = emoji.get(word);
+                      if (name == null) {
+                          result += word + " ";
+                      } else {
+                          result += "[" + name + "] ";
+                      }
+                  }
+                  return result.trim();
+              }
+          }
+        hints:
+          - "Split the message into words with `message.split(\" \")` and go through them. `emoji.get(word)` is the name of the word's emoji, or `null` when the word isn't a shortcode in the map."
+          - "Build the result in a String: add either the name in brackets or the word itself, and then a space. At the end, `trim()` removes the last space."
+        require:
+          - pattern: \bpublic\s+static\s+String\s+expand\s*\(\s*HashMap<String,\s*String>\s+\w+\s*,\s*String\s+\w+\s*\)
+            message: "Write the method as `public static String expand(HashMap<String, String> emoji, String message)`."
+          - pattern: \.(get|getOrDefault)\s*\(
+            message: "Look each word up in the map with `get`."
+        forbid:
+          - pattern: '\.equals\s*\(\s*":'
+            raw: true
+            message: "Look the words up in the map instead of comparing them with shortcodes written in the code."
+        tests:
+          - call: |
+              HashMap<String, String> emoji = new HashMap<>();
+              emoji.put(":tada:", "party popper");
+              emoji.put(":rocket:", "rocket");
+              emoji.put(":coffee:", "hot beverage");
+              System.out.println(expand(emoji, "Launch day :rocket: :tada:"));
+              System.out.println(expand(emoji, ":coffee: first, then :eyes: code"));
+          - call: |
+              HashMap<String, String> emoji = new HashMap<>();
+              emoji.put(":wave:", "waving hand");
+              emoji.put(":fire:", "fire");
+              emoji.put(":eyes:", "eyes");
+              System.out.println(expand(emoji, ":wave: :wave: hello"));
+              System.out.println(expand(emoji, "this demo is :fire:"));
+              System.out.println(expand(emoji, ":tada: :Fire: fire :eyes:"));
+            hidden: true
+          - call: |
+              HashMap<String, String> emoji = new HashMap<>();
+              emoji.put(":sparkles:", "sparkles");
+              System.out.println(expand(emoji, ":sparkles:"));
+              System.out.println(expand(emoji, "nothing to see"));
+              System.out.println(expand(new HashMap<>(), "no :sparkles: here"));
+            hidden: true
+
+  - id: hash-maps-one-value-per-key
+    slug: one-value-per-key
+    title: One value per key
+    text: |
+      A key is linked to **at most one value**. Putting a key that's already in the map doesn't add a second pair: the new value takes the place of the old one.
+
+      The front desk of a small hotel keeps the name of the guest in each room, with the room numbers as keys. Keys can be numbers too, and like values, they're `Integer`, not `int`. `put(204, "Okafor")` turns the 204 into an Integer by itself.
+
+      ```java main
+      HashMap<Integer, String> guests = new HashMap<>();
+      guests.put(204, "Okafor");
+      guests.put(310, "Lindqvist");
+      System.out.println(guests.get(204) + ", " + guests.size() + " rooms taken");
+
+      guests.put(204, "Tanaka");
+      System.out.println(guests.get(204) + ", " + guests.size() + " rooms taken");
+      ```
+
+      ```output
+      Okafor, 2 rooms taken
+      Tanaka, 2 rooms taken
+      ```
+
+      - `size()` is the number of keys in the map, which is also the number of pairs.
+      - The second `put(204, ...)` replaced Okafor with Tanaka. The map still has two pairs, and Okafor isn't in it anymore.
+      - Values have no such rule. Two rooms can have guests with the same name, since the rooms are different keys.
+
+      (When a key needs several values, such as all the guests of a room, the value can be a list. Module 33 does that.)
+
+      ### Checking and removing
+
+      | Method | What it does |
+      | --- | --- |
+      | `containsKey(key)` | `true` if the key is in the map, otherwise `false` |
+      | `remove(key)` | removes the key and its value; a key that isn't there changes nothing |
+      | `size()` | the number of keys |
+      | `isEmpty()` | `true` when the map has no keys at all |
+
+      ```java main
+      HashMap<Integer, String> guests = new HashMap<>();
+      guests.put(204, "Tanaka");
+      guests.put(310, "Lindqvist");
+
+      System.out.println(guests.containsKey(310));
+      guests.remove(310);
+      System.out.println(guests.containsKey(310) + " " + guests.get(310));
+      guests.remove(512);
+      System.out.println(guests.size() + " " + guests.isEmpty());
+      guests.remove(204);
+      System.out.println(guests.size() + " " + guests.isEmpty());
+      ```
+
+      ```output
+      true
+      false null
+      1 false
+      0 true
+      ```
+
+      Since `put` replaces, a program that must not lose a value checks first. Here a new guest gets a room only if nobody is in it:
+
+      ```java fragment
+      if (guests.containsKey(room)) {
+          System.out.println("Room " + room + " is taken");
+      } else {
+          guests.put(room, guest);
+      }
+      ```
+
+      ### Keys must match exactly
+
+      `get`, `containsKey` and `remove` find a key only if it's equal to a key in the map. The map works out the key's hash code, looks only at the keys with that same hash code, and uses `equals` to tell whether one of them is equal. (Module 32 shows why both of those matter.) For Strings, equal means that every character is the same: `"lis"` and `"LIS "` are different keys from `"LIS"`. Keys that people type often come with small letters or extra spaces, so tidy them into the map's form first:
+
+      ```java run
+      import java.util.HashMap;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              HashMap<String, String> airports = new HashMap<>();
+              airports.put("HEL", "Helsinki");
+              airports.put("LIS", "Lisbon");
+
+              String typed = scanner.nextLine();
+              System.out.println("As typed: " + airports.get(typed));
+              String code = typed.trim().toUpperCase();
+              System.out.println("Tidied: " + airports.get(code));
+          }
+      }
+      ```
+
+      ```input
+        lis
+      ```
+
+      ```output
+      As typed: null
+      Tidied: Lisbon
+      ```
+
+      - `trim()` removes the spaces at the start and the end, and `toUpperCase()` turns the letters into capitals (module 16). The map's codes are in capitals, so the tidied code matches.
+      - Choose one form for the keys, such as capitals for codes or small letters for words and titles, and tidy every key into it: when you `put` it, and when you look it up.
+
+      **Your turn:** what does this program print? One room is put twice, and one guest's name is in the map twice.
+    predict: |
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<Integer, String> guests = new HashMap<>();
+              guests.put(101, "Moreau");
+              guests.put(102, "Achebe");
+              guests.put(101, "Kowalski");
+              guests.put(103, "Achebe");
+              System.out.println(guests.size());
+              System.out.println(guests.get(101));
+              guests.remove(102);
+              guests.remove(104);
+              System.out.println(guests.containsKey(102) + " " + guests.size());
+              System.out.println(guests.get(103));
+          }
+      }
+    hints:
+      - "Room 101 is put twice. A key has at most one value, so the second `put` replaces Moreau with Kowalski instead of adding a pair. Achebe in two rooms is fine: the rooms are different keys."
+      - "Removing 102 takes that pair out. The map has no room 104, so removing it changes nothing."
+    more:
+      - task: |
+          A pantry keeps its jars in a `HashMap<String, Integer>`: each food, and how many jars of it there are. A food is in the map only while there's at least one jar of it. Write the method `useOne(HashMap<String, Integer> jars, String food)`. If the pantry has the food, the method takes one jar away and returns `true`, and when that was the last jar, it removes the food from the map. If the pantry has no such food, the method changes nothing and returns `false`. The check runs:
+
+          ```java fragment
+          HashMap<String, Integer> jars = new HashMap<>();
+          jars.put("marmalade", 2);
+          jars.put("olives", 1);
+          System.out.println(useOne(jars, "marmalade") + " " + jars.get("marmalade"));
+          System.out.println(useOne(jars, "olives") + " " + jars.containsKey("olives"));
+          System.out.println(useOne(jars, "olives") + " " + jars.size());
+          ```
+
+          and expects:
+
+          ```
+          true 1
+          true false
+          false 1
+          ```
+        seed: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, Integer> jars = new HashMap<>();
+                  jars.put("marmalade", 2);
+                  jars.put("olives", 1);
+                  System.out.println(useOne(jars, "marmalade") + " " + jars.get("marmalade"));
+                  System.out.println(useOne(jars, "olives") + " " + jars.containsKey("olives"));
+                  System.out.println(useOne(jars, "olives") + " " + jars.size());
+              }
+
+              // Write the method useOne here.
+          }
+        solution: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, Integer> jars = new HashMap<>();
+                  jars.put("marmalade", 2);
+                  jars.put("olives", 1);
+                  System.out.println(useOne(jars, "marmalade") + " " + jars.get("marmalade"));
+                  System.out.println(useOne(jars, "olives") + " " + jars.containsKey("olives"));
+                  System.out.println(useOne(jars, "olives") + " " + jars.size());
+              }
+
+              public static boolean useOne(HashMap<String, Integer> jars, String food) {
+                  if (!jars.containsKey(food)) {
+                      return false;
+                  }
+                  int left = jars.get(food) - 1;
+                  if (left == 0) {
+                      jars.remove(food);
+                  } else {
+                      jars.put(food, left);
+                  }
+                  return true;
+              }
+          }
+        hints:
+          - "Start with `if (!jars.containsKey(food)) { return false; }`. After that, the food is surely in the map, so `jars.get(food)` is a number, not `null`."
+          - "Work out the jars that are left, `jars.get(food) - 1`. When that's 0, `remove` the food; otherwise `put` the new count, which replaces the old one."
+        require:
+          - pattern: \bpublic\s+static\s+boolean\s+useOne\s*\(\s*HashMap<String,\s*Integer>\s+\w+\s*,\s*String\s+\w+\s*\)
+            message: "Write the method as `public static boolean useOne(HashMap<String, Integer> jars, String food)`."
+          - pattern: \.remove\s*\(
+            message: "Take a food out of the map with `remove` when its last jar is used."
+        tests:
+          - call: |
+              HashMap<String, Integer> jars = new HashMap<>();
+              jars.put("marmalade", 2);
+              jars.put("olives", 1);
+              System.out.println(useOne(jars, "marmalade") + " " + jars.get("marmalade"));
+              System.out.println(useOne(jars, "olives") + " " + jars.containsKey("olives"));
+              System.out.println(useOne(jars, "olives") + " " + jars.size());
+          - call: |
+              HashMap<String, Integer> jars = new HashMap<>();
+              jars.put("pickles", 3);
+              jars.put("mustard", 1);
+              System.out.println(useOne(jars, "pickles") + " " + useOne(jars, "pickles") + " " + jars.get("pickles"));
+              System.out.println(useOne(jars, "Pickles") + " " + jars.size());
+              System.out.println(useOne(jars, "mustard") + " " + useOne(jars, "mustard") + " " + jars.containsKey("mustard"));
+              System.out.println(useOne(jars, "pickles") + " " + jars.isEmpty());
+            hidden: true
+          - call: |
+              HashMap<String, Integer> jars = new HashMap<>();
+              System.out.println(useOne(jars, "salsa") + " " + jars.containsKey("salsa") + " " + jars.size());
+              jars.put("salsa", 10);
+              System.out.println(useOne(jars, "salsa") + " " + jars.get("salsa"));
+            hidden: true
+      - task: |
+          A radio station takes song requests by text message, and people type the titles any way they like. The map `catalog` has every song the station can play, with the title in small letters as the key and the artist as the value. Read requests, one per line, until an empty line. Tidy each title with `trim()` and `toLowerCase()`, and then print either `Playing `, the tidied title, ` by ` and the artist, or `Not in the catalog: ` and the tidied title. For the input shown, the program prints:
+
+          ```
+          Playing night bus by Mira Vale
+          Playing paper lanterns by The Quiet Hours
+          Not in the catalog: blue tuesday
+          ```
+        seed: |
+          import java.util.HashMap;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  HashMap<String, String> catalog = new HashMap<>();
+                  catalog.put("paper lanterns", "The Quiet Hours");
+                  catalog.put("night bus", "Mira Vale");
+                  catalog.put("cedar smoke", "Juniper Road");
+                  catalog.put("slow river", "The Quiet Hours");
+
+                  // Read the requests here.
+              }
+          }
+        solution: |
+          import java.util.HashMap;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  HashMap<String, String> catalog = new HashMap<>();
+                  catalog.put("paper lanterns", "The Quiet Hours");
+                  catalog.put("night bus", "Mira Vale");
+                  catalog.put("cedar smoke", "Juniper Road");
+                  catalog.put("slow river", "The Quiet Hours");
+
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.isEmpty()) {
+                          break;
+                      }
+                      String title = line.trim().toLowerCase();
+                      String artist = catalog.get(title);
+                      if (artist == null) {
+                          System.out.println("Not in the catalog: " + title);
+                      } else {
+                          System.out.println("Playing " + title + " by " + artist);
+                      }
+                  }
+              }
+          }
+        hints:
+          - "Read in a `while (true)` loop that stops with `break` at the empty line. Tidy each line with `line.trim().toLowerCase()` before looking it up."
+          - "`catalog.get(title)` gives the artist, or `null` for a title the station doesn't have."
+        require:
+          - pattern: \.trim\s*\(
+            message: "Remove the extra spaces with `trim()`."
+          - pattern: \.toLowerCase\s*\(
+            message: "Turn the title into small letters with `toLowerCase()`, the form of the map's keys."
+        tests:
+          - stdin: |+
+              Night Bus
+                paper LANTERNS
+              Blue Tuesday
+
+          - stdin: "CEDAR SMOKE   \nslow river\nMira Vale\n\n"
+            hidden: true
+          - stdin: |+
+              Night bus
+              night bus
+
+              Slow River
+            hidden: true
+
+  - id: hash-maps-objects-as-values
+    slug: objects-as-values
+    title: Objects as values
+    text: |
+      The values of a map can be objects of your own class. Then the map finds a whole object by its key. A museum's audio guide works this way: each exhibit has a number on a small sign, and visitors type the number into the guide to hear about the exhibit. The keys are the numbers, and the values are `GuideStop` objects.
+
+      ```java run
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<Integer, GuideStop> stops = new HashMap<>();
+              GuideStop harbor = new GuideStop(12, "The Harbor at Dawn", 3);
+              GuideStop horse = new GuideStop(27, "Bronze Horse", 5);
+              stops.put(harbor.getNumber(), harbor);
+              stops.put(horse.getNumber(), horse);
+
+              GuideStop stop = stops.get(27);
+              System.out.println(stop.getTitle() + " is in room " + stop.getRoom());
+              stop.listen();
+              stops.get(27).listen();
+              stops.get(12).listen();
+              System.out.println(stops.get(27));
+              System.out.println(stops.get(12));
+          }
+      }
+      // ==== GuideStop.java ====
+      public class GuideStop {
+          private int number;
+          private String title;
+          private int room;
+          private int listens;
+
+          public GuideStop(int number, String title, int room) {
+              this.number = number;
+              this.title = title;
+              this.room = room;
+              this.listens = 0;
+          }
+
+          public int getNumber() {
+              return this.number;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int getRoom() {
+              return this.room;
+          }
+
+          public void listen() {
+              this.listens++;
+          }
+
+          public String toString() {
+              return this.title + " (room " + this.room + "), listens: " + this.listens;
+          }
+      }
+      ```
+
+      ```output
+      Bronze Horse is in room 5
+      Bronze Horse (room 5), listens: 2
+      The Harbor at Dawn (room 3), listens: 1
+      ```
+
+      - The key comes from the object itself: `stops.put(harbor.getNumber(), harbor)`. That's common: a product found by its code, a user by their username. The key is then kept twice, in the object and in the map, and the two should match.
+      - A map keeps references to its objects, as a list does (module 22). `stops.get(27)` gives a reference to the Bronze Horse object in the map, not a copy of it. So `stop.listen()` changes the object in the map, and there's no need to put it back.
+      - `stops.get(27).listen()` finds the object and calls its method in one go. It's the same object again, so it now has 2 listens.
+
+      ### A number with no stop
+
+      A visitor types 72 instead of 27. The map has no such key, `get` gives `null`, and calling a method on `null` crashes:
+
+      ```java run crash
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<Integer, GuideStop> stops = new HashMap<>();
+              GuideStop horse = new GuideStop(27, "Bronze Horse", 5);
+              stops.put(horse.getNumber(), horse);
+              stops.get(72).listen();
+          }
+      }
+      // ==== GuideStop.java ====
+      public class GuideStop {
+          private int number;
+          private String title;
+          private int room;
+          private int listens;
+
+          public GuideStop(int number, String title, int room) {
+              this.number = number;
+              this.title = title;
+              this.room = room;
+              this.listens = 0;
+          }
+
+          public int getNumber() {
+              return this.number;
+          }
+
+          public void listen() {
+              this.listens++;
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NullPointerException: Cannot invoke "GuideStop.listen()" because the return value of "java.util.HashMap.get(Object)" is null
+      	at Main.main(Main.java:8)
+      ```
+
+      When a key may be missing, keep what `get` gives in a variable, and check it before calling anything on it:
+
+      ```java fragment
+      GuideStop stop = stops.get(number);
+      if (stop == null) {
+          System.out.println("No stop with the number " + number);
+      } else {
+          stop.listen();
+          System.out.println(stop);
+      }
+      ```
+
+      **Your turn:** `Airport.java` is ready: an airport has a code, a city and a country, with getters and a toString. In `Main.java`, write the method `byCode(ArrayList<Airport> airports)`. It makes a new `HashMap<String, Airport>`, puts every airport of the list in it with the airport's code as the key, and returns the map. The check runs:
+
+      ```java fragment
+      ArrayList<Airport> list = new ArrayList<>();
+      list.add(new Airport("OSL", "Oslo", "Norway"));
+      list.add(new Airport("ICN", "Seoul", "South Korea"));
+      list.add(new Airport("MEX", "Mexico City", "Mexico"));
+      HashMap<String, Airport> airports = byCode(list);
+      System.out.println(airports.get("ICN"));
+      System.out.println(airports.get("MEX").getCity());
+      System.out.println(airports.size());
+      ```
+
+      and expects:
+
+      ```
+      Seoul, South Korea (ICN)
+      Mexico City
+      3
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Airport> list = new ArrayList<>();
+                list.add(new Airport("OSL", "Oslo", "Norway"));
+                list.add(new Airport("ICN", "Seoul", "South Korea"));
+                list.add(new Airport("MEX", "Mexico City", "Mexico"));
+                HashMap<String, Airport> airports = byCode(list);
+                System.out.println(airports.get("ICN"));
+                System.out.println(airports.get("MEX").getCity());
+                System.out.println(airports.size());
+            }
+
+            // Write the method byCode here.
+        }
+      Airport.java: |
+        public class Airport {
+            private String code;
+            private String city;
+            private String country;
+
+            public Airport(String code, String city, String country) {
+                this.code = code;
+                this.city = city;
+                this.country = country;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public String getCity() {
+                return this.city;
+            }
+
+            public String getCountry() {
+                return this.country;
+            }
+
+            public String toString() {
+                return this.city + ", " + this.country + " (" + this.code + ")";
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Airport> list = new ArrayList<>();
+                list.add(new Airport("OSL", "Oslo", "Norway"));
+                list.add(new Airport("ICN", "Seoul", "South Korea"));
+                list.add(new Airport("MEX", "Mexico City", "Mexico"));
+                HashMap<String, Airport> airports = byCode(list);
+                System.out.println(airports.get("ICN"));
+                System.out.println(airports.get("MEX").getCity());
+                System.out.println(airports.size());
+            }
+
+            public static HashMap<String, Airport> byCode(ArrayList<Airport> airports) {
+                HashMap<String, Airport> map = new HashMap<>();
+                for (Airport airport : airports) {
+                    map.put(airport.getCode(), airport);
+                }
+                return map;
+            }
+        }
+      Airport.java: |
+        public class Airport {
+            private String code;
+            private String city;
+            private String country;
+
+            public Airport(String code, String city, String country) {
+                this.code = code;
+                this.city = city;
+                this.country = country;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public String getCity() {
+                return this.city;
+            }
+
+            public String getCountry() {
+                return this.country;
+            }
+
+            public String toString() {
+                return this.city + ", " + this.country + " (" + this.code + ")";
+            }
+        }
+    hints:
+      - "The method starts `public static HashMap<String, Airport> byCode(ArrayList<Airport> airports) {`, and its first line makes the map: `HashMap<String, Airport> map = new HashMap<>();`."
+      - "Go through the list with a for-each loop, and put each airport in the map with `map.put(airport.getCode(), airport);`. After the loop, return the map."
+    require:
+      - pattern: \bpublic\s+static\s+HashMap<String,\s*Airport>\s+byCode\s*\(\s*ArrayList<Airport>\s+\w+\s*\)
+        message: "Write the method as `public static HashMap<String, Airport> byCode(ArrayList<Airport> airports)`."
+      - pattern: \.getCode\s*\(
+        message: "Use each airport's own code, `getCode()`, as its key."
+    tests:
+      - call: |
+          ArrayList<Airport> list = new ArrayList<>();
+          list.add(new Airport("OSL", "Oslo", "Norway"));
+          list.add(new Airport("ICN", "Seoul", "South Korea"));
+          list.add(new Airport("MEX", "Mexico City", "Mexico"));
+          HashMap<String, Airport> airports = byCode(list);
+          System.out.println(airports.get("ICN"));
+          System.out.println(airports.get("MEX").getCity());
+          System.out.println(airports.size());
+      - call: |
+          ArrayList<Airport> list = new ArrayList<>();
+          list.add(new Airport("CPT", "Cape Town", "South Africa"));
+          list.add(new Airport("KEF", "Reykjavik", "Iceland"));
+          HashMap<String, Airport> airports = byCode(list);
+          System.out.println(airports.get("KEF").getCountry());
+          System.out.println(airports.get("CPT"));
+          System.out.println(airports.get("Cape Town"));
+          System.out.println(airports.size() + " " + (airports.get("CPT") == list.get(0)));
+        hidden: true
+      - call: |
+          HashMap<String, Airport> none = byCode(new ArrayList<>());
+          System.out.println(none.size() + " " + none.get("OSL"));
+          ArrayList<Airport> list = new ArrayList<>();
+          list.add(new Airport("SYD", "Sydney", "Australia"));
+          HashMap<String, Airport> one = byCode(list);
+          list.add(new Airport("AKL", "Auckland", "New Zealand"));
+          System.out.println(one.size() + " " + one.get("SYD").getCity());
+        hidden: true
+    more:
+      - task: |
+          A radio station finds the tracks it plays by a key, and one track got two keys: its title, and a short name. What does this program print?
+        predict: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, Track> tracks = new HashMap<>();
+                  Track bus = new Track("Night Bus");
+                  tracks.put("night bus", bus);
+                  tracks.put("nb", bus);
+                  tracks.get("night bus").addPlay();
+                  tracks.get("nb").addPlay();
+                  bus.addPlay();
+                  System.out.println(tracks.get("night bus").getPlays());
+
+                  tracks.put("nb", new Track("Neon Bridges"));
+                  tracks.get("nb").addPlay();
+                  System.out.println(bus.getPlays() + " " + tracks.get("nb").getPlays());
+                  System.out.println(tracks.size() + " " + tracks.get("nb").getTitle());
+              }
+          }
+          // ==== Track.java ====
+          public class Track {
+              private String title;
+              private int plays;
+
+              public Track(String title) {
+                  this.title = title;
+                  this.plays = 0;
+              }
+
+              public String getTitle() {
+                  return this.title;
+              }
+
+              public int getPlays() {
+                  return this.plays;
+              }
+
+              public void addPlay() {
+                  this.plays++;
+              }
+          }
+        hints:
+          - "`new Track` runs only once for Night Bus, so both keys lead to the same object, and so does the variable `bus`. All three `addPlay` calls change that one object."
+          - "The second `put` for `nb` links the key to a new Track, Neon Bridges, which replaces the old value of `nb`. The Night Bus object doesn't change, and it's still in the map under `night bus`."
+      - task: |
+          A small hotel keeps its rooms in a `HashMap<Integer, Room>`, with the room numbers as keys. `Room.java` is ready: a room is free until a guest checks in, and it has the methods `isFree()`, `checkIn(String guest)` and `getGuest()`. In `Main.java`, write the method `checkInGuest(HashMap<Integer, Room> rooms, int number, String guest)`. It returns:
+
+          - `No room ` and the number, when the hotel has no room with that number,
+          - `Room `, the number and ` is taken`, when someone is already in the room,
+          - otherwise, it checks the guest in to the room and returns `Welcome, `, the guest, `! Room ` and the number.
+
+          The check runs:
+
+          ```java fragment
+          HashMap<Integer, Room> rooms = new HashMap<>();
+          rooms.put(101, new Room(101));
+          rooms.put(102, new Room(102));
+          System.out.println(checkInGuest(rooms, 102, "Achebe"));
+          System.out.println(checkInGuest(rooms, 102, "Moreau"));
+          System.out.println(checkInGuest(rooms, 105, "Moreau"));
+          System.out.println(rooms.get(102));
+          ```
+
+          and expects:
+
+          ```
+          Welcome, Achebe! Room 102
+          Room 102 is taken
+          No room 105
+          Room 102: Achebe
+          ```
+        seed:
+          Main.java: |
+            import java.util.HashMap;
+
+            public class Main {
+                public static void main(String[] args) {
+                    HashMap<Integer, Room> rooms = new HashMap<>();
+                    rooms.put(101, new Room(101));
+                    rooms.put(102, new Room(102));
+                    System.out.println(checkInGuest(rooms, 102, "Achebe"));
+                    System.out.println(checkInGuest(rooms, 102, "Moreau"));
+                    System.out.println(checkInGuest(rooms, 105, "Moreau"));
+                    System.out.println(rooms.get(102));
+                }
+
+                // Write the method checkInGuest here.
+            }
+          Room.java: |
+            public class Room {
+                private int number;
+                private String guest;
+
+                public Room(int number) {
+                    this.number = number;
+                    this.guest = null;
+                }
+
+                public int getNumber() {
+                    return this.number;
+                }
+
+                public String getGuest() {
+                    return this.guest;
+                }
+
+                public boolean isFree() {
+                    return this.guest == null;
+                }
+
+                public void checkIn(String guest) {
+                    this.guest = guest;
+                }
+
+                public void checkOut() {
+                    this.guest = null;
+                }
+
+                public String toString() {
+                    if (this.isFree()) {
+                        return "Room " + this.number + ": free";
+                    }
+                    return "Room " + this.number + ": " + this.guest;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.HashMap;
+
+            public class Main {
+                public static void main(String[] args) {
+                    HashMap<Integer, Room> rooms = new HashMap<>();
+                    rooms.put(101, new Room(101));
+                    rooms.put(102, new Room(102));
+                    System.out.println(checkInGuest(rooms, 102, "Achebe"));
+                    System.out.println(checkInGuest(rooms, 102, "Moreau"));
+                    System.out.println(checkInGuest(rooms, 105, "Moreau"));
+                    System.out.println(rooms.get(102));
+                }
+
+                public static String checkInGuest(HashMap<Integer, Room> rooms, int number, String guest) {
+                    Room room = rooms.get(number);
+                    if (room == null) {
+                        return "No room " + number;
+                    }
+                    if (!room.isFree()) {
+                        return "Room " + number + " is taken";
+                    }
+                    room.checkIn(guest);
+                    return "Welcome, " + guest + "! Room " + number;
+                }
+            }
+          Room.java: |
+            public class Room {
+                private int number;
+                private String guest;
+
+                public Room(int number) {
+                    this.number = number;
+                    this.guest = null;
+                }
+
+                public int getNumber() {
+                    return this.number;
+                }
+
+                public String getGuest() {
+                    return this.guest;
+                }
+
+                public boolean isFree() {
+                    return this.guest == null;
+                }
+
+                public void checkIn(String guest) {
+                    this.guest = guest;
+                }
+
+                public void checkOut() {
+                    this.guest = null;
+                }
+
+                public String toString() {
+                    if (this.isFree()) {
+                        return "Room " + this.number + ": free";
+                    }
+                    return "Room " + this.number + ": " + this.guest;
+                }
+            }
+        hints:
+          - "Keep the room in a variable, `Room room = rooms.get(number);`. When it's `null`, the hotel has no such room: return the message before calling anything on it."
+          - "Then check `room.isFree()`. When it is free, `room.checkIn(guest);` changes the Room object that's in the map, so there's nothing to put back."
+        require:
+          - pattern: \bpublic\s+static\s+String\s+checkInGuest\s*\(\s*HashMap<Integer,\s*Room>\s+\w+\s*,\s*int\s+\w+\s*,\s*String\s+\w+\s*\)
+            message: "Write the method as `public static String checkInGuest(HashMap<Integer, Room> rooms, int number, String guest)`."
+        tests:
+          - call: |
+              HashMap<Integer, Room> rooms = new HashMap<>();
+              rooms.put(101, new Room(101));
+              rooms.put(102, new Room(102));
+              System.out.println(checkInGuest(rooms, 102, "Achebe"));
+              System.out.println(checkInGuest(rooms, 102, "Moreau"));
+              System.out.println(checkInGuest(rooms, 105, "Moreau"));
+              System.out.println(rooms.get(102));
+          - call: |
+              HashMap<Integer, Room> rooms = new HashMap<>();
+              rooms.put(201, new Room(201));
+              rooms.put(202, new Room(202));
+              rooms.put(301, new Room(301));
+              Room first = rooms.get(201);
+              System.out.println(checkInGuest(rooms, 201, "Tanaka"));
+              System.out.println(first.getGuest() + " " + rooms.get(202) + " " + rooms.size());
+              System.out.println(checkInGuest(rooms, 201, "Okafor"));
+              first.checkOut();
+              System.out.println(checkInGuest(rooms, 201, "Okafor"));
+              System.out.println(checkInGuest(rooms, 302, "Lindqvist"));
+              System.out.println(rooms.get(201) + " " + rooms.containsKey(302));
+            hidden: true
+          - call: |
+              HashMap<Integer, Room> rooms = new HashMap<>();
+              System.out.println(checkInGuest(rooms, 1, "Kim"));
+              rooms.put(7, new Room(7));
+              System.out.println(checkInGuest(rooms, 7, "Kim"));
+              System.out.println(checkInGuest(rooms, 7, "Kim"));
+            hidden: true
+
+  - id: hash-maps-map-in-a-class
+    slug: map-in-a-class
+    title: A hash map inside a class
+    text: |
+      A map can be an instance variable, like a list (module 24). The class creates the map in its constructor, and its methods use it. The rest of the program calls the methods, and doesn't need to know that there's a map inside.
+
+      A radio station logs how many times each song was played:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              PlayLog log = new PlayLog();
+              log.record("Night Bus");
+              log.record("Paper Lanterns");
+              log.record("Night Bus");
+              System.out.println(log.timesPlayed("Night Bus"));
+              System.out.println(log.timesPlayed("Paper Lanterns"));
+              System.out.println(log.timesPlayed("Slow River"));
+          }
+      }
+      // ==== PlayLog.java ====
+      import java.util.HashMap;
+
+      public class PlayLog {
+          private HashMap<String, Integer> plays;
+
+          public PlayLog() {
+              this.plays = new HashMap<>();
+          }
+
+          public void record(String title) {
+              int before = this.plays.getOrDefault(title, 0);
+              this.plays.put(title, before + 1);
+          }
+
+          public int timesPlayed(String title) {
+              return this.plays.getOrDefault(title, 0);
+          }
+      }
+      ```
+
+      ```output
+      2
+      1
+      0
+      ```
+
+      - The constructor creates the map. Without `this.plays = new HashMap<>();`, the instance variable would be `null` (module 22), and the first `record` would crash with a NullPointerException.
+      - `record` is the way to **count** with a map: get the count so far, with 0 for a song that hasn't been played yet, and put back one more. The `put` replaces the old count, since a key has only one value.
+      - `timesPlayed` gives 0 for a song that was never played, not `null`, so the caller can use the answer as a number right away.
+
+      The count can also be written with `containsKey`. It does the same:
+
+      ```java fragment
+      if (this.plays.containsKey(title)) {
+          this.plays.put(title, this.plays.get(title) + 1);
+      } else {
+          this.plays.put(title, 1);
+      }
+      ```
+
+      ### Tidy the keys in one place
+
+      When the keys come from people, the class can tidy every key itself. A private method keeps the tidying in one place, and every method that uses a key calls it, so a title is tidied the same way whether it's recorded or looked up:
+
+      ```java fragment
+      public void record(String title) {
+          String key = tidy(title);
+          this.plays.put(key, this.plays.getOrDefault(key, 0) + 1);
+      }
+
+      public int timesPlayed(String title) {
+          return this.plays.getOrDefault(tidy(title), 0);
+      }
+
+      private String tidy(String title) {
+          return title.trim().toLowerCase();
+      }
+      ```
+
+      Now `record("Night Bus")` and `record(" night bus")` count the same song, and `timesPlayed("NIGHT BUS")` finds it. A method that forgot to call `tidy` would look for another key, and find nothing.
+
+      **Your turn:** an airport's baggage storage keeps travelers' bags on numbered shelves. Each bag gets a tag such as `B-417`, and the staff type the tags in any form: ` b-417` must find the same bag. Write the class `BagStorage`, which keeps the shelf of each bag in a `HashMap<String, Integer>`, with the tags as keys. Tidy every tag with `trim()` and `toUpperCase()` before it's used as a key. A private method `tidy` keeps that in one place.
+
+      - The constructor creates the map.
+      - `leave(String tag, int shelf)` puts the bag on the shelf. When a bag with that tag is already stored, the staff have moved it: the method gives back the shelf it was on before. For a new bag, it gives back -1.
+      - `collect(String tag)` is for a traveler who comes back for a bag. It gives back the shelf to fetch the bag from, and after that the bag isn't stored anymore. For a tag that isn't stored, it gives back -1.
+      - `bagsStored()` returns how many bags are stored.
+
+      `Main.java` is a test drive, and prints:
+
+      ```
+      -1
+      -1
+      3
+      2
+      1 -1 1
+      ```
+    seed:
+      BagStorage.java: |
+        import java.util.HashMap;
+
+        public class BagStorage {
+            private HashMap<String, Integer> shelves;
+
+            public BagStorage() {
+                // Create the map here.
+            }
+
+            public int leave(String tag, int shelf) {
+                return 0;
+            }
+
+            public int collect(String tag) {
+                return 0;
+            }
+
+            public int bagsStored() {
+                return 0;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                BagStorage storage = new BagStorage();
+                System.out.println(storage.leave("B-417", 3));
+                System.out.println(storage.leave(" c-802", 5));
+                System.out.println(storage.leave("b-417 ", 1));
+                System.out.println(storage.bagsStored());
+                System.out.println(storage.collect("B-417") + " " + storage.collect("b-417") + " " + storage.bagsStored());
+            }
+        }
+    solution:
+      BagStorage.java: |
+        import java.util.HashMap;
+
+        public class BagStorage {
+            private HashMap<String, Integer> shelves;
+
+            public BagStorage() {
+                this.shelves = new HashMap<>();
+            }
+
+            public int leave(String tag, int shelf) {
+                String key = tidy(tag);
+                int before = this.shelves.getOrDefault(key, -1);
+                this.shelves.put(key, shelf);
+                return before;
+            }
+
+            public int collect(String tag) {
+                String key = tidy(tag);
+                int shelf = this.shelves.getOrDefault(key, -1);
+                this.shelves.remove(key);
+                return shelf;
+            }
+
+            public int bagsStored() {
+                return this.shelves.size();
+            }
+
+            private String tidy(String tag) {
+                return tag.trim().toUpperCase();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                BagStorage storage = new BagStorage();
+                System.out.println(storage.leave("B-417", 3));
+                System.out.println(storage.leave(" c-802", 5));
+                System.out.println(storage.leave("b-417 ", 1));
+                System.out.println(storage.bagsStored());
+                System.out.println(storage.collect("B-417") + " " + storage.collect("b-417") + " " + storage.bagsStored());
+            }
+        }
+    hints:
+      - "The constructor needs `this.shelves = new HashMap<>();`, or the map stays `null`. Then write `private String tidy(String tag) { return tag.trim().toUpperCase(); }`, and call it first in every method that gets a tag."
+      - "`leave` and `collect` both start by getting the shelf the map has for the tag, `getOrDefault(key, -1)`, which is -1 for a tag that isn't stored. Then `leave` puts the new shelf, which replaces an old one, and `collect` takes the tag out with `remove`. Both give back the shelf they got first."
+    require:
+      - pattern: \.trim\s*\(
+        message: "Remove the extra spaces of a tag with `trim()`."
+      - pattern: \.toUpperCase\s*\(
+        message: "Turn a tag into capitals with `toUpperCase()`."
+      - pattern: \b(getOrDefault|containsKey)\s*\(
+        message: "Find out whether a tag is stored with `getOrDefault` or `containsKey`."
+      - pattern: \.put\s*\(
+        message: "Put a left bag's shelf in the map with `put`."
+      - pattern: \.remove\s*\(
+        message: "Take a collected bag out of the map with `remove`."
+    forbid:
+      - pattern: \bArrayList\b
+        message: "Keep the tags and their shelves in the HashMap."
+    tests:
+      - name: The test drive
+      - call: |
+          BagStorage s = new BagStorage();
+          System.out.println(s.bagsStored() + " " + s.collect("X-1"));
+          System.out.println(s.leave("x-1", 7) + " " + s.leave("X-2", 7) + " " + s.leave(" X-1", 2) + " " + s.leave("X-1", 4));
+          System.out.println(s.bagsStored() + " " + s.collect("x-2 ") + " " + s.bagsStored());
+          System.out.println(s.collect(" x-1") + " " + s.collect("X-1") + " " + s.bagsStored() + " " + s.leave("X-2", 6));
+        hidden: true
+      - call: |
+          BagStorage a = new BagStorage();
+          BagStorage b = new BagStorage();
+          a.leave("K-9", 0);
+          System.out.println(b.collect("k-9") + " " + b.bagsStored() + " " + a.bagsStored());
+          System.out.println(a.leave("k-9 ", 12) + " " + a.collect("K-9") + " " + a.bagsStored());
+        hidden: true
+    more:
+      - task: |
+          A radio station keeps a separate play log for its morning show and for its evening show, with the `PlayLog` class from above and one more method, `songs()`, which returns how many different songs the log has. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  PlayLog morning = new PlayLog();
+                  PlayLog evening = new PlayLog();
+                  morning.record("Night Bus");
+                  evening.record("Night Bus");
+                  morning.record("Night Bus");
+                  evening.record("Slow River");
+                  System.out.println(morning.timesPlayed("Night Bus") + " " + evening.timesPlayed("Night Bus"));
+                  System.out.println(morning.timesPlayed("Slow River") + " " + evening.timesPlayed("Slow River"));
+                  System.out.println(morning.songs() + " " + evening.songs());
+              }
+          }
+          // ==== PlayLog.java ====
+          import java.util.HashMap;
+
+          public class PlayLog {
+              private HashMap<String, Integer> plays;
+
+              public PlayLog() {
+                  this.plays = new HashMap<>();
+              }
+
+              public void record(String title) {
+                  int before = this.plays.getOrDefault(title, 0);
+                  this.plays.put(title, before + 1);
+              }
+
+              public int timesPlayed(String title) {
+                  return this.plays.getOrDefault(title, 0);
+              }
+
+              public int songs() {
+                  return this.plays.size();
+              }
+          }
+        hints:
+          - "Each `new PlayLog()` runs the constructor, which creates a map of its own. So the two logs have two separate maps, and a song recorded in one isn't in the other."
+          - "The morning log gets Night Bus twice, and the evening log gets Night Bus once and Slow River once. `songs()` is the size of the log's own map: the number of different titles, not of plays."
+      - task: |
+          A museum's audio guide keeps two maps with the same keys, the stop numbers: one for the title of each stop, and one for how many times each stop has been played. Write the class `AudioGuide`:
+
+          - The constructor creates both maps.
+          - `addStop(int number, String title)` adds a stop.
+          - `play(int number)` returns the stop's title and counts one more play of the stop. For a number with no stop, it returns `No stop ` and the number, and counts nothing.
+          - `playsOf(int number)` returns how many times the stop has been played: 0 for a stop that hasn't been played yet, and for a number with no stop.
+
+          The test drive in `Main.java` prints:
+
+          ```
+          Bronze Horse
+          Bronze Horse
+          No stop 72
+          2 0 0
+          ```
+        seed:
+          AudioGuide.java: |
+            import java.util.HashMap;
+
+            public class AudioGuide {
+                private HashMap<Integer, String> titles;
+                private HashMap<Integer, Integer> plays;
+
+                public AudioGuide() {
+                    // Create the maps here.
+                }
+
+                public void addStop(int number, String title) {
+                    // Replace the placeholders with the real code.
+                }
+
+                public String play(int number) {
+                    return "";
+                }
+
+                public int playsOf(int number) {
+                    return 0;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    AudioGuide guide = new AudioGuide();
+                    guide.addStop(12, "The Harbor at Dawn");
+                    guide.addStop(27, "Bronze Horse");
+                    System.out.println(guide.play(27));
+                    System.out.println(guide.play(27));
+                    System.out.println(guide.play(72));
+                    System.out.println(guide.playsOf(27) + " " + guide.playsOf(12) + " " + guide.playsOf(72));
+                }
+            }
+        solution:
+          AudioGuide.java: |
+            import java.util.HashMap;
+
+            public class AudioGuide {
+                private HashMap<Integer, String> titles;
+                private HashMap<Integer, Integer> plays;
+
+                public AudioGuide() {
+                    this.titles = new HashMap<>();
+                    this.plays = new HashMap<>();
+                }
+
+                public void addStop(int number, String title) {
+                    this.titles.put(number, title);
+                }
+
+                public String play(int number) {
+                    if (!this.titles.containsKey(number)) {
+                        return "No stop " + number;
+                    }
+                    this.plays.put(number, this.plays.getOrDefault(number, 0) + 1);
+                    return this.titles.get(number);
+                }
+
+                public int playsOf(int number) {
+                    return this.plays.getOrDefault(number, 0);
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    AudioGuide guide = new AudioGuide();
+                    guide.addStop(12, "The Harbor at Dawn");
+                    guide.addStop(27, "Bronze Horse");
+                    System.out.println(guide.play(27));
+                    System.out.println(guide.play(27));
+                    System.out.println(guide.play(72));
+                    System.out.println(guide.playsOf(27) + " " + guide.playsOf(12) + " " + guide.playsOf(72));
+                }
+            }
+        hints:
+          - "In the constructor, create both maps with `new HashMap<>()`. `addStop` puts the title in `this.titles`, under the number."
+          - "In `play`, check `this.titles.containsKey(number)` first, and return the message when the stop is missing. Otherwise count the play the way `record` does above, `this.plays.put(number, this.plays.getOrDefault(number, 0) + 1);`, and return the title. `playsOf` is a `getOrDefault` with 0."
+        forbid:
+          - pattern: \bArrayList\b
+            message: "Keep the titles and the plays in the two HashMaps."
+        tests:
+          - name: The test drive
+          - call: |
+              AudioGuide guide = new AudioGuide();
+              guide.addStop(3, "Glass Garden");
+              guide.addStop(8, "The Iron Clock");
+              guide.addStop(15, "Map of the Old Port");
+              System.out.println(guide.play(8) + ", " + guide.play(3) + ", " + guide.play(8) + ", " + guide.play(8));
+              System.out.println(guide.play(5) + " " + guide.play(5));
+              System.out.println(guide.playsOf(8) + " " + guide.playsOf(3) + " " + guide.playsOf(15) + " " + guide.playsOf(5));
+            hidden: true
+          - call: |
+              AudioGuide guide = new AudioGuide();
+              System.out.println(guide.play(1) + " " + guide.playsOf(1));
+              guide.addStop(1, "Welcome Hall");
+              System.out.println(guide.play(1) + " " + guide.playsOf(1));
+              AudioGuide other = new AudioGuide();
+              System.out.println(other.playsOf(1) + " " + other.play(1));
+            hidden: true
+
+  - id: hash-maps-going-through
+    slug: going-through
+    title: Going through a hash map
+    text: |
+      So far, every lookup started from a key. To do something with all the pairs, such as print them or add up the values, go through the map's keys. `keySet()` gives all the keys, and a for-each loop goes through them. `get` gives each key's value:
+
+      ```java main
+      HashMap<String, String> airports = new HashMap<>();
+      airports.put("YVR", "Vancouver");
+      airports.put("HEL", "Helsinki");
+      airports.put("LIS", "Lisbon");
+      airports.put("CPT", "Cape Town");
+
+      for (String code : airports.keySet()) {
+          System.out.println(code + ": " + airports.get(code));
+      }
+      ```
+
+      ```output
+      YVR: Vancouver
+      CPT: Cape Town
+      LIS: Lisbon
+      HEL: Helsinki
+      ```
+
+      Look at the order. It isn't the order the codes were added in, and it isn't alphabetical either. A hash map keeps each key where its hash code sends it, and the loop goes through the keys in that order. With these four String keys, the order happens to be the same every time the program runs. But Java makes no promise about it: other keys, or more of them, can come out in a completely different order. **Never write a program that depends on the order of a HashMap.** (Printing a whole map, `System.out.println(airports)`, shows its pairs as `{YVR=Vancouver, CPT=Cape Town, ...}`, in the same order.)
+
+      ### The values
+
+      When the keys don't matter, `values()` gives just the values. The order of the values is the map's order again, but a total doesn't depend on order:
+
+      ```java main
+      HashMap<String, Integer> jars = new HashMap<>();
+      jars.put("marmalade", 3);
+      jars.put("plum jam", 5);
+      jars.put("pickles", 1);
+
+      int total = 0;
+      for (int count : jars.values()) {
+          total += count;
+      }
+      System.out.println("Jars in all: " + total);
+      ```
+
+      ```output
+      Jars in all: 9
+      ```
+
+      ### In an order you choose
+
+      To print the pairs in a fixed order, copy the keys into a list, and sort the list with `Collections.sort` (module 28). Then go through the list, and get each value from the map:
+
+      ```java main
+      HashMap<String, String> airports = new HashMap<>();
+      airports.put("YVR", "Vancouver");
+      airports.put("HEL", "Helsinki");
+      airports.put("LIS", "Lisbon");
+      airports.put("CPT", "Cape Town");
+
+      ArrayList<String> codes = new ArrayList<>(airports.keySet());
+      Collections.sort(codes);
+      for (String code : codes) {
+          System.out.println(code + ": " + airports.get(code));
+      }
+      ```
+
+      ```output
+      CPT: Cape Town
+      HEL: Helsinki
+      LIS: Lisbon
+      YVR: Vancouver
+      ```
+
+      - `new ArrayList<>(...)` makes a new list with the same values (module 14), and it works with a key set too. A loop that adds each key to an empty list does the same.
+      - Sorting the list changes only the list. The map stays as it was.
+      - Java also has maps that keep an order of their own: `TreeMap` keeps its keys sorted, and `LinkedHashMap` keeps the order they were added in. This course uses `HashMap`, and sorts the keys whenever the order matters.
+
+      ### Picking some of the pairs
+
+      To pick pairs by their values, go through the keys and check each value. Collect the keys you want in a list, and sort it before printing. Here the pantry makes a shopping list of the foods with fewer than 2 jars left:
+
+      ```java main
+      HashMap<String, Integer> jars = new HashMap<>();
+      jars.put("marmalade", 3);
+      jars.put("plum jam", 1);
+      jars.put("pickles", 1);
+      jars.put("mustard", 4);
+
+      ArrayList<String> toBuy = new ArrayList<>();
+      for (String food : jars.keySet()) {
+          if (jars.get(food) < 2) {
+              toBuy.add(food);
+          }
+      }
+      Collections.sort(toBuy);
+      System.out.println("To buy: " + toBuy);
+      ```
+
+      ```output
+      To buy: [pickles, plum jam]
+      ```
+
+      As with a list (module 14), don't add or remove keys while a for-each goes through the same map. To remove pairs, collect their keys in a list first, and remove them after the loop.
+
+      **Your turn:** fill in the blanks of `printAirports`, which prints every code and city of the map, one per line, in the alphabetical order of the codes. The check runs:
+
+      ```java fragment
+      HashMap<String, String> airports = new HashMap<>();
+      airports.put("SYD", "Sydney");
+      airports.put("AKL", "Auckland");
+      airports.put("DXB", "Dubai");
+      airports.put("KEF", "Reykjavik");
+      printAirports(airports);
+      ```
+
+      and expects:
+
+      ```
+      AKL Auckland
+      DXB Dubai
+      KEF Reykjavik
+      SYD Sydney
+      ```
+    fill: |
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, String> airports = new HashMap<>();
+              airports.put("SYD", "Sydney");
+              airports.put("AKL", "Auckland");
+              airports.put("DXB", "Dubai");
+              airports.put("KEF", "Reykjavik");
+              printAirports(airports);
+          }
+
+          public static void printAirports(HashMap<String, String> airports) {
+              ArrayList<String> codes = new ArrayList<>(airports.[[keySet]]());
+              Collections.[[sort]](codes);
+              for (String code : codes) {
+                  System.out.println(code + " " + airports.[[get]](code));
+              }
+          }
+      }
+    hints:
+      - "The list is a copy of the map's keys, which `keySet()` gives. `Collections.sort` then puts the codes in alphabetical order."
+      - "The loop goes through the sorted codes, and each city comes from the map: `airports.get(code)`."
+    tests:
+      - call: |
+          HashMap<String, String> airports = new HashMap<>();
+          airports.put("SYD", "Sydney");
+          airports.put("AKL", "Auckland");
+          airports.put("DXB", "Dubai");
+          airports.put("KEF", "Reykjavik");
+          printAirports(airports);
+      - call: |
+          HashMap<String, String> airports = new HashMap<>();
+          airports.put("YVR", "Vancouver");
+          airports.put("HEL", "Helsinki");
+          airports.put("LIS", "Lisbon");
+          airports.put("NBO", "Nairobi");
+          airports.put("CPT", "Cape Town");
+          printAirports(airports);
+          System.out.println(airports.size());
+        hidden: true
+      - call: |
+          HashMap<String, String> airports = new HashMap<>();
+          airports.put("ICN", "Seoul");
+          printAirports(airports);
+          printAirports(new HashMap<>());
+          System.out.println("done");
+        hidden: true
+    more:
+      - task: |
+          A museum's audio guide keeps how many times each stop was played, with the stop numbers as keys. What does this program print? One stop is put twice.
+        predict: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<Integer, Integer> listens = new HashMap<>();
+                  listens.put(12, 40);
+                  listens.put(27, 15);
+                  listens.put(31, 8);
+                  listens.put(12, 25);
+
+                  int total = 0;
+                  for (int count : listens.values()) {
+                      total += count;
+                  }
+                  int popular = 0;
+                  for (int stop : listens.keySet()) {
+                      if (listens.get(stop) >= 15) {
+                          popular++;
+                      }
+                  }
+                  System.out.println(total);
+                  System.out.println(popular);
+                  System.out.println(listens.size());
+              }
+          }
+        hints:
+          - "The second `put` for stop 12 replaces 40 with 25, so the map has three pairs, with the values 25, 15 and 8. The first loop adds them up."
+          - "The second loop counts the stops whose value is at least 15. The order the loops go in doesn't matter for a total or a count."
+      - task: |
+          A radio station keeps how many times each song was played this week, in a `HashMap<String, Integer>` with the titles as keys. Write the method `printReport(HashMap<String, Integer> plays, int atLeast)`. It prints each song that was played at least `atLeast` times, as the title, `: ` and the number of plays, in the alphabetical order of the titles. Then it prints `Plays in all: ` and the plays of all the songs added up, the ones not printed too. The check runs:
+
+          ```java fragment
+          HashMap<String, Integer> plays = new HashMap<>();
+          plays.put("Night Bus", 7);
+          plays.put("Slow River", 2);
+          plays.put("Paper Lanterns", 5);
+          plays.put("Blue Tuesday", 9);
+          printReport(plays, 5);
+          ```
+
+          and expects:
+
+          ```
+          Blue Tuesday: 9
+          Night Bus: 7
+          Paper Lanterns: 5
+          Plays in all: 23
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, Integer> plays = new HashMap<>();
+                  plays.put("Night Bus", 7);
+                  plays.put("Slow River", 2);
+                  plays.put("Paper Lanterns", 5);
+                  plays.put("Blue Tuesday", 9);
+                  printReport(plays, 5);
+              }
+
+              // Write the method printReport here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, Integer> plays = new HashMap<>();
+                  plays.put("Night Bus", 7);
+                  plays.put("Slow River", 2);
+                  plays.put("Paper Lanterns", 5);
+                  plays.put("Blue Tuesday", 9);
+                  printReport(plays, 5);
+              }
+
+              public static void printReport(HashMap<String, Integer> plays, int atLeast) {
+                  ArrayList<String> titles = new ArrayList<>();
+                  int total = 0;
+                  for (String title : plays.keySet()) {
+                      total += plays.get(title);
+                      if (plays.get(title) >= atLeast) {
+                          titles.add(title);
+                      }
+                  }
+                  Collections.sort(titles);
+                  for (String title : titles) {
+                      System.out.println(title + ": " + plays.get(title));
+                  }
+                  System.out.println("Plays in all: " + total);
+              }
+          }
+        hints:
+          - "Go through `plays.keySet()`. Add every song's plays to a total, and add the titles with at least `atLeast` plays to a list."
+          - "A HashMap's own order isn't alphabetical, so sort the list with `Collections.sort` before printing it. Print the total after the list."
+        require:
+          - pattern: \bpublic\s+static\s+void\s+printReport\s*\(\s*HashMap<String,\s*Integer>\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static void printReport(HashMap<String, Integer> plays, int atLeast)`."
+          - pattern: \bsort\s*\(
+            message: "Sort the titles, so that they're printed in alphabetical order. A HashMap's own order can't be relied on."
+        tests:
+          - call: |
+              HashMap<String, Integer> plays = new HashMap<>();
+              plays.put("Night Bus", 7);
+              plays.put("Slow River", 2);
+              plays.put("Paper Lanterns", 5);
+              plays.put("Blue Tuesday", 9);
+              printReport(plays, 5);
+          - call: |
+              HashMap<String, Integer> plays = new HashMap<>();
+              plays.put("Cedar Smoke", 3);
+              plays.put("Harbor Lights", 12);
+              plays.put("Wild Thyme", 3);
+              plays.put("Copper Sky", 1);
+              plays.put("Afterglow", 8);
+              plays.put("Morning Ferry", 4);
+              printReport(plays, 3);
+              System.out.println("--");
+              printReport(plays, 20);
+            hidden: true
+          - call: |
+              HashMap<String, Integer> plays = new HashMap<>();
+              printReport(plays, 1);
+              plays.put("Lone Star Motel", 2);
+              plays.put("Echo Park", 0);
+              printReport(plays, 0);
+            hidden: true

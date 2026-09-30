@@ -1,0 +1,291 @@
+topic: grouping
+drills:
+  - type: predict
+    after: list-as-value
+    body: |
+      HashMap<String, ArrayList<String>> beds = new HashMap<>();
+      beds.getOrDefault("North", new ArrayList<>()).add("kale");
+      System.out.println(beds.size());
+      System.out.println(beds.getOrDefault("North", new ArrayList<>()));
+    why: "There's no North in the map, so `getOrDefault` returns the new list it was given, and the kale goes on that list. Nothing ever puts the list in the map, so the map stays empty: its size is 0, and the second `getOrDefault` gives another new, empty list. To keep the kale, the list has to be stored with `put`."
+
+  - type: predict
+    after: list-as-value
+    body: |
+      HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+      ArrayList<String> members = new ArrayList<>();
+      clubs.put("Debate", members);
+      clubs.put("Drama", members);
+      clubs.get("Debate").add("Amira");
+      System.out.println(clubs.get("Drama"));
+    why: "Both keys refer to the same list object: there's only one `new ArrayList<>()`. Adding Amira through Debate adds her to that one list, so Drama shows her too. Each key needs a list of its own, created with `new` for that key."
+
+  - type: predict
+    after: counting-and-grouping
+    body: |
+      String[] orders = {"tea", "soup", "tea", "pie", "tea"};
+      HashMap<String, Integer> counts = new HashMap<>();
+      for (String order : orders) {
+          counts.put(order, counts.getOrDefault(order, 0) + 1);
+      }
+      System.out.println(counts.get("tea") + " " + counts.size() + " " + counts.get("cake"));
+    why: "Tea was ordered 3 times. The map has one key for each different dish: tea, soup and pie, so its size is 3. `get` gives `null` for a key that isn't in the map, and `null` joined to a String prints as `null`. `getOrDefault(\"cake\", 0)` would have given 0."
+
+  - type: predict
+    after: counting-and-grouping
+    body: |
+      HashMap<String, ArrayList<String>> byTable = new HashMap<>();
+      byTable.put("3", new ArrayList<>());
+      byTable.put("12", new ArrayList<>());
+      byTable.put("7", new ArrayList<>());
+      ArrayList<String> tables = new ArrayList<>(byTable.keySet());
+      Collections.sort(tables);
+      System.out.println(tables);
+    why: "The keys are Strings, not numbers, so they're sorted character by character (module 28). `\"12\"` starts with `1`, which comes before `3` and `7`. With `Integer` keys, `Collections.sort` would give `[3, 7, 12]`."
+
+  - type: predict
+    after: groups-in-a-class
+    classes: |
+      class Register {
+          private HashMap<String, ArrayList<String>> clubs;
+
+          public Register() {
+              this.clubs = new HashMap<>();
+          }
+
+          public void join(String club, String student) {
+              if (!this.clubs.containsKey(club)) {
+                  this.clubs.put(club, new ArrayList<>());
+              }
+              this.clubs.get(club).add(student);
+          }
+
+          public ArrayList<String> members(String club) {
+              return new ArrayList<>(this.clubs.getOrDefault(club, new ArrayList<>()));
+          }
+      }
+    body: |
+      Register register = new Register();
+      register.join("Debate", "Amira");
+      register.join("Debate", "Jonas");
+      register.members("Debate").add("Leo");
+      ArrayList<String> debate = register.members("Debate");
+      debate.remove("Amira");
+      System.out.println(debate + " " + register.members("Debate"));
+    why: "This `members` returns a copy: `new ArrayList<>(...)` makes a new list with the same names. So Leo is added to a copy that's thrown away at once, and Amira is removed only from the copy in `debate`. The list in the map still holds Amira and Jonas."
+
+  - type: fill
+    after: list-as-value
+    prompt: Fill in the blank, so that each club gets a list of its own the first time someone joins it.
+    body: |
+      HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+      String[] joins = {"Debate", "Art", "Debate"};
+      for (String club : joins) {
+          if (!clubs.[[containsKey]](club)) {
+              clubs.put(club, new ArrayList<>());
+          }
+          clubs.get(club).add("member");
+      }
+      System.out.println(clubs.get("Debate").size());
+    why: "`containsKey(club)` is true when the club is already a key. With the `!`, the `if` puts a new list in the map only for a club's first member, so the second Debate member goes on the same list as the first."
+
+  - type: fill
+    after: counting-and-grouping
+    prompt: "Fill in the blank, an expression, so that the plants are grouped by the bed they grow in."
+    classes: |
+      class Plant {
+          private String name;
+          private String bed;
+
+          public Plant(String name, String bed) {
+              this.name = name;
+              this.bed = bed;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public String getBed() {
+              return this.bed;
+          }
+
+          public String toString() {
+              return this.name;
+          }
+      }
+    body: |
+      ArrayList<Plant> plants = new ArrayList<>();
+      plants.add(new Plant("kale", "North"));
+      plants.add(new Plant("mint", "Herb"));
+      plants.add(new Plant("leeks", "North"));
+      HashMap<String, ArrayList<Plant>> byBed = new HashMap<>();
+      for (Plant plant : plants) {
+          String bed = [[plant.getBed()]];
+          if (!byBed.containsKey(bed)) {
+              byBed.put(bed, new ArrayList<>());
+          }
+          byBed.get(bed).add(plant);
+      }
+      System.out.println(byBed.get("North"));
+    why: "The key of each group is the value the objects are grouped by, here the plant's bed, `plant.getBed()`. The plant itself goes on that bed's list."
+
+  - type: bug
+    after: list-as-value
+    prompt: "`join` should add the name to the club's list, and create the list the first time. Instead the program crashes. Which line is wrong?"
+    pre: |
+      public static void join(HashMap<String, ArrayList<String>> clubs, String club, String name) {
+          if (clubs.containsKey(club)) { // BUG
+              clubs.put(club, new ArrayList<>());
+          }
+          clubs.get(club).add(name);
+      }
+    body: |
+      HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+      join(clubs, "Debate", "Amira");
+      join(clubs, "Debate", "Jonas");
+      System.out.println(clubs.get("Debate"));
+    fix: if (!clubs.containsKey(club)) {
+    why: "Without the `!`, the new list is created only when the club already has one, which would also throw its members away. For a new club, no list is made, `get` returns `null`, and `add` on it crashes with a NullPointerException."
+
+  - type: bug
+    after: counting-and-grouping
+    prompt: "The program should print `2 1`. Which line is wrong?"
+    body: |
+      String[] dishes = {"soup", "curry", "soup"};
+      HashMap<String, Integer> counts = new HashMap<>();
+      for (String dish : dishes) {
+          counts.put(dish, counts.getOrDefault(dish, 1) + 1); // BUG
+      }
+      System.out.println(counts.get("soup") + " " + counts.get("curry"));
+    fix: counts.put(dish, counts.getOrDefault(dish, 0) + 1);
+    why: "The default is the count of a dish that hasn't been seen yet, and that's 0. With 1, the first order of every dish already counts as 2, so the program prints `3 2`."
+
+  - type: compiles
+    after: list-as-value
+    body: |
+      HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+      clubs.put("Debate", "Amira");
+      System.out.println(clubs.get("Debate"));
+    why: "No. The map's values are lists, `ArrayList<String>`, and `\"Amira\"` is a String: javac says `incompatible types`. Put a list in the map for the club, and add the name to that list: `clubs.get(\"Debate\").add(\"Amira\")`."
+
+  - type: compiles
+    after: counting-and-grouping
+    body: |
+      HashMap<String, Integer> counts = new HashMap<>();
+      counts.put("soup", 2);
+      counts.put("curry", 3);
+      ArrayList<String> dishes = counts.keySet();
+      Collections.sort(dishes);
+      System.out.println(dishes);
+    why: "No. `keySet()` gives the map's keys as a set, which isn't an ArrayList: javac says `incompatible types`. To sort the keys, copy them into a new list first, with `new ArrayList<>(counts.keySet())`."
+
+  - type: choice
+    after: counting-and-grouping
+    prompt: "A program prints every group of a `HashMap<String, ArrayList<String>>` by going through `keySet()` directly. In what order do the groups come out?"
+    choices:
+      - "In alphabetical order of the keys"
+      - "In the order the keys were first added"
+      - "In an order set by the keys' hash codes, which isn't the order they were added in and can't be relied on"
+    answer: 3
+    why: "A HashMap places its keys by their hash codes, and goes through them in that order. For String keys it's the same on every run, but it's not alphabetical and not the adding order, and more keys can change it. When the order matters, copy the keys into a list and sort it with `Collections.sort`."
+
+  - type: choice
+    after: fast-lookups
+    prompt: "Why doesn't finding a key in a hash map get slower as the map grows?"
+    choices:
+      - "The key's hash code tells the map where to look, so it compares the key only with the few entries stored there"
+      - "The map keeps its keys sorted and does a binary search"
+      - "The map goes through all its keys, but it does so faster than a list does"
+      - "The map keeps the keys used most often at the front"
+    answer: 1
+    why: "The hash code picks one bucket, and only the entries in that bucket are compared with the key. As the map grows, it adds buckets and spreads its entries out, so each bucket stays small. A HashMap doesn't keep its keys sorted, and it looks only in the one bucket the hash code picks."
+
+  - type: choice
+    after: fast-lookups
+    prompt: Which of these jobs fits a list better than a hash map?
+    choices:
+      - "Finding a student by card number"
+      - "Keeping every card scanned at a desk, in the order scanned, the same card possibly many times"
+      - "Counting how many times each dish was ordered"
+    answer: 2
+    why: "A list keeps its values in order, and the same value as often as it's added. A map keeps each key once, in an order of its own, but finds a key fast, which suits finding a student by card and counting by dish."
+
+  - type: boss
+    after: counting-and-grouping
+    prompt: |
+      Read words, one per line, until an empty line. Group them by their first letter, and print each letter and its words, like `m: [moon, mist]`: the letters in alphabetical order, and the words of each letter in the order they were read. For the input `sun`, `moon`, `sea`, `mist`, `star` and an empty line, the program prints:
+
+      ```
+      m: [moon, mist]
+      s: [sun, sea, star]
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              HashMap<String, ArrayList<String>> byLetter = new HashMap<>();
+              while (true) {
+                  String word = scanner.nextLine();
+                  if (word.isEmpty()) {
+                      break;
+                  }
+                  String first = word.substring(0, 1);
+                  if (!byLetter.containsKey(first)) {
+                      byLetter.put(first, new ArrayList<>());
+                  }
+                  byLetter.get(first).add(word);
+              }
+
+              ArrayList<String> letters = new ArrayList<>(byLetter.keySet());
+              Collections.sort(letters);
+              for (String letter : letters) {
+                  System.out.println(letter + ": " + byLetter.get(letter));
+              }
+          }
+      }
+    hints:
+      - "Keep a `HashMap<String, ArrayList<String>>`. Each word's key is its first letter, `word.substring(0, 1)`, and the word goes on that letter's list, which is created the first time the letter comes up."
+      - "After reading, copy the keys into a list with `new ArrayList<>(byLetter.keySet())`, sort it with `Collections.sort`, and print each letter with `byLetter.get(letter)`."
+    require:
+      - pattern: \bHashMap\b
+        message: "Group the words in a `HashMap` from a letter to a list of words."
+    tests:
+      - stdin: |+
+          sun
+          moon
+          sea
+          mist
+          star
+
+      - stdin: |+
+          zebra
+          yak
+          apple
+          ant
+          bee
+          yarn
+          ape
+
+        hidden: true
+      - stdin: |+
+          kiwi
+
+        hidden: true

@@ -1,10 +1,12 @@
+import { useEffect } from "react";
 import { Check, Lock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { COURSE_NAMES, moduleById, modulePath, planByCourse } from "../content";
 import { useStore } from "../state/store";
 import { moduleProgress, nextStep } from "../state/derived";
-import { stepPath } from "../content";
+import { prefetchStep, stepPath } from "../content";
 import { useTitle } from "../lib/title";
+import { loadStepPage } from "./editorPages";
 
 const COURSE_NOTES: Record<string, string> = {
   I: "Parts 1 to 7 of the MOOC: the basics of programming, up to classes, objects and larger programs.",
@@ -18,6 +20,8 @@ export default function Learn() {
   const next = nextStep(s);
   const courses = planByCourse();
   const started = Object.keys(s.steps).length > 0;
+  // Fetch the lesson the Continue button opens, so it shows at once.
+  useEffect(() => (next ? prefetchStep(next.module.id, next.step.slug, loadStepPage) : undefined), [next?.module.id, next?.step.slug]);
   return (
     <div className="learn">
       <div className="page-head">

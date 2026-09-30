@@ -1,0 +1,264 @@
+topic: hash-maps
+drills:
+  - type: predict
+    after: keys-and-values
+    body: |
+      HashMap<String, String> airports = new HashMap<>();
+      airports.put("AKL", "Auckland");
+      airports.put("NBO", "Nairobi");
+      System.out.println(airports.get("NBO"));
+      System.out.println(airports.get("Auckland"));
+    why: "`get` looks up a key. `Auckland` is a value of this map, not a key, so `get(\"Auckland\")` finds nothing and gives `null`. The key that leads to Auckland is `AKL`."
+
+  - type: predict
+    after: one-value-per-key
+    body: |
+      HashMap<String, Integer> plays = new HashMap<>();
+      plays.put("Night Bus", 4);
+      plays.put("night bus", 1);
+      plays.put("Night Bus", 6);
+      System.out.println(plays.size() + " " + plays.get("Night Bus"));
+    why: "Keys must match exactly, and `night bus` has small letters, so it's a key of its own: two keys in all. The third `put` uses a key that's already there, so its 6 replaces the 4."
+
+  - type: predict
+    after: objects-as-values
+    classes: |
+      class Stop {
+          private int listens;
+
+          public void listen() {
+              this.listens++;
+          }
+
+          public int getListens() {
+              return this.listens;
+          }
+      }
+    body: |
+      HashMap<Integer, Stop> stops = new HashMap<>();
+      stops.put(8, new Stop());
+      Stop stop = stops.get(8);
+      stop.listen();
+      stops.get(8).listen();
+      stops.put(9, stop);
+      stops.get(9).listen();
+      System.out.println(stops.get(8).getListens());
+    why: "There's only one Stop object. `get` gives a reference to it, not a copy, and `stops.put(9, stop)` links a second key to the same object. So all three `listen` calls change it, and key 8 leads to 3 listens."
+
+  - type: predict
+    after: map-in-a-class
+    body: |
+      HashMap<String, Integer> counts = new HashMap<>();
+      String[] reactions = ":fire: :eyes: :fire: :tada: :fire:".split(" ");
+      for (String r : reactions) {
+          counts.put(r, counts.getOrDefault(r, 0) + 1);
+      }
+      System.out.println(counts.get(":fire:") + " " + counts.get(":tada:") + " " + counts.size());
+    why: "Each reaction's count starts from the fallback 0 and goes up by one every time it comes up. `:fire:` comes up three times, `:tada:` once, and there are three different reactions, so the map has three keys."
+
+  - type: predict
+    after: going-through
+    body: |
+      HashMap<String, Integer> jars = new HashMap<>();
+      jars.put("marmalade", 3);
+      jars.put("pickles", 1);
+      jars.put("mustard", 2);
+      jars.put("marmalade", 1);
+      int total = 0;
+      int low = 0;
+      for (String food : jars.keySet()) {
+          total += jars.get(food);
+          if (jars.get(food) < 2) {
+              low++;
+          }
+      }
+      System.out.println(total + " " + low);
+    why: "The last `put` replaces marmalade's 3 with 1, so the values are 1, 1 and 2: 4 in all, and two foods with fewer than 2 jars. The loop goes through the keys in the map's own order, but a total and a count come out the same in any order."
+
+  - type: fill
+    after: keys-and-values
+    prompt: "Fill in the type of the map's values."
+    body: |
+      HashMap<String, [[Integer]]> rooms = new HashMap<>();
+      rooms.put("Okafor", 204);
+      System.out.println(rooms.get("Okafor") + 1);
+    why: "The values are whole numbers, and a map's types must be class types, as a list's must. So it's `Integer`: `int` doesn't compile there."
+
+  - type: fill
+    after: going-through
+    prompt: "Fill in the method call that gives the map's values, so that the program adds up the jars."
+    body: |
+      HashMap<String, Integer> jars = new HashMap<>();
+      jars.put("marmalade", 3);
+      jars.put("pickles", 4);
+      int total = 0;
+      for (int count : jars.[[values()]]) {
+          total += count;
+      }
+      System.out.println(total);
+    why: "`values()` gives all the values of the map, here the counts 3 and 4. `keySet()` would give the keys, which are Strings, and a String can't go into `int count`."
+
+  - type: bug
+    after: keys-and-values
+    prompt: "The program should print `Salsa: 0`, but it crashes. Which line is wrong?"
+    body: |
+      HashMap<String, Integer> jars = new HashMap<>();
+      jars.put("marmalade", 3);
+      int salsa = jars.get("salsa"); // BUG
+      System.out.println("Salsa: " + salsa);
+    fix: int salsa = jars.getOrDefault("salsa", 0);
+    why: "There's no salsa in the map, so `get` gives `null`, and `null` can't be stored in an `int`: the program stops with a NullPointerException. `getOrDefault(\"salsa\", 0)` gives 0 for a key that isn't there."
+
+  - type: bug
+    after: one-value-per-key
+    prompt: "The map's codes are in capitals and should stay that way, and `typed` is what a user typed. The program should print `LIS: Lisbon`. Which line is wrong?"
+    body: |
+      HashMap<String, String> airports = new HashMap<>();
+      airports.put("LIS", "Lisbon");
+      String typed = " lis ";
+      String code = typed.trim(); // BUG
+      System.out.println(code + ": " + airports.get(code));
+    fix: String code = typed.trim().toUpperCase();
+    why: "`trim()` removes the spaces, but the code is still `lis`, and keys must match exactly, so `get` gives `null`. Tidied into the form of the map's keys with `toUpperCase()`, it's `LIS`, which is in the map."
+
+  - type: bug
+    after: map-in-a-class
+    prompt: "The program should print `2`, but it prints `0`. `main` stays as it is. Which line is wrong?"
+    classes: |
+      class Tally {
+          private HashMap<String, Integer> counts;
+
+          public Tally() {
+              this.counts = new HashMap<>();
+          }
+
+          public void add(String key) {
+              String tidy = key.trim().toUpperCase();
+              this.counts.put(tidy, this.counts.getOrDefault(tidy, 0) + 1);
+          }
+
+          public int count(String key) {
+              return this.counts.getOrDefault(key, 0); // BUG
+          }
+      }
+    body: |
+      Tally tally = new Tally();
+      tally.add("hel");
+      tally.add("HEL ");
+      System.out.println(tally.count(" Hel"));
+    fix: return this.counts.getOrDefault(key.trim().toUpperCase(), 0);
+    why: "`add` tidies each key, so both calls count under `HEL`. `count` looks up ` Hel` as it is, and that isn't a key of the map, so it gets the fallback 0. A key has to be tidied the same way when it's looked up as when it's put."
+
+  - type: compiles
+    after: keys-and-values
+    body: |
+      HashMap<String, int> jars = new HashMap<>();
+      jars.put("marmalade", 3);
+      System.out.println(jars.get("marmalade"));
+    why: "No. A map's key and value types must be class types, as a list's must: `HashMap<String, Integer>`. `int` is a primitive type, and javac says `unexpected type`."
+
+  - type: compiles
+    after: keys-and-values
+    body: |
+      HashMap<String, String> airports = new HashMap<>();
+      airports.put("HEL", "Helsinki");
+      String city = airports.get("XYZ");
+      System.out.println(city);
+    why: "Yes. `get` gives a String, or `null` for a missing key, and a String variable can hold `null`. The program prints `null`. It doesn't crash, since nothing is called on `city`."
+
+  - type: choice
+    after: one-value-per-key
+    prompt: "`stock` is a `HashMap<String, Integer>` in which the key `\"rice\"` has the value 2. What does `stock.put(\"rice\", 5);` do?"
+    choices:
+      - "It replaces the 2 with 5, so `rice` has the value 5"
+      - "It adds a second pair, so `rice` has the values 2 and 5"
+      - "It adds 5 to the 2, so `rice` has the value 7"
+      - "Nothing, because `rice` is already in the map"
+    answer: 1
+    why: "A key has at most one value. Putting a key that's already in the map replaces its value, and the map keeps the same number of keys. To add to a count, get the old value first: `stock.put(\"rice\", stock.get(\"rice\") + 5)`."
+
+  - type: choice
+    after: going-through
+    prompt: "A `HashMap<String, String>` gets the keys `YVR`, `HEL`, `LIS` and `CPT`, added in that order. In what order does `for (String code : airports.keySet())` go through them?"
+    choices:
+      - "In the order they were added"
+      - "In alphabetical order"
+      - "In an order set by the keys' hash codes, which a program can't rely on"
+      - "In a new random order every time the loop runs"
+    answer: 3
+    why: "A hash map keeps each key where its hash code sends it, and the loop goes through the keys in that order: for these four, `YVR`, `CPT`, `LIS`, `HEL`. It isn't random, but it's neither the adding order nor alphabetical, and other or more keys can change it. To go through the keys in a fixed order, copy them into a list and sort it."
+
+  - type: boss
+    after: going-through
+    prompt: |
+      A museum's audio guide logs the stop numbers a visitor typed, on one line, separated by spaces, like `12 27 12 5 27 12`. Write the method `favoriteStop(String log)`, which returns the number the visitor typed most often. If two numbers were typed equally often, it returns the smaller of them. The log always has at least one number. The check runs:
+
+      ```java fragment
+      System.out.println(favoriteStop("12 27 12 5 27 12"));
+      System.out.println(favoriteStop("40 9 40 9"));
+      ```
+
+      and expects:
+
+      ```
+      12
+      9
+      ```
+    seed: |
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(favoriteStop("12 27 12 5 27 12"));
+              System.out.println(favoriteStop("40 9 40 9"));
+          }
+
+          // Write the method favoriteStop here.
+      }
+    solution: |
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(favoriteStop("12 27 12 5 27 12"));
+              System.out.println(favoriteStop("40 9 40 9"));
+          }
+
+          public static int favoriteStop(String log) {
+              HashMap<Integer, Integer> counts = new HashMap<>();
+              for (String part : log.split(" ")) {
+                  int stop = Integer.valueOf(part);
+                  counts.put(stop, counts.getOrDefault(stop, 0) + 1);
+              }
+              int best = -1;
+              for (int stop : counts.keySet()) {
+                  int count = counts.get(stop);
+                  if (best == -1 || count > counts.get(best) || (count == counts.get(best) && stop < best)) {
+                      best = stop;
+                  }
+              }
+              return best;
+          }
+      }
+    hints:
+      - "First count: split the log, turn each part into a number with `Integer.valueOf`, and count it in a `HashMap<Integer, Integer>` with `getOrDefault(stop, 0) + 1`."
+      - "Then go through the keys and keep the best stop so far. A stop beats it with a higher count, or with the same count and a smaller number. That way the answer doesn't depend on the map's order."
+    require:
+      - pattern: \bpublic\s+static\s+int\s+favoriteStop\s*\(\s*String\s+\w+\s*\)
+        message: "Write the method as `public static int favoriteStop(String log)`."
+      - pattern: \bHashMap\b
+        message: "Count the numbers in a HashMap."
+    tests:
+      - call: |
+          System.out.println(favoriteStop("12 27 12 5 27 12"));
+          System.out.println(favoriteStop("40 9 40 9"));
+      - call: |
+          System.out.println(favoriteStop("7"));
+          System.out.println(favoriteStop("31 30 31 30 30 31 2"));
+          System.out.println(favoriteStop("100 3 3 100 64 64 100 3 64"));
+          System.out.println(favoriteStop("5 18 18 5 5"));
+        hidden: true
+      - call: |
+          System.out.println(favoriteStop("250 17 250 17 99 99 1"));
+          System.out.println(favoriteStop("8 16 24 32 40 48 56 64 72 80 88 96 104 112 120 64"));
+        hidden: true

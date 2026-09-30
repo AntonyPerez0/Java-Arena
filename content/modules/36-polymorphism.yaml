@@ -1,0 +1,2628 @@
+id: polymorphism
+summary: One object seen through each of its types, from its own class up to Object and every interface it has. What a variable's type allows, instanceof and casts, and the ClassCastException of a wrong cast, a program built on one general type that works with every kind of object, choosing between extends and an interface, and the end of part 9. MOOC sections 9.3 and 9.4.
+steps:
+  - id: polymorphism-many-types
+    slug: many-types
+    title: "Hierarchies: one object, many types"
+    text: |
+      Modules 34 and 35 gave classes two ways to be related: a class extends one superclass, and it can implement any number of interfaces. Together, the classes and interfaces of a program form a **hierarchy**, a family tree of types. This module looks at what that means for one object, and for programs that handle many kinds of objects at once. The idea has a name, **polymorphism**, from the Greek for "many forms": one object can be used as several types, and one variable can refer to objects of many classes.
+
+      ### A toll booth's vehicles
+
+      A toll booth charges every vehicle that goes through. A plain `Vehicle`, such as a motorbike, pays 3. A `Car` pays 6. A `Taxi` is a car, and pays 2 less than other cars. A `Truck` pays 5 for each axle. Taxis and trucks work for companies, which get a bill every month, so both implement an interface, `Commercial`, with one method: `company()`. Here's the hierarchy, with each class under the one it extends:
+
+      ```
+      Object
+        Vehicle
+          Car
+            Taxi     implements Commercial
+          Truck      implements Commercial
+      ```
+
+      Vehicle doesn't say what it extends, so it extends Object (module 34). Here's the program, with one taxi in five variables:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Taxi taxi = new Taxi("TX-12", "Metro Cabs");
+              Car car = taxi;
+              Vehicle vehicle = taxi;
+              Commercial customer = taxi;
+              Object thing = taxi;
+
+              System.out.println(taxi.toll() + " " + car.toll() + " " + vehicle.toll());
+              System.out.println(customer.company());
+              System.out.println(thing);
+              System.out.println(thing == customer);
+          }
+      }
+      // ==== Vehicle.java ====
+      public class Vehicle {
+          private String plate;
+
+          public Vehicle(String plate) {
+              this.plate = plate;
+          }
+
+          public String getPlate() {
+              return this.plate;
+          }
+
+          public int toll() {
+              return 3;
+          }
+
+          @Override
+          public String toString() {
+              return this.plate + " pays " + this.toll();
+          }
+      }
+      // ==== Car.java ====
+      public class Car extends Vehicle {
+          public Car(String plate) {
+              super(plate);
+          }
+
+          @Override
+          public int toll() {
+              return 6;
+          }
+      }
+      // ==== Taxi.java ====
+      public class Taxi extends Car implements Commercial {
+          private String company;
+
+          public Taxi(String plate, String company) {
+              super(plate);
+              this.company = company;
+          }
+
+          @Override
+          public int toll() {
+              return super.toll() - 2;
+          }
+
+          @Override
+          public String company() {
+              return this.company;
+          }
+      }
+      // ==== Truck.java ====
+      public class Truck extends Vehicle implements Commercial {
+          private String company;
+          private int axles;
+
+          public Truck(String plate, String company, int axles) {
+              super(plate);
+              this.company = company;
+              this.axles = axles;
+          }
+
+          @Override
+          public int toll() {
+              return 5 * this.axles;
+          }
+
+          @Override
+          public String company() {
+              return this.company;
+          }
+      }
+      // ==== Commercial.java ====
+      public interface Commercial {
+          String company();
+      }
+      ```
+
+      ```output
+      4 4 4
+      Metro Cabs
+      TX-12 pays 4
+      true
+      ```
+
+      - There's one `new`, so there's one object, a Taxi. Five variables refer to it, and each has a different type.
+      - Each assignment compiles because a Taxi *is* each of those things: a Car, since Taxi extends Car; a Vehicle, since Car extends Vehicle; a Commercial, since Taxi implements it; and an Object, as every object is.
+      - Putting the object in another variable doesn't change it or copy it. `thing == customer` is `true`: both refer to the same Taxi.
+      - The toll is 4 through every variable. The object's class decides which version of a method runs (module 34), and this object is a Taxi, whatever the variable's type.
+
+      ### Every type an object has
+
+      The taxi has five types. In general, an object's types are:
+
+      - its own class,
+      - every class above it, all the way up to Object,
+      - every interface that its class, or any class above it, implements,
+      - and every interface above those, all the way up, since an interface can extend another one, as Set extends Collection (module 35).
+
+      A variable of any of those types can refer to the object. The last two rules mean that interfaces are inherited, like methods: a class that extends Taxi is Commercial too, without writing `implements` again, and an ArrayList, which implements List, is a Collection too.
+
+      What changes from variable to variable is what you may call through it, since the variable's type decides that (modules 34 and 35):
+
+      | Through a variable of type | you may call |
+      | --- | --- |
+      | `Taxi` | `toll()`, `getPlate()` and `company()` |
+      | `Car` or `Vehicle` | `toll()` and `getPlate()` |
+      | `Commercial` | `company()` |
+      | `Object` | only Object's methods, such as `toString()` and `equals(...)` |
+
+      Object's methods can be called through all of them, since every object has those.
+
+      ### Up the tree, never across
+
+      A variable can refer to objects of its own type and of every type below it in the tree. Other assignments don't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Car car = new Truck("TR-88", "Nordic Freight", 3);
+              Commercial customer = new Car("CR-55");
+          }
+      }
+      // ==== Vehicle.java ====
+      public class Vehicle {
+          private String plate;
+
+          public Vehicle(String plate) {
+              this.plate = plate;
+          }
+      }
+      // ==== Car.java ====
+      public class Car extends Vehicle {
+          public Car(String plate) {
+              super(plate);
+          }
+      }
+      // ==== Truck.java ====
+      public class Truck extends Vehicle implements Commercial {
+          private String company;
+          private int axles;
+
+          public Truck(String plate, String company, int axles) {
+              super(plate);
+              this.company = company;
+              this.axles = axles;
+          }
+
+          @Override
+          public String company() {
+              return this.company;
+          }
+      }
+      // ==== Commercial.java ====
+      public interface Commercial {
+          String company();
+      }
+      ```
+
+      ```javac
+      Main.java:3: error: incompatible types: Truck cannot be converted to Car
+              Car car = new Truck("TR-88", "Nordic Freight", 3);
+                        ^
+      Main.java:4: error: incompatible types: Car cannot be converted to Commercial
+              Commercial customer = new Car("CR-55");
+                                    ^
+      2 errors
+      ```
+
+      - A Truck is a Vehicle, and so is a Car. But a Truck isn't a Car: classes side by side in the tree share only what's above them.
+      - A plain Car isn't Commercial, even though Taxi, a class below it, is. Types are passed down the tree, never up: a Car doesn't get what its subclasses add.
+
+      ### Java's own classes
+
+      Java's own classes are built the same way. An ArrayList is a List and a Collection (module 35), and an Object:
+
+      ```java main
+      ArrayList<String> plates = new ArrayList<>();
+      plates.add("TX-12");
+      plates.add("TR-88");
+      List<String> list = plates;
+      Collection<String> collection = plates;
+      Object thing = plates;
+
+      list.add("CR-55");
+      System.out.println(collection.size());
+      System.out.println(thing);
+      System.out.println(thing == collection);
+      ```
+
+      ```output
+      3
+      [TX-12, TR-88, CR-55]
+      true
+      ```
+
+      Four variables, one list: `list.add` adds to the same list that `collection.size()` counts, and printing it through `thing` runs ArrayList's own `toString`. An ArrayList has a few more types, such as the abstract class AbstractList that module 35 mentioned. Java's documentation lists the superclasses and interfaces of each of its classes.
+
+      **Your turn:** at the end of the day, the booth adds up the tolls of every vehicle that went through, and lists the companies to bill. Fill in the type of each list. `passed` holds all three vehicles, and its loop calls `toll()` on each. `customers` holds the taxi and the truck, and its loop calls `company()`. Each list's type must be one that every object on it has, and that has the method its loop calls. The program prints:
+
+      ```
+      Tolls today: 25
+      Bill to Metro Cabs
+      Bill to Nordic Freight
+      ```
+    fill: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              Taxi taxi = new Taxi("TX-12", "Metro Cabs");
+              Car car = new Car("CR-55");
+              Truck truck = new Truck("TR-88", "Nordic Freight", 3);
+
+              ArrayList<[[Vehicle]]> passed = new ArrayList<>();
+              passed.add(taxi);
+              passed.add(car);
+              passed.add(truck);
+              int total = 0;
+              for (int i = 0; i < passed.size(); i++) {
+                  total += passed.get(i).toll();
+              }
+              System.out.println("Tolls today: " + total);
+
+              ArrayList<[[Commercial]]> customers = new ArrayList<>();
+              customers.add(taxi);
+              customers.add(truck);
+              for (int i = 0; i < customers.size(); i++) {
+                  System.out.println("Bill to " + customers.get(i).company());
+              }
+          }
+      }
+      // ==== Vehicle.java ====
+      public class Vehicle {
+          private String plate;
+
+          public Vehicle(String plate) {
+              this.plate = plate;
+          }
+
+          public String getPlate() {
+              return this.plate;
+          }
+
+          public int toll() {
+              return 3;
+          }
+
+          @Override
+          public String toString() {
+              return this.plate + " pays " + this.toll();
+          }
+      }
+      // ==== Car.java ====
+      public class Car extends Vehicle {
+          public Car(String plate) {
+              super(plate);
+          }
+
+          @Override
+          public int toll() {
+              return 6;
+          }
+      }
+      // ==== Taxi.java ====
+      public class Taxi extends Car implements Commercial {
+          private String company;
+
+          public Taxi(String plate, String company) {
+              super(plate);
+              this.company = company;
+          }
+
+          @Override
+          public int toll() {
+              return super.toll() - 2;
+          }
+
+          @Override
+          public String company() {
+              return this.company;
+          }
+      }
+      // ==== Truck.java ====
+      public class Truck extends Vehicle implements Commercial {
+          private String company;
+          private int axles;
+
+          public Truck(String plate, String company, int axles) {
+              super(plate);
+              this.company = company;
+              this.axles = axles;
+          }
+
+          @Override
+          public int toll() {
+              return 5 * this.axles;
+          }
+
+          @Override
+          public String company() {
+              return this.company;
+          }
+      }
+      // ==== Commercial.java ====
+      public interface Commercial {
+          String company();
+      }
+    hints:
+      - "Go up the tree from each object on the list until you reach a type they all share. The taxi, the car and the truck meet at Vehicle, and Vehicle has `toll()`."
+      - "The taxi and the truck share Vehicle too, but Vehicle has no `company()`. The type they share that has it is the interface they both implement."
+    more:
+      - task: |
+          The booth's truck, seen through several variables. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Truck truck = new Truck("TR-88", "Nordic Freight", 2);
+                  Vehicle vehicle = truck;
+                  Commercial customer = truck;
+                  Object thing = customer;
+
+                  System.out.println(vehicle.toll() + " " + customer.company());
+                  System.out.println(thing);
+                  System.out.println(thing.getClass().getName());
+                  System.out.println(thing == vehicle);
+
+                  Vehicle twin = new Truck("TR-88", "Nordic Freight", 2);
+                  System.out.println(twin == vehicle);
+              }
+          }
+          // ==== Vehicle.java ====
+          public class Vehicle {
+              private String plate;
+
+              public Vehicle(String plate) {
+                  this.plate = plate;
+              }
+
+              public String getPlate() {
+                  return this.plate;
+              }
+
+              public int toll() {
+                  return 3;
+              }
+
+              @Override
+              public String toString() {
+                  return this.plate + " pays " + this.toll();
+              }
+          }
+          // ==== Truck.java ====
+          public class Truck extends Vehicle implements Commercial {
+              private String company;
+              private int axles;
+
+              public Truck(String plate, String company, int axles) {
+                  super(plate);
+                  this.company = company;
+                  this.axles = axles;
+              }
+
+              @Override
+              public int toll() {
+                  return 5 * this.axles;
+              }
+
+              @Override
+              public String company() {
+                  return this.company;
+              }
+          }
+          // ==== Commercial.java ====
+          public interface Commercial {
+              String company();
+          }
+        hints:
+          - "`vehicle`, `customer` and `thing` all refer to the one Truck that the first `new` made. Printing `thing` runs the object's own `toString`, which is Vehicle's, and it calls the truck's `toll()`."
+          - "`getClass().getName()` names the object's class, not the variable's type. `twin` is a second object, made by another `new`, so `==` is `false`, even though its values are the same."
+      - task: |
+          Some trucks carry fuel, and pay 10 more than other trucks with the same number of axles. In `TankerTruck.java`, write the class `TankerTruck`, which extends Truck, with:
+
+          - a constructor `TankerTruck(String plate, String company, int axles)`
+          - `toll()` overridden to return Truck's toll plus 10: get Truck's toll with `super.toll()`
+
+          Don't write `implements Commercial` or `company()`: a TankerTruck gets both from Truck. The check runs:
+
+          ```java fragment
+          TankerTruck tanker = new TankerTruck("TK-4", "Coastal Fuels", 3);
+          Vehicle vehicle = tanker;
+          Commercial customer = tanker;
+          Truck truck = tanker;
+          System.out.println(vehicle);
+          System.out.println(customer.company() + " " + truck.toll());
+          ```
+
+          and expects:
+
+          ```
+          TK-4 pays 25
+          Coastal Fuels 25
+          ```
+        seed:
+          TankerTruck.java: |
+            public class TankerTruck {
+
+            }
+          Truck.java: |
+            public class Truck extends Vehicle implements Commercial {
+                private String company;
+                private int axles;
+
+                public Truck(String plate, String company, int axles) {
+                    super(plate);
+                    this.company = company;
+                    this.axles = axles;
+                }
+
+                @Override
+                public int toll() {
+                    return 5 * this.axles;
+                }
+
+                @Override
+                public String company() {
+                    return this.company;
+                }
+            }
+          Vehicle.java: |
+            public class Vehicle {
+                private String plate;
+
+                public Vehicle(String plate) {
+                    this.plate = plate;
+                }
+
+                public String getPlate() {
+                    return this.plate;
+                }
+
+                public int toll() {
+                    return 3;
+                }
+
+                @Override
+                public String toString() {
+                    return this.plate + " pays " + this.toll();
+                }
+            }
+          Commercial.java: |
+            public interface Commercial {
+                String company();
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TankerTruck tanker = new TankerTruck("TK-4", "Coastal Fuels", 3);
+                    Vehicle vehicle = tanker;
+                    Commercial customer = tanker;
+                    Truck truck = tanker;
+                    System.out.println(vehicle);
+                    System.out.println(customer.company() + " " + truck.toll());
+                }
+            }
+        solution:
+          TankerTruck.java: |
+            public class TankerTruck extends Truck {
+                public TankerTruck(String plate, String company, int axles) {
+                    super(plate, company, axles);
+                }
+
+                @Override
+                public int toll() {
+                    return super.toll() + 10;
+                }
+            }
+          Truck.java: |
+            public class Truck extends Vehicle implements Commercial {
+                private String company;
+                private int axles;
+
+                public Truck(String plate, String company, int axles) {
+                    super(plate);
+                    this.company = company;
+                    this.axles = axles;
+                }
+
+                @Override
+                public int toll() {
+                    return 5 * this.axles;
+                }
+
+                @Override
+                public String company() {
+                    return this.company;
+                }
+            }
+          Vehicle.java: |
+            public class Vehicle {
+                private String plate;
+
+                public Vehicle(String plate) {
+                    this.plate = plate;
+                }
+
+                public String getPlate() {
+                    return this.plate;
+                }
+
+                public int toll() {
+                    return 3;
+                }
+
+                @Override
+                public String toString() {
+                    return this.plate + " pays " + this.toll();
+                }
+            }
+          Commercial.java: |
+            public interface Commercial {
+                String company();
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TankerTruck tanker = new TankerTruck("TK-4", "Coastal Fuels", 3);
+                    Vehicle vehicle = tanker;
+                    Commercial customer = tanker;
+                    Truck truck = tanker;
+                    System.out.println(vehicle);
+                    System.out.println(customer.company() + " " + truck.toll());
+                }
+            }
+        hints:
+          - "Start with `public class TankerTruck extends Truck {`. The constructor hands all three values to Truck's constructor with `super(plate, company, axles);`."
+          - "Override `toll()`, with `@Override` above it, and return `super.toll() + 10`. Everything else, `company()` and being Commercial included, comes from Truck."
+        require:
+          - pattern: \bclass\s+TankerTruck\s+extends\s+Truck\b
+            message: "Write the header as `public class TankerTruck extends Truck`."
+          - pattern: \bsuper\s*\.\s*toll\s*\(\s*\)
+            message: "Get Truck's toll with `super.toll()`, and add 10 to it."
+        forbid:
+          - pattern: \bclass\s+TankerTruck\s+extends\s+Truck\s+implements\b
+            message: "TankerTruck is already Commercial, because Truck is. Leave out `implements Commercial`."
+        tests:
+          - call: |
+              TankerTruck tanker = new TankerTruck("TK-4", "Coastal Fuels", 3);
+              Vehicle vehicle = tanker;
+              Commercial customer = tanker;
+              Truck truck = tanker;
+              System.out.println(vehicle);
+              System.out.println(customer.company() + " " + truck.toll());
+          - call: |
+              ArrayList<Vehicle> passed = new ArrayList<>();
+              passed.add(new TankerTruck("TK-1", "Coastal Fuels", 2));
+              passed.add(new Truck("TR-2", "Nordic Freight", 2));
+              passed.add(new Vehicle("MC-3"));
+              int total = 0;
+              for (Vehicle vehicle : passed) {
+                  total += vehicle.toll();
+              }
+              System.out.println(total + " " + passed.get(0));
+            hidden: true
+          - call: |
+              ArrayList<Commercial> customers = new ArrayList<>();
+              customers.add(new TankerTruck("TK-9", "Blue Ridge Oil", 5));
+              customers.add(new Truck("TR-7", "Nordic Freight", 1));
+              for (Commercial customer : customers) {
+                  System.out.println(customer.company());
+              }
+              Object thing = customers.get(0);
+              System.out.println(thing + " " + thing.getClass().getName());
+            hidden: true
+
+  - id: polymorphism-instanceof
+    slug: instanceof-and-casts
+    title: instanceof and casts
+    text: |
+      In a game, an `ArrayList<Enemy>` holds goblins, trolls and bats, and a loop over it can call anything every Enemy has. But some enemies have more. A troll can regenerate, and a bat flies at some altitude, which the hero's weapon may or may not reach. Through an Enemy variable, those methods can't be called: the variable's type decides what you may call, and not every Enemy is a troll or a bat. This step shows how a program asks an object what it is, and then gets a variable of the more specific type.
+
+      Here's the game's hierarchy. Enemy is abstract, since every enemy is some particular kind of enemy (module 34), and `Flying` is an interface with one method, `altitude()`:
+
+      ```
+      Object
+        Enemy        (abstract)
+          Goblin
+          Troll
+          Bat        implements Flying
+      ```
+
+      ### instanceof
+
+      `instanceof` asks whether an object has a type:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Enemy squeak = new Bat("Squeak", 3);
+              System.out.println(squeak instanceof Bat);
+              System.out.println(squeak instanceof Enemy);
+              System.out.println(squeak instanceof Flying);
+              System.out.println(squeak instanceof Object);
+              System.out.println(squeak instanceof Troll);
+
+              Enemy nobody = null;
+              System.out.println(nobody instanceof Enemy);
+          }
+      }
+      // ==== Enemy.java ====
+      public abstract class Enemy {
+          private String name;
+          private int health;
+
+          public Enemy(String name, int health) {
+              this.name = name;
+              this.health = health;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public int getHealth() {
+              return this.health;
+          }
+
+          public void heal(int amount) {
+              this.health += amount;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + " (" + this.health + ")";
+          }
+      }
+      // ==== Troll.java ====
+      public class Troll extends Enemy {
+          public Troll(String name, int health) {
+              super(name, health);
+          }
+
+          public void regenerate() {
+              this.heal(5);
+          }
+      }
+      // ==== Bat.java ====
+      public class Bat extends Enemy implements Flying {
+          private int altitude;
+
+          public Bat(String name, int altitude) {
+              super(name, 8);
+              this.altitude = altitude;
+          }
+
+          @Override
+          public int altitude() {
+              return this.altitude;
+          }
+      }
+      // ==== Flying.java ====
+      public interface Flying {
+          int altitude();
+      }
+      ```
+
+      ```output
+      true
+      true
+      true
+      true
+      false
+      false
+      ```
+
+      - `value instanceof Type` is `true` when the object that `value` refers to has that type. That's any of its types from step 1, not only its own class: a Bat is a Bat, an Enemy, a Flying and an Object.
+      - It looks at the object, not at the variable. `squeak` is an Enemy variable, and `squeak instanceof Flying` is still `true`.
+      - It's `false` for `null`, which isn't an object at all. So `instanceof` never crashes.
+      - Module 23's `equals` used it in the same way, to check that the compared object is of the right class.
+
+      ### Casts
+
+      When `instanceof` says yes, a **cast** gets a variable of that type. Here the flying enemies report their altitude, and the troll regenerates:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Enemy> enemies = new ArrayList<>();
+              enemies.add(new Troll("Grak", 30));
+              enemies.add(new Bat("Squeak", 3));
+              enemies.add(new Goblin("Snip", 20));
+              enemies.add(new Bat("Flit", 12));
+
+              for (Enemy enemy : enemies) {
+                  if (enemy instanceof Flying) {
+                      Flying flyer = (Flying) enemy;
+                      System.out.println(enemy.getName() + " flies at " + flyer.altitude() + " meters");
+                  } else {
+                      System.out.println(enemy.getName() + " is on the ground");
+                  }
+              }
+
+              Enemy first = enemies.get(0);
+              if (first instanceof Troll) {
+                  Troll troll = (Troll) first;
+                  troll.regenerate();
+              }
+              System.out.println(first);
+          }
+      }
+      // ==== Enemy.java ====
+      public abstract class Enemy {
+          private String name;
+          private int health;
+
+          public Enemy(String name, int health) {
+              this.name = name;
+              this.health = health;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public int getHealth() {
+              return this.health;
+          }
+
+          public void heal(int amount) {
+              this.health += amount;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + " (" + this.health + ")";
+          }
+      }
+      // ==== Goblin.java ====
+      public class Goblin extends Enemy {
+          public Goblin(String name, int health) {
+              super(name, health);
+          }
+      }
+      // ==== Troll.java ====
+      public class Troll extends Enemy {
+          public Troll(String name, int health) {
+              super(name, health);
+          }
+
+          public void regenerate() {
+              this.heal(5);
+          }
+      }
+      // ==== Bat.java ====
+      public class Bat extends Enemy implements Flying {
+          private int altitude;
+
+          public Bat(String name, int altitude) {
+              super(name, 8);
+              this.altitude = altitude;
+          }
+
+          @Override
+          public int altitude() {
+              return this.altitude;
+          }
+      }
+      // ==== Flying.java ====
+      public interface Flying {
+          int altitude();
+      }
+      ```
+
+      ```output
+      Grak is on the ground
+      Squeak flies at 3 meters
+      Snip is on the ground
+      Flit flies at 12 meters
+      Grak (35)
+      ```
+
+      - `(Flying) enemy` is a cast, as in module 23's `equals`. It doesn't create an object, and it doesn't change one. It gives a reference to the same object, with the type Flying, so javac lets `flyer.altitude()` through.
+      - `enemy` and `flyer` refer to the same bat. Through `enemy` the loop calls Enemy's `getName()`. Through `flyer` it calls the `altitude()` that Flying lists, and the bat's own version runs.
+      - The `if` makes the cast safe: it runs only for objects that are Flying.
+      - A cast to a class works the same way. `(Troll) first` gives a reference of type Troll to the troll at index 0. `troll` and `first` refer to the same object, the one in the list, so after `regenerate()`, printing `first` shows 35.
+
+      ### A wrong cast crashes
+
+      javac accepts a cast whenever it *could* work. Whether it does is only known when the program runs:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Enemy snip = new Goblin("Snip", 20);
+              Troll troll = (Troll) snip;
+              troll.regenerate();
+          }
+      }
+      // ==== Enemy.java ====
+      public abstract class Enemy {
+          private String name;
+          private int health;
+
+          public Enemy(String name, int health) {
+              this.name = name;
+              this.health = health;
+          }
+
+          public void heal(int amount) {
+              this.health += amount;
+          }
+      }
+      // ==== Goblin.java ====
+      public class Goblin extends Enemy {
+          public Goblin(String name, int health) {
+              super(name, health);
+          }
+      }
+      // ==== Troll.java ====
+      public class Troll extends Enemy {
+          public Troll(String name, int health) {
+              super(name, health);
+          }
+
+          public void regenerate() {
+              this.heal(5);
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.ClassCastException: class Goblin cannot be cast to class Troll (Goblin and Troll are in unnamed module of loader 'app')
+      	at Main.main(Main.java:4)
+      ```
+
+      - `snip` is an Enemy variable, and an Enemy might be a troll, so javac lets `(Troll) snip` through. When the line runs, Java sees that the object is a goblin, and stops the program with a **ClassCastException**.
+      - A cast never turns an object into another class. A goblin stays a goblin. The cast works only when the object already has the type.
+      - So check with `instanceof` before a cast, unless the code can be sure of the type in some other way.
+      - A cast that could never work doesn't compile at all. `(String) snip` is an error, since no Enemy can be a String: javac says `incompatible types: Enemy cannot be converted to String`.
+
+      ### instanceof, or a method of its own?
+
+      `instanceof` fits when only some objects have what the code needs: the flying enemies' altitude, or a troll's `regenerate()`. When every kind has its own answer to the same question, it's the wrong tool. Say each enemy is worth some points when it's defeated. This works:
+
+      ```java fragment
+      public static int points(Enemy enemy) {
+          if (enemy instanceof Goblin) {
+              return 10;
+          } else if (enemy instanceof Troll) {
+              return 50;
+          } else if (enemy instanceof Bat) {
+              return 5;
+          }
+          return 0;
+      }
+      ```
+
+      But every new kind of enemy needs another `else if`, here and in every method written this way, and a forgotten one quietly gives 0 points. Instead, give Enemy an abstract method `points()`, and let each class write its own (module 34). Then the code asks `enemy.points()`, and javac makes every new kind of enemy say what it's worth. The next step builds a whole program in that way.
+
+      **Your turn:** the hero's spear reaches enemies on the ground, and flying enemies up to a given height. In `Main.java`, write the method `inReach(ArrayList<Enemy> enemies, int reach)`. It returns a new list of the names of the enemies the spear can hit, in the order of the list: every enemy that doesn't fly, and every flying enemy whose altitude is at most `reach`. Ask whether an enemy flies with `instanceof Flying`, not whether it's a Bat, so that flying enemies added to the game later count too. The check runs:
+
+      ```java fragment
+      ArrayList<Enemy> enemies = new ArrayList<>();
+      enemies.add(new Bat("Squeak", 3));
+      enemies.add(new Goblin("Snip", 20));
+      enemies.add(new Bat("Flit", 12));
+      enemies.add(new Goblin("Nab", 15));
+      System.out.println(inReach(enemies, 5));
+      ```
+
+      and expects:
+
+      ```
+      [Squeak, Snip, Nab]
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Enemy> enemies = new ArrayList<>();
+                enemies.add(new Bat("Squeak", 3));
+                enemies.add(new Goblin("Snip", 20));
+                enemies.add(new Bat("Flit", 12));
+                enemies.add(new Goblin("Nab", 15));
+                System.out.println(inReach(enemies, 5));
+            }
+
+            // Write the method inReach here.
+        }
+      Enemy.java: |
+        public abstract class Enemy {
+            private String name;
+            private int health;
+
+            public Enemy(String name, int health) {
+                this.name = name;
+                this.health = health;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getHealth() {
+                return this.health;
+            }
+
+            public void heal(int amount) {
+                this.health += amount;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.health + ")";
+            }
+        }
+      Flying.java: |
+        public interface Flying {
+            int altitude();
+        }
+      Goblin.java: |
+        public class Goblin extends Enemy {
+            public Goblin(String name, int health) {
+                super(name, health);
+            }
+        }
+      Bat.java: |
+        public class Bat extends Enemy implements Flying {
+            private int altitude;
+
+            public Bat(String name, int altitude) {
+                super(name, 8);
+                this.altitude = altitude;
+            }
+
+            @Override
+            public int altitude() {
+                return this.altitude;
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Enemy> enemies = new ArrayList<>();
+                enemies.add(new Bat("Squeak", 3));
+                enemies.add(new Goblin("Snip", 20));
+                enemies.add(new Bat("Flit", 12));
+                enemies.add(new Goblin("Nab", 15));
+                System.out.println(inReach(enemies, 5));
+            }
+
+            public static ArrayList<String> inReach(ArrayList<Enemy> enemies, int reach) {
+                ArrayList<String> names = new ArrayList<>();
+                for (Enemy enemy : enemies) {
+                    if (enemy instanceof Flying) {
+                        Flying flyer = (Flying) enemy;
+                        if (flyer.altitude() <= reach) {
+                            names.add(enemy.getName());
+                        }
+                    } else {
+                        names.add(enemy.getName());
+                    }
+                }
+                return names;
+            }
+        }
+      Enemy.java: |
+        public abstract class Enemy {
+            private String name;
+            private int health;
+
+            public Enemy(String name, int health) {
+                this.name = name;
+                this.health = health;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getHealth() {
+                return this.health;
+            }
+
+            public void heal(int amount) {
+                this.health += amount;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.health + ")";
+            }
+        }
+      Flying.java: |
+        public interface Flying {
+            int altitude();
+        }
+      Goblin.java: |
+        public class Goblin extends Enemy {
+            public Goblin(String name, int health) {
+                super(name, health);
+            }
+        }
+      Bat.java: |
+        public class Bat extends Enemy implements Flying {
+            private int altitude;
+
+            public Bat(String name, int altitude) {
+                super(name, 8);
+                this.altitude = altitude;
+            }
+
+            @Override
+            public int altitude() {
+                return this.altitude;
+            }
+        }
+    hints:
+      - "Go through the enemies with a for-each loop. An enemy for which `enemy instanceof Flying` is `false` is on the ground: add its `getName()` to the list."
+      - "For a flying one, cast first: `Flying flyer = (Flying) enemy;`. Then add its name only when `flyer.altitude() <= reach`. Return the list after the loop."
+    require:
+      - pattern: \bpublic\s+static\s+ArrayList\s*<\s*String\s*>\s+inReach\s*\(\s*ArrayList\s*<\s*Enemy\s*>\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the method as `public static ArrayList<String> inReach(ArrayList<Enemy> enemies, int reach)`."
+      - pattern: \binstanceof\s+Flying\b
+        message: "Ask whether an enemy flies with `instanceof Flying`."
+    forbid:
+      - pattern: \binstanceof\s+Bat\b
+        message: "Ask whether the enemy flies (`instanceof Flying`), not whether it's a Bat: other flying enemies may join the game later."
+    tests:
+      - call: |
+          ArrayList<Enemy> enemies = new ArrayList<>();
+          enemies.add(new Bat("Squeak", 3));
+          enemies.add(new Goblin("Snip", 20));
+          enemies.add(new Bat("Flit", 12));
+          enemies.add(new Goblin("Nab", 15));
+          System.out.println(inReach(enemies, 5));
+      - call: |
+          ArrayList<Enemy> enemies = new ArrayList<>();
+          enemies.add(new Bat("Flit", 12));
+          enemies.add(new Bat("Dusk", 0));
+          enemies.add(new Goblin("Snip", 20));
+          System.out.println(inReach(enemies, 12));
+          System.out.println(inReach(enemies, 11));
+          System.out.println(inReach(enemies, 0) + " " + enemies.size());
+        hidden: true
+      - call: |
+          ArrayList<Enemy> enemies = new ArrayList<>();
+          System.out.println(inReach(enemies, 5));
+          enemies.add(new Bat("High", 50));
+          enemies.add(new Bat("Higher", 80));
+          System.out.println(inReach(enemies, 49));
+          System.out.println(inReach(enemies, 80));
+        hidden: true
+    more:
+      - task: |
+          Casts between a class, an interface and Object. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Enemy a = new Bat("Squeak", 3);
+                  Flying b = (Flying) a;
+                  Enemy c = (Enemy) b;
+                  System.out.println(b.altitude() + " " + c.getName());
+                  System.out.println((a == c) + " " + (c instanceof Bat));
+
+                  Enemy grak = new Troll("Grak", 30);
+                  Object thing = grak;
+                  Troll troll = (Troll) thing;
+                  troll.regenerate();
+                  System.out.println(grak.getHealth() + " " + (thing instanceof Flying));
+              }
+          }
+          // ==== Enemy.java ====
+          public abstract class Enemy {
+              private String name;
+              private int health;
+
+              public Enemy(String name, int health) {
+                  this.name = name;
+                  this.health = health;
+              }
+
+              public String getName() {
+                  return this.name;
+              }
+
+              public int getHealth() {
+                  return this.health;
+              }
+
+              public void heal(int amount) {
+                  this.health += amount;
+              }
+          }
+          // ==== Troll.java ====
+          public class Troll extends Enemy {
+              public Troll(String name, int health) {
+                  super(name, health);
+              }
+
+              public void regenerate() {
+                  this.heal(5);
+              }
+          }
+          // ==== Bat.java ====
+          public class Bat extends Enemy implements Flying {
+              private int altitude;
+
+              public Bat(String name, int altitude) {
+                  super(name, 8);
+                  this.altitude = altitude;
+              }
+
+              @Override
+              public int altitude() {
+                  return this.altitude;
+              }
+          }
+          // ==== Flying.java ====
+          public interface Flying {
+              int altitude();
+          }
+        hints:
+          - "No cast makes a new object. `a`, `b` and `c` all refer to the one bat, each with a different type, and the bat is still a Bat whichever variable you ask through."
+          - "`thing` and `troll` refer to the same troll as `grak`, so regenerating through `troll` heals the object that `grak` refers to. A troll doesn't fly."
+      - task: |
+          At the end of each round, every troll regenerates. But `endRound` in `Main.java` crashes with a ClassCastException as soon as the list holds anything other than a troll. Fix it, so that the trolls regenerate and the other enemies are left as they are. `Main` is a test drive, and it prints:
+
+          ```
+          [Grak (35), Snip (20), Mossback (55)]
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Enemy> enemies = new ArrayList<>();
+                    enemies.add(new Troll("Grak", 30));
+                    enemies.add(new Goblin("Snip", 20));
+                    enemies.add(new Troll("Mossback", 50));
+                    endRound(enemies);
+                    System.out.println(enemies);
+                }
+
+                public static void endRound(ArrayList<Enemy> enemies) {
+                    for (Enemy enemy : enemies) {
+                        Troll troll = (Troll) enemy;
+                        troll.regenerate();
+                    }
+                }
+            }
+          Enemy.java: |
+            public abstract class Enemy {
+                private String name;
+                private int health;
+
+                public Enemy(String name, int health) {
+                    this.name = name;
+                    this.health = health;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getHealth() {
+                    return this.health;
+                }
+
+                public void heal(int amount) {
+                    this.health += amount;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.health + ")";
+                }
+            }
+          Troll.java: |
+            public class Troll extends Enemy {
+                public Troll(String name, int health) {
+                    super(name, health);
+                }
+
+                public void regenerate() {
+                    this.heal(5);
+                }
+            }
+          Goblin.java: |
+            public class Goblin extends Enemy {
+                public Goblin(String name, int health) {
+                    super(name, health);
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Enemy> enemies = new ArrayList<>();
+                    enemies.add(new Troll("Grak", 30));
+                    enemies.add(new Goblin("Snip", 20));
+                    enemies.add(new Troll("Mossback", 50));
+                    endRound(enemies);
+                    System.out.println(enemies);
+                }
+
+                public static void endRound(ArrayList<Enemy> enemies) {
+                    for (Enemy enemy : enemies) {
+                        if (enemy instanceof Troll) {
+                            Troll troll = (Troll) enemy;
+                            troll.regenerate();
+                        }
+                    }
+                }
+            }
+          Enemy.java: |
+            public abstract class Enemy {
+                private String name;
+                private int health;
+
+                public Enemy(String name, int health) {
+                    this.name = name;
+                    this.health = health;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getHealth() {
+                    return this.health;
+                }
+
+                public void heal(int amount) {
+                    this.health += amount;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.health + ")";
+                }
+            }
+          Troll.java: |
+            public class Troll extends Enemy {
+                public Troll(String name, int health) {
+                    super(name, health);
+                }
+
+                public void regenerate() {
+                    this.heal(5);
+                }
+            }
+          Goblin.java: |
+            public class Goblin extends Enemy {
+                public Goblin(String name, int health) {
+                    super(name, health);
+                }
+            }
+        hints:
+          - "The cast crashes on Snip: a goblin is not a troll, and a cast can't make it one. Only cast an enemy that `instanceof` says is a Troll."
+          - "Put the two lines inside `if (enemy instanceof Troll) { ... }`. The other enemies then skip the cast, and are left as they are."
+        require:
+          - pattern: \binstanceof\s+Troll\b
+            message: "Check with `instanceof Troll` before the cast."
+        tests:
+          - name: The test drive
+          - call: |
+              ArrayList<Enemy> enemies = new ArrayList<>();
+              enemies.add(new Goblin("Nab", 15));
+              enemies.add(new Goblin("Snip", 20));
+              endRound(enemies);
+              System.out.println(enemies);
+              enemies.add(new Troll("Grak", 0));
+              endRound(enemies);
+              endRound(enemies);
+              System.out.println(enemies);
+            hidden: true
+          - call: |
+              ArrayList<Enemy> enemies = new ArrayList<>();
+              endRound(enemies);
+              System.out.println(enemies.size());
+              Troll troll = new Troll("Mossback", 50);
+              enemies.add(troll);
+              enemies.add(new Goblin("Snip", 20));
+              enemies.add(troll);
+              endRound(enemies);
+              System.out.println(troll.getHealth() + " " + enemies.get(1));
+            hidden: true
+
+  - id: polymorphism-program
+    slug: one-list-many-kinds
+    title: A program built on polymorphism
+    text: |
+      Steps 1 and 2 looked at the types an object has, what a variable of each type lets you call, and how to check for a type with `instanceof` and cast to it. This step builds a small program around the idea that makes polymorphism worth having: code that works with one general type, and objects that each do their own thing.
+
+      ### A payroll
+
+      A company pays its staff every month, but not all in the same way. A salaried employee gets a twelfth of a yearly salary. An hourly employee gets an hourly rate times the hours logged. `Employee` is an abstract class that knows the name and leaves the pay to each kind of employee, and `Payroll` keeps them all in one list:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Payroll payroll = new Payroll();
+              payroll.add(new SalariedEmployee("Rosa", 54000));
+
+              HourlyEmployee sam = new HourlyEmployee("Sam", 22);
+              sam.logHours(80);
+              sam.logHours(35);
+              payroll.add(sam);
+
+              payroll.add(new SalariedEmployee("Omar", 61200));
+              payroll.printSlips();
+          }
+      }
+      // ==== Employee.java ====
+      public abstract class Employee {
+          private String name;
+
+          public Employee(String name) {
+              this.name = name;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public abstract int monthlyPay();
+
+          @Override
+          public String toString() {
+              return this.name + ": " + this.monthlyPay();
+          }
+      }
+      // ==== SalariedEmployee.java ====
+      public class SalariedEmployee extends Employee {
+          private int yearlySalary;
+
+          public SalariedEmployee(String name, int yearlySalary) {
+              super(name);
+              this.yearlySalary = yearlySalary;
+          }
+
+          @Override
+          public int monthlyPay() {
+              return this.yearlySalary / 12;
+          }
+      }
+      // ==== HourlyEmployee.java ====
+      public class HourlyEmployee extends Employee {
+          private int hourlyRate;
+          private int hours;
+
+          public HourlyEmployee(String name, int hourlyRate) {
+              super(name);
+              this.hourlyRate = hourlyRate;
+              this.hours = 0;
+          }
+
+          public void logHours(int hours) {
+              this.hours += hours;
+          }
+
+          @Override
+          public int monthlyPay() {
+              return this.hourlyRate * this.hours;
+          }
+      }
+      // ==== Payroll.java ====
+      import java.util.ArrayList;
+
+      public class Payroll {
+          private ArrayList<Employee> employees;
+
+          public Payroll() {
+              this.employees = new ArrayList<>();
+          }
+
+          public void add(Employee employee) {
+              this.employees.add(employee);
+          }
+
+          public int total() {
+              int total = 0;
+              for (Employee employee : this.employees) {
+                  total += employee.monthlyPay();
+              }
+              return total;
+          }
+
+          public void printSlips() {
+              for (Employee employee : this.employees) {
+                  System.out.println(employee);
+              }
+              System.out.println("Total: " + this.total());
+          }
+      }
+      ```
+
+      ```output
+      Rosa: 4500
+      Sam: 2530
+      Omar: 5100
+      Total: 12130
+      ```
+
+      - Payroll knows only Employee. `add` takes an Employee, the list is an `ArrayList<Employee>`, and `total` calls `monthlyPay()` on each. It never asks which kind of employee it has.
+      - Each kind brings its own `monthlyPay()`. Employee's `toString` calls `this.monthlyPay()`, and the object's own version runs, so each slip shows the right pay.
+      - `sam` is an HourlyEmployee variable, because `main` needs `logHours`, which only hourly employees have. Handed to `add`, the same object is just an Employee to the payroll. Each part of the program uses the type that has what it needs, and no more.
+      - `monthlyPay()` is abstract, since there's no pay for "an employee" in general. javac won't compile a class that extends Employee without one, unless that class is abstract too. A class further down, such as one that extends SalariedEmployee, can use the version it inherits.
+
+      ### A new kind of employee
+
+      The company takes on interns, who get a fixed 900 a month. That's one new class:
+
+      ```java fragment
+      public class Intern extends Employee {
+          public Intern(String name) {
+              super(name);
+          }
+
+          @Override
+          public int monthlyPay() {
+              return 900;
+          }
+      }
+      ```
+
+      And that's the whole change. Payroll isn't touched: with `payroll.add(new Intern("Kai"));` in `main`, the slips get a line `Kai: 900`, and the total grows by 900. Payroll was written before interns existed, and it works with them, as it will with every class that extends Employee.
+
+      ### Without polymorphism
+
+      Compare a Payroll that works out the pay itself with `instanceof` (with getters for each kind's numbers):
+
+      ```java fragment
+      public int total() {
+          int total = 0;
+          for (Employee employee : this.employees) {
+              if (employee instanceof SalariedEmployee) {
+                  SalariedEmployee salaried = (SalariedEmployee) employee;
+                  total += salaried.getYearlySalary() / 12;
+              } else if (employee instanceof HourlyEmployee) {
+                  HourlyEmployee hourly = (HourlyEmployee) employee;
+                  total += hourly.getHourlyRate() * hourly.getHours();
+              }
+          }
+          return total;
+      }
+      ```
+
+      - The pay rules have moved out of the classes they belong to, into Payroll.
+      - Interns need another `else if`, here and in every other method that works out pay. Forget one, and interns quietly get 0.
+      - With a `monthlyPay()` in each class, each rule lives next to its own data, and a new kind of employee is one new class.
+
+      ### A list of an interface type
+
+      The general type can just as well be an interface. A notification service sends emails, text messages and app alerts. They have nothing in common but being sent, so they share an interface, and no superclass other than Object:
+
+      ```java fragment
+      public interface Notification {
+          String deliver();
+      }
+      ```
+
+      An `ArrayList<Notification>` can hold all of them, and a loop can call `deliver()` on each, which returns the message as that kind sends it. The last task of this step builds that.
+
+      **Your turn:** the company also has salespeople. A salesperson gets 1800 a month, plus 5 percent of the month's sales, rounded down as integer division does. `Employee.java`, `SalariedEmployee.java` and `Payroll.java` are the lesson's. In `SalesEmployee.java`, write the class `SalesEmployee`, which extends Employee, with:
+
+      - a constructor `SalesEmployee(String name)`; a new salesperson has sold nothing yet
+      - `recordSale(int amount)`, which adds a sale to the month's sales
+      - `monthlyPay()`, overridden to return 1800 plus 5 percent of the sales
+
+      Don't change Payroll: it already works with every kind of employee. The check runs:
+
+      ```java fragment
+      Payroll payroll = new Payroll();
+      SalesEmployee lin = new SalesEmployee("Lin");
+      lin.recordSale(12000);
+      lin.recordSale(4500);
+      payroll.add(new SalariedEmployee("Rosa", 54000));
+      payroll.add(lin);
+      payroll.printSlips();
+      ```
+
+      and expects:
+
+      ```
+      Rosa: 4500
+      Lin: 2625
+      Total: 7125
+      ```
+    seed:
+      SalesEmployee.java: |
+        public class SalesEmployee {
+
+        }
+      Employee.java: |
+        public abstract class Employee {
+            private String name;
+
+            public Employee(String name) {
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public abstract int monthlyPay();
+
+            @Override
+            public String toString() {
+                return this.name + ": " + this.monthlyPay();
+            }
+        }
+      SalariedEmployee.java: |
+        public class SalariedEmployee extends Employee {
+            private int yearlySalary;
+
+            public SalariedEmployee(String name, int yearlySalary) {
+                super(name);
+                this.yearlySalary = yearlySalary;
+            }
+
+            @Override
+            public int monthlyPay() {
+                return this.yearlySalary / 12;
+            }
+        }
+      Payroll.java: |
+        import java.util.ArrayList;
+
+        public class Payroll {
+            private ArrayList<Employee> employees;
+
+            public Payroll() {
+                this.employees = new ArrayList<>();
+            }
+
+            public void add(Employee employee) {
+                this.employees.add(employee);
+            }
+
+            public int total() {
+                int total = 0;
+                for (Employee employee : this.employees) {
+                    total += employee.monthlyPay();
+                }
+                return total;
+            }
+
+            public void printSlips() {
+                for (Employee employee : this.employees) {
+                    System.out.println(employee);
+                }
+                System.out.println("Total: " + this.total());
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Payroll payroll = new Payroll();
+                SalesEmployee lin = new SalesEmployee("Lin");
+                lin.recordSale(12000);
+                lin.recordSale(4500);
+                payroll.add(new SalariedEmployee("Rosa", 54000));
+                payroll.add(lin);
+                payroll.printSlips();
+            }
+        }
+    solution:
+      SalesEmployee.java: |
+        public class SalesEmployee extends Employee {
+            private int sales;
+
+            public SalesEmployee(String name) {
+                super(name);
+                this.sales = 0;
+            }
+
+            public void recordSale(int amount) {
+                this.sales += amount;
+            }
+
+            @Override
+            public int monthlyPay() {
+                return 1800 + this.sales * 5 / 100;
+            }
+        }
+      Employee.java: |
+        public abstract class Employee {
+            private String name;
+
+            public Employee(String name) {
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public abstract int monthlyPay();
+
+            @Override
+            public String toString() {
+                return this.name + ": " + this.monthlyPay();
+            }
+        }
+      SalariedEmployee.java: |
+        public class SalariedEmployee extends Employee {
+            private int yearlySalary;
+
+            public SalariedEmployee(String name, int yearlySalary) {
+                super(name);
+                this.yearlySalary = yearlySalary;
+            }
+
+            @Override
+            public int monthlyPay() {
+                return this.yearlySalary / 12;
+            }
+        }
+      Payroll.java: |
+        import java.util.ArrayList;
+
+        public class Payroll {
+            private ArrayList<Employee> employees;
+
+            public Payroll() {
+                this.employees = new ArrayList<>();
+            }
+
+            public void add(Employee employee) {
+                this.employees.add(employee);
+            }
+
+            public int total() {
+                int total = 0;
+                for (Employee employee : this.employees) {
+                    total += employee.monthlyPay();
+                }
+                return total;
+            }
+
+            public void printSlips() {
+                for (Employee employee : this.employees) {
+                    System.out.println(employee);
+                }
+                System.out.println("Total: " + this.total());
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Payroll payroll = new Payroll();
+                SalesEmployee lin = new SalesEmployee("Lin");
+                lin.recordSale(12000);
+                lin.recordSale(4500);
+                payroll.add(new SalariedEmployee("Rosa", 54000));
+                payroll.add(lin);
+                payroll.printSlips();
+            }
+        }
+    hints:
+      - "Start like HourlyEmployee: `public class SalesEmployee extends Employee {`, a private `int sales`, and a constructor that hands the name on with `super(name);` and sets the sales to 0. `recordSale` adds the amount to the sales."
+      - "Override `monthlyPay()` with `@Override`, and return `1800 + this.sales * 5 / 100`. Multiply before dividing: `this.sales / 100 * 5` would lose the part under 100."
+    require:
+      - pattern: \bclass\s+SalesEmployee\s+extends\s+Employee\b
+        message: "Write the header as `public class SalesEmployee extends Employee`."
+    tests:
+      - call: |
+          Payroll payroll = new Payroll();
+          SalesEmployee lin = new SalesEmployee("Lin");
+          lin.recordSale(12000);
+          lin.recordSale(4500);
+          payroll.add(new SalariedEmployee("Rosa", 54000));
+          payroll.add(lin);
+          payroll.printSlips();
+      - call: |
+          SalesEmployee ana = new SalesEmployee("Ana");
+          System.out.println(ana.monthlyPay());
+          ana.recordSale(99);
+          System.out.println(ana);
+          ana.recordSale(1);
+          Employee employee = ana;
+          System.out.println(employee.monthlyPay() + " " + employee.getName());
+        hidden: true
+      - call: |
+          Payroll payroll = new Payroll();
+          SalesEmployee bo = new SalesEmployee("Bo");
+          SalesEmployee cy = new SalesEmployee("Cy");
+          payroll.add(bo);
+          payroll.add(cy);
+          bo.recordSale(20000);
+          cy.recordSale(1000);
+          cy.recordSale(3050);
+          System.out.println(payroll.total());
+          payroll.printSlips();
+        hidden: true
+    more:
+      - task: |
+          A manager is a salaried employee with 400 a month on top of the salary. Sam logs his hours after he's been added to the list. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Employee> staff = new ArrayList<>();
+                  HourlyEmployee sam = new HourlyEmployee("Sam", 20);
+                  staff.add(sam);
+                  staff.add(new Manager("Ines", 60000));
+                  staff.add(new SalariedEmployee("Rosa", 48000));
+                  sam.logHours(50);
+
+                  int total = 0;
+                  for (Employee employee : staff) {
+                      total += employee.monthlyPay();
+                  }
+                  System.out.println(staff.get(0));
+                  System.out.println(staff.get(1));
+                  System.out.println(total);
+              }
+          }
+          // ==== Employee.java ====
+          public abstract class Employee {
+              private String name;
+
+              public Employee(String name) {
+                  this.name = name;
+              }
+
+              public abstract int monthlyPay();
+
+              @Override
+              public String toString() {
+                  return this.name + ": " + this.monthlyPay();
+              }
+          }
+          // ==== SalariedEmployee.java ====
+          public class SalariedEmployee extends Employee {
+              private int yearlySalary;
+
+              public SalariedEmployee(String name, int yearlySalary) {
+                  super(name);
+                  this.yearlySalary = yearlySalary;
+              }
+
+              @Override
+              public int monthlyPay() {
+                  return this.yearlySalary / 12;
+              }
+          }
+          // ==== Manager.java ====
+          public class Manager extends SalariedEmployee {
+              public Manager(String name, int yearlySalary) {
+                  super(name, yearlySalary);
+              }
+
+              @Override
+              public int monthlyPay() {
+                  return super.monthlyPay() + 400;
+              }
+          }
+          // ==== HourlyEmployee.java ====
+          public class HourlyEmployee extends Employee {
+              private int hourlyRate;
+              private int hours;
+
+              public HourlyEmployee(String name, int hourlyRate) {
+                  super(name);
+                  this.hourlyRate = hourlyRate;
+                  this.hours = 0;
+              }
+
+              public void logHours(int hours) {
+                  this.hours += hours;
+              }
+
+              @Override
+              public int monthlyPay() {
+                  return this.hourlyRate * this.hours;
+              }
+          }
+        hints:
+          - "The list holds a reference to the object `sam` refers to, not a copy, so the 50 hours logged afterwards count in the list too."
+          - "Ines is a Manager: her `monthlyPay()` runs SalariedEmployee's version with `super.monthlyPay()`, a twelfth of 60000, and adds 400. Rosa gets a twelfth of 48000."
+      - task: |
+          A notification service sends three kinds of message. `Notification.java` is the interface from the lesson, with one method, `String deliver()`, which returns the message as it's sent. `Email.java` and `PushAlert.java` are ready. Write:
+
+          - In `Sms.java`, the class `Sms`, which implements Notification. Its constructor is `Sms(String phone, String text)`, and `deliver()` returns `SMS to `, the phone number, `: ` and the text. A text message has little room, so a text longer than 20 characters is cut to its first 20 characters, followed by `...`.
+          - In `Main.java`, the method `sendAll(ArrayList<Notification> outbox)`, which prints what each notification delivers, one per line, and then how many were sent, like `4 sent`.
+
+          `sendAll` shouldn't care which kind each notification is. The check runs:
+
+          ```java fragment
+          ArrayList<Notification> outbox = new ArrayList<>();
+          outbox.add(new Email("ada@example.com", "Your invoice"));
+          outbox.add(new Sms("555-0142", "Your code is 4417"));
+          outbox.add(new PushAlert("Weather", "Rain at 3 pm"));
+          outbox.add(new Sms("555-0199", "Table for 4 is ready at the front desk"));
+          sendAll(outbox);
+          ```
+
+          and expects:
+
+          ```
+          Email to ada@example.com: Your invoice
+          SMS to 555-0142: Your code is 4417
+          [Weather] Rain at 3 pm
+          SMS to 555-0199: Table for 4 is ready...
+          4 sent
+          ```
+        seed:
+          Sms.java: |
+            public class Sms {
+
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Notification> outbox = new ArrayList<>();
+                    outbox.add(new Email("ada@example.com", "Your invoice"));
+                    outbox.add(new Sms("555-0142", "Your code is 4417"));
+                    outbox.add(new PushAlert("Weather", "Rain at 3 pm"));
+                    outbox.add(new Sms("555-0199", "Table for 4 is ready at the front desk"));
+                    sendAll(outbox);
+                }
+
+                // Write the method sendAll here.
+            }
+          Notification.java: |
+            public interface Notification {
+                String deliver();
+            }
+          Email.java: |
+            public class Email implements Notification {
+                private String address;
+                private String subject;
+
+                public Email(String address, String subject) {
+                    this.address = address;
+                    this.subject = subject;
+                }
+
+                @Override
+                public String deliver() {
+                    return "Email to " + this.address + ": " + this.subject;
+                }
+            }
+          PushAlert.java: |
+            public class PushAlert implements Notification {
+                private String app;
+                private String text;
+
+                public PushAlert(String app, String text) {
+                    this.app = app;
+                    this.text = text;
+                }
+
+                @Override
+                public String deliver() {
+                    return "[" + this.app + "] " + this.text;
+                }
+            }
+        solution:
+          Sms.java: |
+            public class Sms implements Notification {
+                private String phone;
+                private String text;
+
+                public Sms(String phone, String text) {
+                    this.phone = phone;
+                    this.text = text;
+                }
+
+                @Override
+                public String deliver() {
+                    String shown = this.text;
+                    if (shown.length() > 20) {
+                        shown = shown.substring(0, 20) + "...";
+                    }
+                    return "SMS to " + this.phone + ": " + shown;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Notification> outbox = new ArrayList<>();
+                    outbox.add(new Email("ada@example.com", "Your invoice"));
+                    outbox.add(new Sms("555-0142", "Your code is 4417"));
+                    outbox.add(new PushAlert("Weather", "Rain at 3 pm"));
+                    outbox.add(new Sms("555-0199", "Table for 4 is ready at the front desk"));
+                    sendAll(outbox);
+                }
+
+                public static void sendAll(ArrayList<Notification> outbox) {
+                    for (Notification notification : outbox) {
+                        System.out.println(notification.deliver());
+                    }
+                    System.out.println(outbox.size() + " sent");
+                }
+            }
+          Notification.java: |
+            public interface Notification {
+                String deliver();
+            }
+          Email.java: |
+            public class Email implements Notification {
+                private String address;
+                private String subject;
+
+                public Email(String address, String subject) {
+                    this.address = address;
+                    this.subject = subject;
+                }
+
+                @Override
+                public String deliver() {
+                    return "Email to " + this.address + ": " + this.subject;
+                }
+            }
+          PushAlert.java: |
+            public class PushAlert implements Notification {
+                private String app;
+                private String text;
+
+                public PushAlert(String app, String text) {
+                    this.app = app;
+                    this.text = text;
+                }
+
+                @Override
+                public String deliver() {
+                    return "[" + this.app + "] " + this.text;
+                }
+            }
+        hints:
+          - "Sms starts `public class Sms implements Notification {`, keeps the phone and the text in private variables, and writes `deliver()` with `@Override`. When `text.length() > 20`, use `text.substring(0, 20) + \"...\"` in place of the text."
+          - "`sendAll` goes through the outbox with a for-each loop over `Notification`s, prints `notification.deliver()` for each, and after the loop prints `outbox.size() + \" sent\"`. Each object's own `deliver()` does the rest."
+        require:
+          - pattern: \bclass\s+Sms\s+implements\s+Notification\b
+            message: "Write the header as `public class Sms implements Notification`."
+          - pattern: \bpublic\s+static\s+void\s+sendAll\s*\(\s*ArrayList\s*<\s*Notification\s*>\s+\w+\s*\)
+            message: "Write the method as `public static void sendAll(ArrayList<Notification> outbox)`."
+        forbid:
+          - pattern: \binstanceof\b
+            message: "`sendAll` doesn't need to know the kinds: each notification's own `deliver()` does its part."
+        tests:
+          - call: |
+              ArrayList<Notification> outbox = new ArrayList<>();
+              outbox.add(new Email("ada@example.com", "Your invoice"));
+              outbox.add(new Sms("555-0142", "Your code is 4417"));
+              outbox.add(new PushAlert("Weather", "Rain at 3 pm"));
+              outbox.add(new Sms("555-0199", "Table for 4 is ready at the front desk"));
+              sendAll(outbox);
+          - call: |
+              ArrayList<Notification> outbox = new ArrayList<>();
+              outbox.add(new Sms("555-0100", "12345678901234567890"));
+              outbox.add(new Sms("555-0101", "123456789012345678901"));
+              outbox.add(new Sms("555-0102", "Hi"));
+              sendAll(outbox);
+            hidden: true
+          - call: |
+              ArrayList<Notification> outbox = new ArrayList<>();
+              sendAll(outbox);
+              outbox.add(new PushAlert("Bank", "Card used"));
+              Notification sms = new Sms("555-0177", "Meeting moved to 4 pm tomorrow");
+              outbox.add(sms);
+              sendAll(outbox);
+              System.out.println(sms.deliver().length());
+            hidden: true
+
+  - id: polymorphism-end-of-part-9
+    slug: end-of-part-9
+    title: Choosing a design, and the end of part 9
+    text: |
+      This last step of part 9 puts the pieces together: first how to choose between them when you design classes of your own, then a look back at the whole part.
+
+      ### extends, abstract, or an interface?
+
+      Module 34 asked "is a, or has a?", and module 35 compared interfaces with abstract classes. With whole hierarchies in view, the choices look like this, with this module's examples:
+
+      | When | Use | Example |
+      | --- | --- | --- |
+      | Every X is a Y, and should get Y's code and data | `class X extends Y` | A Taxi is a Car, and gets its plate and its toll rule |
+      | Shared code, but no objects of the general kind | an abstract class | Employee keeps the name and the `toString`, and leaves `monthlyPay()` to each kind |
+      | Classes share an ability, but no code, or aren't otherwise related | an interface | Taxis and trucks are Commercial, and plain cars aren't |
+      | One class needs several roles | one superclass, and any number of interfaces | `Bat extends Enemy implements Flying` |
+
+      For the types of variables, parameters and lists, pick the most general type that has everything the code needs. Payroll takes any Employee, a company's bill needs only Commercial, and step 2's spear only needs to know whether an enemy is Flying. Code written in that way works with more classes, including ones that don't exist yet, like the interns of step 3.
+
+      ### The end of part 9
+
+      This step ends the material of the MOOC's ninth part. Module 34 started from the class Object, which every class extends, and built classes on other classes with `extends`: `super(...)` for the superclass's constructor, overriding with `@Override` and `super.method()`, `protected`, "is a or has a", and abstract classes. Module 35 brought interfaces, lists of methods that a class promises with `implements`, used as the types of variables, parameters, return values and lists, and Java's own List, Map, Set and Collection. This module put them together. An object has every type of its hierarchy, `instanceof` asks which, and a cast gives a reference of the more specific type. A program built on a general type works with every kind of object, even kinds added later. Part 10 comes next, starting with streams and lambdas. Part 9 ends with [the MOOC's summary page](https://java-programming.mooc.fi/part-9/4-summary) on its own site.
+
+      **Your turn:** the game gets hot-air balloons that drift across the sky. A balloon flies, but it isn't an enemy: it has no health, and nobody fights it. So `Balloon` implements Flying and has no `extends`: its only superclass is Object. `Flying.java`, `Enemy.java` and `Bat.java` are step 2's. Write:
+
+      - in `Balloon.java`, the class `Balloon`, with a constructor `Balloon(String color, int altitude)`, the method `altitude()` from Flying, and a `toString` that returns the color and the word `balloon`, like `red balloon`
+      - in `Main.java`, the method `lowest(ArrayList<Flying> flyers)`, which returns the flyer with the lowest altitude, the first of them when several are equally low, or `null` for an empty list
+
+      The check runs the following. A bat prints as every Enemy does, with its name and its health:
+
+      ```java fragment
+      ArrayList<Flying> sky = new ArrayList<>();
+      sky.add(new Bat("Squeak", 9));
+      sky.add(new Balloon("red", 40));
+      sky.add(new Balloon("green", 6));
+      sky.add(new Bat("Flit", 12));
+      System.out.println(sky);
+      System.out.println(lowest(sky));
+      ```
+
+      and expects:
+
+      ```
+      [Squeak (8), red balloon, green balloon, Flit (8)]
+      green balloon
+      ```
+    seed:
+      Balloon.java: |
+        public class Balloon {
+
+        }
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Flying> sky = new ArrayList<>();
+                sky.add(new Bat("Squeak", 9));
+                sky.add(new Balloon("red", 40));
+                sky.add(new Balloon("green", 6));
+                sky.add(new Bat("Flit", 12));
+                System.out.println(sky);
+                System.out.println(lowest(sky));
+            }
+
+            // Write the method lowest here.
+        }
+      Flying.java: |
+        public interface Flying {
+            int altitude();
+        }
+      Enemy.java: |
+        public abstract class Enemy {
+            private String name;
+            private int health;
+
+            public Enemy(String name, int health) {
+                this.name = name;
+                this.health = health;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getHealth() {
+                return this.health;
+            }
+
+            public void heal(int amount) {
+                this.health += amount;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.health + ")";
+            }
+        }
+      Bat.java: |
+        public class Bat extends Enemy implements Flying {
+            private int altitude;
+
+            public Bat(String name, int altitude) {
+                super(name, 8);
+                this.altitude = altitude;
+            }
+
+            @Override
+            public int altitude() {
+                return this.altitude;
+            }
+        }
+    solution:
+      Balloon.java: |
+        public class Balloon implements Flying {
+            private String color;
+            private int altitude;
+
+            public Balloon(String color, int altitude) {
+                this.color = color;
+                this.altitude = altitude;
+            }
+
+            @Override
+            public int altitude() {
+                return this.altitude;
+            }
+
+            @Override
+            public String toString() {
+                return this.color + " balloon";
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Flying> sky = new ArrayList<>();
+                sky.add(new Bat("Squeak", 9));
+                sky.add(new Balloon("red", 40));
+                sky.add(new Balloon("green", 6));
+                sky.add(new Bat("Flit", 12));
+                System.out.println(sky);
+                System.out.println(lowest(sky));
+            }
+
+            public static Flying lowest(ArrayList<Flying> flyers) {
+                Flying lowest = null;
+                for (Flying flyer : flyers) {
+                    if (lowest == null || flyer.altitude() < lowest.altitude()) {
+                        lowest = flyer;
+                    }
+                }
+                return lowest;
+            }
+        }
+      Flying.java: |
+        public interface Flying {
+            int altitude();
+        }
+      Enemy.java: |
+        public abstract class Enemy {
+            private String name;
+            private int health;
+
+            public Enemy(String name, int health) {
+                this.name = name;
+                this.health = health;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getHealth() {
+                return this.health;
+            }
+
+            public void heal(int amount) {
+                this.health += amount;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.health + ")";
+            }
+        }
+      Bat.java: |
+        public class Bat extends Enemy implements Flying {
+            private int altitude;
+
+            public Bat(String name, int altitude) {
+                super(name, 8);
+                this.altitude = altitude;
+            }
+
+            @Override
+            public int altitude() {
+                return this.altitude;
+            }
+        }
+    hints:
+      - "`public class Balloon implements Flying {` with a private color and altitude, a constructor, `altitude()` with `@Override`, and `toString` returning `this.color + \" balloon\"`."
+      - "In `lowest`, keep the lowest flyer so far in a `Flying` variable that starts as `null`. Replace it when it's still `null`, or when a flyer's `altitude()` is smaller, with `<` so that the first of equally low ones stays."
+    require:
+      - pattern: \bclass\s+Balloon\s+implements\s+Flying\b
+        message: "Write the header as `public class Balloon implements Flying`."
+      - pattern: \bpublic\s+static\s+Flying\s+lowest\s*\(\s*ArrayList\s*<\s*Flying\s*>\s+\w+\s*\)
+        message: "Write the method as `public static Flying lowest(ArrayList<Flying> flyers)`."
+    forbid:
+      - pattern: \bclass\s+Balloon\s+extends\b
+        message: "A balloon isn't an enemy, or any other kind of class here: Balloon implements Flying, and needs no `extends`."
+    tests:
+      - call: |
+          ArrayList<Flying> sky = new ArrayList<>();
+          sky.add(new Bat("Squeak", 9));
+          sky.add(new Balloon("red", 40));
+          sky.add(new Balloon("green", 6));
+          sky.add(new Bat("Flit", 12));
+          System.out.println(sky);
+          System.out.println(lowest(sky));
+      - call: |
+          ArrayList<Flying> sky = new ArrayList<>();
+          System.out.println(lowest(sky));
+          sky.add(new Balloon("blue", 15));
+          System.out.println(lowest(sky));
+          sky.add(new Bat("Dusk", 15));
+          sky.add(new Bat("Low", 2));
+          sky.add(new Balloon("white", 2));
+          Flying found = lowest(sky);
+          System.out.println(found + " " + found.altitude() + " " + (found instanceof Enemy));
+        hidden: true
+      - call: |
+          Balloon yellow = new Balloon("yellow", 300);
+          Flying flyer = yellow;
+          Object thing = yellow;
+          System.out.println(flyer.altitude() + " " + thing);
+          System.out.println((thing instanceof Enemy) + " " + (thing instanceof Flying));
+          ArrayList<Flying> sky = new ArrayList<>();
+          sky.add(new Bat("Top", 500));
+          sky.add(yellow);
+          System.out.println(lowest(sky));
+        hidden: true
+    more:
+      - task: |
+          The toll booth from step 1, with step 1's TankerTruck, which pays 10 more than a Truck. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Vehicle> passed = new ArrayList<>();
+                  passed.add(new Vehicle("MC-40"));
+                  passed.add(new TankerTruck("TK-4", "Coastal Fuels", 2));
+                  passed.add(new Truck("TR-88", "Coastal Fuels", 1));
+                  passed.add(new Truck("TR-21", "Birch Haulage", 3));
+
+                  int trucks = 0;
+                  int coastal = 0;
+                  for (Vehicle vehicle : passed) {
+                      if (vehicle instanceof Truck) {
+                          trucks++;
+                      }
+                      if (vehicle instanceof Commercial) {
+                          Commercial customer = (Commercial) vehicle;
+                          if (customer.company().equals("Coastal Fuels")) {
+                              coastal += vehicle.toll();
+                          }
+                      }
+                  }
+                  System.out.println(trucks + " " + coastal);
+                  System.out.println(passed.get(1));
+                  Object last = passed.get(3);
+                  System.out.println(last);
+              }
+          }
+          // ==== Vehicle.java ====
+          public class Vehicle {
+              private String plate;
+
+              public Vehicle(String plate) {
+                  this.plate = plate;
+              }
+
+              public int toll() {
+                  return 3;
+              }
+
+              @Override
+              public String toString() {
+                  return this.plate + " pays " + this.toll();
+              }
+          }
+          // ==== Truck.java ====
+          public class Truck extends Vehicle implements Commercial {
+              private String company;
+              private int axles;
+
+              public Truck(String plate, String company, int axles) {
+                  super(plate);
+                  this.company = company;
+                  this.axles = axles;
+              }
+
+              @Override
+              public int toll() {
+                  return 5 * this.axles;
+              }
+
+              @Override
+              public String company() {
+                  return this.company;
+              }
+          }
+          // ==== TankerTruck.java ====
+          public class TankerTruck extends Truck {
+              public TankerTruck(String plate, String company, int axles) {
+                  super(plate, company, axles);
+              }
+
+              @Override
+              public int toll() {
+                  return super.toll() + 10;
+              }
+          }
+          // ==== Commercial.java ====
+          public interface Commercial {
+              String company();
+          }
+        hints:
+          - "A TankerTruck is a Truck, so `instanceof Truck` counts it, and it's Commercial through Truck. The motorbike is neither."
+          - "Coastal Fuels has the tanker, with 2 axles, 10 + 10, and a truck with 1 axle. Printing an element runs Vehicle's `toString` with the object's own `toll()`, even through an Object variable."
+      - task: |
+          To end part 9: the toll booth's records, which bring together a class hierarchy, an interface, `instanceof`, and a hash map from part 8. `Vehicle.java`, `Truck.java` and `Commercial.java` are step 1's. Write:
+
+          - In `Van.java`, the class `Van`. A delivery van is a Vehicle, and it works for a company. Its constructor is `Van(String plate, String company)`, it pays a toll of 7, and it's Commercial.
+          - In `TollBooth.java`:
+            - the constructor,
+            - `pass(Vehicle vehicle)`, which records a vehicle going through the booth,
+            - `total()`, which returns all the tolls paid so far, added up,
+            - `billFor(String company)`, which returns the tolls of that company's vehicles added up, or 0 for a company with none,
+            - `companies()`, which returns a new list of the companies that have a bill, each once, in alphabetical order.
+
+          A `HashMap<String, Integer>` from a company to its bill is one good way to keep the bills. `Main.java` is a test drive, and it prints:
+
+          ```
+          49
+          21
+          0
+          [Birch Haulage, Nordic Freight, Swift Parcels]
+          ```
+        seed:
+          TollBooth.java: |
+            import java.util.ArrayList;
+            import java.util.Collections;
+            import java.util.HashMap;
+
+            public class TollBooth {
+
+                public TollBooth() {
+
+                }
+
+                public void pass(Vehicle vehicle) {
+
+                }
+
+                public int total() {
+                    return 0;
+                }
+
+                public int billFor(String company) {
+                    return 0;
+                }
+
+                public ArrayList<String> companies() {
+                    return null;
+                }
+            }
+          Van.java: |
+            public class Van {
+
+            }
+          Vehicle.java: |
+            public class Vehicle {
+                private String plate;
+
+                public Vehicle(String plate) {
+                    this.plate = plate;
+                }
+
+                public String getPlate() {
+                    return this.plate;
+                }
+
+                public int toll() {
+                    return 3;
+                }
+
+                @Override
+                public String toString() {
+                    return this.plate + " pays " + this.toll();
+                }
+            }
+          Truck.java: |
+            public class Truck extends Vehicle implements Commercial {
+                private String company;
+                private int axles;
+
+                public Truck(String plate, String company, int axles) {
+                    super(plate);
+                    this.company = company;
+                    this.axles = axles;
+                }
+
+                @Override
+                public int toll() {
+                    return 5 * this.axles;
+                }
+
+                @Override
+                public String company() {
+                    return this.company;
+                }
+            }
+          Commercial.java: |
+            public interface Commercial {
+                String company();
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TollBooth booth = new TollBooth();
+                    booth.pass(new Van("VN-7", "Swift Parcels"));
+                    booth.pass(new Vehicle("MC-40"));
+                    booth.pass(new Truck("TR-88", "Nordic Freight", 3));
+                    booth.pass(new Van("VN-9", "Swift Parcels"));
+                    booth.pass(new Truck("TR-21", "Birch Haulage", 2));
+                    booth.pass(new Van("VN-7", "Swift Parcels"));
+                    System.out.println(booth.total());
+                    System.out.println(booth.billFor("Swift Parcels"));
+                    System.out.println(booth.billFor("Metro Cabs"));
+                    System.out.println(booth.companies());
+                }
+            }
+        solution:
+          TollBooth.java: |
+            import java.util.ArrayList;
+            import java.util.Collections;
+            import java.util.HashMap;
+
+            public class TollBooth {
+                private int total;
+                private HashMap<String, Integer> bills;
+
+                public TollBooth() {
+                    this.total = 0;
+                    this.bills = new HashMap<>();
+                }
+
+                public void pass(Vehicle vehicle) {
+                    int toll = vehicle.toll();
+                    this.total += toll;
+                    if (vehicle instanceof Commercial) {
+                        Commercial customer = (Commercial) vehicle;
+                        String company = customer.company();
+                        this.bills.put(company, this.bills.getOrDefault(company, 0) + toll);
+                    }
+                }
+
+                public int total() {
+                    return this.total;
+                }
+
+                public int billFor(String company) {
+                    return this.bills.getOrDefault(company, 0);
+                }
+
+                public ArrayList<String> companies() {
+                    ArrayList<String> companies = new ArrayList<>(this.bills.keySet());
+                    Collections.sort(companies);
+                    return companies;
+                }
+            }
+          Van.java: |
+            public class Van extends Vehicle implements Commercial {
+                private String company;
+
+                public Van(String plate, String company) {
+                    super(plate);
+                    this.company = company;
+                }
+
+                @Override
+                public int toll() {
+                    return 7;
+                }
+
+                @Override
+                public String company() {
+                    return this.company;
+                }
+            }
+          Vehicle.java: |
+            public class Vehicle {
+                private String plate;
+
+                public Vehicle(String plate) {
+                    this.plate = plate;
+                }
+
+                public String getPlate() {
+                    return this.plate;
+                }
+
+                public int toll() {
+                    return 3;
+                }
+
+                @Override
+                public String toString() {
+                    return this.plate + " pays " + this.toll();
+                }
+            }
+          Truck.java: |
+            public class Truck extends Vehicle implements Commercial {
+                private String company;
+                private int axles;
+
+                public Truck(String plate, String company, int axles) {
+                    super(plate);
+                    this.company = company;
+                    this.axles = axles;
+                }
+
+                @Override
+                public int toll() {
+                    return 5 * this.axles;
+                }
+
+                @Override
+                public String company() {
+                    return this.company;
+                }
+            }
+          Commercial.java: |
+            public interface Commercial {
+                String company();
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TollBooth booth = new TollBooth();
+                    booth.pass(new Van("VN-7", "Swift Parcels"));
+                    booth.pass(new Vehicle("MC-40"));
+                    booth.pass(new Truck("TR-88", "Nordic Freight", 3));
+                    booth.pass(new Van("VN-9", "Swift Parcels"));
+                    booth.pass(new Truck("TR-21", "Birch Haulage", 2));
+                    booth.pass(new Van("VN-7", "Swift Parcels"));
+                    System.out.println(booth.total());
+                    System.out.println(booth.billFor("Swift Parcels"));
+                    System.out.println(booth.billFor("Metro Cabs"));
+                    System.out.println(booth.companies());
+                }
+            }
+        hints:
+          - "Van is step 1's Truck without the axles: `public class Van extends Vehicle implements Commercial`, a constructor that hands the plate on with `super(plate)`, and `toll()` and `company()` with `@Override`."
+          - "In TollBooth, keep the total in an `int` and the bills in a `HashMap<String, Integer>`, both set in the constructor. `pass` adds the vehicle's `toll()` to the total and, when `vehicle instanceof Commercial`, casts it, and adds the toll to its company's bill with `getOrDefault(company, 0)`. `companies()` sorts a copy of the keys, as in module 33."
+        require:
+          - pattern: \bclass\s+Van\s+extends\s+Vehicle\s+implements\s+Commercial\b
+            message: "Write the header as `public class Van extends Vehicle implements Commercial`."
+          - pattern: \binstanceof\s+Commercial\b
+            message: "In `pass`, check with `instanceof Commercial` whether the vehicle has a company to bill."
+        forbid:
+          - pattern: \bclass\s+TollBooth\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Van\b
+            message: "TollBooth doesn't print. Its methods return their answers, and `main` prints them."
+        tests:
+          - name: The test drive
+          - call: |
+              TollBooth booth = new TollBooth();
+              System.out.println(booth.total() + " " + booth.billFor("Swift Parcels") + " " + booth.companies());
+              booth.pass(new Vehicle("MC-1"));
+              booth.pass(new Vehicle("MC-2"));
+              System.out.println(booth.total() + " " + booth.companies());
+              Van van = new Van("VN-1", "Zeta Couriers");
+              Commercial customer = van;
+              booth.pass(van);
+              booth.pass(new Truck("TR-5", "Alder Logistics", 4));
+              booth.pass(van);
+              System.out.println(booth.total() + " " + booth.billFor(customer.company()) + " " + booth.billFor("Alder Logistics"));
+              System.out.println(booth.companies());
+            hidden: true
+          - call: |
+              TollBooth booth = new TollBooth();
+              for (int i = 1; i <= 10; i++) {
+                  booth.pass(new Truck("TR-" + i, "Fleet " + (i % 3), i));
+              }
+              System.out.println(booth.total());
+              System.out.println(booth.billFor("Fleet 0") + " " + booth.billFor("fleet 0"));
+              System.out.println(booth.companies());
+              Vehicle van = new Van("VN-2", "Fleet 1");
+              booth.pass(van);
+              System.out.println(van.toll() + " " + booth.billFor("Fleet 1") + " " + van);
+            hidden: true

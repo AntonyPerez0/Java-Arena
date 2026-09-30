@@ -606,3 +606,69 @@ questions:
       }
       System.out.println(clubs.get("Debate") + " " + clubs.size());
     why: "Each club gets its own list the first time it's seen, and later names are added to that list, not put in its place. Debate holds both Amira and Jonas, and the map has two keys, Debate and Art."
+
+  - module: inheritance
+    type: predict
+    classes: |
+      class Instrument {
+          public String sound() {
+              return "hum";
+          }
+
+          public String play() {
+              return "plays " + this.sound();
+          }
+      }
+
+      class Horn extends Instrument {
+          @Override
+          public String sound() {
+              return "toot";
+          }
+      }
+    body: |
+      Instrument horn = new Horn();
+      Instrument plain = new Instrument();
+      System.out.println(horn.play() + ", " + plain.play());
+    why: "Horn inherits `play` from Instrument but overrides `sound`. `play` calls `this.sound()`, and the version that runs belongs to the object's class, not the variable's type. `horn` refers to a Horn, so its `play` uses Horn's toot. `plain` is an Instrument and gets hum."
+
+  - module: interfaces
+    type: predict
+    pre: |
+      public static int total(Collection<Integer> numbers) {
+          int sum = 0;
+          for (int number : numbers) {
+              sum += number;
+          }
+          return sum;
+      }
+    body: |
+      List<Integer> scans = new ArrayList<>();
+      scans.add(5);
+      scans.add(7);
+      scans.add(5);
+      Set<Integer> codes = new HashSet<>(scans);
+      System.out.println(total(scans) + " " + total(codes) + " " + codes.add(7));
+    why: "`total` takes a Collection, and a List and a Set are both Collections. The list keeps both 5s: 17. `new HashSet<>(scans)` keeps each value once, so the set holds 5 and 7: 12. `add` returns `false`, since 7 is in the set already."
+
+  - module: polymorphism
+    type: choice
+    classes: |
+      abstract class Enemy {
+      }
+
+      class Goblin extends Enemy {
+      }
+
+      class Troll extends Enemy {
+      }
+    body: |
+      Enemy snip = new Goblin();
+    prompt: "Which line, added after this code, compiles but crashes when it runs?"
+    choices:
+      - "`Object thing = snip;`"
+      - "`boolean troll = snip instanceof Troll;`"
+      - "`Troll troll = (Troll) snip;`"
+      - "`String name = (String) snip;`"
+    answer: 3
+    why: "An Enemy might be a Troll, so javac accepts `(Troll) snip`, and the line crashes with a ClassCastException when it runs, because this object is a goblin. `(String) snip` never compiles, because no Enemy can be a String. The other two lines compile and run: every object is an Object, and `instanceof` gives `false`."

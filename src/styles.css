@@ -7,6 +7,8 @@
    brand highlight (the logo, the hero's accent word and corner glow, the eyebrow tile,
    Deathmatch decoration). Brand red never carries body text or marks a status, so "failed"
    (--bad, --fail-*) keeps its own red tokens, always with an icon and a label.
+   No orange anywhere, code included (numbers are pink, true and false violet). Amber stays for
+   hints and warnings only, and gold for type names in code.
    ========================================================================== */
 
 /* Self-hosted (works offline, nothing loaded from other sites). Latin only. */
@@ -104,10 +106,13 @@
   --tk-kw: #c792ea;
   --tk-type: #ffcb6b;
   --tk-str: #c3e88d;
-  --tk-num: #f78c6c;
+  /* Numbers are pink, not the old coral: no orange, and clear of the "failed" red. */
+  --tk-num: #ff79c6;
   --tk-com: #8a94a8;
   --tk-pre: #89ddff;
   --tk-fn: #82aaff;
+  /* Selected text: a 25% blue wash keeps muted, red and comment text readable on the page and panels. */
+  --selection: color-mix(in srgb, var(--accent) 25%, transparent);
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 12px 32px -16px rgb(0 0 0 / 0.7);
   --shadow-lg: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 32px 80px -32px rgb(0 0 0 / 0.9);
@@ -174,10 +179,12 @@
   --tk-kw: #7a2fae;
   --tk-type: #805300;
   --tk-str: #2b6e1f;
-  --tk-num: #a8401b;
+  --tk-num: #a3246a;
   --tk-com: #5c6574;
   --tk-pre: #0a6590;
   --tk-fn: #2448a8;
+  /* A paler 15% wash in light: links, muted and red text keep 4.5:1 when selected, even on grey panels. */
+  --selection: color-mix(in srgb, var(--accent) 15%, transparent);
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
   --shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 24px -12px rgb(16 24 40 / 0.14);
   --shadow-lg: 0 1px 2px rgb(16 24 40 / 0.04), 0 32px 64px -24px rgb(16 24 40 / 0.22);
@@ -192,7 +199,7 @@
 html { font-size: calc(16px * var(--scale)); -webkit-text-size-adjust: 100%; scroll-padding-top: calc(var(--header-h) + 0.75rem); }
 html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.6; }
 body { font-size: 1rem; font-feature-settings: "cv11", "ss01", "ss03"; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
-::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+::selection { background: var(--selection); }
 a { color: var(--accent2); text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
 code { font-family: var(--mono); font-size: 0.88em; background: var(--tint); padding: 0.1em 0.38em; border-radius: 5px; border: 1px solid var(--tint-faint); }
@@ -704,9 +711,15 @@ select, input[type="text"], input[type="url"], input[type="password"], input[typ
   .cta-band { padding: 4.5rem 0; }
   .section-head { margin-bottom: 2rem; }
 }
-/* The smallest phones: the logo mark alone (the link still says "Java Arena home"). */
+/* The smallest phones keep "Java Arena" next to the mark whenever it fits: the mark goes alone
+   (the link still says "Java Arena home") only while the engine pill is loading or shows an error,
+   or below 340px once any engine pill shows. */
 @media (max-width: 374px) {
   .topbar .brand-name { display: none; }
+  .topbar:not(:has(.pill-loading, .pill-error)) .brand-name { display: inline; }
+}
+@media (max-width: 339px) {
+  .topbar:has(.pill) .brand-name { display: none; }
 }
 
 /* ---------- lesson challenges and the task card */
@@ -715,7 +728,9 @@ select, input[type="text"], input[type="url"], input[type="password"], input[typ
 .challenge-tab:hover { border-color: var(--line-strong); color: var(--text); }
 .challenge-n, .challenge-tab > .icon { display: inline-grid; place-items: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; background: var(--tint); font-size: 0.75rem; flex: none; }
 .challenge-tab > .icon { padding: 0.2rem; }
-.challenge-cur { color: var(--text); border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+/* The current tab's border is the full line color (3:1 or more on the page and on its fill), the only
+   mark left on phones once the number circle goes; :hover too, since a tapped tab keeps it. */
+.challenge-cur, .challenge-cur:hover { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
 .challenge-cur .challenge-n { background: var(--accent-fill); color: var(--on-accent); }
 .challenge-done { color: var(--pass-fg); }
 .challenge-done > .icon { background: var(--pass-bg); color: var(--good); box-shadow: inset 0 0 0 1px var(--pass-line); }
@@ -818,14 +833,14 @@ ol.modules { list-style: none; padding: 0; margin: 0; }
 
 /* ---------------------------------------------------------------- Deathmatch (adapted from C/C++ Arena) */
 .lobby-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; margin-bottom: 1rem; align-items: stretch; }
-/* The rank is an achievement: a blue tint, never the "failed" colors. */
+/* The rank is an achievement: a blue tint, never the "failed" colors (the top tier is the logo's red). */
 .rank-card { display: flex; gap: 1rem; align-items: center; background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 14%, var(--panel)), var(--panel) 60%); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
 .rank-emblem { color: var(--accent-fg); flex: none; }
 .rank-emblem[data-tier="0"] { color: var(--muted); }
 .rank-emblem[data-tier="1"] { color: #ca8a04; }
 .rank-emblem[data-tier="2"] { color: #0284c7; }
 .rank-emblem[data-tier="3"] { color: var(--tk-kw); }
-.rank-emblem[data-tier="4"] { color: var(--bad); }
+.rank-emblem[data-tier="4"] { color: var(--brand-red); }
 .rank-name { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; }
 .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
 .mode { text-align: left; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem; cursor: pointer; display: flex; flex-direction: column; gap: 0.4rem; transition: transform 0.2s var(--ease), border-color 0.2s, box-shadow 0.2s; box-shadow: var(--shadow); }
@@ -905,8 +920,11 @@ button.bugline:hover { background: color-mix(in srgb, var(--bad) 12%, transparen
 .death { background: var(--panel); border: 1px solid var(--fail-line); border-radius: var(--radius); padding: 1.4rem; animation: pop 0.25s var(--ease); box-shadow: var(--shadow-lg); }
 .death.cleared { border-color: var(--pass-line); }
 .death-title { font-size: 2rem; font-weight: 800; letter-spacing: 0.02em; color: var(--bad); margin: 0; }
+/* A solved Daily challenge is a success: green, not the "failed" red. */
+.death.cleared .death-title { color: var(--pass-fg); }
 .death-title:focus { outline: none; }
-.death-sub { color: var(--accent2); font-weight: 700; margin: 0.2rem 0 1rem; }
+/* Plain text, not the link blue: the subtitle isn't something to tap. */
+.death-sub { color: var(--text2); font-weight: 700; margin: 0.2rem 0 1rem; }
 .death-card { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; }
 .answer-cmp { display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.8rem; margin: 0.7rem 0 0; align-items: baseline; }
 p.answer-cmp { display: block; }

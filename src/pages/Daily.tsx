@@ -89,7 +89,7 @@ export default function Daily() {
           />
         </>
       ) : (
-        <Death drill={drill} given={given} title={daily[day] ? "Solved" : "Not this time"} sub={daily[day] ? `Streak: ${streak} ${streak === 1 ? "day" : "days"}. Come back tomorrow.` : "Your streak still counts. Read why, then come back tomorrow."}>
+        <Death drill={drill} given={given} cleared={daily[day]} title={daily[day] ? "Solved" : "Not this time"} sub={daily[day] ? `Streak: ${streak} ${streak === 1 ? "day" : "days"}. Come back tomorrow.` : "Your streak still counts. Read why, then come back tomorrow."}>
           <Link className="btn btn-primary" to="/deathmatch/">
             Keep going in Deathmatch
           </Link>

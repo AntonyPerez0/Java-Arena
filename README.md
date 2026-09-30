@@ -19,8 +19,9 @@ The site is built in batches, one pull request per batch.
 | 7 | MOOC part 4 (modules 17 to 20: objects, classes, reading files), an editor for programs of several files | done |
 | 8 | MOOC part 5 (modules 21 to 23: designing classes and overloading, references and null, objects working together), undo history per file | done |
 | 9 | MOOC part 6 (modules 24 to 26: lists inside objects, a text user interface, troubleshooting and unit testing), JUnit 4 in the browser | done |
-| 10 | MOOC part 7 (modules 27 to 29: procedural and object-oriented programs, sorting and searching, larger programs), the end of Java Programming I; lesson pages load only their own step | this batch |
-| 11 to 20 | Parts 8 to 14 of the course, progress sync, projects, Pro Track, tools, polish | planned |
+| 10 | MOOC part 7 (modules 27 to 29: procedural and object-oriented programs, sorting and searching, larger programs), the end of Java Programming I; lesson pages load only their own step | done |
+| 11 | MOOC part 8 (modules 30 to 33: a recap of parts 1 to 7, hash maps, equals and hashCode, grouping data), the start of Java Programming II; Continue buttons open their lesson at once, a keyboard user keeps their place when the app starts | this batch |
+| 12 to 20 | Parts 9 to 14 of the course, progress sync, projects, Pro Track, tools, polish | planned |
 
 The plan and the research behind it are in [`docs/research/`](docs/research/README.md), including the full curriculum map.
 

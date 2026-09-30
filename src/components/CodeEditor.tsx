@@ -50,7 +50,7 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
       // Four spaces per level, like the lessons and the style check (CodeMirror's default is two).
       indentUnit.of("    "),
       EditorView.lineWrapping,
-      // An explicit tabindex keeps the text area a tab stop that tools like axe recognise inside the scroll area.
+      // An explicit tabindex keeps the text area a tab stop that tools like axe recognize inside the scroll area.
       EditorView.contentAttributes.of({ "aria-label": label, "aria-describedby": helpId, tabindex: "0", autocapitalize: "off", autocorrect: "off", spellcheck: "false" }),
       lintGutter(),
       linter(

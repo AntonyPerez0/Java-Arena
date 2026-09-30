@@ -1,0 +1,2544 @@
+id: useful-techniques
+summary: The tools that round off part 10. The traditional for loop once more, for counting down, taking steps and working with indexes; StringBuilder, for building a text piece by piece; regular expressions, which check the form of a string with matches, alternation, groups, quantifiers and character classes; enums, types with a fixed set of values, with fields, a constructor and methods of their own; and iterators, which can remove elements while going through a collection. Last, a look back at the whole of part 10. MOOC sections 10.3 and 10.4.
+steps:
+  - id: useful-techniques-for-loop
+    slug: for-loop-again
+    title: The for loop again
+    text: |
+      Since module 14, you've gone through lists mostly with for-each loops, and module 37 added streams. Both hand you the values one at a time, which is often all a loop needs. The traditional `for` loop from module 9 is still the tool when the loop needs numbers of its own: counting down, jumping ahead by more than one, or knowing *where* each value is. The MOOC's section 10.3 names it first among its learning goals, so this module starts with it, as a recap.
+
+      ### Three parts, any numbers
+
+      `for (start; condition; change)`: the start runs once, the condition is checked before every round, and the change runs at the end of every round. Nothing says that the change must be `i++`. The last seconds of a quiz round count down:
+
+      ```java main
+      for (int seconds = 5; seconds >= 1; seconds--) {
+          System.out.println(seconds + "...");
+      }
+      System.out.println("Time's up!");
+      ```
+
+      ```output
+      5...
+      4...
+      3...
+      2...
+      1...
+      Time's up!
+      ```
+
+      Counting down, the condition turns around too: the loop goes on while `seconds >= 1`. Written as `seconds <= 1`, the condition would be false before the first round (5 isn't at most 1), and the loop would never run, without any error message.
+
+      To jump by more than one, write the change with `+=` or `-=`. Between 2024 and 2040, every fourth year is a leap year:
+
+      ```java main
+      for (int year = 2024; year <= 2040; year += 4) {
+          System.out.println(year + " is a leap year");
+      }
+      ```
+
+      ```output
+      2024 is a leap year
+      2028 is a leap year
+      2032 is a leap year
+      2036 is a leap year
+      2040 is a leap year
+      ```
+
+      ### Loops over indexes
+
+      A for-each loop gives you each value, but not its position. When the position matters, loop over the indexes instead, from 0 up to `size() - 1` for a list (`length - 1` for an array). You need the indexes:
+
+      - to compare a value with the one before it or after it
+      - to go through two lists side by side, with the same index in both
+      - to go through a list backwards, or to take only every second value
+
+      A school garden measures its sunflower every Monday. The growth in a week is a height minus the height of the week before:
+
+      ```java main
+      ArrayList<Integer> heights = new ArrayList<>();
+      heights.add(12);
+      heights.add(19);
+      heights.add(31);
+      heights.add(30);
+      heights.add(45);
+      for (int i = 1; i < heights.size(); i++) {
+          int growth = heights.get(i) - heights.get(i - 1);
+          System.out.println("Week " + i + ": " + growth + " cm");
+      }
+      ```
+
+      ```output
+      Week 1: 7 cm
+      Week 2: 12 cm
+      Week 3: -1 cm
+      Week 4: 15 cm
+      ```
+
+      - The loop starts from index 1, since the first height has no week before it. Starting from 0, the first round would ask for `heights.get(-1)`, and the program would stop with an IndexOutOfBoundsException.
+      - `i < heights.size()` makes the last round the last index, 4.
+      - `i` is also the week's number, which a for-each loop wouldn't know.
+
+      Module 14's way of removing values from a list, a loop that goes backwards with `for (int i = list.size() - 1; i >= 0; i--)`, is an index loop too. Step 7 shows another way to remove, the iterator.
+
+      | The loop needs | Use |
+      | --- | --- |
+      | each value, from the first to the last | a for-each loop (or a stream) |
+      | numbers that count down, or go up in steps | `for` with `--`, `+=` or `-=` |
+      | positions: neighbors, two lists at once, going backwards | `for` over the indexes |
+
+      **Your turn:** in `Main.java`, write the method `biggestGrowth(ArrayList<Integer> heights)` with a `for` loop over the indexes. It returns the sunflower's biggest growth from one week to the next: the largest `heights.get(i) - heights.get(i - 1)`. If the sunflower never grew, or the list has fewer than two heights, the method returns 0. The check runs:
+
+      ```java fragment
+      ArrayList<Integer> heights = new ArrayList<>();
+      heights.add(12);
+      heights.add(19);
+      heights.add(31);
+      heights.add(30);
+      heights.add(45);
+      System.out.println(biggestGrowth(heights));
+      ```
+
+      and expects:
+
+      ```
+      15
+      ```
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> heights = new ArrayList<>();
+              heights.add(12);
+              heights.add(19);
+              heights.add(31);
+              heights.add(30);
+              heights.add(45);
+              System.out.println(biggestGrowth(heights));
+          }
+
+          public static int biggestGrowth(ArrayList<Integer> heights) {
+              return 0;
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> heights = new ArrayList<>();
+              heights.add(12);
+              heights.add(19);
+              heights.add(31);
+              heights.add(30);
+              heights.add(45);
+              System.out.println(biggestGrowth(heights));
+          }
+
+          public static int biggestGrowth(ArrayList<Integer> heights) {
+              int biggest = 0;
+              for (int i = 1; i < heights.size(); i++) {
+                  int growth = heights.get(i) - heights.get(i - 1);
+                  if (growth > biggest) {
+                      biggest = growth;
+                  }
+              }
+              return biggest;
+          }
+      }
+    hints:
+      - "Keep the biggest growth so far in a variable that starts at 0. Then a week in which the plant shrank never replaces it, and a list of one height, or none, gives 0."
+      - "Loop with `for (int i = 1; i < heights.size(); i++)`, work out `heights.get(i) - heights.get(i - 1)`, and keep it when it's bigger than the biggest so far."
+    require:
+      - pattern: '\bfor\s*\([^:;]*;'
+        message: "Use a `for` loop over the indexes, such as `for (int i = 1; i < heights.size(); i++)`."
+    forbid:
+      - pattern: '\bfor\s*\([^;)]*:'
+        message: "A for-each loop doesn't know where each height is. Loop over the indexes, so that you can take the height before, at `i - 1`."
+    tests:
+      - call: |
+          ArrayList<Integer> heights = new ArrayList<>();
+          heights.add(12);
+          heights.add(19);
+          heights.add(31);
+          heights.add(30);
+          heights.add(45);
+          System.out.println(biggestGrowth(heights));
+      - call: |
+          ArrayList<Integer> heights = new ArrayList<>();
+          System.out.println(biggestGrowth(heights));
+          heights.add(50);
+          System.out.println(biggestGrowth(heights));
+          heights.add(48);
+          heights.add(40);
+          System.out.println(biggestGrowth(heights));
+        hidden: true
+      - call: |
+          ArrayList<Integer> heights = new ArrayList<>();
+          heights.add(3);
+          heights.add(10);
+          heights.add(17);
+          heights.add(17);
+          heights.add(30);
+          heights.add(31);
+          System.out.println(biggestGrowth(heights));
+          ArrayList<Integer> other = new ArrayList<>();
+          other.add(100);
+          other.add(1);
+          other.add(90);
+          System.out.println(biggestGrowth(other) + " " + other.size());
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  for (int i = 10; i > 0; i -= 4) {
+                      System.out.println(i);
+                  }
+
+                  ArrayList<Integer> heights = new ArrayList<>();
+                  heights.add(20);
+                  heights.add(26);
+                  heights.add(29);
+                  heights.add(41);
+                  heights.add(50);
+                  for (int i = heights.size() - 1; i >= 1; i -= 2) {
+                      System.out.println(heights.get(i) - heights.get(i - 1));
+                  }
+              }
+          }
+        hints:
+          - "The first loop prints 10, 6 and 2. The next value, -2, isn't above 0, so the loop stops there."
+          - "The second loop starts from the last index, 4, and goes down by 2: index 4, then 2. (Index 0 fails `i >= 1`.) Each round prints a height minus the one right before it."
+      - task: |
+          The garden club waters its sunflowers every few days. The program reads two numbers, each on its own line: the day of the month of the first watering, and how many days apart the waterings are. With a `for` loop that steps with `+=`, print every watering day in a month of 30 days, and after them how many waterings there were. For the input `3` and `7` the program prints:
+
+          ```
+          Water on day 3
+          Water on day 10
+          Water on day 17
+          Water on day 24
+          Waterings: 4
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int first = Integer.valueOf(scanner.nextLine());
+                  int every = Integer.valueOf(scanner.nextLine());
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int first = Integer.valueOf(scanner.nextLine());
+                  int every = Integer.valueOf(scanner.nextLine());
+                  int count = 0;
+                  for (int day = first; day <= 30; day += every) {
+                      System.out.println("Water on day " + day);
+                      count++;
+                  }
+                  System.out.println("Waterings: " + count);
+              }
+          }
+        hints:
+          - "The loop variable is the day. It starts from the first watering day, goes on while it's at most 30, and grows by `every` in each round."
+          - "`for (int day = first; day <= 30; day += every)`, with a counter that goes up in each round and is printed after the loop."
+        require:
+          - pattern: '\bfor\s*\('
+            message: "Use a `for` loop."
+          - pattern: '\+=\s*every\b'
+            message: "Step from one watering day to the next with `day += every`."
+        forbid:
+          - pattern: '\bwhile\b'
+            message: "Use a `for` loop, not `while`."
+        tests:
+          - stdin: |
+              3
+              7
+          - stdin: |
+              30
+              5
+            hidden: true
+          - stdin: |
+              12
+              9
+            hidden: true
+          - stdin: |
+              1
+              2
+            hidden: true
+
+  - id: useful-techniques-stringbuilder
+    slug: stringbuilder
+    title: "StringBuilder: building a text piece by piece"
+    text: |
+      Programs often build a text from many pieces: a receipt from its lines, or a list of names with commas between them. Module 24's bookshelf built its `toString` with `text = text + "\n" + book` in a loop. Here's the same idea, smaller. A seaside town rents out six beach huts, B1 to B6, which stand in a row, and its booking page draws them as a row of boxes:
+
+      ```java main
+      String row = "";
+      for (int hut = 1; hut <= 6; hut++) {
+          row += "|B" + hut;
+      }
+      row += "|";
+      System.out.println(row);
+      ```
+
+      ```output
+      |B1|B2|B3|B4|B5|B6|
+      ```
+
+      ### Why += in a loop is slow
+
+      A String never changes after it's made. `row += "|B" + hut` doesn't add to the old String: it makes a new one, copies every character of the old one into it, then the new piece, and the old String is thrown away. Each hut's piece is 3 characters, so the first round copies 3 characters, the second 6, the third 9, and so on. Every round copies everything built so far, once more.
+
+      For six huts, that's nothing. For 1,000 pieces of 3 characters each, the rounds copy 3 + 6 + 9 + ... + 3,000 characters: 1,501,500 in all, to make a text of 3,000 characters. Twice as many pieces means about four times as much copying, so a loop that builds a long text this way gets slower and slower as the text grows.
+
+      ### StringBuilder
+
+      Java's **StringBuilder** is a text that can change. It keeps its characters with room to spare, and `append` writes a new piece at the end, without copying what's already there. (When the room runs out, it makes a bigger one, again with room to spare.)
+
+      ```java main
+      StringBuilder row = new StringBuilder();
+      for (int hut = 1; hut <= 6; hut++) {
+          row.append("|B");
+          row.append(hut);
+      }
+      row.append("|");
+      String text = row.toString();
+      System.out.println(text);
+      ```
+
+      ```output
+      |B1|B2|B3|B4|B5|B6|
+      ```
+
+      - `new StringBuilder()` makes an empty one, and `new StringBuilder("Total")` one that starts with a text.
+      - `new StringBuilder(5)` doesn't hold 5: a number in the parentheses only sets how much room it starts with, and the text is empty. Use `new StringBuilder().append(5)`.
+      - `append` adds anything to the end: a String, an int, a double, a char or a boolean.
+      - `toString()` returns the finished text as a String. Printing a StringBuilder, or joining it to a String with `+`, calls it for you, as for any object. A method that returns a `String` needs it: `return row.toString();`
+      - StringBuilder is in the package `java.lang`, like String, so it needs no import.
+
+      `append` returns the StringBuilder itself, so the calls can be chained: `row.append("|B").append(hut);` does the two appends in the loop in one statement.
+
+      ### A receipt
+
+      Here's a receipt, built line by line. Step 1's index loop goes through the two lists side by side, and `\n` is a line break, as in module 24:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> items = new ArrayList<>();
+              items.add("Hammer");
+              items.add("Nails");
+              items.add("Tape");
+              ArrayList<Integer> prices = new ArrayList<>();
+              prices.add(12);
+              prices.add(4);
+              prices.add(3);
+              System.out.println(receipt(items, prices));
+          }
+
+          public static String receipt(ArrayList<String> items, ArrayList<Integer> prices) {
+              StringBuilder text = new StringBuilder();
+              int total = 0;
+              for (int i = 0; i < items.size(); i++) {
+                  text.append(items.get(i)).append(": ").append(prices.get(i)).append(" dollars\n");
+                  total += prices.get(i);
+              }
+              text.append("Total: ").append(total).append(" dollars");
+              return text.toString();
+          }
+      }
+      ```
+
+      ```output
+      Hammer: 12 dollars
+      Nails: 4 dollars
+      Tape: 3 dollars
+      Total: 19 dollars
+      ```
+
+      ### insert, reverse and length
+
+      - `insert(index, text)` puts a text at a position, and moves everything after it to the right. `insert(0, ...)` adds to the front.
+      - `reverse()` turns the characters around.
+      - `length()` and `charAt(index)` work as they do for a String.
+
+      ```java main
+      StringBuilder code = new StringBuilder("4821");
+      code.insert(0, "#");
+      code.insert(3, "-");
+      System.out.println(code);
+      code.reverse();
+      System.out.println(code + " has " + code.length() + " characters");
+      ```
+
+      ```output
+      #48-21
+      12-84# has 6 characters
+      ```
+
+      After the first insert, the text is `#4821`, and `insert(3, "-")` puts the dash in front of index 3, the 2.
+
+      ### Comparing the text
+
+      A StringBuilder has no `equals` of its own. It has Object's, which asks whether two variables refer to the same object (modules 23 and 34), so a StringBuilder is never equal to a String. To compare the text, turn it into a String first:
+
+      ```java main
+      String word = "level";
+      StringBuilder backwards = new StringBuilder(word).reverse();
+      System.out.println(backwards.equals(word));
+      System.out.println(backwards.toString().equals(word));
+      ```
+
+      ```output
+      false
+      true
+      ```
+
+      "level" reads the same backwards, but only the second line says so.
+
+      `+` is still the clearest way to join a few pieces in one expression, as in `return this.name + " (" + this.age + ")";`. StringBuilder is for a text that grows in a loop.
+
+      **Your turn:** write the method `guestList(ArrayList<String> names)`, which returns the text `Guests: ` followed by the names with a comma and a space between them. For an empty list it returns `Guests: none`. Build the text with a StringBuilder and `append`. The check runs:
+
+      ```java fragment
+      ArrayList<String> names = new ArrayList<>();
+      names.add("Ada");
+      names.add("Ben");
+      names.add("Cy");
+      System.out.println(guestList(names));
+      ```
+
+      and expects:
+
+      ```
+      Guests: Ada, Ben, Cy
+      ```
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> names = new ArrayList<>();
+              names.add("Ada");
+              names.add("Ben");
+              names.add("Cy");
+              System.out.println(guestList(names));
+          }
+
+          public static String guestList(ArrayList<String> names) {
+              return "";
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> names = new ArrayList<>();
+              names.add("Ada");
+              names.add("Ben");
+              names.add("Cy");
+              System.out.println(guestList(names));
+          }
+
+          public static String guestList(ArrayList<String> names) {
+              if (names.isEmpty()) {
+                  return "Guests: none";
+              }
+              StringBuilder list = new StringBuilder("Guests: ");
+              for (int i = 0; i < names.size(); i++) {
+                  if (i > 0) {
+                      list.append(", ");
+                  }
+                  list.append(names.get(i));
+              }
+              return list.toString();
+          }
+      }
+    hints:
+      - "Handle the empty list first, with `isEmpty()`. Otherwise start with `new StringBuilder(\"Guests: \")` and append the names in a loop."
+      - "The comma goes *between* names: append `\", \"` before every name except the first, which an index loop can tell by `i > 0`. Return `list.toString()` at the end."
+    require:
+      - pattern: '\bnew\s+StringBuilder\s*\('
+        message: "Build the text in a `StringBuilder`."
+      - pattern: '\.append\s*\('
+        message: "Add the pieces with `append`."
+    forbid:
+      - pattern: '\+='
+        message: "Build the text with `append`, not with `+=`."
+      - pattern: '\bString\s*\.\s*join\b'
+        message: "`String.join` would do it for you: build the text with a StringBuilder this time."
+    tests:
+      - call: |
+          ArrayList<String> names = new ArrayList<>();
+          names.add("Ada");
+          names.add("Ben");
+          names.add("Cy");
+          System.out.println(guestList(names));
+      - call: |
+          ArrayList<String> names = new ArrayList<>();
+          System.out.println(guestList(names));
+          names.add("Zoe");
+          System.out.println(guestList(names));
+        hidden: true
+      - call: |
+          ArrayList<String> names = new ArrayList<>();
+          names.add("Maria Lopez");
+          names.add("Tom");
+          names.add("Ines");
+          names.add("Tom");
+          System.out.println(guestList(names));
+          System.out.println(names.size());
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  StringBuilder text = new StringBuilder("cat");
+                  text.append("s").insert(0, "3 ");
+                  System.out.println(text + " " + text.length());
+                  text.reverse();
+                  System.out.println(text);
+                  StringBuilder same = text;
+                  same.append("!");
+                  System.out.println(text);
+              }
+          }
+        hints:
+          - "`append(\"s\")` gives `cats`, and it returns the same StringBuilder, so `insert(0, \"3 \")` adds to its front: `3 cats`, which is 6 characters long, the space included."
+          - "`reverse()` turns the whole text around, the space too. `same = text` makes no copy: both variables refer to the one StringBuilder, so the `!` shows up when `text` is printed."
+      - task: |
+          Big numbers are easier to read with a comma between every three digits, counted from the right: 1,234,567. Write the method `withCommas(int number)`, which returns the number written that way, for any number from 0 up. Put the digits in a StringBuilder, and insert the commas with a `for` loop that goes backwards from the end, three digits at a time. The check runs:
+
+          ```java fragment
+          System.out.println(withCommas(1234567));
+          System.out.println(withCommas(950));
+          System.out.println(withCommas(20000));
+          ```
+
+          and expects:
+
+          ```
+          1,234,567
+          950
+          20,000
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(withCommas(1234567));
+                  System.out.println(withCommas(950));
+                  System.out.println(withCommas(20000));
+              }
+
+              public static String withCommas(int number) {
+                  return "" + number;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(withCommas(1234567));
+                  System.out.println(withCommas(950));
+                  System.out.println(withCommas(20000));
+              }
+
+              public static String withCommas(int number) {
+                  StringBuilder digits = new StringBuilder();
+                  digits.append(number);
+                  for (int i = digits.length() - 3; i > 0; i -= 3) {
+                      digits.insert(i, ",");
+                  }
+                  return digits.toString();
+              }
+          }
+        hints:
+          - "`new StringBuilder().append(number)` holds the digits (`new StringBuilder(number)` would only set its starting room and stay empty). The first comma goes in front of the last three digits, at index `length() - 3`, and each comma after that three places further left."
+          - "Loop with `for (int i = digits.length() - 3; i > 0; i -= 3)` and `digits.insert(i, \",\")`. Going from the right, the commas already added are all to the right of `i`, so they don't move the digits still to come. `i > 0` stops a comma from going in front of the first digit."
+        require:
+          - pattern: '\bnew\s+StringBuilder\s*\('
+            message: "Put the digits in a `StringBuilder`."
+          - pattern: '\.insert\s*\('
+            message: "Add the commas with `insert`."
+          - pattern: '\bfor\s*\('
+            message: "Insert the commas in a `for` loop that goes backwards, three digits at a time."
+        forbid:
+          - pattern: '\bString\s*\.\s*format\b|%,'
+            raw: true
+            message: "Java can format numbers for you, but here the point is to insert the commas yourself."
+        tests:
+          - call: |
+              System.out.println(withCommas(1234567));
+              System.out.println(withCommas(950));
+              System.out.println(withCommas(20000));
+          - call: |
+              System.out.println(withCommas(0));
+              System.out.println(withCommas(999));
+              System.out.println(withCommas(1000));
+              System.out.println(withCommas(100000));
+            hidden: true
+          - call: |
+              System.out.println(withCommas(2147483647));
+              System.out.println(withCommas(12345));
+              System.out.println(withCommas(7));
+            hidden: true
+
+  - id: useful-techniques-regex
+    slug: regular-expressions
+    title: "Regular expressions: matches, | and groups"
+    text: |
+      Is `KTX-0415` a booking code of the right form? Is `9021O` a postcode, or a typo with the letter O in it? Checking the form of a string with `charAt` and loops takes many lines. A **regular expression**, or **regex** for short, describes a form in one short String, and String's method `matches` checks whether a string has that form.
+
+      ### matches
+
+      ```java main
+      System.out.println("yes".matches("yes"));
+      System.out.println("Yes".matches("yes"));
+      System.out.println("yes!".matches("yes"));
+      ```
+
+      ```output
+      true
+      false
+      false
+      ```
+
+      - Letters and digits in a regex stand for themselves, so the regex `yes` describes exactly the text yes.
+      - Upper and lower case differ, as they do for `equals`.
+      - The **whole** string must fit the regex: `yes!` has a `!` left over.
+
+      So far, that's what `equals` does. The rest of this step and the next are what `equals` can't do.
+
+      ### Alternation: |
+
+      A `|` means "or". The regex `yes|y|ok` describes three texts, and a string matches if it's any one of them:
+
+      ```java main
+      String[] answers = {"yes", "y", "ok", "okay", "no"};
+      for (String answer : answers) {
+          System.out.println(answer + ": " + answer.matches("yes|y|ok"));
+      }
+      ```
+
+      ```output
+      yes: true
+      y: true
+      ok: true
+      okay: false
+      no: false
+      ```
+
+      `okay` begins with `ok`, but the whole string has to fit one of the three.
+
+      ### Groups: ( )
+
+      A `|` splits the whole regex in two. A ferry sells four kinds of tickets: `adult single`, `adult return`, `child single` and `child return`. The regex `adult|child single|return` would mean three choices: `adult`, `child single` or `return`. Parentheses make a **group**, and a `|` inside a group chooses only there:
+
+      ```java main
+      String ticket = "(adult|child) (single|return)";
+      System.out.println("child return".matches(ticket));
+      System.out.println("adult single".matches(ticket));
+      System.out.println("adult".matches(ticket));
+      System.out.println("senior single".matches(ticket));
+      ```
+
+      ```output
+      true
+      true
+      false
+      false
+      ```
+
+      The regex describes four texts: one of the words in the first group, a space, and one of the words in the second group. A group can be a part of a word, too: `gr(a|e)y` matches both gray and grey.
+
+      ```java main
+      System.out.println("grey".matches("gr(a|e)y") + " " + "gray".matches("gr(a|e)y") + " " + "groy".matches("gr(a|e)y"));
+      ```
+
+      ```output
+      true true false
+      ```
+
+      ### Characters with a meaning of their own
+
+      `|`, `(` and `)` aren't matched as themselves: they're part of the regex's own language. So are a few more characters, `. * + ? [ { ^ $ \`, and also `]` and `}` when they close a `[` or a `{`. Step 4 gives most of them their meaning. (`^` and `$` mark the start and the end of the text, which `matches` checks anyway.) Letters, digits, spaces, dashes and colons are plain characters. To match a special character as itself, put `\\` in front of it in the Java String: in a regex, a backslash takes the special meaning away, and in a Java String, `\\` is how you write one backslash.
+
+      ```java main
+      System.out.println("(1)".matches("\\(1\\)"));
+      ```
+
+      ```output
+      true
+      ```
+
+      **Your turn:** an ice cream stand sells four things: `single cone`, `single cup`, `double cone` and `double cup`. Fill in the regex, with two groups, so that it describes exactly those four. The program then prints:
+
+      ```
+      single cone: true
+      double cup: true
+      single cup: true
+      double cone: true
+      triple cone: false
+      double: false
+      single cones: false
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              String menu = "[[(single|double) (cone|cup)‖(double|single) (cone|cup)‖(single|double) (cup|cone)‖(double|single) (cup|cone)]]";
+              String[] orders = {"single cone", "double cup", "single cup", "double cone", "triple cone", "double", "single cones"};
+              for (String order : orders) {
+                  System.out.println(order + ": " + order.matches(menu));
+              }
+          }
+      }
+    hints:
+      - "Like the ferry's tickets: a group with the two sizes, a space, and a group with the two ways to serve it."
+      - "`(single|double) (cone|cup)`"
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("dog".matches("cat|dog food"));
+                  System.out.println("dog food".matches("(cat|dog) food"));
+                  System.out.println("grey".matches("gr(a|e)y"));
+                  System.out.println("Gray".matches("gr(a|e)y"));
+                  System.out.println("cat food".matches("cat|dog food"));
+              }
+          }
+        hints:
+          - "Without parentheses, `|` splits the whole regex: `cat|dog food` means `cat`, or `dog food`."
+          - "`dog` and `cat food` are neither of those two. In the fourth line, the capital G doesn't match the regex's small g."
+      - task: |
+          The text UI of a notes app, like the ones in module 25, understands six commands: `add note`, `add task`, `remove note`, `remove task`, `list` and `quit`. Write the method `isCommand(String line)`, which returns whether a line is one of them, with a single call to `matches`. The check runs:
+
+          ```java fragment
+          System.out.println(isCommand("add task"));
+          System.out.println(isCommand("list"));
+          System.out.println(isCommand("list task"));
+          System.out.println(isCommand("add"));
+          ```
+
+          and expects:
+
+          ```
+          true
+          true
+          false
+          false
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(isCommand("add task"));
+                  System.out.println(isCommand("list"));
+                  System.out.println(isCommand("list task"));
+                  System.out.println(isCommand("add"));
+              }
+
+              public static boolean isCommand(String line) {
+                  return false;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(isCommand("add task"));
+                  System.out.println(isCommand("list"));
+                  System.out.println(isCommand("list task"));
+                  System.out.println(isCommand("add"));
+              }
+
+              public static boolean isCommand(String line) {
+                  return line.matches("(add|remove) (note|task)|list|quit");
+              }
+          }
+        hints:
+          - "Four of the commands are two words: `add` or `remove`, a space, and `note` or `task`. That part is two groups, as for the ferry's tickets. The other two commands are single words."
+          - "Put the three choices together with `|` outside the groups: `(add|remove) (note|task)|list|quit`."
+        require:
+          - pattern: '\.matches\s*\('
+            min: 1
+            max: 1
+            message: "Check the line with one call to `matches`, with a regex that describes all six commands."
+        forbid:
+          - pattern: '\.equals\s*\('
+            message: "Let the regex do the comparing: no `equals` this time."
+        tests:
+          - call: |
+              System.out.println(isCommand("add task"));
+              System.out.println(isCommand("list"));
+              System.out.println(isCommand("list task"));
+              System.out.println(isCommand("add"));
+          - call: |
+              System.out.println(isCommand("add note") + " " + isCommand("remove note") + " " + isCommand("remove task") + " " + isCommand("quit"));
+              System.out.println(isCommand("Quit") + " " + isCommand("add  note") + " " + isCommand("add notes") + " " + isCommand(""));
+            hidden: true
+          - call: |
+              System.out.println(isCommand("note") + " " + isCommand("remove") + " " + isCommand("list note") + " " + isCommand("add task quit"));
+              System.out.println(isCommand("quit ") + " " + isCommand("addnote") + " " + isCommand("remove list"));
+            hidden: true
+
+  - id: useful-techniques-quantifiers
+    slug: quantifiers
+    title: Quantifiers and character classes
+    text: |
+      Step 3's regexes described texts of a fixed length. Most formats have parts that repeat: a postcode is five digits, a PIN four to six, and a name any number of letters. Two more tools describe them: quantifiers and character classes.
+
+      ### Quantifiers
+
+      A **quantifier** goes after a character, or after a group, and says how many times it may come:
+
+      | Quantifier | How many times | Example | Matches | Doesn't match |
+      | --- | --- | --- | --- | --- |
+      | `*` | any number, zero too | `hm*` | h, hm, hmmm | hmh |
+      | `+` | at least once | `go+al` | goal, gooooal | gal |
+      | `?` | zero times or once: it's optional | `colou?r` | color, colour | colouur |
+      | `{3}` | exactly 3 | `z{3}` | zzz | zz, zzzz |
+      | `{2,4}` | from 2 to 4 | `a{2,4}` | aa, aaa, aaaa | a, aaaaa |
+      | `{2,}` | 2 or more | `a{2,}` | aa, aaaaaaa | a |
+
+      Without parentheses, a quantifier repeats only the one character right before it. `ha+` is an h followed by one or more a's, and `(ha)+` is ha, once or more:
+
+      ```java main
+      System.out.println("haaa".matches("ha+"));
+      System.out.println("haaa".matches("(ha)+"));
+      System.out.println("hahaha".matches("(ha)+"));
+      System.out.println("gal".matches("go*al"));
+      ```
+
+      ```output
+      true
+      false
+      true
+      true
+      ```
+
+      `go*al` allows zero o's, so gal matches it, but not `go+al`.
+
+      ### Character classes
+
+      Square brackets make a **character class**. It matches one character, any of the ones inside: `[aeiou]` is one vowel. A dash between two characters gives a range: `[0-9]` is one digit, `[a-z]` one lowercase letter, `[A-Z]` one capital letter, and `[a-zA-Z]` a letter of either kind.
+
+      With a quantifier, a class describes a whole format. A US ZIP code is five digits, sometimes followed by a dash and four more digits (the ZIP+4 form, such as 10001-4356):
+
+      ```java main
+      String zip = "[0-9]{5}(-[0-9]{4})?";
+      String[] codes = {"90210", "10001-4356", "9021", "90210-", "9021O"};
+      for (String code : codes) {
+          System.out.println(code + " " + code.matches(zip));
+      }
+      ```
+
+      ```output
+      90210 true
+      10001-4356 true
+      9021 false
+      90210- false
+      9021O false
+      ```
+
+      - `[0-9]{5}` is five digits.
+      - `(-[0-9]{4})?` is a group of a dash and four digits, and the `?` makes the whole group optional. A dash outside square brackets is just a dash.
+      - `90210-` has the dash, but not the four digits that must come with it.
+      - `9021O` ends with the capital letter O, which isn't in `[0-9]`.
+
+      ### Times of day
+
+      Sometimes a class isn't enough by itself, and a group with `|` does the rest. A time on a 24-hour clock is written like 07:45 or 23:05. The hours go from 00 to 23: a 0 or a 1 followed by any digit, or a 2 followed by a digit from 0 to 3. The minutes go from 00 to 59:
+
+      ```java main
+      String time = "([01][0-9]|2[0-3]):[0-5][0-9]";
+      System.out.println("07:45".matches(time));
+      System.out.println("23:05".matches(time));
+      System.out.println("24:00".matches(time));
+      System.out.println("7:45".matches(time));
+      System.out.println("12:60".matches(time));
+      ```
+
+      ```output
+      true
+      true
+      false
+      false
+      false
+      ```
+
+      The group holds the two ways to write an hour, and the colon stands for itself.
+
+      ### A few more
+
+      - A dot `.` matches any one character, so `.*` matches any text on one line: `"b.*"` matches every one-line string that starts with b.
+      - `\\d` in a Java String is a shorter way to write `[0-9]`, so `"\\d{5}"` is five digits.
+      - To match a real dot, write `"\\."`. Module 16's `split` takes a regular expression too, so `split(".")` splits at every character, not just at the dots (a dot means any character), but `split("\\.")` splits only at the dots.
+
+      **Your turn:** a hotel's booking codes are three capital letters, a dash and four digits, like `KTX-0415`. Write the method `isBookingCode(String code)`, which returns whether a string has that form, with a regex and `matches`. The check runs:
+
+      ```java fragment
+      System.out.println(isBookingCode("KTX-0415"));
+      System.out.println(isBookingCode("ktx-0415"));
+      System.out.println(isBookingCode("KT-0415"));
+      System.out.println(isBookingCode("KTX-04155"));
+      ```
+
+      and expects:
+
+      ```
+      true
+      false
+      false
+      false
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(isBookingCode("KTX-0415"));
+              System.out.println(isBookingCode("ktx-0415"));
+              System.out.println(isBookingCode("KT-0415"));
+              System.out.println(isBookingCode("KTX-04155"));
+          }
+
+          public static boolean isBookingCode(String code) {
+              return false;
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(isBookingCode("KTX-0415"));
+              System.out.println(isBookingCode("ktx-0415"));
+              System.out.println(isBookingCode("KT-0415"));
+              System.out.println(isBookingCode("KTX-04155"));
+          }
+
+          public static boolean isBookingCode(String code) {
+              return code.matches("[A-Z]{3}-[0-9]{4}");
+          }
+      }
+    hints:
+      - "A capital letter is `[A-Z]` and a digit `[0-9]`. A quantifier in curly braces says how many of them come in a row."
+      - "`return code.matches(\"[A-Z]{3}-[0-9]{4}\");`"
+    require:
+      - pattern: '\.matches\s*\('
+        message: "Check the form with `matches` and a regular expression."
+    forbid:
+      - pattern: '\bcharAt\s*\('
+        message: "Let the regex check every character: one call to `matches` is enough."
+    tests:
+      - call: |
+          System.out.println(isBookingCode("KTX-0415"));
+          System.out.println(isBookingCode("ktx-0415"));
+          System.out.println(isBookingCode("KT-0415"));
+          System.out.println(isBookingCode("KTX-04155"));
+      - call: |
+          System.out.println(isBookingCode("ABC-0000") + " " + isBookingCode("ZZZ-9999") + " " + isBookingCode("KTX0415") + " " + isBookingCode("KTXX-0415"));
+          System.out.println(isBookingCode("KTX-041") + " " + isBookingCode("K1X-0415") + " " + isBookingCode("") + " " + isBookingCode("KTX-04a5"));
+        hidden: true
+      - call: |
+          System.out.println(isBookingCode("KTX-0415 ") + " " + isBookingCode(" KTX-0415") + " " + isBookingCode("KTx-0415") + " " + isBookingCode("QRS-2026"));
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  String pin = "[0-9]{4,6}";
+                  System.out.println("0815".matches(pin) + " " + "123".matches(pin));
+                  System.out.println("1234567".matches(pin) + " " + "12 34".matches(pin));
+                  String name = "[A-Z][a-z]*";
+                  System.out.println("Bo".matches(name) + " " + "B".matches(name) + " " + "bo".matches(name));
+                  System.out.println("Ann-Marie".matches(name + "(-" + name + ")?"));
+              }
+          }
+        hints:
+          - "`[0-9]{4,6}` is four to six digits, and nothing else: seven digits are too many, and a space isn't a digit."
+          - "`[A-Z][a-z]*` is one capital letter followed by any number of small letters, zero too. The last regex is `[A-Z][a-z]*(-[A-Z][a-z]*)?`: a name, and optionally a dash and a second name."
+      - task: |
+          In the Netherlands, a postcode is four digits, the first of which isn't 0, then a space and two capital letters, like `1012 AB`. A web shop accepts them with or without the space. Write the method `isPostcode(String text)`, which returns whether a string is a postcode of that form, with one call to `matches`. The check runs:
+
+          ```java fragment
+          System.out.println(isPostcode("1012 AB"));
+          System.out.println(isPostcode("1012AB"));
+          System.out.println(isPostcode("0123 AB"));
+          System.out.println(isPostcode("1012 ab"));
+          ```
+
+          and expects:
+
+          ```
+          true
+          true
+          false
+          false
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(isPostcode("1012 AB"));
+                  System.out.println(isPostcode("1012AB"));
+                  System.out.println(isPostcode("0123 AB"));
+                  System.out.println(isPostcode("1012 ab"));
+              }
+
+              public static boolean isPostcode(String text) {
+                  return false;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(isPostcode("1012 AB"));
+                  System.out.println(isPostcode("1012AB"));
+                  System.out.println(isPostcode("0123 AB"));
+                  System.out.println(isPostcode("1012 ab"));
+              }
+
+              public static boolean isPostcode(String text) {
+                  return text.matches("[1-9][0-9]{3} ?[A-Z]{2}");
+              }
+          }
+        hints:
+          - "The first digit is a class of its own, `[1-9]`, and the three other digits are `[0-9]{3}`. The letters are `[A-Z]{2}`."
+          - "A `?` after the space makes the space optional: `[1-9][0-9]{3} ?[A-Z]{2}`."
+        require:
+          - pattern: '\.matches\s*\('
+            min: 1
+            max: 1
+            message: "Check the postcode with one call to `matches`, whose regex allows the space to be there or not."
+        tests:
+          - call: |
+              System.out.println(isPostcode("1012 AB"));
+              System.out.println(isPostcode("1012AB"));
+              System.out.println(isPostcode("0123 AB"));
+              System.out.println(isPostcode("1012 ab"));
+          - call: |
+              System.out.println(isPostcode("9999 ZZ") + " " + isPostcode("1000AA") + " " + isPostcode("1012  AB") + " " + isPostcode("101 AB"));
+              System.out.println(isPostcode("10123 AB") + " " + isPostcode("1012 ABC") + " " + isPostcode("1000 A") + " " + isPostcode(""));
+            hidden: true
+          - call: |
+              System.out.println(isPostcode("5611 EM") + " " + isPostcode("5611-EM") + " " + isPostcode("56I1 EM") + " " + isPostcode(" 5611 EM"));
+            hidden: true
+
+  - id: useful-techniques-enums
+    slug: enums
+    title: "Enums: a fixed set of values"
+    text: |
+      Some values can only be one of a few: a traffic light is red, yellow or green, a cup of coffee is small, medium or large. Module 17's TrafficLight challenge kept its color in a String, `private String color;`, and compared it with `equals`. That works as long as every String is spelled exactly right, but nothing stops a typo:
+
+      ```java main
+      String light = "Green";
+      if (light.equals("green")) {
+          System.out.println("Go");
+      } else {
+          System.out.println("Stop");
+      }
+      ```
+
+      ```output
+      Stop
+      ```
+
+      The capital G makes it another String, and neither javac nor the program notices anything wrong. An **enum** (short for *enumerated type*) is a type that lists every value it can have:
+
+      ```java fragment
+      public enum Light {
+          RED, YELLOW, GREEN
+      }
+      ```
+
+      - It's written like a class, with the word `enum` in place of `class`, in a file of its own, `Light.java`.
+      - The values are called **constants**. They're separated by commas, and by custom written in capital letters.
+      - A variable of type Light can hold one of these three, and nothing else (or `null`, like any object variable).
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Light light = Light.GREEN;
+              System.out.println(light);
+              if (light == Light.GREEN) {
+                  System.out.println("Go");
+              }
+              light = Light.RED;
+              System.out.println(light == Light.GREEN);
+          }
+      }
+      // ==== Light.java ====
+      public enum Light {
+          RED, YELLOW, GREEN
+      }
+      ```
+
+      ```output
+      GREEN
+      Go
+      false
+      ```
+
+      - A constant is written with the enum's name and a dot: `Light.GREEN`.
+      - Printing a constant prints its name.
+      - Constants are compared with `==`. Each constant is one object, made once, the first time the program uses the enum, so there's never a second GREEN, and `==` is right here, unlike for Strings. (`equals` gives the same answers.)
+
+      A typo is now javac's problem, not the user's:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Light light = Light.GREN;
+              System.out.println(light);
+          }
+      }
+      // ==== Light.java ====
+      public enum Light {
+          RED, YELLOW, GREEN
+      }
+      ```
+
+      ```javac
+      Main.java:3: error: cannot find symbol
+              Light light = Light.GREN;
+                                 ^
+        symbol:   variable GREN
+        location: class Light
+      1 error
+      ```
+
+      ### values(), name() and ordinal()
+
+      - `Light.values()` returns an array of all the constants, in the order they're written in the enum. A for-each loop goes through it.
+      - `name()` returns a constant's name as a String, such as `"RED"`.
+      - `ordinal()` returns a constant's position in the enum, counted from 0.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              for (Light light : Light.values()) {
+                  System.out.println(light.ordinal() + ": " + light.name().toLowerCase());
+              }
+              System.out.println(Light.values().length + " lights");
+          }
+      }
+      // ==== Light.java ====
+      public enum Light {
+          RED, YELLOW, GREEN
+      }
+      ```
+
+      ```output
+      0: red
+      1: yellow
+      2: green
+      3 lights
+      ```
+
+      ### An enum is a type
+
+      An enum can be the type of a variable, a parameter, a return value, an instance variable or a list's elements, like any class. A method can check which constant it got:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(canCross(Light.GREEN));
+              System.out.println(canCross(Light.YELLOW));
+          }
+
+          public static boolean canCross(Light light) {
+              return light == Light.GREEN;
+          }
+      }
+      // ==== Light.java ====
+      public enum Light {
+          RED, YELLOW, GREEN
+      }
+      ```
+
+      ```output
+      true
+      false
+      ```
+
+      Java also has `Light.valueOf("RED")`, which gives the constant with that name. For a text that isn't a constant's name, it stops the program with an error, and part 11 covers handling errors like that.
+
+      **Your turn:** a traffic light in the US goes from green to yellow, from yellow to red, and from red back to green. That's the cycle of module 17's TrafficLight, this time with an enum in place of Strings. `Light.java` is ready. In `Main.java`, write the method `next(Light light)`, which returns the light that comes after the one it's given. Compare the constants with `==`. The check runs:
+
+      ```java fragment
+      System.out.println(next(Light.GREEN));
+      System.out.println(next(Light.YELLOW));
+      System.out.println(next(Light.RED));
+      ```
+
+      and expects:
+
+      ```
+      YELLOW
+      RED
+      GREEN
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(next(Light.GREEN));
+                System.out.println(next(Light.YELLOW));
+                System.out.println(next(Light.RED));
+            }
+
+            public static Light next(Light light) {
+                return light;
+            }
+        }
+      Light.java: |
+        public enum Light {
+            RED, YELLOW, GREEN
+        }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(next(Light.GREEN));
+                System.out.println(next(Light.YELLOW));
+                System.out.println(next(Light.RED));
+            }
+
+            public static Light next(Light light) {
+                if (light == Light.GREEN) {
+                    return Light.YELLOW;
+                }
+                if (light == Light.YELLOW) {
+                    return Light.RED;
+                }
+                return Light.GREEN;
+            }
+        }
+      Light.java: |
+        public enum Light {
+            RED, YELLOW, GREEN
+        }
+    hints:
+      - "Check which light the method got with `if (light == Light.GREEN)`, and return the one after it, such as `return Light.YELLOW;`."
+      - "Two checks are enough: green gives yellow, yellow gives red, and the only light left, red, gives green."
+    require:
+      - pattern: '=='
+        message: "Compare the constants with `==`, as in `light == Light.GREEN`."
+    forbid:
+      - pattern: '"(RED|YELLOW|GREEN)"'
+        raw: true
+        flags: i
+        message: "Use the enum's constants, like `Light.RED`, not Strings."
+    tests:
+      - call: |
+          System.out.println(next(Light.GREEN));
+          System.out.println(next(Light.YELLOW));
+          System.out.println(next(Light.RED));
+      - call: |
+          Light light = Light.RED;
+          for (int i = 0; i < 4; i++) {
+              light = next(light);
+              System.out.println(light);
+          }
+          System.out.println(next(next(Light.GREEN)) == Light.RED);
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Light[] lights = Light.values();
+                  Light last = lights[lights.length - 1];
+                  System.out.println(last + " " + last.ordinal());
+                  Light first = Light.RED;
+                  Light same = Light.RED;
+                  System.out.println(first == same);
+                  int letters = 0;
+                  for (Light light : lights) {
+                      letters += light.name().length();
+                  }
+                  System.out.println(letters);
+              }
+          }
+          // ==== Light.java ====
+          public enum Light {
+              RED, YELLOW, GREEN
+          }
+        hints:
+          - "`values()` gives the constants in the order the enum lists them, so the last one is GREEN, at position 2."
+          - "There's only one RED, so both variables refer to it. The names RED, YELLOW and GREEN have 3, 6 and 5 letters."
+      - task: |
+          On a parade ground, a marching band faces north, east, south or west, and at the command "right face", everyone makes a quarter turn clockwise. Write:
+
+          - in `Direction.java`, the enum `Direction`, with the constants `NORTH`, `EAST`, `SOUTH` and `WEST`, in that order (clockwise)
+          - in `Main.java`, the method `turnRight(Direction facing)`, which returns the direction after a quarter turn clockwise: north to east, east to south, south to west, and west back to north
+
+          `main` is a test drive, and it prints:
+
+          ```
+          NORTH
+          EAST
+          SOUTH
+          WEST
+          NORTH
+          ```
+        seed:
+          Direction.java: |
+            public enum Direction {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Direction facing = Direction.NORTH;
+                    for (int i = 0; i < 5; i++) {
+                        System.out.println(facing);
+                        facing = turnRight(facing);
+                    }
+                }
+
+                // Write the method turnRight here.
+            }
+        solution:
+          Direction.java: |
+            public enum Direction {
+                NORTH, EAST, SOUTH, WEST
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Direction facing = Direction.NORTH;
+                    for (int i = 0; i < 5; i++) {
+                        System.out.println(facing);
+                        facing = turnRight(facing);
+                    }
+                }
+
+                public static Direction turnRight(Direction facing) {
+                    Direction[] all = Direction.values();
+                    return all[(facing.ordinal() + 1) % all.length];
+                }
+            }
+        hints:
+          - "The enum is one line inside its braces: the four constants, separated by commas. The method's header is `public static Direction turnRight(Direction facing)`."
+          - "Since the constants are in clockwise order, the next direction is the next constant: `Direction.values()[facing.ordinal() + 1]`, except that after WEST comes NORTH again. `% 4` (or `% values().length`) takes care of that. Three `if`s with `==` work too."
+        require:
+          - pattern: '\benum\s+Direction\b'
+            message: "Write `Direction` as an enum: `public enum Direction { ... }`."
+          - pattern: '\bpublic\s+static\s+Direction\s+turnRight\s*\(\s*Direction\s+\w+\s*\)'
+            message: "Write the method as `public static Direction turnRight(Direction facing)`."
+        tests:
+          - name: The test drive
+          - call: |
+              System.out.println(turnRight(Direction.WEST) + " " + turnRight(Direction.SOUTH));
+              Direction d = Direction.EAST;
+              d = turnRight(turnRight(d));
+              System.out.println(d + " " + (d == Direction.WEST) + " " + Direction.values().length);
+            hidden: true
+
+  - id: useful-techniques-enum-fields
+    slug: enum-fields
+    title: Enums with fields, a constructor and methods
+    text: |
+      An enum is a class, one whose objects are all made in advance: its constants. So it can have what a class has: instance variables, a constructor and methods.
+
+      Module 21's CoffeeOrder kept its size in a String, `"medium"` unless the order said otherwise, and its constructor turned any size other than small, medium or large into a medium. As an enum, those three sizes are the only ones there are, and each one can carry its own volume and price:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              CupSize size = CupSize.MEDIUM;
+              System.out.println(size + ": " + size.getMilliliters() + " ml, " + size.getPrice() + " dollars");
+
+              ArrayList<CupSize> order = new ArrayList<>();
+              order.add(CupSize.LARGE);
+              order.add(CupSize.SMALL);
+              order.add(CupSize.LARGE);
+              int total = 0;
+              for (CupSize cup : order) {
+                  total += cup.getPrice();
+              }
+              System.out.println(order + " cost " + total + " dollars");
+          }
+      }
+      // ==== CupSize.java ====
+      public enum CupSize {
+          SMALL(250, 3),
+          MEDIUM(350, 4),
+          LARGE(450, 5);
+
+          private int milliliters;
+          private int price;
+
+          private CupSize(int milliliters, int price) {
+              this.milliliters = milliliters;
+              this.price = price;
+          }
+
+          public int getMilliliters() {
+              return this.milliliters;
+          }
+
+          public int getPrice() {
+              return this.price;
+          }
+      }
+      ```
+
+      ```output
+      MEDIUM: 350 ml, 4 dollars
+      [LARGE, SMALL, LARGE] cost 13 dollars
+      ```
+
+      - The constants come first, and each one gives the constructor its values in parentheses: `SMALL(250, 3)` makes the constant SMALL with the constructor call `CupSize(250, 3)`.
+      - A semicolon ends the list of constants. After it, the enum goes on like a class: instance variables, the constructor, methods.
+      - The constructor is `private`: only the constants use it. The first time the program uses the enum, all three constants are made together, in the order they're written, and never again. An enum's constructor can't be public, and `new CupSize(300, 4)` doesn't compile (javac says `enum classes may not be instantiated`). The three constants are all the CupSizes there will ever be.
+      - A method is called on a constant, or on a variable that holds one: `CupSize.LARGE.getPrice()`, `size.getMilliliters()`.
+      - The instance variables have getters and no setters, which is usual for an enum: a constant is shared by the whole program, so changing LARGE's price would change it everywhere at once.
+
+      ### Methods that do more
+
+      An enum's methods can do anything a class's methods can. They can use the instance variables, `name()` and `ordinal()`, and `toString` can be overridden:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              for (CupSize size : CupSize.values()) {
+                  System.out.println(size + ": two cost " + size.priceFor(2) + " dollars");
+              }
+              System.out.println(CupSize.SMALL.holds(300) + " " + CupSize.LARGE.holds(300));
+              System.out.println(CupSize.LARGE.name());
+          }
+      }
+      // ==== CupSize.java ====
+      public enum CupSize {
+          SMALL(250, 3),
+          MEDIUM(350, 4),
+          LARGE(450, 5);
+
+          private int milliliters;
+          private int price;
+
+          private CupSize(int milliliters, int price) {
+              this.milliliters = milliliters;
+              this.price = price;
+          }
+
+          public int priceFor(int cups) {
+              return cups * this.price;
+          }
+
+          public boolean holds(int milliliters) {
+              return milliliters <= this.milliliters;
+          }
+
+          @Override
+          public String toString() {
+              return this.name().toLowerCase() + " (" + this.milliliters + " ml)";
+          }
+      }
+      ```
+
+      ```output
+      small (250 ml): two cost 6 dollars
+      medium (350 ml): two cost 8 dollars
+      large (450 ml): two cost 10 dollars
+      false true
+      LARGE
+      ```
+
+      - With its own `toString`, a constant prints as `small (250 ml)` instead of `SMALL`.
+      - `name()` still returns the constant's name as it's written in the enum, and the new `toString` uses it.
+
+      ### The order of the constants
+
+      Every enum has a natural order, as in module 38: the order in which its constants are written. Enums implement `Comparable`, so `Collections.sort` puts a list of CupSizes from SMALL to LARGE, and `size.compareTo(CupSize.MEDIUM) > 0` asks whether a size comes after MEDIUM. Write the constants in the order that makes sense, such as smallest first.
+
+      **Your turn:** here are the planets, in order from the sun. `Planet.java` lists the eight constants, each with its diameter at the equator in kilometers, but it doesn't compile yet: the enum has no constructor for those values. Add:
+
+      - a private instance variable for the diameter, and a private constructor that sets it
+      - `getDiameter()`, which returns the diameter
+      - `positionFromSun()`, which returns 1 for Mercury, 2 for Venus, and so on (the constants are in that order)
+
+      The check runs:
+
+      ```java fragment
+      System.out.println(Planet.EARTH.getDiameter());
+      System.out.println(Planet.MARS.positionFromSun());
+      for (Planet planet : Planet.values()) {
+          if (planet.getDiameter() > 100000) {
+              System.out.println(planet);
+          }
+      }
+      ```
+
+      and expects:
+
+      ```
+      12756
+      4
+      JUPITER
+      SATURN
+      ```
+    seed:
+      Planet.java: |
+        public enum Planet {
+            MERCURY(4879),
+            VENUS(12104),
+            EARTH(12756),
+            MARS(6792),
+            JUPITER(142984),
+            SATURN(120536),
+            URANUS(51118),
+            NEPTUNE(49528);
+
+            // Add the instance variable, the constructor and the methods here.
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(Planet.EARTH.getDiameter());
+                System.out.println(Planet.MARS.positionFromSun());
+                for (Planet planet : Planet.values()) {
+                    if (planet.getDiameter() > 100000) {
+                        System.out.println(planet);
+                    }
+                }
+            }
+        }
+    solution:
+      Planet.java: |
+        public enum Planet {
+            MERCURY(4879),
+            VENUS(12104),
+            EARTH(12756),
+            MARS(6792),
+            JUPITER(142984),
+            SATURN(120536),
+            URANUS(51118),
+            NEPTUNE(49528);
+
+            private int diameter;
+
+            private Planet(int diameter) {
+                this.diameter = diameter;
+            }
+
+            public int getDiameter() {
+                return this.diameter;
+            }
+
+            public int positionFromSun() {
+                return this.ordinal() + 1;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(Planet.EARTH.getDiameter());
+                System.out.println(Planet.MARS.positionFromSun());
+                for (Planet planet : Planet.values()) {
+                    if (planet.getDiameter() > 100000) {
+                        System.out.println(planet);
+                    }
+                }
+            }
+        }
+    hints:
+      - "Like CupSize: `private int diameter;`, then `private Planet(int diameter) { this.diameter = diameter; }`, and a getter."
+      - "`ordinal()` counts from 0 in the order of the constants, and Mercury comes first, so `positionFromSun()` returns `this.ordinal() + 1`."
+    require:
+      - pattern: '\bPlanet\s*\(\s*int\s+\w+\s*\)'
+        message: "Give Planet a constructor, `private Planet(int diameter)`, which the constants call with their values."
+      - pattern: '\bpublic\s+int\s+positionFromSun\s*\(\s*\)'
+        message: "Write the method `public int positionFromSun()`."
+    tests:
+      - call: |
+          System.out.println(Planet.EARTH.getDiameter());
+          System.out.println(Planet.MARS.positionFromSun());
+          for (Planet planet : Planet.values()) {
+              if (planet.getDiameter() > 100000) {
+                  System.out.println(planet);
+              }
+          }
+      - call: |
+          System.out.println(Planet.NEPTUNE.positionFromSun() + " " + Planet.MERCURY.positionFromSun());
+          int bigger = 0;
+          for (Planet planet : Planet.values()) {
+              if (planet.getDiameter() > Planet.EARTH.getDiameter()) {
+                  bigger++;
+              }
+          }
+          System.out.println(bigger + " " + Planet.VENUS.getDiameter() + " " + Planet.URANUS.positionFromSun());
+        hidden: true
+    more:
+      - task: |
+          The café's cup sizes, with a method that gives the next size up. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+
+          public class Main {
+              public static void main(String[] args) {
+                  CupSize cup = CupSize.SMALL;
+                  cup = cup.larger();
+                  System.out.println(cup + " " + cup.getPrice());
+                  cup = cup.larger().larger();
+                  System.out.println(cup.name() + " " + (cup == CupSize.LARGE));
+
+                  ArrayList<CupSize> sizes = new ArrayList<>();
+                  sizes.add(CupSize.LARGE);
+                  sizes.add(CupSize.SMALL);
+                  sizes.add(CupSize.MEDIUM);
+                  Collections.sort(sizes);
+                  System.out.println(sizes);
+              }
+          }
+          // ==== CupSize.java ====
+          public enum CupSize {
+              SMALL(250, 3),
+              MEDIUM(350, 4),
+              LARGE(450, 5);
+
+              private int milliliters;
+              private int price;
+
+              private CupSize(int milliliters, int price) {
+                  this.milliliters = milliliters;
+                  this.price = price;
+              }
+
+              public int getPrice() {
+                  return this.price;
+              }
+
+              public CupSize larger() {
+                  CupSize[] sizes = CupSize.values();
+                  if (this.ordinal() + 1 < sizes.length) {
+                      return sizes[this.ordinal() + 1];
+                  }
+                  return this;
+              }
+          }
+        hints:
+          - "`larger()` returns the constant after this one, or this one when there's none after it. SMALL's next is MEDIUM, which costs 4."
+          - "From MEDIUM, two calls give LARGE and then LARGE again, since there's nothing larger. `Collections.sort` uses the natural order, the order in which the constants are written."
+      - task: |
+          A cash register gives change in four kinds of US bills: ones, fives, tens and twenties. Write:
+
+          - in `Bill.java`, the enum `Bill`, with the constants `ONE`, `FIVE`, `TEN` and `TWENTY`, in that order, each with its value in dollars, and the method `getDollars()`
+          - in `Main.java`, the method `change(int dollars)`, which returns an `ArrayList<Bill>` that makes up the amount with as few bills as possible: as many twenties as fit, then as many tens as fit in what's left, then fives, then ones
+
+          Go through `Bill.values()` backwards with an index loop, as in step 1, so the largest bill comes first. The check runs:
+
+          ```java fragment
+          System.out.println(change(68));
+          System.out.println(change(30));
+          ```
+
+          and expects:
+
+          ```
+          [TWENTY, TWENTY, TWENTY, FIVE, ONE, ONE, ONE]
+          [TWENTY, TEN]
+          ```
+        seed:
+          Bill.java: |
+            public enum Bill {
+
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(change(68));
+                    System.out.println(change(30));
+                }
+
+                // Write the method change here.
+            }
+        solution:
+          Bill.java: |
+            public enum Bill {
+                ONE(1),
+                FIVE(5),
+                TEN(10),
+                TWENTY(20);
+
+                private int dollars;
+
+                private Bill(int dollars) {
+                    this.dollars = dollars;
+                }
+
+                public int getDollars() {
+                    return this.dollars;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(change(68));
+                    System.out.println(change(30));
+                }
+
+                public static ArrayList<Bill> change(int dollars) {
+                    ArrayList<Bill> bills = new ArrayList<>();
+                    Bill[] kinds = Bill.values();
+                    for (int i = kinds.length - 1; i >= 0; i--) {
+                        while (dollars >= kinds[i].getDollars()) {
+                            bills.add(kinds[i]);
+                            dollars -= kinds[i].getDollars();
+                        }
+                    }
+                    return bills;
+                }
+            }
+        hints:
+          - "The enum is like CupSize with one value: `ONE(1), FIVE(5), TEN(10), TWENTY(20);`, a private `int dollars`, a private constructor and `getDollars()`."
+          - "In `change`, take `Bill[] kinds = Bill.values();` and loop `for (int i = kinds.length - 1; i >= 0; i--)`. Inside it, a `while` loop adds `kinds[i]` to the list and takes its dollars off the amount, as long as the bill still fits."
+        require:
+          - pattern: '\benum\s+Bill\b'
+            message: "Write `Bill` as an enum: `public enum Bill { ... }`."
+          - pattern: '\bBill\s*\(\s*int\s+\w+\s*\)'
+            message: "Give Bill a constructor, `private Bill(int dollars)`, which the constants call with their values."
+          - pattern: '\.values\s*\(\s*\)'
+            message: "Go through the bills with `Bill.values()`, largest first."
+        tests:
+          - call: |
+              System.out.println(change(68));
+              System.out.println(change(30));
+          - call: |
+              System.out.println(change(0));
+              System.out.println(change(4));
+              System.out.println(change(99).size() + " " + change(50));
+              System.out.println(Bill.TEN.getDollars() + " " + Bill.TWENTY.getDollars() + " " + Bill.values().length);
+            hidden: true
+          - call: |
+              ArrayList<Bill> bills = change(41);
+              int total = 0;
+              for (Bill bill : bills) {
+                  total += bill.getDollars();
+              }
+              System.out.println(bills + " " + total);
+              System.out.println(change(15) + " " + change(125).size());
+            hidden: true
+
+  - id: useful-techniques-iterators
+    slug: iterators
+    title: "Iterators: removing while going through"
+    text: |
+      Module 14 showed that removing from a list inside a for-each loop stops the program. Here it is once more, with a to-do list that should lose its finished tasks:
+
+      ```java run crash
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> tasks = new ArrayList<>();
+              tasks.add("buy stamps");
+              tasks.add("DONE call the dentist");
+              tasks.add("water the plants");
+              tasks.add("DONE pay the rent");
+              for (String task : tasks) {
+                  if (task.startsWith("DONE")) {
+                      tasks.remove(task);
+                  }
+              }
+              System.out.println(tasks);
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.util.ConcurrentModificationException
+      	at Main.main(Main.java:10)
+      ```
+
+      Module 14's fix was an index loop that goes backwards. That works for a list, which has indexes. An **iterator** is Java's general tool for going through a collection one element at a time, and it can remove the element it's on:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Iterator;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> tasks = new ArrayList<>();
+              tasks.add("buy stamps");
+              tasks.add("DONE call the dentist");
+              tasks.add("water the plants");
+              tasks.add("DONE pay the rent");
+
+              Iterator<String> iterator = tasks.iterator();
+              while (iterator.hasNext()) {
+                  String task = iterator.next();
+                  if (task.startsWith("DONE")) {
+                      iterator.remove();
+                  }
+              }
+              System.out.println(tasks);
+          }
+      }
+      ```
+
+      ```output
+      [buy stamps, water the plants]
+      ```
+
+      - `tasks.iterator()` returns an `Iterator<String>`, which starts in front of the first element. Iterator is in `java.util`, so it needs `import java.util.Iterator;`.
+      - `hasNext()` returns `true` while there are elements left.
+      - `next()` moves on to the next element and returns it.
+      - `remove()` removes the element that `next()` returned last, from the list itself. The iterator knows about the removal, so it carries on correctly with the next element.
+
+      ### The rules
+
+      - Call `next()` once in each round, after `hasNext()` has said there's an element. A second `next()` in the same round skips an element, and past the end, `next()` stops the program with a NoSuchElementException.
+      - Call `remove()` at most once after each `next()`. Before the first `next()`, or twice in a row, it stops the program with an IllegalStateException.
+      - Don't change the collection in any other way while the iterator goes through it: only through the iterator's own `remove()`.
+
+      ### Why a for-each loop can't remove
+
+      A for-each loop uses an iterator too, one that you don't see. `tasks.remove(task)` removes behind that iterator's back: the list changes, but the loop's iterator isn't told. When the loop asks it for the next element, the iterator notices that the list has changed and stops the program with a ConcurrentModificationException ("concurrent" means at the same time: the list changed while it was being gone through). With the iterator in a variable of your own, you remove through it, and it keeps track.
+
+      ### Collections without indexes
+
+      Every collection has `iterator()`: lists, sets, and a map's `keySet()` and `values()`. A set has no indexes, so module 14's backwards loop can't go through one, but an iterator can:
+
+      ```java run
+      import java.util.HashSet;
+      import java.util.Iterator;
+      import java.util.Set;
+
+      public class Main {
+          public static void main(String[] args) {
+              Set<String> coupons = new HashSet<>();
+              coupons.add("SPRING-10");
+              coupons.add("WINTER-15");
+              coupons.add("SPRING-20");
+              coupons.add("SUMMER-5");
+
+              Iterator<String> iterator = coupons.iterator();
+              while (iterator.hasNext()) {
+                  if (iterator.next().startsWith("SPRING")) {
+                      iterator.remove();
+                  }
+              }
+              System.out.println(coupons.size() + " " + coupons.contains("SPRING-10") + " " + coupons.contains("SUMMER-5"));
+          }
+      }
+      ```
+
+      ```output
+      2 false true
+      ```
+
+      Here `next()` is called right in the `if`'s condition. That's fine: it's still called once in each round.
+
+      Lists and sets also have `removeIf`, which takes a lambda, like module 37's `filter`: `tasks.removeIf(task -> task.startsWith("DONE"));` removes every finished task in one line. An iterator is the tool when the loop does more than remove, for example counts what it removes, adds up the removed values, or stops at the first match.
+
+      **Your turn:** a playlist should lose its short tracks, the ones under 60 seconds. Fill in the blanks: get an iterator from the list, go on while it has elements, take the next one, and remove it when it's short. The program prints:
+
+      ```
+      [214, 187, 302]
+      ```
+    fill: |
+      import java.util.ArrayList;
+      import java.util.Iterator;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> tracks = new ArrayList<>();
+              tracks.add(214);
+              tracks.add(45);
+              tracks.add(187);
+              tracks.add(30);
+              tracks.add(302);
+
+              Iterator<Integer> iterator = tracks.[[iterator]]();
+              while (iterator.[[hasNext]]()) {
+                  int seconds = iterator.[[next]]();
+                  if (seconds < 60) {
+                      iterator.[[remove]]();
+                  }
+              }
+              System.out.println(tracks);
+          }
+      }
+    hints:
+      - "The four blanks are, in order: the list's method that gives an iterator, and the iterator's methods that ask whether there's more, take the next element, and remove it."
+      - "`tracks.iterator()`, `iterator.hasNext()`, `iterator.next()` and `iterator.remove()`."
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Iterator;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> queue = new ArrayList<>();
+                  queue.add("Ada");
+                  queue.add("Ben");
+                  queue.add("Cy");
+                  queue.add("Dee");
+                  queue.add("Eve");
+
+                  Iterator<String> iterator = queue.iterator();
+                  int round = 0;
+                  while (iterator.hasNext()) {
+                      iterator.next();
+                      round++;
+                      if (round % 2 == 0) {
+                          iterator.remove();
+                      }
+                  }
+                  System.out.println(queue + " " + round);
+
+                  Iterator<String> again = queue.iterator();
+                  again.next();
+                  again.next();
+                  again.remove();
+                  System.out.println(queue);
+              }
+          }
+        hints:
+          - "The first loop goes through all five names, so `round` ends at 5. In rounds 2 and 4, `remove()` removes the name that `next()` returned in that round: Ben and Dee."
+          - "The second iterator starts from the front of what's left, Ada, Cy and Eve. After two calls to `next()`, the last one returned is Cy, and that's the one `remove()` removes."
+      - task: |
+          A shopping app keeps its coupons in a wallet. `Coupon.java` is ready: a coupon has a code, a discount in percent, and the last day of the month on which it's valid. In `Wallet.java`, write the two missing methods, each with an iterator:
+
+          - `removeExpired(int today)`, which removes every coupon whose last day is before `today` (a coupon is still valid on its last day)
+          - `use(String code)`, which removes the first coupon with that code (a wallet can hold two with the same code, and capitals count) and returns its discount, or returns 0 if the wallet has no such coupon
+
+          `Main.java` is a test drive, and it prints:
+
+          ```
+          [BREAD10 (10%), BOOKS15 (15%)]
+          15 0
+          [BREAD10 (10%)]
+          ```
+        seed:
+          Wallet.java: |
+            import java.util.ArrayList;
+            import java.util.Iterator;
+
+            public class Wallet {
+                private ArrayList<Coupon> coupons;
+
+                public Wallet() {
+                    this.coupons = new ArrayList<>();
+                }
+
+                public void add(Coupon coupon) {
+                    this.coupons.add(coupon);
+                }
+
+                public void removeExpired(int today) {
+
+                }
+
+                public int use(String code) {
+                    return 0;
+                }
+
+                @Override
+                public String toString() {
+                    return this.coupons.toString();
+                }
+            }
+          Coupon.java: |
+            public class Coupon {
+                private String code;
+                private int percent;
+                private int lastDay;
+
+                public Coupon(String code, int percent, int lastDay) {
+                    this.code = code;
+                    this.percent = percent;
+                    this.lastDay = lastDay;
+                }
+
+                public String getCode() {
+                    return this.code;
+                }
+
+                public int getPercent() {
+                    return this.percent;
+                }
+
+                public int getLastDay() {
+                    return this.lastDay;
+                }
+
+                @Override
+                public String toString() {
+                    return this.code + " (" + this.percent + "%)";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Wallet wallet = new Wallet();
+                    wallet.add(new Coupon("BREAD10", 10, 14));
+                    wallet.add(new Coupon("SHOES25", 25, 3));
+                    wallet.add(new Coupon("BOOKS15", 15, 20));
+                    wallet.add(new Coupon("TEA5", 5, 9));
+                    wallet.removeExpired(10);
+                    System.out.println(wallet);
+                    System.out.println(wallet.use("BOOKS15") + " " + wallet.use("TEA5"));
+                    System.out.println(wallet);
+                }
+            }
+        solution:
+          Wallet.java: |
+            import java.util.ArrayList;
+            import java.util.Iterator;
+
+            public class Wallet {
+                private ArrayList<Coupon> coupons;
+
+                public Wallet() {
+                    this.coupons = new ArrayList<>();
+                }
+
+                public void add(Coupon coupon) {
+                    this.coupons.add(coupon);
+                }
+
+                public void removeExpired(int today) {
+                    Iterator<Coupon> iterator = this.coupons.iterator();
+                    while (iterator.hasNext()) {
+                        if (iterator.next().getLastDay() < today) {
+                            iterator.remove();
+                        }
+                    }
+                }
+
+                public int use(String code) {
+                    Iterator<Coupon> iterator = this.coupons.iterator();
+                    while (iterator.hasNext()) {
+                        Coupon coupon = iterator.next();
+                        if (coupon.getCode().equals(code)) {
+                            iterator.remove();
+                            return coupon.getPercent();
+                        }
+                    }
+                    return 0;
+                }
+
+                @Override
+                public String toString() {
+                    return this.coupons.toString();
+                }
+            }
+          Coupon.java: |
+            public class Coupon {
+                private String code;
+                private int percent;
+                private int lastDay;
+
+                public Coupon(String code, int percent, int lastDay) {
+                    this.code = code;
+                    this.percent = percent;
+                    this.lastDay = lastDay;
+                }
+
+                public String getCode() {
+                    return this.code;
+                }
+
+                public int getPercent() {
+                    return this.percent;
+                }
+
+                public int getLastDay() {
+                    return this.lastDay;
+                }
+
+                @Override
+                public String toString() {
+                    return this.code + " (" + this.percent + "%)";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Wallet wallet = new Wallet();
+                    wallet.add(new Coupon("BREAD10", 10, 14));
+                    wallet.add(new Coupon("SHOES25", 25, 3));
+                    wallet.add(new Coupon("BOOKS15", 15, 20));
+                    wallet.add(new Coupon("TEA5", 5, 9));
+                    wallet.removeExpired(10);
+                    System.out.println(wallet);
+                    System.out.println(wallet.use("BOOKS15") + " " + wallet.use("TEA5"));
+                    System.out.println(wallet);
+                }
+            }
+        hints:
+          - "Both methods start with `Iterator<Coupon> iterator = this.coupons.iterator();` and a `while (iterator.hasNext())` loop. In `removeExpired`, remove the coupon when its `getLastDay()` is smaller than `today`."
+          - "In `use`, keep the coupon from `next()` in a variable. When its code `equals` the one asked for, call `iterator.remove()` and return the coupon's percent right away. After the loop, nothing matched: return 0."
+        require:
+          - pattern: '\.iterator\s*\(\s*\)'
+            min: 2
+            message: "Go through the coupons with an iterator in both methods: `this.coupons.iterator()`."
+          - pattern: '\.remove\s*\(\s*\)'
+            min: 2
+            message: "Remove the coupons with the iterator's own `remove()`, in both methods."
+        forbid:
+          - pattern: '\bremoveIf\b'
+            message: "`removeIf` would do the loop for you. Use an iterator this time."
+        tests:
+          - name: The test drive
+          - call: |
+              Wallet wallet = new Wallet();
+              System.out.println(wallet.use("TEA5") + " " + wallet);
+              wallet.removeExpired(31);
+              wallet.add(new Coupon("A1", 5, 1));
+              wallet.add(new Coupon("B2", 10, 2));
+              wallet.add(new Coupon("C3", 15, 3));
+              wallet.removeExpired(2);
+              System.out.println(wallet);
+              wallet.removeExpired(4);
+              System.out.println(wallet + " " + wallet.use("B2"));
+            hidden: true
+          - call: |
+              Wallet wallet = new Wallet();
+              wallet.add(new Coupon("SAME", 10, 30));
+              wallet.add(new Coupon("SAME", 20, 30));
+              wallet.add(new Coupon("OTHER", 30, 30));
+              System.out.println(wallet.use("SAME") + " " + wallet);
+              System.out.println(wallet.use("SAME") + " " + wallet.use("SAME") + " " + wallet.use("other"));
+              wallet.removeExpired(30);
+              System.out.println(wallet);
+            hidden: true
+          - call: |
+              Wallet wallet = new Wallet();
+              for (int day = 1; day <= 3; day++) {
+                  wallet.add(new Coupon("DAY" + day, day * 5, 30));
+              }
+              System.out.println(wallet.use("DAY2") + " " + wallet);
+              System.out.println(wallet.use("DAY2") + " " + wallet.use("DAY3") + " " + wallet);
+            hidden: true
+
+  - id: useful-techniques-end-of-part-10
+    slug: end-of-part-10
+    title: Putting it together, and the end of part 10
+    text: |
+      This last step of part 10 puts this module's tools side by side, and then looks back at the whole part.
+
+      ### Which tool when
+
+      | You want to | Use | Instead of |
+      | --- | --- | --- |
+      | count down, or step by more than one | `for (int i = 10; i > 0; i -= 2)` | a counter in a `while` loop |
+      | use the positions of a list's values | `for` over the indexes | a for-each loop |
+      | build a text in a loop | `StringBuilder` and `append` | `+=` on a String |
+      | check the form of a string | `matches` and a regular expression | a loop with `charAt` |
+      | a value from a fixed set | an enum, compared with `==` | Strings or numbers that stand for the choices |
+      | remove elements while going through a collection | an `Iterator` and its `remove()` | removing inside a for-each loop |
+
+      The tools work well together. A regex check that a code has the right form can decide which enum constant the code stands for, a StringBuilder can build a report with a line for each constant in `values()`, and an iterator can clear out the objects that a report no longer needs. The challenges of this step do all of that, for the tickets of a music festival.
+
+      ### The end of part 10
+
+      This step ends the material of the MOOC's tenth part. Module 37 brought streams: `stream()` and a chain of steps such as `filter`, `map`, `sorted` and `distinct`, ended by `count`, `sum`, `average`, `collect` or `forEach`, with lambda expressions and method references to say what each step does, and `reduce`, `IntStream` and the lines of a file as a stream. Module 38 put objects in order: a natural order with `Comparable` and `compareTo`, and any other order with a `Comparator`, built with `Comparator.comparing`, `thenComparing` and `reversed`. This module added a set of smaller tools: the for loop once more, StringBuilder, regular expressions, enums with fields and methods, and iterators. Part 11 comes next, starting with class diagrams. Part 10 ends with [the MOOC's summary page](https://java-programming.mooc.fi/part-10/4-summary) on its own site.
+
+      **Your turn:** a music festival sells three kinds of passes. `Pass.java` is ready, with a price for each. A ticket's code is the first letter of its pass's name, a dash and four digits: `D-0412` is a day pass, `W-1001` a weekend pass and `B-0007` a backstage pass. In `Main.java`, write the method `passFor(String code)`, which returns the Pass that a code stands for, or `null` when the code doesn't have that form. Check the form with `matches`, and find the pass by going through `Pass.values()`. The check runs:
+
+      ```java fragment
+      System.out.println(passFor("W-1001"));
+      System.out.println(passFor("B-0007"));
+      System.out.println(passFor("D-412"));
+      System.out.println(passFor("X-1234"));
+      ```
+
+      and expects:
+
+      ```
+      WEEKEND
+      BACKSTAGE
+      null
+      null
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(passFor("W-1001"));
+                System.out.println(passFor("B-0007"));
+                System.out.println(passFor("D-412"));
+                System.out.println(passFor("X-1234"));
+            }
+
+            public static Pass passFor(String code) {
+                return null;
+            }
+        }
+      Pass.java: |
+        public enum Pass {
+            DAY(45),
+            WEEKEND(110),
+            BACKSTAGE(250);
+
+            private int price;
+
+            private Pass(int price) {
+                this.price = price;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+        }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(passFor("W-1001"));
+                System.out.println(passFor("B-0007"));
+                System.out.println(passFor("D-412"));
+                System.out.println(passFor("X-1234"));
+            }
+
+            public static Pass passFor(String code) {
+                if (!code.matches("[DWB]-[0-9]{4}")) {
+                    return null;
+                }
+                for (Pass pass : Pass.values()) {
+                    if (pass.name().charAt(0) == code.charAt(0)) {
+                        return pass;
+                    }
+                }
+                return null;
+            }
+        }
+      Pass.java: |
+        public enum Pass {
+            DAY(45),
+            WEEKEND(110),
+            BACKSTAGE(250);
+
+            private int price;
+
+            private Pass(int price) {
+                this.price = price;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+        }
+    hints:
+      - "The form is one of the letters D, W or B, a dash, and four digits: `[DWB]-[0-9]{4}`. When the code doesn't match, return `null` at once."
+      - "Then go through `Pass.values()`, and return the pass whose `name().charAt(0)` equals the code's `charAt(0)`. Both are chars, so compare them with `==`."
+    require:
+      - pattern: '\.matches\s*\('
+        message: "Check the code's form with `matches`."
+      - pattern: '\bPass\s*\.\s*values\s*\(\s*\)'
+        message: "Find the pass by going through `Pass.values()`."
+    tests:
+      - call: |
+          System.out.println(passFor("W-1001"));
+          System.out.println(passFor("B-0007"));
+          System.out.println(passFor("D-412"));
+          System.out.println(passFor("X-1234"));
+      - call: |
+          System.out.println(passFor("D-0412") + " " + passFor("D-0000") + " " + (passFor("B-9999") == Pass.BACKSTAGE));
+          System.out.println(passFor("d-0412") + " " + passFor("W-10010") + " " + passFor("W1001") + " " + passFor("WD-1001") + " " + passFor(""));
+        hidden: true
+      - call: |
+          Pass pass = passFor("W-2026");
+          System.out.println(pass.getPrice() + " " + passFor("B-12a4") + " " + passFor(" D-1234"));
+        hidden: true
+    more:
+      - task: |
+          The festival's passes once more. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  StringBuilder line = new StringBuilder();
+                  for (Pass pass : Pass.values()) {
+                      line.append(pass.name().charAt(0));
+                  }
+                  System.out.println(line.reverse());
+                  String code = line + "-0042";
+                  System.out.println(code.matches("[A-Z]+-[0-9]{4}") + " " + code.matches("[DWB]-[0-9]+"));
+                  int total = 0;
+                  for (int i = Pass.values().length - 1; i >= 0; i -= 2) {
+                      total += Pass.values()[i].getPrice();
+                  }
+                  System.out.println(total);
+              }
+          }
+          // ==== Pass.java ====
+          public enum Pass {
+              DAY(45),
+              WEEKEND(110),
+              BACKSTAGE(250);
+
+              private int price;
+
+              private Pass(int price) {
+                  this.price = price;
+              }
+
+              public int getPrice() {
+                  return this.price;
+              }
+          }
+        hints:
+          - "The loop appends the first letters of DAY, WEEKEND and BACKSTAGE. `reverse()` turns the builder itself around and returns it, so it's printed reversed, and it stays reversed for the next line."
+          - "The code is the three letters, a dash and 0042: `[A-Z]+` allows any number of capital letters, but `[DWB]` is exactly one. The last loop takes indexes 2 and 0, BACKSTAGE and DAY."
+      - task: |
+          To end part 10: the festival's box office. `Pass.java` is the one from the first task, and `Ticket.java` is ready: a ticket has the name of its holder and a Pass. One person can hold several tickets. In `BoxOffice.java`, `sell` is ready. Write:
+
+          - `refund(String holder)`, for a person who can't come after all: it removes every ticket of that holder, with an iterator, and returns the money that goes back, the sum of the prices of the removed tickets' passes (0 when the holder has no tickets)
+          - `report()`, which returns a String built with a StringBuilder: one line for each pass, in the order of `Pass.values()`, like `DAY: 3 sold, 135 dollars`, with a line break between the lines and none after the last
+
+          `Main.java` is a test drive, and it prints:
+
+          ```
+          DAY: 3 sold, 135 dollars
+          WEEKEND: 1 sold, 110 dollars
+          BACKSTAGE: 1 sold, 250 dollars
+          Refunded: 405
+          DAY: 2 sold, 90 dollars
+          WEEKEND: 0 sold, 0 dollars
+          BACKSTAGE: 0 sold, 0 dollars
+          ```
+        seed:
+          BoxOffice.java: |
+            import java.util.ArrayList;
+            import java.util.Iterator;
+
+            public class BoxOffice {
+                private ArrayList<Ticket> tickets;
+
+                public BoxOffice() {
+                    this.tickets = new ArrayList<>();
+                }
+
+                public void sell(String holder, Pass pass) {
+                    this.tickets.add(new Ticket(holder, pass));
+                }
+
+                public int refund(String holder) {
+                    return 0;
+                }
+
+                public String report() {
+                    return "";
+                }
+            }
+          Ticket.java: |
+            public class Ticket {
+                private String holder;
+                private Pass pass;
+
+                public Ticket(String holder, Pass pass) {
+                    this.holder = holder;
+                    this.pass = pass;
+                }
+
+                public String getHolder() {
+                    return this.holder;
+                }
+
+                public Pass getPass() {
+                    return this.pass;
+                }
+
+                @Override
+                public String toString() {
+                    return this.holder + " (" + this.pass + ")";
+                }
+            }
+          Pass.java: |
+            public enum Pass {
+                DAY(45),
+                WEEKEND(110),
+                BACKSTAGE(250);
+
+                private int price;
+
+                private Pass(int price) {
+                    this.price = price;
+                }
+
+                public int getPrice() {
+                    return this.price;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    BoxOffice office = new BoxOffice();
+                    office.sell("Ada", Pass.DAY);
+                    office.sell("Ben", Pass.WEEKEND);
+                    office.sell("Ben", Pass.BACKSTAGE);
+                    office.sell("Cy", Pass.DAY);
+                    office.sell("Ben", Pass.DAY);
+                    System.out.println(office.report());
+                    System.out.println("Refunded: " + office.refund("Ben"));
+                    System.out.println(office.report());
+                }
+            }
+        solution:
+          BoxOffice.java: |
+            import java.util.ArrayList;
+            import java.util.Iterator;
+
+            public class BoxOffice {
+                private ArrayList<Ticket> tickets;
+
+                public BoxOffice() {
+                    this.tickets = new ArrayList<>();
+                }
+
+                public void sell(String holder, Pass pass) {
+                    this.tickets.add(new Ticket(holder, pass));
+                }
+
+                public int refund(String holder) {
+                    int money = 0;
+                    Iterator<Ticket> iterator = this.tickets.iterator();
+                    while (iterator.hasNext()) {
+                        Ticket ticket = iterator.next();
+                        if (ticket.getHolder().equals(holder)) {
+                            iterator.remove();
+                            money += ticket.getPass().getPrice();
+                        }
+                    }
+                    return money;
+                }
+
+                public String report() {
+                    StringBuilder report = new StringBuilder();
+                    for (Pass pass : Pass.values()) {
+                        int sold = 0;
+                        for (Ticket ticket : this.tickets) {
+                            if (ticket.getPass() == pass) {
+                                sold++;
+                            }
+                        }
+                        if (report.length() > 0) {
+                            report.append("\n");
+                        }
+                        report.append(pass).append(": ").append(sold).append(" sold, ").append(sold * pass.getPrice()).append(" dollars");
+                    }
+                    return report.toString();
+                }
+            }
+          Ticket.java: |
+            public class Ticket {
+                private String holder;
+                private Pass pass;
+
+                public Ticket(String holder, Pass pass) {
+                    this.holder = holder;
+                    this.pass = pass;
+                }
+
+                public String getHolder() {
+                    return this.holder;
+                }
+
+                public Pass getPass() {
+                    return this.pass;
+                }
+
+                @Override
+                public String toString() {
+                    return this.holder + " (" + this.pass + ")";
+                }
+            }
+          Pass.java: |
+            public enum Pass {
+                DAY(45),
+                WEEKEND(110),
+                BACKSTAGE(250);
+
+                private int price;
+
+                private Pass(int price) {
+                    this.price = price;
+                }
+
+                public int getPrice() {
+                    return this.price;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    BoxOffice office = new BoxOffice();
+                    office.sell("Ada", Pass.DAY);
+                    office.sell("Ben", Pass.WEEKEND);
+                    office.sell("Ben", Pass.BACKSTAGE);
+                    office.sell("Cy", Pass.DAY);
+                    office.sell("Ben", Pass.DAY);
+                    System.out.println(office.report());
+                    System.out.println("Refunded: " + office.refund("Ben"));
+                    System.out.println(office.report());
+                }
+            }
+        hints:
+          - "`refund` is step 7's loop: an iterator over `this.tickets`. Keep the ticket from `next()` in a variable, since you need both its holder and its pass. When the holder `equals` the name asked for, call `iterator.remove()` and add `ticket.getPass().getPrice()` to the money. Return the money after the loop."
+          - "`report` makes one StringBuilder, and for each pass in `Pass.values()` counts the tickets of that pass with a for-each loop. Before every line but the first (when `report.length() > 0`), append `\"\\n\"`; then append the pass, the count and `count * pass.getPrice()` with the words in between."
+        require:
+          - pattern: '\.iterator\s*\(\s*\)'
+            message: "Remove the refunded tickets with an iterator: `this.tickets.iterator()`."
+          - pattern: '\bnew\s+StringBuilder\s*\('
+            message: "Build the report in a `StringBuilder`."
+          - pattern: '\bPass\s*\.\s*values\s*\(\s*\)'
+            message: "Go through the passes with `Pass.values()`, so the report has a line for each one, in the enum's order."
+        forbid:
+          - pattern: '\bremoveIf\b'
+            message: "`removeIf` would do the loop for you. Use an iterator this time."
+          - pattern: '\bclass\s+BoxOffice\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Ticket\b'
+            message: "BoxOffice doesn't print. `report` returns the text, and `main` prints it."
+        tests:
+          - name: The test drive
+          - call: |
+              BoxOffice office = new BoxOffice();
+              System.out.println(office.report());
+              System.out.println(office.refund("Kai"));
+              office.sell("Kai", Pass.BACKSTAGE);
+              office.sell("Lin", Pass.BACKSTAGE);
+              office.sell("Kai", Pass.WEEKEND);
+              office.sell("Mo", Pass.DAY);
+              System.out.println(office.refund("Zed") + " " + office.refund("Kai") + " " + office.refund("Kai"));
+              System.out.println(office.report());
+            hidden: true
+          - call: |
+              BoxOffice office = new BoxOffice();
+              for (int i = 0; i < 10; i++) {
+                  office.sell("Fan " + (i % 4), Pass.values()[i % 3]);
+              }
+              System.out.println(office.report());
+              System.out.println(office.refund("Fan 2") + " " + office.refund("Fan 2"));
+              office.sell("Late", Pass.WEEKEND);
+              System.out.println(office.report());
+            hidden: true

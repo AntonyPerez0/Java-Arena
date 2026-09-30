@@ -1,0 +1,2412 @@
+id: sorting-objects
+summary: Putting objects of your own classes in order. Comparable and compareTo give a class a natural order, which Collections.sort and a stream's sorted() use; a Comparator, written as a lambda or built with Comparator.comparing and reversed, sorts by any other rule; thenComparing sorts by several criteria, in lists and in streams. Last, where an order belongs, in the class or where it's used. MOOC section 10.2.
+steps:
+  - id: sorting-objects-comparable
+    slug: comparable
+    title: "Comparable: a natural order for your class"
+    text: |
+      Module 28 sorted lists of numbers and Strings with `Collections.sort`, and said that a list of your own objects can't be sorted that way yet. Java knows that 3 comes before 7 and that "Ada" comes before "Ben". But a conference talk: does it go by its title, its start time or its room? Java can't guess. This module shows how to tell it.
+
+      ### Java doesn't know the order
+
+      A conference app keeps the day's talks. Each talk has a title and the hour it starts. Sorting them doesn't compile:
+
+      ```java error
+      import java.util.ArrayList;
+      import java.util.Collections;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Talk> talks = new ArrayList<>();
+              talks.add(new Talk("Testing with JUnit", 14));
+              talks.add(new Talk("Opening keynote", 9));
+              Collections.sort(talks);
+              System.out.println(talks);
+          }
+      }
+      // ==== Talk.java ====
+      public class Talk {
+          private String title;
+          private int hour;
+
+          public Talk(String title, int hour) {
+              this.title = title;
+              this.hour = hour;
+          }
+
+          @Override
+          public String toString() {
+              return this.hour + ":00 " + this.title;
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:9: error: no suitable method found for sort(ArrayList<Talk>)
+              Collections.sort(talks);
+                         ^
+          method Collections.<T#1>sort(List<T#1>) is not applicable
+            (inference variable T#1 has incompatible bounds
+              equality constraints: Talk
+              upper bounds: Comparable<? super T#1>)
+          method Collections.<T#2>sort(List<T#2>,Comparator<? super T#2>) is not applicable
+            (cannot infer type-variable(s) T#2
+              (actual and formal argument lists differ in length))
+        where T#1,T#2 are type-variables:
+          T#1 extends Comparable<? super T#1> declared in method <T#1>sort(List<T#1>)
+          T#2 extends Object declared in method <T#2>sort(List<T#2>,Comparator<? super T#2>)
+      1 error
+      ```
+
+      The message is long, but its key word is `Comparable`: `Collections.sort` sorts only elements that are **Comparable**, and a Talk isn't. (The other method it mentions, the one with a `Comparator`, is step 2's.) A stream's `sorted()` from module 37 has the same need. It compiles, but as soon as the stream has two talks to compare, the program stops with a `ClassCastException`.
+
+      ### Comparable and compareTo
+
+      `Comparable` is one of Java's own interfaces (module 35). It lists one method, and in short it looks like this:
+
+      ```java fragment
+      public interface Comparable<T> {
+          int compareTo(T other);
+      }
+      ```
+
+      `T` stands for a type, given in angle brackets as in `ArrayList<Talk>`. A class that implements `Comparable<Talk>` promises the method `compareTo(Talk other)`. It compares the object it's called on, `this`, with `other`, and answers with an int:
+
+      - a **negative** number: `this` comes before `other`
+      - **zero**: they have the same place in the order
+      - a **positive** number: `this` comes after `other`
+
+      The order that `compareTo` gives is called the class's **natural order**. Talks, in the order they start:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Talk> talks = new ArrayList<>();
+              talks.add(new Talk("Clean code in practice", 11));
+              talks.add(new Talk("Opening keynote", 9));
+              talks.add(new Talk("Testing with JUnit", 14));
+              talks.add(new Talk("Accessible web forms", 11));
+              talks.add(new Talk("Streams in depth", 10));
+              Collections.sort(talks);
+              for (Talk talk : talks) {
+                  System.out.println(talk);
+              }
+          }
+      }
+      // ==== Talk.java ====
+      public class Talk implements Comparable<Talk> {
+          private String title;
+          private int hour;
+
+          public Talk(String title, int hour) {
+              this.title = title;
+              this.hour = hour;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int getHour() {
+              return this.hour;
+          }
+
+          @Override
+          public int compareTo(Talk other) {
+              if (this.hour < other.hour) {
+                  return -1;
+              }
+              if (this.hour > other.hour) {
+                  return 1;
+              }
+              return 0;
+          }
+
+          @Override
+          public String toString() {
+              return this.hour + ":00 " + this.title;
+          }
+      }
+      ```
+
+      ```output
+      9:00 Opening keynote
+      10:00 Streams in depth
+      11:00 Clean code in practice
+      11:00 Accessible web forms
+      14:00 Testing with JUnit
+      ```
+
+      - `implements Comparable<Talk>` says that a Talk can be compared with another Talk. `@Override` goes above `compareTo`, as above any method an interface asks for.
+      - `compareTo` can read `other.hour`, a private variable of another Talk, because the code is inside the class Talk. Module 32's `equals` did the same.
+      - You don't call `compareTo` yourself here. `Collections.sort` calls it on pairs of talks, as many times as it needs, and moves the talks into order.
+      - The two talks at 11 are a tie: `compareTo` says 0. Java's sort never swaps elements that tie, so they keep the order they had in the list. Clean code was added first, so it stays first.
+
+      ### Only the sign matters
+
+      A sort only looks at whether the answer is negative, zero or positive, so any negative number means "before", not just -1. Java has a method that compares two ints that way, `Integer.compare(a, b)`:
+
+      ```java main
+      System.out.println(Integer.compare(9, 14));
+      System.out.println(Integer.compare(14, 14));
+      System.out.println(Integer.compare(14, 9));
+      ```
+
+      ```output
+      -1
+      0
+      1
+      ```
+
+      With it, the talks' `compareTo` is one line:
+
+      ```java fragment
+      @Override
+      public int compareTo(Talk other) {
+          return Integer.compare(this.hour, other.hour);
+      }
+      ```
+
+      Swap the two values, `Integer.compare(other.hour, this.hour)`, and the order turns around: the latest talk comes first.
+
+      For `double` values, `Double.compare(a, b)` works the same way.
+
+      You'll also see `return this.hour - other.hour;` in other people's code. For small numbers such as hours, the difference has the right sign. But a subtraction can overflow (module 4): when the numbers are far apart, the result wraps around, and the sign comes out wrong:
+
+      ```java main
+      int big = 2000000000;
+      int small = -2000000000;
+      System.out.println(big - small);
+      System.out.println(Integer.compare(big, small));
+      ```
+
+      ```output
+      -294967296
+      1
+      ```
+
+      `big` is the larger number, so the answer should be positive, but the subtraction says negative. `Integer.compare` is always right, so this course uses it.
+
+      ### Strings have a compareTo already
+
+      String implements `Comparable<String>`, and its `compareTo` gives alphabetical order. That's what `Collections.sort` used for Strings in module 28:
+
+      ```java main
+      System.out.println("Ada".compareTo("Ben") < 0);
+      System.out.println("Ben".compareTo("Ada") < 0);
+      System.out.println("Ada".compareTo("Ada"));
+      System.out.println("Zoe".compareTo("adam") < 0);
+      ```
+
+      ```output
+      true
+      false
+      0
+      true
+      ```
+
+      The last line is a surprise: "Zoe" comes before "adam". Strings are compared letter by letter, by the letters' codes, and every capital from A to Z comes before every small letter from a to z. Names made of a capital from A to Z followed by small letters from a to z, like Ada and Ben, sort as you'd expect.
+
+      A class ordered by a String, such as talks by their titles, hands the job to the String's `compareTo`:
+
+      ```java fragment
+      @Override
+      public int compareTo(Talk other) {
+          return this.title.compareTo(other.title);
+      }
+      ```
+
+      ### sorted() in a stream
+
+      Module 37 promised this: once a class is Comparable, a stream's `sorted()` works for its objects too. It uses the same `compareTo`, and it leaves the list as it was:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Talk> talks = new ArrayList<>();
+              talks.add(new Talk("Clean code in practice", 11));
+              talks.add(new Talk("Opening keynote", 9));
+              talks.add(new Talk("Streams in depth", 10));
+              talks.stream()
+                      .sorted()
+                      .forEach(System.out::println);
+              System.out.println("First in the list: " + talks.get(0));
+          }
+      }
+      // ==== Talk.java ====
+      public class Talk implements Comparable<Talk> {
+          private String title;
+          private int hour;
+
+          public Talk(String title, int hour) {
+              this.title = title;
+              this.hour = hour;
+          }
+
+          @Override
+          public int compareTo(Talk other) {
+              return Integer.compare(this.hour, other.hour);
+          }
+
+          @Override
+          public String toString() {
+              return this.hour + ":00 " + this.title;
+          }
+      }
+      ```
+
+      ```output
+      9:00 Opening keynote
+      10:00 Streams in depth
+      11:00 Clean code in practice
+      First in the list: 11:00 Clean code in practice
+      ```
+
+      **Your turn:** a rental site lists apartments, the cheapest first. `Apartment.java` has a street and a monthly rent. Make Apartment implement `Comparable<Apartment>`, with a `compareTo` that orders apartments by rent, the cheapest first. Use `Integer.compare`, and put `@Override` above the method. Compare only the rents: two apartments with the same rent are a tie, so `compareTo` gives 0 and the sort keeps them in the list's order. The check runs:
+
+      ```java fragment
+      ArrayList<Apartment> listings = new ArrayList<>();
+      listings.add(new Apartment("12 Elm Street", 1450));
+      listings.add(new Apartment("3 Harbor Lane", 980));
+      listings.add(new Apartment("47 Hill Road", 1200));
+      Collections.sort(listings);
+      System.out.println(listings);
+      ```
+
+      and expects:
+
+      ```
+      [3 Harbor Lane (980), 47 Hill Road (1200), 12 Elm Street (1450)]
+      ```
+    seed:
+      Apartment.java: |
+        public class Apartment {
+            private String street;
+            private int rent;
+
+            public Apartment(String street, int rent) {
+                this.street = street;
+                this.rent = rent;
+            }
+
+            public String getStreet() {
+                return this.street;
+            }
+
+            public int getRent() {
+                return this.rent;
+            }
+
+            @Override
+            public String toString() {
+                return this.street + " (" + this.rent + ")";
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Apartment> listings = new ArrayList<>();
+                listings.add(new Apartment("12 Elm Street", 1450));
+                listings.add(new Apartment("3 Harbor Lane", 980));
+                listings.add(new Apartment("47 Hill Road", 1200));
+                Collections.sort(listings);
+                System.out.println(listings);
+            }
+        }
+    solution:
+      Apartment.java: |
+        public class Apartment implements Comparable<Apartment> {
+            private String street;
+            private int rent;
+
+            public Apartment(String street, int rent) {
+                this.street = street;
+                this.rent = rent;
+            }
+
+            public String getStreet() {
+                return this.street;
+            }
+
+            public int getRent() {
+                return this.rent;
+            }
+
+            @Override
+            public int compareTo(Apartment other) {
+                return Integer.compare(this.rent, other.rent);
+            }
+
+            @Override
+            public String toString() {
+                return this.street + " (" + this.rent + ")";
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Apartment> listings = new ArrayList<>();
+                listings.add(new Apartment("12 Elm Street", 1450));
+                listings.add(new Apartment("3 Harbor Lane", 980));
+                listings.add(new Apartment("47 Hill Road", 1200));
+                Collections.sort(listings);
+                System.out.println(listings);
+            }
+        }
+    hints:
+      - "Change the header to `public class Apartment implements Comparable<Apartment> {`. Then the class must have the method `public int compareTo(Apartment other)`."
+      - "The cheapest comes first, so `this` goes before `other` when its rent is smaller: `return Integer.compare(this.rent, other.rent);`."
+    require:
+      - pattern: \bclass\s+Apartment\s+implements\s+Comparable\s*<\s*Apartment\s*>
+        message: "Write the header as `public class Apartment implements Comparable<Apartment>`."
+      - pattern: \bInteger\s*\.\s*compare\s*\(
+        message: "Compare the rents with `Integer.compare`."
+      - pattern: "@Override\\s+public\\s+int\\s+compareTo\\s*\\("
+        message: "Put `@Override` above `public int compareTo(Apartment other)`."
+    tests:
+      - call: |
+          ArrayList<Apartment> listings = new ArrayList<>();
+          listings.add(new Apartment("12 Elm Street", 1450));
+          listings.add(new Apartment("3 Harbor Lane", 980));
+          listings.add(new Apartment("47 Hill Road", 1200));
+          Collections.sort(listings);
+          System.out.println(listings);
+      - call: |
+          ArrayList<Apartment> listings = new ArrayList<>();
+          listings.add(new Apartment("8 Mill Road", 2100));
+          listings.add(new Apartment("5 Oak Court", 750));
+          listings.add(new Apartment("21 Bay View", 2100));
+          listings.add(new Apartment("2 Park Row", 1999));
+          listings.add(new Apartment("6 Pier Street", 750));
+          Collections.sort(listings);
+          System.out.println(listings);
+        hidden: true
+      - call: |
+          Apartment cheap = new Apartment("1 Low Street", 500);
+          Apartment dear = new Apartment("99 High Street", 3000);
+          System.out.println(cheap.compareTo(dear) < 0);
+          System.out.println(dear.compareTo(cheap) > 0);
+          System.out.println(cheap.compareTo(new Apartment("3 Other Street", 500)));
+        hidden: true
+    more:
+      - task: |
+          A hackathon's scoreboard shows the teams with the highest score first. Look closely at the order of the two values in `compareTo`. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Entry> board = new ArrayList<>();
+                  board.add(new Entry("Byte Club", 72));
+                  board.add(new Entry("Null Pointers", 88));
+                  board.add(new Entry("Stack Stars", 72));
+                  board.add(new Entry("Loop Troop", 95));
+                  Collections.sort(board);
+                  for (Entry entry : board) {
+                      System.out.println(entry);
+                  }
+                  System.out.println(board.get(3).compareTo(board.get(0)) > 0);
+              }
+          }
+          // ==== Entry.java ====
+          public class Entry implements Comparable<Entry> {
+              private String team;
+              private int score;
+
+              public Entry(String team, int score) {
+                  this.team = team;
+                  this.score = score;
+              }
+
+              @Override
+              public int compareTo(Entry other) {
+                  return Integer.compare(other.score, this.score);
+              }
+
+              @Override
+              public String toString() {
+                  return this.team + " " + this.score;
+              }
+          }
+        hints:
+          - "`Integer.compare(other.score, this.score)` has the two values swapped: it's negative when `this` has the *higher* score. So a higher score comes first."
+          - "The order is 95, 88, 72, 72. Byte Club and Stack Stars tie at 72, and a tie keeps the list's order. Last, Stack Stars comes after Loop Troop, so its `compareTo` is positive."
+      - task: |
+          A spice rack is easier to use in alphabetical order. `Spice.java` has a name and the grams left. Write:
+
+          - in `Spice.java`: make Spice implement `Comparable<Spice>`, with a `compareTo` that orders spices by name, alphabetically. Compare only the names: two spices with the same name are a tie, so `compareTo` gives 0 and they keep the list's order.
+          - in `Main.java`: the method `printRack(List<Spice> rack)`, which prints the spices one per line in alphabetical order, without changing the list. Use a stream with `sorted()`.
+
+          The check runs:
+
+          ```java fragment
+          List<Spice> rack = new ArrayList<>();
+          rack.add(new Spice("Paprika", 50));
+          rack.add(new Spice("Cumin", 40));
+          rack.add(new Spice("Saffron", 2));
+          rack.add(new Spice("Cardamom", 25));
+          printRack(rack);
+          System.out.println(rack.get(0));
+          ```
+
+          and expects:
+
+          ```
+          Cardamom (25 g)
+          Cumin (40 g)
+          Paprika (50 g)
+          Saffron (2 g)
+          Paprika (50 g)
+          ```
+        seed:
+          Spice.java: |
+            public class Spice {
+                private String name;
+                private int grams;
+
+                public Spice(String name, int grams) {
+                    this.name = name;
+                    this.grams = grams;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getGrams() {
+                    return this.grams;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.grams + " g)";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Spice> rack = new ArrayList<>();
+                    rack.add(new Spice("Paprika", 50));
+                    rack.add(new Spice("Cumin", 40));
+                    rack.add(new Spice("Saffron", 2));
+                    rack.add(new Spice("Cardamom", 25));
+                    printRack(rack);
+                    System.out.println(rack.get(0));
+                }
+
+                // Write the method printRack here.
+            }
+        solution:
+          Spice.java: |
+            public class Spice implements Comparable<Spice> {
+                private String name;
+                private int grams;
+
+                public Spice(String name, int grams) {
+                    this.name = name;
+                    this.grams = grams;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getGrams() {
+                    return this.grams;
+                }
+
+                @Override
+                public int compareTo(Spice other) {
+                    return this.name.compareTo(other.name);
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.grams + " g)";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Spice> rack = new ArrayList<>();
+                    rack.add(new Spice("Paprika", 50));
+                    rack.add(new Spice("Cumin", 40));
+                    rack.add(new Spice("Saffron", 2));
+                    rack.add(new Spice("Cardamom", 25));
+                    printRack(rack);
+                    System.out.println(rack.get(0));
+                }
+
+                public static void printRack(List<Spice> rack) {
+                    rack.stream()
+                            .sorted()
+                            .forEach(System.out::println);
+                }
+            }
+        hints:
+          - "The header becomes `public class Spice implements Comparable<Spice> {`. A String already knows alphabetical order, so Spice's `compareTo` can hand the job to the names' own `compareTo`, as the talks did with their titles."
+          - "`compareTo` is one line, `return this.name.compareTo(other.name);`. `printRack` is `public static void printRack(List<Spice> rack)`, and its body is one stream: `rack.stream().sorted().forEach(System.out::println);`. `sorted()` uses Spice's `compareTo`."
+        require:
+          - pattern: \bclass\s+Spice\s+implements\s+Comparable\s*<\s*Spice\s*>
+            message: "Write the header as `public class Spice implements Comparable<Spice>`."
+          - pattern: \.compareTo\s*\(
+            message: "Compare the names with the Strings' own `compareTo`."
+          - pattern: \.sorted\s*\(\s*\)
+            message: "Sort in the stream with `sorted()`."
+        forbid:
+          - pattern: \bCollections\s*\.\s*sort\b|\.sort\s*\(
+            message: "`printRack` shouldn't change the list, so don't sort the list itself: let the stream sort what passes through it, with `sorted()`."
+        tests:
+          - call: |
+              List<Spice> rack = new ArrayList<>();
+              rack.add(new Spice("Paprika", 50));
+              rack.add(new Spice("Cumin", 40));
+              rack.add(new Spice("Saffron", 2));
+              rack.add(new Spice("Cardamom", 25));
+              printRack(rack);
+              System.out.println(rack.get(0));
+          - call: |
+              List<Spice> rack = new ArrayList<>();
+              printRack(rack);
+              rack.add(new Spice("Turmeric", 70));
+              rack.add(new Spice("Nutmeg", 15));
+              rack.add(new Spice("Turmeric", 5));
+              rack.add(new Spice("Anise", 30));
+              rack.add(new Spice("Nigella", 12));
+              printRack(rack);
+              System.out.println(rack);
+            hidden: true
+          - call: |
+              Spice cumin = new Spice("Cumin", 40);
+              Spice clove = new Spice("Clove", 9);
+              System.out.println(cumin.compareTo(clove) > 0);
+              System.out.println(clove.compareTo(cumin) < 0);
+              System.out.println(cumin.compareTo(new Spice("Cumin", 1)));
+            hidden: true
+
+  - id: sorting-objects-comparator
+    slug: comparator
+    title: "Comparator: an order given to the sort"
+    text: |
+      A class has only one `compareTo`, so it has only one natural order. But a program often needs the same objects in several orders. An airport's departures board lists the flights by time, the staff at the gates want them by gate, and a travel app lists them by destination. For those, you hand the sort the order to use, as a lambda.
+
+      ### A lambda that compares two objects
+
+      A list has a `sort` method of its own, which takes the rule as a lambda with two parameters (module 37 showed that two parameters go in parentheses: `(a, b) -> ...`). The board's flights, by gate:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Flight> flights = new ArrayList<>();
+              flights.add(new Flight("Lisbon", "13:10", 4));
+              flights.add(new Flight("Oslo", "07:45", 12));
+              flights.add(new Flight("Dublin", "09:30", 7));
+              flights.add(new Flight("Athens", "18:20", 2));
+              flights.add(new Flight("Riga", "09:05", 12));
+
+              flights.sort((a, b) -> Integer.compare(a.getGate(), b.getGate()));
+              for (Flight flight : flights) {
+                  System.out.println(flight);
+              }
+          }
+      }
+      // ==== Flight.java ====
+      public class Flight {
+          private String destination;
+          private String departs;
+          private int gate;
+
+          public Flight(String destination, String departs, int gate) {
+              this.destination = destination;
+              this.departs = departs;
+              this.gate = gate;
+          }
+
+          public String getDestination() {
+              return this.destination;
+          }
+
+          public String getDeparts() {
+              return this.departs;
+          }
+
+          public int getGate() {
+              return this.gate;
+          }
+
+          @Override
+          public String toString() {
+              return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+          }
+      }
+      ```
+
+      ```output
+      18:20 Athens (gate 2)
+      13:10 Lisbon (gate 4)
+      09:30 Dublin (gate 7)
+      07:45 Oslo (gate 12)
+      09:05 Riga (gate 12)
+      ```
+
+      - Flight has no `compareTo`, and it doesn't implement Comparable. The whole rule is in the lambda.
+      - The lambda gets two flights, `a` and `b`, and answers the way `compareTo` does: negative when `a` goes before `b`, zero for a tie, positive when `a` goes after `b`. `Integer.compare(a.getGate(), b.getGate())` puts the smaller gate first.
+      - `a` and `b` are names like any others: `(first, second) -> ...` works the same.
+      - `sort` changes the list itself, as `Collections.sort` does. Ties keep their order here too: Oslo and Riga both leave from gate 12, and Oslo was in the list first.
+
+      ### The Comparator interface
+
+      The lambda is a **Comparator**, another of Java's interfaces. The one method you have to write for a comparator, the one the lambda writes, is `compare(a, b)`, which answers like `compareTo`, but for two objects given to it from outside. Every comparator also comes with ready-made methods, such as `reversed()` and `thenComparing()` later in this module. A comparator can be kept in a variable of type `Comparator<Flight>` and used as often as you like, and `Collections.sort` takes one as its second parameter:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.Comparator;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Flight> flights = new ArrayList<>();
+              flights.add(new Flight("Lisbon", "13:10", 4));
+              flights.add(new Flight("Oslo", "07:45", 12));
+              flights.add(new Flight("Dublin", "09:30", 7));
+              flights.add(new Flight("Athens", "18:20", 2));
+              flights.add(new Flight("Riga", "09:05", 12));
+
+              Comparator<Flight> byTime = (a, b) -> a.getDeparts().compareTo(b.getDeparts());
+              Collections.sort(flights, byTime);
+              for (Flight flight : flights) {
+                  System.out.println(flight);
+              }
+          }
+      }
+      // ==== Flight.java ====
+      public class Flight {
+          private String destination;
+          private String departs;
+          private int gate;
+
+          public Flight(String destination, String departs, int gate) {
+              this.destination = destination;
+              this.departs = departs;
+              this.gate = gate;
+          }
+
+          public String getDestination() {
+              return this.destination;
+          }
+
+          public String getDeparts() {
+              return this.departs;
+          }
+
+          public int getGate() {
+              return this.gate;
+          }
+
+          @Override
+          public String toString() {
+              return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+          }
+      }
+      ```
+
+      ```output
+      07:45 Oslo (gate 12)
+      09:05 Riga (gate 12)
+      09:30 Dublin (gate 7)
+      13:10 Lisbon (gate 4)
+      18:20 Athens (gate 2)
+      ```
+
+      - `Comparator` is in `java.util`, so the program imports it: `import java.util.Comparator;`.
+      - The type `Comparator<Flight>` tells Java that the lambda's `a` and `b` are Flights.
+      - `Collections.sort(flights, byTime)` and `flights.sort(byTime)` do the same thing. This module mostly writes the shorter `flights.sort(...)`.
+      - The times are Strings, and Strings sort letter by letter. Every time here has two digits for the hour, like `07:45`, so alphabetical order is time order. Written as `7:45`, it would come after `13:10`, since the character 7 comes after 1.
+
+      ### Comparator.comparing
+
+      Most comparators compare one value of each object, such as the gate or the time. `Comparator.comparing` builds that comparator for you, from a method that gives the value, usually a getter written as a method reference (module 37):
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Comparator;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Flight> flights = new ArrayList<>();
+              flights.add(new Flight("Lisbon", "13:10", 4));
+              flights.add(new Flight("Oslo", "07:45", 12));
+              flights.add(new Flight("Dublin", "09:30", 7));
+              flights.add(new Flight("Athens", "18:20", 2));
+              flights.add(new Flight("Riga", "09:05", 12));
+
+              flights.sort(Comparator.comparing(Flight::getDestination));
+              for (Flight flight : flights) {
+                  System.out.println(flight);
+              }
+          }
+      }
+      // ==== Flight.java ====
+      public class Flight {
+          private String destination;
+          private String departs;
+          private int gate;
+
+          public Flight(String destination, String departs, int gate) {
+              this.destination = destination;
+              this.departs = departs;
+              this.gate = gate;
+          }
+
+          public String getDestination() {
+              return this.destination;
+          }
+
+          public String getDeparts() {
+              return this.departs;
+          }
+
+          public int getGate() {
+              return this.gate;
+          }
+
+          @Override
+          public String toString() {
+              return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+          }
+      }
+      ```
+
+      ```output
+      18:20 Athens (gate 2)
+      09:30 Dublin (gate 7)
+      13:10 Lisbon (gate 4)
+      07:45 Oslo (gate 12)
+      09:05 Riga (gate 12)
+      ```
+
+      `Comparator.comparing(Flight::getDestination)` reads: to compare two flights, call `getDestination()` on each, and compare those values. So the values need an order of their own: numbers, Strings, or objects of a Comparable class like step 1's Talk. The two comparators above, built this way:
+
+      - `Comparator.comparing(Flight::getGate)` does what `(a, b) -> Integer.compare(a.getGate(), b.getGate())` did.
+      - `Comparator.comparing(Flight::getDeparts)` does what `byTime` did.
+
+      ### reversed
+
+      `reversed()` turns a comparator around: the largest first, or Z to A. The board's evening view shows the latest flights first:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Comparator;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Flight> flights = new ArrayList<>();
+              flights.add(new Flight("Lisbon", "13:10", 4));
+              flights.add(new Flight("Oslo", "07:45", 12));
+              flights.add(new Flight("Dublin", "09:30", 7));
+              flights.add(new Flight("Athens", "18:20", 2));
+              flights.add(new Flight("Riga", "09:05", 12));
+
+              flights.sort(Comparator.comparing(Flight::getDeparts).reversed());
+              for (Flight flight : flights) {
+                  System.out.println(flight);
+              }
+              System.out.println();
+
+              flights.sort(Comparator.comparing(Flight::getGate).reversed());
+              for (Flight flight : flights) {
+                  System.out.println(flight);
+              }
+          }
+      }
+      // ==== Flight.java ====
+      public class Flight {
+          private String destination;
+          private String departs;
+          private int gate;
+
+          public Flight(String destination, String departs, int gate) {
+              this.destination = destination;
+              this.departs = departs;
+              this.gate = gate;
+          }
+
+          public String getDestination() {
+              return this.destination;
+          }
+
+          public String getDeparts() {
+              return this.departs;
+          }
+
+          public int getGate() {
+              return this.gate;
+          }
+
+          @Override
+          public String toString() {
+              return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+          }
+      }
+      ```
+
+      ```output
+      18:20 Athens (gate 2)
+      13:10 Lisbon (gate 4)
+      09:30 Dublin (gate 7)
+      09:05 Riga (gate 12)
+      07:45 Oslo (gate 12)
+
+      09:05 Riga (gate 12)
+      07:45 Oslo (gate 12)
+      09:30 Dublin (gate 7)
+      13:10 Lisbon (gate 4)
+      18:20 Athens (gate 2)
+      ```
+
+      Look at Riga and Oslo in the second list. `reversed()` turns the comparator's answers around, not the list: flights that tie still tie, and a tie keeps the order the list had. After the first sort, Riga was before Oslo, so it stays before Oslo.
+
+      A lambda you write yourself turns around by swapping the two values, `(a, b) -> Integer.compare(b.getGate(), a.getGate())`, just as swapping them in step 1's `compareTo` put the latest talk first.
+
+      ### Use a method reference in comparing
+
+      `Comparator.comparing(flight -> flight.getGate())` works too, on its own. But with `.reversed()` after it, it doesn't compile:
+
+      ```java error
+      import java.util.ArrayList;
+      import java.util.Comparator;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Flight> flights = new ArrayList<>();
+              flights.add(new Flight("Lisbon", "13:10", 4));
+              flights.add(new Flight("Oslo", "07:45", 12));
+              flights.sort(Comparator.comparing(flight -> flight.getGate()).reversed());
+              System.out.println(flights);
+          }
+      }
+      // ==== Flight.java ====
+      public class Flight {
+          private String destination;
+          private String departs;
+          private int gate;
+
+          public Flight(String destination, String departs, int gate) {
+              this.destination = destination;
+              this.departs = departs;
+              this.gate = gate;
+          }
+
+          public int getGate() {
+              return this.gate;
+          }
+
+          @Override
+          public String toString() {
+              return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:10: error: cannot find symbol
+              flights.sort(Comparator.comparing(flight -> flight.getGate()).reversed());
+                                                                ^
+        symbol:   method getGate()
+        location: variable flight of type Object
+      1 error
+      ```
+
+      Java works out a lambda's parameter types from the place where the lambda is used. Here, `.reversed()` is called on the comparator before Java has seen that it's meant for flights, so it takes `flight` to be just an Object, which has no `getGate()`. The method reference `Flight::getGate` names the class, so Java knows. Write method references in `comparing`, as the rest of this module does.
+
+      **Your turn:** a podcast app plays the short episodes first. `Episode.java` is ready: an episode has a title and a length in minutes, and no `compareTo`. In `Main.java`, write the method `sortShortestFirst(List<Episode> episodes)`, which sorts the list, the shortest episode first. Episodes of the same length keep the order they had in the list. Use the list's own `sort` with a lambda of two episodes: `episodes.sort((a, b) -> ...)`. The check runs:
+
+      ```java fragment
+      List<Episode> queue = new ArrayList<>();
+      queue.add(new Episode("The deep sea", 48));
+      queue.add(new Episode("Tiny houses", 22));
+      queue.add(new Episode("Night trains", 35));
+      sortShortestFirst(queue);
+      System.out.println(queue);
+      ```
+
+      and expects:
+
+      ```
+      [Tiny houses (22 min), Night trains (35 min), The deep sea (48 min)]
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Episode> queue = new ArrayList<>();
+                queue.add(new Episode("The deep sea", 48));
+                queue.add(new Episode("Tiny houses", 22));
+                queue.add(new Episode("Night trains", 35));
+                sortShortestFirst(queue);
+                System.out.println(queue);
+            }
+
+            // Write the method sortShortestFirst here.
+        }
+      Episode.java: |
+        public class Episode {
+            private String title;
+            private int minutes;
+
+            public Episode(String title, int minutes) {
+                this.title = title;
+                this.minutes = minutes;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public int getMinutes() {
+                return this.minutes;
+            }
+
+            @Override
+            public String toString() {
+                return this.title + " (" + this.minutes + " min)";
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Episode> queue = new ArrayList<>();
+                queue.add(new Episode("The deep sea", 48));
+                queue.add(new Episode("Tiny houses", 22));
+                queue.add(new Episode("Night trains", 35));
+                sortShortestFirst(queue);
+                System.out.println(queue);
+            }
+
+            public static void sortShortestFirst(List<Episode> episodes) {
+                episodes.sort((a, b) -> Integer.compare(a.getMinutes(), b.getMinutes()));
+            }
+        }
+      Episode.java: |
+        public class Episode {
+            private String title;
+            private int minutes;
+
+            public Episode(String title, int minutes) {
+                this.title = title;
+                this.minutes = minutes;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public int getMinutes() {
+                return this.minutes;
+            }
+
+            @Override
+            public String toString() {
+                return this.title + " (" + this.minutes + " min)";
+            }
+        }
+    hints:
+      - "The header is `public static void sortShortestFirst(List<Episode> episodes)`. It returns nothing: `sort` changes the list it's called on."
+      - "The lambda gets two episodes and compares their lengths: `episodes.sort((a, b) -> Integer.compare(a.getMinutes(), b.getMinutes()));`."
+    require:
+      - pattern: \.sort\s*\(\s*\([^()]*\)\s*->
+        message: "Sort with the list's own `sort` and a lambda of two episodes, like `episodes.sort((a, b) -> ...)`."
+    forbid:
+      - pattern: \bimplements\s+Comparable\b
+        message: "Episode stays as it is. The order goes in the lambda that you give to `sort`."
+    tests:
+      - call: |
+          List<Episode> queue = new ArrayList<>();
+          queue.add(new Episode("The deep sea", 48));
+          queue.add(new Episode("Tiny houses", 22));
+          queue.add(new Episode("Night trains", 35));
+          sortShortestFirst(queue);
+          System.out.println(queue);
+      - call: |
+          List<Episode> queue = new ArrayList<>();
+          sortShortestFirst(queue);
+          System.out.println(queue);
+          queue.add(new Episode("Bees", 61));
+          queue.add(new Episode("Lighthouses", 19));
+          queue.add(new Episode("Maps", 61));
+          queue.add(new Episode("Salt", 5));
+          queue.add(new Episode("Clocks", 19));
+          sortShortestFirst(queue);
+          System.out.println(queue);
+        hidden: true
+    more:
+      - task: |
+          A ski resort's app shows its slopes in different orders. Each slope has a name and the centimeters of fresh snow on it. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.Comparator;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Slope> slopes = new ArrayList<>();
+                  slopes.add(new Slope("Summit", 8));
+                  slopes.add(new Slope("Glacier", 25));
+                  slopes.add(new Slope("Pine", 0));
+                  slopes.add(new Slope("Eagle", 25));
+
+                  slopes.sort(Comparator.comparing(Slope::getSnow).reversed());
+                  System.out.println(slopes.get(0) + " " + slopes.get(1));
+
+                  Comparator<Slope> byName = Comparator.comparing(Slope::getName);
+                  Collections.sort(slopes, byName);
+                  System.out.println(slopes.get(0) + " " + slopes.get(3));
+
+                  slopes.sort(byName.reversed());
+                  System.out.println(slopes.get(0));
+              }
+          }
+          // ==== Slope.java ====
+          public class Slope {
+              private String name;
+              private int snow;
+
+              public Slope(String name, int snow) {
+                  this.name = name;
+                  this.snow = snow;
+              }
+
+              public String getName() {
+                  return this.name;
+              }
+
+              public int getSnow() {
+                  return this.snow;
+              }
+
+              @Override
+              public String toString() {
+                  return this.name + "(" + this.snow + ")";
+              }
+          }
+        hints:
+          - "The first sort puts the most snow first. Glacier and Eagle both have 25: `reversed()` turns the comparator's answers around, but a tie is still a tie, so they keep the list's order, Glacier first."
+          - "`byName` sorts from A to Z: Eagle, Glacier, Pine, Summit. `byName.reversed()` sorts from Z to A."
+      - task: |
+          A phone's video app helps free up space by showing the largest videos first. `Video.java` is ready. In `Main.java`, write the method `largestFirst(List<Video> videos)`, which returns a **new** list of the videos, the largest first, and leaves the given list as it was. Copy the list with `new ArrayList<>(videos)`, and sort the copy with `Comparator.comparing` and `reversed()`. The check runs:
+
+          ```java fragment
+          List<Video> videos = new ArrayList<>();
+          videos.add(new Video("concert.mp4", 240));
+          videos.add(new Video("cat.mp4", 85));
+          videos.add(new Video("fireworks.mp4", 310));
+          System.out.println(largestFirst(videos));
+          System.out.println(videos.get(0));
+          ```
+
+          and expects:
+
+          ```
+          [fireworks.mp4 310 MB, concert.mp4 240 MB, cat.mp4 85 MB]
+          concert.mp4 240 MB
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+            import java.util.List;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Video> videos = new ArrayList<>();
+                    videos.add(new Video("concert.mp4", 240));
+                    videos.add(new Video("cat.mp4", 85));
+                    videos.add(new Video("fireworks.mp4", 310));
+                    System.out.println(largestFirst(videos));
+                    System.out.println(videos.get(0));
+                }
+
+                // Write the method largestFirst here.
+            }
+          Video.java: |
+            public class Video {
+                private String file;
+                private int megabytes;
+
+                public Video(String file, int megabytes) {
+                    this.file = file;
+                    this.megabytes = megabytes;
+                }
+
+                public String getFile() {
+                    return this.file;
+                }
+
+                public int getMegabytes() {
+                    return this.megabytes;
+                }
+
+                @Override
+                public String toString() {
+                    return this.file + " " + this.megabytes + " MB";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+            import java.util.List;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Video> videos = new ArrayList<>();
+                    videos.add(new Video("concert.mp4", 240));
+                    videos.add(new Video("cat.mp4", 85));
+                    videos.add(new Video("fireworks.mp4", 310));
+                    System.out.println(largestFirst(videos));
+                    System.out.println(videos.get(0));
+                }
+
+                public static List<Video> largestFirst(List<Video> videos) {
+                    List<Video> sorted = new ArrayList<>(videos);
+                    sorted.sort(Comparator.comparing(Video::getMegabytes).reversed());
+                    return sorted;
+                }
+            }
+          Video.java: |
+            public class Video {
+                private String file;
+                private int megabytes;
+
+                public Video(String file, int megabytes) {
+                    this.file = file;
+                    this.megabytes = megabytes;
+                }
+
+                public String getFile() {
+                    return this.file;
+                }
+
+                public int getMegabytes() {
+                    return this.megabytes;
+                }
+
+                @Override
+                public String toString() {
+                    return this.file + " " + this.megabytes + " MB";
+                }
+            }
+        hints:
+          - "The header is `public static List<Video> largestFirst(List<Video> videos)`. Start with a copy, `List<Video> sorted = new ArrayList<>(videos);`, sort the copy, and return it."
+          - "`Comparator.comparing(Video::getMegabytes)` puts the smallest first, and `.reversed()` after it puts the largest first: `sorted.sort(Comparator.comparing(Video::getMegabytes).reversed());`."
+        require:
+          - pattern: \bComparator\s*\.\s*comparing\s*\(
+            message: "Build the comparator with `Comparator.comparing`, for example `Comparator.comparing(Video::getMegabytes)`."
+          - pattern: \.reversed\s*\(\s*\)
+            message: "Turn the comparator around with `reversed()`, so the largest video comes first."
+        tests:
+          - call: |
+              List<Video> videos = new ArrayList<>();
+              videos.add(new Video("concert.mp4", 240));
+              videos.add(new Video("cat.mp4", 85));
+              videos.add(new Video("fireworks.mp4", 310));
+              System.out.println(largestFirst(videos));
+              System.out.println(videos.get(0));
+          - call: |
+              List<Video> videos = new ArrayList<>();
+              System.out.println(largestFirst(videos));
+              videos.add(new Video("a.mp4", 12));
+              videos.add(new Video("b.mp4", 400));
+              videos.add(new Video("c.mp4", 12));
+              videos.add(new Video("d.mp4", 1));
+              videos.add(new Video("e.mp4", 400));
+              List<Video> sorted = largestFirst(videos);
+              System.out.println(sorted);
+              System.out.println(videos);
+            hidden: true
+
+  - id: sorting-objects-several-criteria
+    slug: several-criteria
+    title: Several criteria, and sorted streams
+    text: |
+      The conference has grown: it now runs talks in three rooms at once, so several talks start at the same hour. The printed program lists them by hour, and the talks of the same hour by room, in alphabetical order. The room is a **second criterion**: it's only asked when the first one, the hour, is a tie.
+
+      ### Two criteria in compareTo
+
+      `compareTo` compares the hours first. When they differ, that settles it. Only when they're the same does it go on to the rooms:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Talk> talks = new ArrayList<>();
+              talks.add(new Talk("Clean code in practice", 11, "Room B"));
+              talks.add(new Talk("Opening keynote", 9, "Main hall"));
+              talks.add(new Talk("Testing with JUnit", 14, "Room A"));
+              talks.add(new Talk("Accessible web forms", 11, "Room A"));
+              talks.add(new Talk("Streams in depth", 14, "Main hall"));
+              talks.add(new Talk("Game jams for beginners", 11, "Main hall"));
+              Collections.sort(talks);
+              for (Talk talk : talks) {
+                  System.out.println(talk);
+              }
+          }
+      }
+      // ==== Talk.java ====
+      public class Talk implements Comparable<Talk> {
+          private String title;
+          private int hour;
+          private String room;
+
+          public Talk(String title, int hour, String room) {
+              this.title = title;
+              this.hour = hour;
+              this.room = room;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int getHour() {
+              return this.hour;
+          }
+
+          public String getRoom() {
+              return this.room;
+          }
+
+          @Override
+          public int compareTo(Talk other) {
+              int byHour = Integer.compare(this.hour, other.hour);
+              if (byHour != 0) {
+                  return byHour;
+              }
+              return this.room.compareTo(other.room);
+          }
+
+          @Override
+          public String toString() {
+              return this.hour + ":00 " + this.room + ": " + this.title;
+          }
+      }
+      ```
+
+      ```output
+      9:00 Main hall: Opening keynote
+      11:00 Main hall: Game jams for beginners
+      11:00 Room A: Accessible web forms
+      11:00 Room B: Clean code in practice
+      14:00 Main hall: Streams in depth
+      14:00 Room A: Testing with JUnit
+      ```
+
+      `byHour` is not 0 when the hours differ, and then it's the answer. The rooms are compared only for talks at the same hour. A third criterion would follow the same pattern: compare the rooms into a variable, return it if it's not 0, and compare the third value last.
+
+      ### thenComparing
+
+      A comparator does the same with `thenComparing`. `Comparator.comparing(Talk::getHour).thenComparing(Talk::getRoom)` compares the hours, and for a tie, the rooms: the order above. Each room's door gets a sign with that room's talks, which is another order, by room first and then by hour:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Comparator;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Talk> talks = new ArrayList<>();
+              talks.add(new Talk("Clean code in practice", 11, "Room B"));
+              talks.add(new Talk("Opening keynote", 9, "Main hall"));
+              talks.add(new Talk("Testing with JUnit", 14, "Room A"));
+              talks.add(new Talk("Accessible web forms", 11, "Room A"));
+              talks.add(new Talk("Streams in depth", 14, "Main hall"));
+              talks.add(new Talk("Game jams for beginners", 11, "Main hall"));
+              talks.sort(Comparator.comparing(Talk::getRoom).thenComparing(Talk::getHour));
+              for (Talk talk : talks) {
+                  System.out.println(talk);
+              }
+          }
+      }
+      // ==== Talk.java ====
+      public class Talk implements Comparable<Talk> {
+          private String title;
+          private int hour;
+          private String room;
+
+          public Talk(String title, int hour, String room) {
+              this.title = title;
+              this.hour = hour;
+              this.room = room;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int getHour() {
+              return this.hour;
+          }
+
+          public String getRoom() {
+              return this.room;
+          }
+
+          @Override
+          public int compareTo(Talk other) {
+              int byHour = Integer.compare(this.hour, other.hour);
+              if (byHour != 0) {
+                  return byHour;
+              }
+              return this.room.compareTo(other.room);
+          }
+
+          @Override
+          public String toString() {
+              return this.hour + ":00 " + this.room + ": " + this.title;
+          }
+      }
+      ```
+
+      ```output
+      9:00 Main hall: Opening keynote
+      11:00 Main hall: Game jams for beginners
+      14:00 Main hall: Streams in depth
+      11:00 Room A: Accessible web forms
+      14:00 Room A: Testing with JUnit
+      11:00 Room B: Clean code in practice
+      ```
+
+      - The criteria are read from left to right. `thenComparing` is asked only when everything before it says "tie".
+      - More criteria mean more `thenComparing`s: `.thenComparing(Talk::getTitle)` after the hour would sort talks in the same room at the same hour by title.
+      - Talk still has its `compareTo`, but a sort that's given a comparator uses the comparator. The natural order is for the sorts that aren't given one.
+
+      ### reversed in a chain
+
+      The hackathon's scoreboard from step 1's second challenge gets a rule for ties: the highest score first, and teams with the same score in alphabetical order. The score goes from high to low, but the names go from A to Z, so only the first criterion is reversed. Where `reversed()` stands makes the difference:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Comparator;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Entry> entries = new ArrayList<>();
+              entries.add(new Entry("Byte Club", 72));
+              entries.add(new Entry("Null Pointers", 88));
+              entries.add(new Entry("Stack Stars", 72));
+              entries.add(new Entry("Loop Troop", 95));
+              entries.add(new Entry("Array Aces", 88));
+
+              entries.sort(Comparator.comparing(Entry::getScore).reversed().thenComparing(Entry::getTeam));
+              System.out.println(entries);
+
+              entries.sort(Comparator.comparing(Entry::getScore).thenComparing(Entry::getTeam).reversed());
+              System.out.println(entries);
+          }
+      }
+      // ==== Entry.java ====
+      public class Entry {
+          private String team;
+          private int score;
+
+          public Entry(String team, int score) {
+              this.team = team;
+              this.score = score;
+          }
+
+          public String getTeam() {
+              return this.team;
+          }
+
+          public int getScore() {
+              return this.score;
+          }
+
+          @Override
+          public String toString() {
+              return this.team + " " + this.score;
+          }
+      }
+      ```
+
+      ```output
+      [Loop Troop 95, Array Aces 88, Null Pointers 88, Byte Club 72, Stack Stars 72]
+      [Loop Troop 95, Null Pointers 88, Array Aces 88, Stack Stars 72, Byte Club 72]
+      ```
+
+      `reversed()` turns around the whole comparator it's called on, which is everything to its left. In the first sort, that's just the score, and `thenComparing` after it adds the names, from A to Z. In the second, `reversed()` comes last and turns both criteria around, so the names of a tie go from Z to A. The first one is the scoreboard's rule.
+
+      ### sorted with a comparator
+
+      A stream's `sorted()` takes a comparator too. `sorted()` with nothing in the parentheses uses the natural order (step 1), and `sorted(comparator)` uses the comparator. The scoreboard's top three, as a list of team names:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Comparator;
+      import java.util.List;
+      import java.util.stream.Collectors;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Entry> entries = new ArrayList<>();
+              entries.add(new Entry("Byte Club", 72));
+              entries.add(new Entry("Null Pointers", 88));
+              entries.add(new Entry("Stack Stars", 72));
+              entries.add(new Entry("Loop Troop", 95));
+              entries.add(new Entry("Array Aces", 88));
+
+              Comparator<Entry> ranking = Comparator.comparing(Entry::getScore).reversed()
+                      .thenComparing(Entry::getTeam);
+              List<String> podium = entries.stream()
+                      .sorted(ranking)
+                      .limit(3)
+                      .map(Entry::getTeam)
+                      .collect(Collectors.toList());
+              System.out.println(podium);
+              System.out.println("First handed in: " + entries.get(0));
+          }
+      }
+      // ==== Entry.java ====
+      public class Entry {
+          private String team;
+          private int score;
+
+          public Entry(String team, int score) {
+              this.team = team;
+              this.score = score;
+          }
+
+          public String getTeam() {
+              return this.team;
+          }
+
+          public int getScore() {
+              return this.score;
+          }
+
+          @Override
+          public String toString() {
+              return this.team + " " + this.score;
+          }
+      }
+      ```
+
+      ```output
+      [Loop Troop, Array Aces, Null Pointers]
+      First handed in: Byte Club 72
+      ```
+
+      - The comparator is kept in a variable, `ranking`, which gives the rule a name. A long chain may go on the next line, like the steps of a stream.
+      - `sorted(ranking)` comes before `limit(3)`, so the stream keeps the three best, not the first three handed in (module 37 showed that the order of the steps matters).
+      - The stream sorts only what passes through it. The list `entries` keeps the order in which the teams handed in their projects.
+
+      **Your turn:** a tea shop prints its menu with the cheapest teas first, and teas of the same price in alphabetical order. `Tea.java` is ready. In `Main.java`, write the method `sortMenu(List<Tea> teas)`, which sorts the list that way. Use `Comparator.comparing` and `thenComparing`. The check runs:
+
+      ```java fragment
+      List<Tea> menu = new ArrayList<>();
+      menu.add(new Tea("Sencha", 6));
+      menu.add(new Tea("Earl Grey", 4));
+      menu.add(new Tea("Oolong", 6));
+      menu.add(new Tea("Chai", 4));
+      menu.add(new Tea("Matcha", 9));
+      sortMenu(menu);
+      System.out.println(menu);
+      ```
+
+      and expects:
+
+      ```
+      [Chai $4, Earl Grey $4, Oolong $6, Sencha $6, Matcha $9]
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Comparator;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Tea> menu = new ArrayList<>();
+                menu.add(new Tea("Sencha", 6));
+                menu.add(new Tea("Earl Grey", 4));
+                menu.add(new Tea("Oolong", 6));
+                menu.add(new Tea("Chai", 4));
+                menu.add(new Tea("Matcha", 9));
+                sortMenu(menu);
+                System.out.println(menu);
+            }
+
+            // Write the method sortMenu here.
+        }
+      Tea.java: |
+        public class Tea {
+            private String name;
+            private int price;
+
+            public Tea(String name, int price) {
+                this.name = name;
+                this.price = price;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " $" + this.price;
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Comparator;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Tea> menu = new ArrayList<>();
+                menu.add(new Tea("Sencha", 6));
+                menu.add(new Tea("Earl Grey", 4));
+                menu.add(new Tea("Oolong", 6));
+                menu.add(new Tea("Chai", 4));
+                menu.add(new Tea("Matcha", 9));
+                sortMenu(menu);
+                System.out.println(menu);
+            }
+
+            public static void sortMenu(List<Tea> teas) {
+                teas.sort(Comparator.comparing(Tea::getPrice).thenComparing(Tea::getName));
+            }
+        }
+      Tea.java: |
+        public class Tea {
+            private String name;
+            private int price;
+
+            public Tea(String name, int price) {
+                this.name = name;
+                this.price = price;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " $" + this.price;
+            }
+        }
+    hints:
+      - "The header is `public static void sortMenu(List<Tea> teas)`, and its body is one call of `teas.sort(...)`."
+      - "The price comes first and the name second: `teas.sort(Comparator.comparing(Tea::getPrice).thenComparing(Tea::getName));`."
+    require:
+      - pattern: \bComparator\s*\.\s*comparing\s*\(
+        message: "Build the comparator with `Comparator.comparing`."
+      - pattern: \.thenComparing\s*\(
+        message: "Add the second criterion, the name, with `thenComparing`."
+    tests:
+      - call: |
+          List<Tea> menu = new ArrayList<>();
+          menu.add(new Tea("Sencha", 6));
+          menu.add(new Tea("Earl Grey", 4));
+          menu.add(new Tea("Oolong", 6));
+          menu.add(new Tea("Chai", 4));
+          menu.add(new Tea("Matcha", 9));
+          sortMenu(menu);
+          System.out.println(menu);
+      - call: |
+          List<Tea> menu = new ArrayList<>();
+          sortMenu(menu);
+          System.out.println(menu);
+          menu.add(new Tea("Rooibos", 5));
+          menu.add(new Tea("Mint", 3));
+          menu.add(new Tea("Jasmine", 5));
+          menu.add(new Tea("Assam", 5));
+          menu.add(new Tea("Chamomile", 3));
+          menu.add(new Tea("Darjeeling", 12));
+          sortMenu(menu);
+          System.out.println(menu);
+        hidden: true
+    more:
+      - task: |
+          A warehouse lists its crates by weight, and crates of the same weight by the code of the port they're shipped to. The port codes are Strings, such as `NLRTM` for Rotterdam. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Comparator;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Crate> crates = new ArrayList<>();
+                  crates.add(new Crate("ESVLC", 500));
+                  crates.add(new Crate("BEANR", 1200));
+                  crates.add(new Crate("NLRTM", 500));
+                  crates.add(new Crate("DEHAM", 1200));
+
+                  crates.sort(Comparator.comparing(Crate::getKilos).thenComparing(Crate::getPort));
+                  System.out.println(crates.get(0) + ", " + crates.get(1));
+
+                  crates.sort(Comparator.comparing(Crate::getKilos).reversed().thenComparing(Crate::getPort));
+                  System.out.println(crates.get(0) + ", " + crates.get(1));
+
+                  crates.sort(Comparator.comparing(Crate::getKilos).thenComparing(Crate::getPort).reversed());
+                  System.out.println(crates.get(0) + ", " + crates.get(1));
+              }
+          }
+          // ==== Crate.java ====
+          public class Crate {
+              private String port;
+              private int kilos;
+
+              public Crate(String port, int kilos) {
+                  this.port = port;
+                  this.kilos = kilos;
+              }
+
+              public String getPort() {
+                  return this.port;
+              }
+
+              public int getKilos() {
+                  return this.kilos;
+              }
+
+              @Override
+              public String toString() {
+                  return this.port + " (" + this.kilos + " kg)";
+              }
+          }
+        hints:
+          - "The first sort puts the light crates first, and the two 500 kg crates by port code, from A to Z: ESVLC before NLRTM."
+          - "In the second sort, `reversed()` turns around only the weight, so the heavy crates come first, and the port codes still go from A to Z. In the third, `reversed()` at the end turns around both: the heavy ones first, and the port codes from Z to A."
+      - task: |
+          The airport's app shows the next departures from a given time on. `Flight.java` is the lesson's. In `Main.java`, write the method `nextDepartures(List<Flight> flights, String time, int count)`, which returns a list of the destinations of the first `count` flights that depart at `time` or later, in the order they depart. It shouldn't change the list it's given. Use one stream with `filter`, `sorted` with a comparator, `limit`, `map` and `collect`.
+
+          The times are Strings like `09:05`. A flight departs at `time` or later when `flight.getDeparts().compareTo(time) >= 0`. The check runs:
+
+          ```java fragment
+          List<Flight> flights = new ArrayList<>();
+          flights.add(new Flight("Lisbon", "13:10", 4));
+          flights.add(new Flight("Oslo", "07:45", 12));
+          flights.add(new Flight("Dublin", "09:30", 7));
+          flights.add(new Flight("Athens", "18:20", 2));
+          flights.add(new Flight("Riga", "09:05", 12));
+          System.out.println(nextDepartures(flights, "09:00", 3));
+          System.out.println(nextDepartures(flights, "12:00", 5));
+          ```
+
+          and expects:
+
+          ```
+          [Riga, Dublin, Lisbon]
+          [Lisbon, Athens]
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Flight> flights = new ArrayList<>();
+                    flights.add(new Flight("Lisbon", "13:10", 4));
+                    flights.add(new Flight("Oslo", "07:45", 12));
+                    flights.add(new Flight("Dublin", "09:30", 7));
+                    flights.add(new Flight("Athens", "18:20", 2));
+                    flights.add(new Flight("Riga", "09:05", 12));
+                    System.out.println(nextDepartures(flights, "09:00", 3));
+                    System.out.println(nextDepartures(flights, "12:00", 5));
+                }
+
+                // Write the method nextDepartures here.
+            }
+          Flight.java: |
+            public class Flight {
+                private String destination;
+                private String departs;
+                private int gate;
+
+                public Flight(String destination, String departs, int gate) {
+                    this.destination = destination;
+                    this.departs = departs;
+                    this.gate = gate;
+                }
+
+                public String getDestination() {
+                    return this.destination;
+                }
+
+                public String getDeparts() {
+                    return this.departs;
+                }
+
+                public int getGate() {
+                    return this.gate;
+                }
+
+                @Override
+                public String toString() {
+                    return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Flight> flights = new ArrayList<>();
+                    flights.add(new Flight("Lisbon", "13:10", 4));
+                    flights.add(new Flight("Oslo", "07:45", 12));
+                    flights.add(new Flight("Dublin", "09:30", 7));
+                    flights.add(new Flight("Athens", "18:20", 2));
+                    flights.add(new Flight("Riga", "09:05", 12));
+                    System.out.println(nextDepartures(flights, "09:00", 3));
+                    System.out.println(nextDepartures(flights, "12:00", 5));
+                }
+
+                public static List<String> nextDepartures(List<Flight> flights, String time, int count) {
+                    return flights.stream()
+                            .filter(flight -> flight.getDeparts().compareTo(time) >= 0)
+                            .sorted(Comparator.comparing(Flight::getDeparts))
+                            .limit(count)
+                            .map(Flight::getDestination)
+                            .collect(Collectors.toList());
+                }
+            }
+          Flight.java: |
+            public class Flight {
+                private String destination;
+                private String departs;
+                private int gate;
+
+                public Flight(String destination, String departs, int gate) {
+                    this.destination = destination;
+                    this.departs = departs;
+                    this.gate = gate;
+                }
+
+                public String getDestination() {
+                    return this.destination;
+                }
+
+                public String getDeparts() {
+                    return this.departs;
+                }
+
+                public int getGate() {
+                    return this.gate;
+                }
+
+                @Override
+                public String toString() {
+                    return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+                }
+            }
+        hints:
+          - "The header is `public static List<String> nextDepartures(List<Flight> flights, String time, int count)`. The filter keeps the flights with `flight.getDeparts().compareTo(time) >= 0`."
+          - "Then `.sorted(Comparator.comparing(Flight::getDeparts))`, `.limit(count)`, `.map(Flight::getDestination)` and `.collect(Collectors.toList())`. Sort before `limit`, so that the first flights are the earliest ones."
+        require:
+          - pattern: \.sorted\s*\(\s*[^)\s]
+            message: "Sort the flights in the stream with `sorted`, given a comparator such as `Comparator.comparing(Flight::getDeparts)`."
+          - pattern: \.limit\s*\(
+            message: "Keep only the first `count` flights with `limit(count)`."
+        forbid:
+          - pattern: \bCollections\s*\.\s*sort\b|\.sort\s*\(
+            message: "`nextDepartures` shouldn't change the list, so let the stream sort with `sorted(...)`."
+        tests:
+          - call: |
+              List<Flight> flights = new ArrayList<>();
+              flights.add(new Flight("Lisbon", "13:10", 4));
+              flights.add(new Flight("Oslo", "07:45", 12));
+              flights.add(new Flight("Dublin", "09:30", 7));
+              flights.add(new Flight("Athens", "18:20", 2));
+              flights.add(new Flight("Riga", "09:05", 12));
+              System.out.println(nextDepartures(flights, "09:00", 3));
+              System.out.println(nextDepartures(flights, "12:00", 5));
+          - call: |
+              List<Flight> flights = new ArrayList<>();
+              System.out.println(nextDepartures(flights, "00:00", 3));
+              flights.add(new Flight("Vienna", "21:40", 3));
+              flights.add(new Flight("Porto", "06:15", 1));
+              flights.add(new Flight("Tallinn", "16:05", 9));
+              flights.add(new Flight("Bergen", "16:50", 5));
+              flights.add(new Flight("Split", "11:50", 6));
+              System.out.println(nextDepartures(flights, "16:05", 2));
+              System.out.println(nextDepartures(flights, "00:00", 1));
+              System.out.println(nextDepartures(flights, "22:00", 4));
+              System.out.println(nextDepartures(flights, "06:00", 10));
+              System.out.println(flights.get(0));
+            hidden: true
+
+  - id: sorting-objects-choosing
+    slug: choosing
+    title: Natural order or comparator?
+    text: |
+      An order can live in two places: inside the class, as its `compareTo`, or outside it, as a comparator handed to a sort. This step is about choosing between them, and it ends the module with a challenge that uses both.
+
+      ### An order that belongs to the class
+
+      An app store keeps the releases of an app. Each release has a version number of two parts, such as 2.9 or 2.10, and a download count. Kept as text, the versions sort wrongly:
+
+      ```java main
+      ArrayList<String> versions = new ArrayList<>();
+      versions.add("2.9");
+      versions.add("10.0");
+      versions.add("2.10");
+      Collections.sort(versions);
+      System.out.println(versions);
+      ```
+
+      ```output
+      [10.0, 2.10, 2.9]
+      ```
+
+      Text is compared character by character. The character 1 comes before 2, so "10.0" goes first, and "2.10" goes before "2.9" because 1 comes before 9. But 2.10 is the release after 2.9, and 10.0 came after both. Versions have one right order, the same everywhere and for everyone. That's what a natural order is for:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.Comparator;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Release> releases = new ArrayList<>();
+              releases.add(new Release(2, 9, 5400));
+              releases.add(new Release(10, 0, 820));
+              releases.add(new Release(2, 10, 7300));
+              releases.add(new Release(1, 4, 12000));
+
+              Collections.sort(releases);
+              System.out.println("History: " + releases);
+
+              releases.sort(Comparator.comparing(Release::getDownloads).reversed());
+              System.out.println("Most downloaded: " + releases);
+          }
+      }
+      // ==== Release.java ====
+      public class Release implements Comparable<Release> {
+          private int major;
+          private int minor;
+          private int downloads;
+
+          public Release(int major, int minor, int downloads) {
+              this.major = major;
+              this.minor = minor;
+              this.downloads = downloads;
+          }
+
+          public int getDownloads() {
+              return this.downloads;
+          }
+
+          @Override
+          public int compareTo(Release other) {
+              int byMajor = Integer.compare(this.major, other.major);
+              if (byMajor != 0) {
+                  return byMajor;
+              }
+              return Integer.compare(this.minor, other.minor);
+          }
+
+          @Override
+          public String toString() {
+              return this.major + "." + this.minor;
+          }
+      }
+      ```
+
+      ```output
+      History: [1.4, 2.9, 2.10, 10.0]
+      Most downloaded: [1.4, 2.10, 2.9, 10.0]
+      ```
+
+      - The version numbers are ints, and `compareTo` compares them as step 3 did: the first part, and for a tie, the second.
+      - The download ranking is the order of one page of the store. It changes every day, and it isn't what anyone means by "the order of the versions". So it's a comparator, written where that page sorts its list.
+
+      ### How to choose
+
+      - **In the class, with Comparable**, when the objects have one order that everyone expects, the same all over the program: versions, times of day, dates, sizes. Then `Collections.sort(list)` and `sorted()` work with nothing more, and so does anything else in Java that needs an order. A class has only one `compareTo`, so give it the obvious order, or none.
+      - **Where you sort, with a Comparator**, for every other order. There can be any number of them, and the class doesn't change: the flights by gate, the releases by downloads, the teas by price and then name. A rule that belongs to one page or one report goes next to the code of that page.
+      - **No natural order at all** is fine. Is a hackathon entry "smaller" than another when its score is lower, or when its team's name comes first? Neither is obvious, and the contest's ranking rules might change. Such a class is better off without `compareTo`, and every sort says which order it wants. Step 1's hackathon challenge gave Entry a `compareTo` only to show the two values swapped. Step 3's Entry has none, and that's the better design.
+      - **A class that isn't yours** keeps its natural order. String's `compareTo` is alphabetical, and you can't change the class String. A comparator can sort Strings in any other order, such as by length.
+      - **The natural order backwards** is `Comparator.reverseOrder()`. `releases.sort(Comparator.reverseOrder())` would put the newest version first.
+
+      The last two, on names:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Comparator;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> names = new ArrayList<>();
+              names.add("Priya");
+              names.add("Bo");
+              names.add("Alexander");
+              names.add("Ines");
+              names.sort(Comparator.comparing(String::length));
+              System.out.println(names);
+              names.sort(Comparator.reverseOrder());
+              System.out.println(names);
+          }
+      }
+      ```
+
+      ```output
+      [Bo, Ines, Priya, Alexander]
+      [Priya, Ines, Bo, Alexander]
+      ```
+
+      `String::length` is a method of the value itself, like module 37's `String::toUpperCase`, so `Comparator.comparing(String::length)` compares two names by their lengths.
+
+      | You want | Use | Examples from this module |
+      | --- | --- | --- |
+      | The one order everybody expects of the class | `implements Comparable<...>` and `compareTo` | talks by start time, versions by number |
+      | Another order, for one list or one page | a lambda, or `Comparator.comparing(...)` | flights by gate, releases by downloads |
+      | A second criterion for ties | `thenComparing`, or a second comparison in `compareTo` | talks by hour, then room |
+      | The largest first | `reversed()`, or the two values swapped in `Integer.compare` | the hackathon's scoreboard |
+      | A sorted view that leaves the list as it is | `sorted()` or `sorted(comparator)` in a stream, or a sorted copy | the podium, the largest videos |
+
+      ### What this module covered
+
+      A class gets a natural order by implementing `Comparable` and its `compareTo`, which answers negative, zero or positive, and `Integer.compare` and String's own `compareTo` do most of the work. `Collections.sort(list)` and a stream's `sorted()` use that order. Any other order is a `Comparator`: a lambda of two objects, or one built with `Comparator.comparing` from a getter, turned around with `reversed()` and given more criteria with `thenComparing`, for `list.sort`, `Collections.sort` and `sorted`. These are the topics of the MOOC's section 10.2. Module 39 finishes part 10 with StringBuilder, regular expressions, enums and iterators.
+
+      **Your turn:** a student's planner lists exams by date. `Exam.java` has a course, a month and a day. Make Exam implement `Comparable<Exam>`, with a `compareTo` that puts exams in date order: by month, and exams in the same month by day. Exams on the same day are a tie, so `compareTo` gives 0 and the sort keeps them in the list's order. Put `@Override` above `compareTo`. The check runs:
+
+      ```java fragment
+      ArrayList<Exam> exams = new ArrayList<>();
+      exams.add(new Exam("Statistics", 6, 12));
+      exams.add(new Exam("Algebra", 5, 28));
+      exams.add(new Exam("Biology", 6, 3));
+      exams.add(new Exam("History", 5, 30));
+      Collections.sort(exams);
+      System.out.println(exams);
+      ```
+
+      and expects:
+
+      ```
+      [Algebra 5/28, History 5/30, Biology 6/3, Statistics 6/12]
+      ```
+    seed:
+      Exam.java: |
+        public class Exam {
+            private String course;
+            private int month;
+            private int day;
+
+            public Exam(String course, int month, int day) {
+                this.course = course;
+                this.month = month;
+                this.day = day;
+            }
+
+            public String getCourse() {
+                return this.course;
+            }
+
+            @Override
+            public String toString() {
+                return this.course + " " + this.month + "/" + this.day;
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Exam> exams = new ArrayList<>();
+                exams.add(new Exam("Statistics", 6, 12));
+                exams.add(new Exam("Algebra", 5, 28));
+                exams.add(new Exam("Biology", 6, 3));
+                exams.add(new Exam("History", 5, 30));
+                Collections.sort(exams);
+                System.out.println(exams);
+            }
+        }
+    solution:
+      Exam.java: |
+        public class Exam implements Comparable<Exam> {
+            private String course;
+            private int month;
+            private int day;
+
+            public Exam(String course, int month, int day) {
+                this.course = course;
+                this.month = month;
+                this.day = day;
+            }
+
+            public String getCourse() {
+                return this.course;
+            }
+
+            @Override
+            public int compareTo(Exam other) {
+                int byMonth = Integer.compare(this.month, other.month);
+                if (byMonth != 0) {
+                    return byMonth;
+                }
+                return Integer.compare(this.day, other.day);
+            }
+
+            @Override
+            public String toString() {
+                return this.course + " " + this.month + "/" + this.day;
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Exam> exams = new ArrayList<>();
+                exams.add(new Exam("Statistics", 6, 12));
+                exams.add(new Exam("Algebra", 5, 28));
+                exams.add(new Exam("Biology", 6, 3));
+                exams.add(new Exam("History", 5, 30));
+                Collections.sort(exams);
+                System.out.println(exams);
+            }
+        }
+    hints:
+      - "The header becomes `public class Exam implements Comparable<Exam> {`, and the class gets `public int compareTo(Exam other)` with `@Override` above it."
+      - "Compare the months first: `int byMonth = Integer.compare(this.month, other.month);`. If `byMonth` isn't 0, return it. Otherwise the months are the same, so return `Integer.compare(this.day, other.day)`."
+    require:
+      - pattern: \bclass\s+Exam\s+implements\s+Comparable\s*<\s*Exam\s*>
+        message: "Write the header as `public class Exam implements Comparable<Exam>`."
+      - pattern: "@Override\\s+public\\s+int\\s+compareTo\\s*\\("
+        message: "Put `@Override` above `public int compareTo(Exam other)`."
+    tests:
+      - call: |
+          ArrayList<Exam> exams = new ArrayList<>();
+          exams.add(new Exam("Statistics", 6, 12));
+          exams.add(new Exam("Algebra", 5, 28));
+          exams.add(new Exam("Biology", 6, 3));
+          exams.add(new Exam("History", 5, 30));
+          Collections.sort(exams);
+          System.out.println(exams);
+      - call: |
+          ArrayList<Exam> exams = new ArrayList<>();
+          exams.add(new Exam("Physics", 2, 1));
+          exams.add(new Exam("Chemistry", 1, 31));
+          exams.add(new Exam("Latin", 12, 9));
+          exams.add(new Exam("Art", 2, 1));
+          exams.add(new Exam("Music", 1, 2));
+          exams.add(new Exam("Drama", 11, 30));
+          Collections.sort(exams);
+          System.out.println(exams);
+        hidden: true
+      - call: |
+          Exam early = new Exam("Geology", 3, 25);
+          Exam late = new Exam("Economics", 4, 2);
+          System.out.println(early.compareTo(late) < 0);
+          System.out.println(late.compareTo(early) > 0);
+          System.out.println(early.compareTo(new Exam("Ethics", 3, 25)));
+          System.out.println(new Exam("Logic", 3, 7).compareTo(early) < 0);
+        hidden: true
+    more:
+      - task: |
+          A tree nursery sorts the names on its labels in several orders. A String's natural order is alphabetical. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.Comparator;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> trees = new ArrayList<>();
+                  trees.add("maple");
+                  trees.add("oak");
+                  trees.add("willow");
+                  trees.add("birch");
+                  trees.add("elm");
+                  Collections.sort(trees);
+                  System.out.println(trees);
+                  trees.sort(Comparator.comparing(String::length));
+                  System.out.println(trees);
+                  trees.sort(Comparator.reverseOrder());
+                  System.out.println(trees);
+              }
+          }
+        hints:
+          - "The second sort compares only the lengths, so elm and oak tie, and so do birch and maple. A tie keeps the order the list had, and after the first sort that was alphabetical."
+          - "`Comparator.reverseOrder()` is the natural order backwards: Z to A, whatever order the list was in before."
+      - task: |
+          To end the module, the departures board again, now with a natural order. A board lists flights by time: that's the order anyone expects of it, so it becomes Flight's natural order. The gate staff want another order, so that one is a comparator. Write:
+
+          - In `Flight.java`: make Flight implement `Comparable<Flight>`. Flights go by departure time, and flights that leave at the same time by destination, alphabetically.
+          - In `Board.java`, the class `Board`, which keeps its flights in a list:
+            - the constructor, and `add(Flight flight)`, which adds a flight to the board
+            - `departures()`, which returns a new list of all the flights in their natural order
+            - `atGate(int gate)`, which returns a new list of the flights from that gate, in their natural order
+            - `byGate()`, which returns a new list of all the flights sorted by gate number, and the flights of the same gate by departure time
+
+          The lists that the methods return are new lists, not the board's own: flights added to the board later don't show up in a list it returned before. `Main.java` is a test drive, and it prints:
+
+          ```
+          [07:45 Oslo (gate 12), 09:05 Riga (gate 12), 09:30 Dublin (gate 4), 13:10 Athens (gate 2), 13:10 Lisbon (gate 4)]
+          [07:45 Oslo (gate 12), 09:05 Riga (gate 12)]
+          [13:10 Athens (gate 2), 09:30 Dublin (gate 4), 13:10 Lisbon (gate 4), 07:45 Oslo (gate 12), 09:05 Riga (gate 12)]
+          ```
+        seed:
+          Flight.java: |
+            public class Flight {
+                private String destination;
+                private String departs;
+                private int gate;
+
+                public Flight(String destination, String departs, int gate) {
+                    this.destination = destination;
+                    this.departs = departs;
+                    this.gate = gate;
+                }
+
+                public String getDestination() {
+                    return this.destination;
+                }
+
+                public String getDeparts() {
+                    return this.departs;
+                }
+
+                public int getGate() {
+                    return this.gate;
+                }
+
+                @Override
+                public String toString() {
+                    return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+                }
+            }
+          Board.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Board {
+
+                public Board() {
+
+                }
+
+                public void add(Flight flight) {
+
+                }
+
+                public List<Flight> departures() {
+                    return new ArrayList<>();
+                }
+
+                public List<Flight> atGate(int gate) {
+                    return new ArrayList<>();
+                }
+
+                public List<Flight> byGate() {
+                    return new ArrayList<>();
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Board board = new Board();
+                    board.add(new Flight("Lisbon", "13:10", 4));
+                    board.add(new Flight("Oslo", "07:45", 12));
+                    board.add(new Flight("Dublin", "09:30", 4));
+                    board.add(new Flight("Athens", "13:10", 2));
+                    board.add(new Flight("Riga", "09:05", 12));
+                    System.out.println(board.departures());
+                    System.out.println(board.atGate(12));
+                    System.out.println(board.byGate());
+                }
+            }
+        solution:
+          Flight.java: |
+            public class Flight implements Comparable<Flight> {
+                private String destination;
+                private String departs;
+                private int gate;
+
+                public Flight(String destination, String departs, int gate) {
+                    this.destination = destination;
+                    this.departs = departs;
+                    this.gate = gate;
+                }
+
+                public String getDestination() {
+                    return this.destination;
+                }
+
+                public String getDeparts() {
+                    return this.departs;
+                }
+
+                public int getGate() {
+                    return this.gate;
+                }
+
+                @Override
+                public int compareTo(Flight other) {
+                    int byTime = this.departs.compareTo(other.departs);
+                    if (byTime != 0) {
+                        return byTime;
+                    }
+                    return this.destination.compareTo(other.destination);
+                }
+
+                @Override
+                public String toString() {
+                    return this.departs + " " + this.destination + " (gate " + this.gate + ")";
+                }
+            }
+          Board.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Board {
+                private List<Flight> flights;
+
+                public Board() {
+                    this.flights = new ArrayList<>();
+                }
+
+                public void add(Flight flight) {
+                    this.flights.add(flight);
+                }
+
+                public List<Flight> departures() {
+                    return this.flights.stream()
+                            .sorted()
+                            .collect(Collectors.toList());
+                }
+
+                public List<Flight> atGate(int gate) {
+                    return this.flights.stream()
+                            .filter(flight -> flight.getGate() == gate)
+                            .sorted()
+                            .collect(Collectors.toList());
+                }
+
+                public List<Flight> byGate() {
+                    return this.flights.stream()
+                            .sorted(Comparator.comparing(Flight::getGate).thenComparing(Flight::getDeparts))
+                            .collect(Collectors.toList());
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Board board = new Board();
+                    board.add(new Flight("Lisbon", "13:10", 4));
+                    board.add(new Flight("Oslo", "07:45", 12));
+                    board.add(new Flight("Dublin", "09:30", 4));
+                    board.add(new Flight("Athens", "13:10", 2));
+                    board.add(new Flight("Riga", "09:05", 12));
+                    System.out.println(board.departures());
+                    System.out.println(board.atGate(12));
+                    System.out.println(board.byGate());
+                }
+            }
+        hints:
+          - "Flight's `compareTo` follows step 3's pattern for two criteria. The times are Strings, so their own `compareTo` compares them. In Board, keep a `List<Flight>` that the constructor creates, and let `add` add to it."
+          - "Flight's `compareTo` starts with `int byTime = this.departs.compareTo(other.departs);`, returns `byTime` when it isn't 0, and otherwise compares the destinations. In Board, each method can be one stream that ends with `collect(Collectors.toList())`, which makes a new list. `departures` uses `sorted()`, `atGate` puts a `filter` on the gate before `sorted()`, and `byGate` uses `sorted(Comparator.comparing(Flight::getGate).thenComparing(Flight::getDeparts))`."
+        require:
+          - pattern: \bclass\s+Flight\s+implements\s+Comparable\s*<\s*Flight\s*>
+            message: "Write Flight's header as `public class Flight implements Comparable<Flight>`."
+        forbid:
+          - pattern: \bSystem\s*\.\s*out\b(?=[\s\S]*\bclass\s+Main\b)
+            message: "Flight and Board don't print. Board's methods return their lists, and `main` prints them."
+        tests:
+          - name: The test drive
+          - call: |
+              Board board = new Board();
+              System.out.println(board.departures() + " " + board.atGate(1) + " " + board.byGate());
+              board.add(new Flight("Vienna", "21:40", 3));
+              board.add(new Flight("Porto", "06:15", 1));
+              board.add(new Flight("Tallinn", "16:05", 3));
+              board.add(new Flight("Bergen", "16:05", 5));
+              board.add(new Flight("Split", "11:50", 3));
+              board.add(new Flight("Nice", "06:15", 5));
+              System.out.println(board.departures());
+              System.out.println(board.atGate(3));
+              System.out.println(board.atGate(5));
+              System.out.println(board.atGate(9));
+              System.out.println(board.byGate());
+            hidden: true
+          - call: |
+              Board board = new Board();
+              board.add(new Flight("Riga", "09:05", 12));
+              List<Flight> before = board.departures();
+              List<Flight> gate = board.atGate(12);
+              List<Flight> gates = board.byGate();
+              board.add(new Flight("Oslo", "07:45", 12));
+              System.out.println(before + " " + gate + " " + gates);
+              System.out.println(board.departures().size() + " " + board.atGate(12).size() + " " + board.byGate().size());
+              List<Flight> flights = new ArrayList<>();
+              flights.add(new Flight("Zagreb", "10:00", 1));
+              flights.add(new Flight("Ankara", "10:00", 2));
+              flights.add(new Flight("Malmo", "09:59", 3));
+              Collections.sort(flights);
+              System.out.println(flights);
+              System.out.println(flights.get(0).compareTo(flights.get(1)) < 0);
+            hidden: true

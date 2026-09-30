@@ -1,0 +1,349 @@
+topic: useful-techniques
+drills:
+  - type: predict
+    after: for-loop-again
+    body: |
+      int count = 0;
+      int sum = 0;
+      for (int i = 20; i > 0; i -= 6) {
+          count++;
+          sum += i;
+      }
+      System.out.println(count + " " + sum);
+    why: "`i` takes the values 20, 14, 8 and 2. The next one, -4, fails `i > 0`, so the loop runs 4 rounds, and 20 + 14 + 8 + 2 = 44."
+
+  - type: predict
+    after: stringbuilder
+    body: |
+      StringBuilder word = new StringBuilder("tops");
+      word.reverse().append("!");
+      word.insert(0, word.length());
+      System.out.println(word);
+    why: "`reverse()` turns tops into spot and returns the same StringBuilder, so `append` adds the `!` to it: spot!, which is 5 characters long. `insert(0, 5)` then puts the number 5 in front."
+
+  - type: predict
+    after: quantifiers
+    body: |
+      boolean first = "aaab".matches("a+b");
+      boolean second = "b".matches("a+b");
+      boolean third = "b".matches("a*b");
+      boolean fourth = "ab".matches("a?b?c?");
+      System.out.println(first + " " + second + " " + third + " " + fourth);
+    why: "`+` needs at least one a, so aaab matches `a+b`, but b alone doesn't. `*` allows zero a's, so b matches `a*b`. In `a?b?c?` every part is optional: ab has the a and the b, and no c."
+
+  - type: predict
+    after: enums
+    classes: |
+      enum Season {
+          SPRING, SUMMER, AUTUMN, WINTER
+      }
+    body: |
+      Season now = Season.AUTUMN;
+      Season[] all = Season.values();
+      System.out.println(now.ordinal() + " " + all[all.length - 1] + " " + now.name().length());
+    why: "`ordinal()` counts from 0, so AUTUMN, the third constant, is 2. `values()` lists the constants in the order they're written, so the last one is WINTER. `name()` is the text AUTUMN, 6 letters."
+
+  - type: predict
+    after: enum-fields
+    classes: |
+      enum Floor {
+          BASEMENT(-1),
+          LOBBY(0),
+          ROOFTOP(12);
+
+          private int number;
+
+          private Floor(int number) {
+              this.number = number;
+          }
+
+          public int getNumber() {
+              return this.number;
+          }
+
+          public int floorsTo(Floor other) {
+              return Math.abs(other.number - this.number);
+          }
+      }
+    body: |
+      System.out.println(Floor.BASEMENT.floorsTo(Floor.ROOFTOP) + " " + Floor.LOBBY.getNumber() + " " + Floor.ROOFTOP.ordinal());
+    why: "Each constant got its number from the constructor. From the basement, -1, to the rooftop, 12, is 12 - (-1) = 13 floors. The lobby's number is 0, and ROOFTOP is the third constant, so its ordinal is 2."
+
+  - type: fill
+    after: stringbuilder
+    prompt: "Fill in the blank, a method name, so that the program checks whether the word reads the same backwards."
+    body: |
+      String word = "racecar";
+      String backwards = new StringBuilder(word).[[reverse]]().toString();
+      System.out.println(word.equals(backwards));
+    why: "`reverse()` turns the StringBuilder's characters around, and `toString()` gives them back as a String, which `equals` can compare with the word. racecar reads the same both ways, so the program prints `true`."
+
+  - type: fill
+    after: enums
+    prompt: "Fill in the blank, a method name, so that the loop prints every medal."
+    classes: |
+      enum Medal {
+          GOLD, SILVER, BRONZE
+      }
+    body: |
+      for (Medal medal : Medal.[[values]]()) {
+          System.out.println(medal);
+      }
+    why: "`values()` returns an array of the enum's constants, in the order they're written, and a for-each loop goes through it."
+
+  - type: bug
+    after: for-loop-again
+    prompt: "The program should print 10, 5 and 0. Which line is wrong?"
+    body: |
+      for (int i = 10; i <= 0; i -= 5) { // BUG
+          System.out.println(i);
+      }
+    fix: "for (int i = 10; i >= 0; i -= 5) {"
+    why: "The condition is checked before the first round, and 10 isn't at most 0, so the loop never runs, and nothing tells you so. Counting down, the loop goes on while `i >= 0`."
+
+  - type: bug
+    after: stringbuilder
+    prompt: "The program should print `palindrome` for a word that reads the same backwards. The variable `backwards` should stay a StringBuilder. Which line is wrong?"
+    body: |
+      String word = "noon";
+      StringBuilder backwards = new StringBuilder(word).reverse();
+      if (backwards.equals(word)) { // BUG
+          System.out.println("palindrome");
+      } else {
+          System.out.println("not a palindrome");
+      }
+    fix: "if (backwards.toString().equals(word)) {"
+    why: "StringBuilder has no `equals` of its own. It has Object's, which asks whether two variables refer to the same object, so a StringBuilder is never equal to a String. `backwards.toString()` gives the text as a String, and String's `equals` compares the characters."
+
+  - type: bug
+    after: regular-expressions
+    prompt: "`isFood` should accept exactly `cat food` and `dog food`. Which line is wrong?"
+    pre: |
+      public static boolean isFood(String text) {
+          return text.matches("cat|dog food"); // BUG
+      }
+    body: |
+      System.out.println(isFood("cat food") + " " + isFood("dog food") + " " + isFood("cat"));
+    fix: "return text.matches(\"(cat|dog) food\");"
+    why: "Without parentheses, `|` splits the whole regex: `cat|dog food` means `cat`, or `dog food`. So `cat food` doesn't match, and plain `cat` does. A group, `(cat|dog) food`, keeps the choice to the first word."
+
+  - type: compiles
+    after: stringbuilder
+    body: |
+      String text = new StringBuilder("abc").append("d");
+      System.out.println(text);
+    why: "No. `append` returns the StringBuilder, and a StringBuilder isn't a String: javac says `incompatible types: StringBuilder cannot be converted to String`. With `.toString()` at the end, it compiles."
+
+  - type: compiles
+    after: enums
+    classes: |
+      enum Light {
+          RED, YELLOW, GREEN
+      }
+    body: |
+      Light light = Light.RED;
+      if (light.equals("RED")) {
+          System.out.println("Stop");
+      }
+      System.out.println(light);
+    why: "Yes, since `equals` takes any Object. But a Light is never equal to a String, so `Stop` is never printed. Compare constants with `==` and the constant itself: `light == Light.RED`."
+
+  - type: choice
+    after: quantifiers
+    prompt: "Which regex matches both `color` and `colour`, and nothing else?"
+    choices:
+      - "`colou?r`"
+      - "`colou*r`"
+      - "`colo(u)+r`"
+      - "`colo|colour`"
+    answer: 1
+    why: "`?` makes the u optional: once, or not at all. `colou*r` also matches colouuur, `colo(u)+r` needs at least one u, so it misses color, and `colo|colour` means colo, or colour."
+
+  - type: choice
+    after: iterators
+    prompt: "`iterator` goes through a list of names, and its `next()` has just returned Ben. What does `iterator.remove()` do?"
+    choices:
+      - "It removes Ben, the element that `next()` returned last."
+      - "It removes the element after Ben."
+      - "It removes the first element of the list."
+      - "It removes every Ben in the list."
+    answer: 1
+    why: "An iterator's `remove()` removes the element that the last `next()` returned, from the collection itself, and then the loop carries on from there. It takes no parameter, so it can't be told what else to remove."
+
+  - type: boss
+    after: iterators
+    prompt: |
+      A shop's coupon codes are four capital letters followed by two digits, like `SAVE10`. Write the method `removeInvalid(List<String> codes)`, which removes every code of another form from the list, with an iterator, and returns how many codes it removed. The check runs:
+
+      ```java fragment
+      List<String> codes = new ArrayList<>();
+      codes.add("SAVE10");
+      codes.add("save10");
+      codes.add("DEAL5");
+      codes.add("GIFT25");
+      System.out.println(removeInvalid(codes) + " " + codes);
+      ```
+
+      and expects:
+
+      ```
+      2 [SAVE10, GIFT25]
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Iterator;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<String> codes = new ArrayList<>();
+                codes.add("SAVE10");
+                codes.add("save10");
+                codes.add("DEAL5");
+                codes.add("GIFT25");
+                System.out.println(removeInvalid(codes) + " " + codes);
+            }
+
+            public static int removeInvalid(List<String> codes) {
+                return 0;
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Iterator;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<String> codes = new ArrayList<>();
+                codes.add("SAVE10");
+                codes.add("save10");
+                codes.add("DEAL5");
+                codes.add("GIFT25");
+                System.out.println(removeInvalid(codes) + " " + codes);
+            }
+
+            public static int removeInvalid(List<String> codes) {
+                int removed = 0;
+                Iterator<String> iterator = codes.iterator();
+                while (iterator.hasNext()) {
+                    if (!iterator.next().matches("[A-Z]{4}[0-9]{2}")) {
+                        iterator.remove();
+                        removed++;
+                    }
+                }
+                return removed;
+            }
+        }
+    hints:
+      - "The form is `[A-Z]{4}[0-9]{2}`. Go through the list with `Iterator<String> iterator = codes.iterator();` and `while (iterator.hasNext())`."
+      - "When `iterator.next()` doesn't match the form, call `iterator.remove()` and count it. Return the count after the loop."
+    require:
+      - pattern: '\.iterator\s*\(\s*\)'
+        message: "Go through the codes with an iterator: `codes.iterator()`."
+      - pattern: '\.matches\s*\('
+        message: "Check each code's form with `matches`."
+    forbid:
+      - pattern: '\bremoveIf\b'
+        message: "`removeIf` would do the loop for you. Use an iterator this time."
+    tests:
+      - call: |
+          List<String> codes = new ArrayList<>();
+          codes.add("SAVE10");
+          codes.add("save10");
+          codes.add("DEAL5");
+          codes.add("GIFT25");
+          System.out.println(removeInvalid(codes) + " " + codes);
+      - call: |
+          List<String> codes = new ArrayList<>();
+          System.out.println(removeInvalid(codes) + " " + codes);
+          codes.add("AB12");
+          codes.add("ABCDE12");
+          codes.add("ABCD123");
+          codes.add("ABCD 12");
+          System.out.println(removeInvalid(codes) + " " + codes);
+        hidden: true
+      - call: |
+          List<String> codes = new ArrayList<>();
+          codes.add("bad");
+          codes.add("WORSE");
+          codes.add("ZZZZ99");
+          codes.add("AAAA00");
+          codes.add("aaaa00");
+          codes.add("QRST42");
+          System.out.println(removeInvalid(codes) + " " + codes + " " + removeInvalid(codes));
+        hidden: true
+
+  - type: boss
+    after: stringbuilder
+    prompt: |
+      **Run-length encoding** shortens a text that has long runs of the same character: each run is written as its character followed by how many times it comes in a row. `aaabccdddd` becomes `a3b1c2d4`. Write the method `compress(String text)`, which returns the text written that way, built with a StringBuilder. Capital and small letters are different characters, and an empty text gives an empty text. The check runs:
+
+      ```java fragment
+      System.out.println(compress("aaabccdddd"));
+      System.out.println(compress("wwwwwwwwwwwwb"));
+      ```
+
+      and expects:
+
+      ```
+      a3b1c2d4
+      w12b1
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(compress("aaabccdddd"));
+              System.out.println(compress("wwwwwwwwwwwwb"));
+          }
+
+          public static String compress(String text) {
+              return text;
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(compress("aaabccdddd"));
+              System.out.println(compress("wwwwwwwwwwwwb"));
+          }
+
+          public static String compress(String text) {
+              StringBuilder result = new StringBuilder();
+              int run = 1;
+              for (int i = 1; i <= text.length(); i++) {
+                  if (i < text.length() && text.charAt(i) == text.charAt(i - 1)) {
+                      run++;
+                  } else {
+                      result.append(text.charAt(i - 1)).append(run);
+                      run = 1;
+                  }
+              }
+              return result.toString();
+          }
+      }
+    hints:
+      - "Go through the indexes and compare each character with the one before it. While they're the same, the run grows by one. When they differ, or the text ends, append the run's character and its length, and start a new run of 1."
+      - "Append the character and the count separately, as in `result.append(c).append(run)`. `result.append(c + run)` would add the char's code and the count as numbers: `'a' + 3` is 100."
+    require:
+      - pattern: '\bnew\s+StringBuilder\s*\('
+        message: "Build the result in a `StringBuilder`."
+      - pattern: '\.append\s*\('
+        message: "Add the characters and the counts with `append`."
+    tests:
+      - call: |
+          System.out.println(compress("aaabccdddd"));
+          System.out.println(compress("wwwwwwwwwwwwb"));
+      - call: |
+          System.out.println("[" + compress("") + "]");
+          System.out.println(compress("x") + " " + compress("abab") + " " + compress("AAaa") + " " + compress("!!??"));
+        hidden: true
+      - call: |
+          StringBuilder many = new StringBuilder();
+          for (int i = 0; i < 105; i++) {
+              many.append("z");
+          }
+          System.out.println(compress(many.toString() + "yy") + " " + compress("ppq"));
+        hidden: true

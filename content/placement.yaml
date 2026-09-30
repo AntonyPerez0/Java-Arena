@@ -672,3 +672,55 @@ questions:
       - "`String name = (String) snip;`"
     answer: 3
     why: "An Enemy might be a Troll, so javac accepts `(Troll) snip`, and the line crashes with a ClassCastException when it runs, because this object is a goblin. `(String) snip` never compiles, because no Enemy can be a String. The other two lines compile and run: every object is an Object, and `instanceof` gives `false`."
+
+  - module: streams
+    type: predict
+    body: |
+      ArrayList<Integer> rides = new ArrayList<>();
+      rides.add(40);
+      rides.add(75);
+      rides.add(20);
+      rides.add(90);
+      rides.add(55);
+      int middle = rides.stream().sorted().skip(2).limit(2).mapToInt(km -> km).sum();
+      long longOnes = rides.stream().filter(km -> km > 50).count();
+      System.out.println(middle + " " + longOnes + " " + rides.get(0));
+    why: "`sorted()` passes on 20, 40, 55, 75, 90, `skip(2)` drops 20 and 40, and `limit(2)` keeps 55 and 75: 130. `filter` keeps the rides over 50 (75, 90 and 55), so `count()` gives 3. A stream only reads the list and never sorts or changes it, so `rides.get(0)` is still 40. It prints `130 3 40`."
+
+  - module: sorting-objects
+    type: predict
+    classes: |
+      class Swimmer implements Comparable<Swimmer> {
+          private String name;
+          private int seconds;
+
+          public Swimmer(String name, int seconds) {
+              this.name = name;
+              this.seconds = seconds;
+          }
+
+          @Override
+          public int compareTo(Swimmer other) {
+              return Integer.compare(other.seconds, this.seconds);
+          }
+
+          @Override
+          public String toString() {
+              return this.name;
+          }
+      }
+    body: |
+      ArrayList<Swimmer> heat = new ArrayList<>();
+      heat.add(new Swimmer("Ana", 41));
+      heat.add(new Swimmer("Ben", 37));
+      heat.add(new Swimmer("Cy", 52));
+      Collections.sort(heat);
+      System.out.println(heat);
+    why: "`Collections.sort` uses Swimmer's `compareTo`, and a negative answer means `this` comes first. Here the two values are swapped, `Integer.compare(other.seconds, this.seconds)`, so it's negative when `this` has *more* seconds: the slowest swimmer comes first. It prints `[Cy, Ana, Ben]`."
+
+  - module: useful-techniques
+    type: predict
+    body: |
+      String code = "[A-D]-(0|1)?[0-9]";
+      System.out.println("B-7".matches(code) + " " + "C-17".matches(code) + " " + "E-4".matches(code) + " " + "A-27".matches(code));
+    why: "`[A-D]` is one capital from A to D, `(0|1)?` is an optional 0 or 1, and `[0-9]` is one digit. `matches` asks whether the *whole* text has that form: `B-7` and `C-17` do, `E-4` doesn't because E isn't in `[A-D]`, and `A-27` doesn't because 2 isn't a 0 or a 1, so the 7 is left over. It prints `true true false false`."

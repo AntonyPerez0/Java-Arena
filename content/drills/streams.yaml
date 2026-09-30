@@ -1,0 +1,336 @@
+topic: streams
+drills:
+  - type: predict
+    after: why-streams
+    body: |
+      ArrayList<Integer> rides = new ArrayList<>();
+      rides.add(20);
+      rides.add(55);
+      rides.add(70);
+      rides.add(55);
+      long count = rides.stream().filter(km -> km > 50).filter(km -> km < 70).count();
+      System.out.println(count + " " + rides.size());
+    why: "The first filter lets 55, 70 and 55 through, and the second drops 70, so `count()` gives 2. The stream only reads the list: it still has all 4 rides."
+
+  - type: predict
+    after: lambdas
+    body: |
+      ArrayList<String> titles = new ArrayList<>();
+      titles.add("Emma");
+      titles.add("Kindred");
+      titles.add("Dune");
+      titles.stream()
+              .filter(title -> title.length() == 4)
+              .forEach(title -> System.out.println(title.charAt(0)));
+    why: "Only Emma and Dune have 4 letters, so `filter` drops Kindred. The `forEach` lambda runs once for each title that got through and prints its first letter on a line of its own: `E`, then `D`."
+
+  - type: predict
+    after: terminal-operations
+    body: |
+      ArrayList<Integer> expenses = new ArrayList<>();
+      expenses.add(10);
+      expenses.add(25);
+      expenses.add(40);
+      double average = expenses.stream().mapToInt(amount -> amount).average().getAsDouble();
+      int sum = expenses.stream().filter(amount -> amount > 10).mapToInt(amount -> amount).sum();
+      System.out.println(average + " " + sum);
+    why: "`average()` divides the sum by the count as a double: 75 / 3 is 25.0, printed with its `.0`. The second stream adds up only the expenses over 10: 25 + 40 = 65, an `int`."
+
+  - type: predict
+    after: intermediate-operations
+    body: |
+      ArrayList<Integer> tickets = new ArrayList<>();
+      tickets.add(70);
+      tickets.add(20);
+      tickets.add(90);
+      tickets.add(20);
+      tickets.add(50);
+      int first = tickets.stream().distinct().limit(3).mapToInt(sold -> sold).sum();
+      int second = tickets.stream().sorted().limit(3).mapToInt(sold -> sold).sum();
+      System.out.println(first + " " + second);
+    why: "`distinct()` drops the second 20, and `limit(3)` keeps the first three that are left: 70, 20 and 90, which add up to 180. The second chain sorts first, 20, 20, 50, 70, 90, and keeps the three smallest, copies included: 20 + 20 + 50 = 90."
+
+  - type: predict
+    after: objects
+    classes: |
+      class Ride {
+          private String rider;
+          private int km;
+
+          public Ride(String rider, int km) {
+              this.rider = rider;
+              this.km = km;
+          }
+
+          public String getRider() {
+              return this.rider;
+          }
+
+          public int getKm() {
+              return this.km;
+          }
+      }
+    body: |
+      List<Ride> rides = new ArrayList<>();
+      rides.add(new Ride("Ines", 40));
+      rides.add(new Ride("Tom", 25));
+      rides.add(new Ride("Ines", 60));
+      long riders = rides.stream().map(Ride::getRider).distinct().count();
+      int ines = rides.stream().filter(ride -> ride.getRider().equals("Ines")).mapToInt(Ride::getKm).sum();
+      System.out.println(riders + " " + ines);
+    why: "`map(Ride::getRider)` turns the rides into the names Ines, Tom and Ines, and `distinct()` keeps two of them. The second stream keeps Ines's rides and adds up their distances: 40 + 60 = 100."
+
+  - type: predict
+    after: reduce-and-intstream
+    body: |
+      ArrayList<String> films = new ArrayList<>();
+      films.add("Up");
+      films.add("Heat");
+      films.add("Jaws");
+      String result = films.stream()
+              .map(film -> film.length() + "")
+              .reduce("", (text, digits) -> text + digits);
+      System.out.println(result);
+    why: "`map` turns each film into its length as text: `\"2\"`, `\"4\"` and `\"4\"`. `reduce` starts from the empty String and joins them on: `2`, then `24`, then `244`. The values are Strings, so `+` joins them instead of adding them up to 10."
+
+  - type: fill
+    after: lambdas
+    prompt: "Fill in the blank, a method reference that prints each title on a line of its own."
+    body: |
+      ArrayList<String> titles = new ArrayList<>();
+      titles.add("Beloved");
+      titles.add("Emma");
+      titles.stream().forEach([[System.out::println]]);
+    why: "`System.out::println` is short for `title -> System.out.println(title)`: the stream hands each value to `println`. A method reference has two colons and no parentheses."
+
+  - type: fill
+    after: intermediate-operations
+    prompt: "Fill in the blank, a stream method, so that the program prints how many different films are shown today: `3`."
+    body: |
+      ArrayList<String> screenings = new ArrayList<>();
+      screenings.add("Heat");
+      screenings.add("Alien");
+      screenings.add("Heat");
+      screenings.add("Up");
+      long films = screenings.stream().[[distinct]]().count();
+      System.out.println(films);
+    why: "`distinct()` lets each film through once, so `count()` counts Heat, Alien and Up. Without it, the count would be the 4 screenings."
+
+  - type: bug
+    after: terminal-operations
+    prompt: "This doesn't compile. Keep the stream as it is. Which line is wrong?"
+    body: |
+      ArrayList<Integer> expenses = new ArrayList<>();
+      expenses.add(54);
+      expenses.add(120);
+      expenses.add(64);
+      int count = expenses.stream().filter(amount -> amount > 60).count(); // BUG
+      System.out.println(count + " big expenses");
+    fix: "long count = expenses.stream().filter(amount -> amount > 60).count();"
+    why: "`count()` returns a `long`, and javac won't put a `long` into an `int` variable: `possible lossy conversion from long to int`. Make the variable a `long`."
+
+  - type: bug
+    after: intermediate-operations
+    prompt: "The program should print the three smallest ticket counts, from the smallest up. Which line is wrong?"
+    body: |
+      ArrayList<Integer> tickets = new ArrayList<>();
+      tickets.add(85);
+      tickets.add(140);
+      tickets.add(32);
+      tickets.add(120);
+      tickets.add(64);
+      tickets.stream().limit(3).sorted().forEach(System.out::println); // BUG
+    fix: "tickets.stream().sorted().limit(3).forEach(System.out::println);"
+    why: "Each step works on what the step before it let through. `limit(3)` first keeps the first three of the day, 85, 140 and 32, and only those are sorted. Sort first, then `limit(3)` keeps the three smallest: 32, 64 and 85."
+
+  - type: bug
+    after: from-input
+    prompt: "The program should print the sum of the readings, leaving out the missing ones, which are sent as `-`. Which line is wrong?"
+    body: |
+      ArrayList<String> lines = new ArrayList<>();
+      lines.add("12");
+      lines.add("-");
+      lines.add("7");
+      int sum = lines.stream().mapToInt(Integer::valueOf).sum(); // BUG
+      System.out.println(sum);
+    fix: "int sum = lines.stream().filter(line -> !line.equals(\"-\")).mapToInt(Integer::valueOf).sum();"
+    why: "`Integer.valueOf(\"-\")` throws a NumberFormatException, so the program crashes. A `filter` that drops the dashes must come before `mapToInt`: then only 12 and 7 are turned into numbers, and the sum is 19."
+
+  - type: compiles
+    after: lambdas
+    body: |
+      ArrayList<Integer> rides = new ArrayList<>();
+      rides.add(42);
+      rides.add(18);
+      long count = rides.stream().filter(km -> {
+          int limit = 40;
+          return km > limit;
+      }).count();
+      System.out.println(count);
+    why: "Yes. A lambda's body can be a block in braces, with statements and a `return` for its answer, like a method's body. The lambda given to `filter` returns a boolean, as it must. It prints 1."
+
+  - type: compiles
+    after: terminal-operations
+    body: |
+      ArrayList<Integer> expenses = new ArrayList<>();
+      expenses.add(54);
+      expenses.add(120);
+      int total = expenses.stream().sum();
+      System.out.println(total);
+    why: "No. A stream of Integer objects has no `sum` method: javac says `cannot find symbol`. `mapToInt(amount -> amount)` turns it into an IntStream first, and an IntStream has `sum()`."
+
+  - type: choice
+    after: reduce-and-intstream
+    prompt: "Which numbers does `IntStream.range(1, 4)` give?"
+    choices:
+      - "1, 2 and 3"
+      - "1, 2, 3 and 4"
+      - "0, 1, 2 and 3"
+      - "4, 3, 2 and 1"
+    answer: 1
+    why: "`range` includes its start and leaves out its end, like `for (int i = 1; i < 4; i++)`. `IntStream.rangeClosed(1, 4)` would include the 4."
+
+  - type: choice
+    after: loop-or-stream
+    prompt: "Which of these jobs is plainer with a loop than with the streams of this module?"
+    choices:
+      - "Counting the rides longer than 50 km"
+      - "Adding up the prices of the books sold"
+      - "Finding the number of the first day with more than 100 sales, and stopping there"
+      - "Listing the films shown today, each once, in alphabetical order"
+    answer: 3
+    why: "A loop can `return` as soon as it finds the day, and its index gives the day's number. The other three are keep, change, count or collect jobs, which a stream says in a line: `filter` and `count`, `mapToInt` and `sum`, `distinct`, `sorted` and `collect`."
+
+  - type: boss
+    after: objects
+    prompt: |
+      `Expense.java` is ready: an expense has a category and an amount in whole dollars. In `Main.java`, write the method `averageOf(List<Expense> expenses, String category)`, which returns the average amount of the expenses in that category, as the stream's `average()` computes it, or `0.0` when the category has no expenses. Use streams. The check runs:
+
+      ```java fragment
+      List<Expense> expenses = new ArrayList<>();
+      expenses.add(new Expense("groceries", 54));
+      expenses.add(new Expense("rent", 850));
+      expenses.add(new Expense("groceries", 38));
+      expenses.add(new Expense("groceries", 25));
+      System.out.println(averageOf(expenses, "groceries"));
+      System.out.println(averageOf(expenses, "phone"));
+      ```
+
+      and expects:
+
+      ```
+      39.0
+      0.0
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Expense> expenses = new ArrayList<>();
+                expenses.add(new Expense("groceries", 54));
+                expenses.add(new Expense("rent", 850));
+                expenses.add(new Expense("groceries", 38));
+                expenses.add(new Expense("groceries", 25));
+                System.out.println(averageOf(expenses, "groceries"));
+                System.out.println(averageOf(expenses, "phone"));
+            }
+
+            // Write the method averageOf here.
+        }
+      Expense.java: |
+        public class Expense {
+            private String category;
+            private int amount;
+
+            public Expense(String category, int amount) {
+                this.category = category;
+                this.amount = amount;
+            }
+
+            public String getCategory() {
+                return this.category;
+            }
+
+            public int getAmount() {
+                return this.amount;
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Expense> expenses = new ArrayList<>();
+                expenses.add(new Expense("groceries", 54));
+                expenses.add(new Expense("rent", 850));
+                expenses.add(new Expense("groceries", 38));
+                expenses.add(new Expense("groceries", 25));
+                System.out.println(averageOf(expenses, "groceries"));
+                System.out.println(averageOf(expenses, "phone"));
+            }
+
+            public static double averageOf(List<Expense> expenses, String category) {
+                long count = expenses.stream()
+                        .filter(expense -> expense.getCategory().equals(category))
+                        .count();
+                if (count == 0) {
+                    return 0.0;
+                }
+                return expenses.stream()
+                        .filter(expense -> expense.getCategory().equals(category))
+                        .mapToInt(Expense::getAmount)
+                        .average()
+                        .getAsDouble();
+            }
+        }
+      Expense.java: |
+        public class Expense {
+            private String category;
+            private int amount;
+
+            public Expense(String category, int amount) {
+                this.category = category;
+                this.amount = amount;
+            }
+
+            public String getCategory() {
+                return this.category;
+            }
+
+            public int getAmount() {
+                return this.amount;
+            }
+        }
+    hints:
+      - "The header is `public static double averageOf(List<Expense> expenses, String category)`. `getAsDouble()` crashes on an empty stream, so first count the category's expenses with `filter` and `count()`, and return `0.0` when there are none."
+      - "Otherwise, the same `filter`, then `mapToInt(Expense::getAmount)`, `average()` and `getAsDouble()`."
+    require:
+      - pattern: \bpublic\s+static\s+double\s+averageOf\s*\(\s*List<Expense>\s+\w+\s*,\s*String\s+\w+\s*\)
+        message: "Write the method as `public static double averageOf(List<Expense> expenses, String category)`."
+      - pattern: \.average\s*\(\s*\)
+        message: "Let the stream work out the average with `average()`."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Use streams this time, not a loop."
+    tests:
+      - call: |
+          List<Expense> expenses = new ArrayList<>();
+          expenses.add(new Expense("groceries", 54));
+          expenses.add(new Expense("rent", 850));
+          expenses.add(new Expense("groceries", 38));
+          expenses.add(new Expense("groceries", 25));
+          System.out.println(averageOf(expenses, "groceries"));
+          System.out.println(averageOf(expenses, "phone"));
+      - call: |
+          List<Expense> expenses = new ArrayList<>();
+          expenses.add(new Expense("phone", 25));
+          expenses.add(new Expense("rent", 850));
+          expenses.add(new Expense("phone", 30));
+          System.out.println(averageOf(expenses, "rent") + " " + averageOf(expenses, "phone"));
+          System.out.println(averageOf(new ArrayList<>(), "rent"));
+        hidden: true

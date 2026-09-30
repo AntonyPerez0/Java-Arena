@@ -521,3 +521,69 @@ questions:
           }
       }
     why: "The check skips the rest of the command before its hours line is read, so the next round reads `3` as a command. A command should read all of its lines before checking any of them."
+
+  - module: recap
+    type: predict
+    body: |
+      String[] parts = "12,5,x,8".split(",");
+      int total = 0;
+      String joined = "";
+      for (String part : parts) {
+          if (part.equals("x")) {
+              continue;
+          }
+          total += Integer.valueOf(part);
+          joined += part;
+      }
+      System.out.println(total + " " + joined);
+    why: "`split` gives four Strings. `continue` skips the `x` before it's used. The other parts are added up as numbers (12 + 5 + 8 = 25) and joined as text (`1258`), because `+=` on a String joins and on an int adds."
+
+  - module: hash-maps
+    type: predict
+    body: |
+      HashMap<String, Integer> stock = new HashMap<>();
+      stock.put("tea", 4);
+      stock.put("rice", 2);
+      stock.put("tea", 7);
+      System.out.println(stock.size() + " " + stock.get("tea") + " " + stock.get("oats"));
+    why: "A key has at most one value, so the second `put` for tea replaces 4 with 7 and the map keeps 2 keys. `get` gives `null` for a key that isn't in the map."
+
+  - module: equals-hashcode
+    type: predict
+    classes: |
+      class Seat {
+          private int number;
+
+          public Seat(int number) {
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.number == other.number;
+          }
+      }
+    body: |
+      ArrayList<Seat> list = new ArrayList<>();
+      HashMap<Seat, String> map = new HashMap<>();
+      list.add(new Seat(7));
+      map.put(new Seat(7), "Ada");
+      System.out.println(list.contains(new Seat(7)) + " " + map.containsKey(new Seat(7)));
+    why: "A list's `contains` uses only `equals`, so it finds the equal seat. A HashMap looks at the hash code first, and Seat has no `hashCode` of its own: each new Seat gets Java's default one, which in practice is a different number for each object, so `containsKey` never gets as far as `equals`."
+
+  - module: grouping
+    type: predict
+    body: |
+      HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+      String[] joins = {"Chess", "Amira", "Art", "Leo", "Chess", "Jonas"};
+      for (int i = 0; i < joins.length; i += 2) {
+          if (!clubs.containsKey(joins[i])) {
+              clubs.put(joins[i], new ArrayList<>());
+          }
+          clubs.get(joins[i]).add(joins[i + 1]);
+      }
+      System.out.println(clubs.get("Chess") + " " + clubs.size());
+    why: "Each club gets its own list the first time it's seen, and later names are added to that list, not put in its place. Chess holds both Amira and Jonas, and the map has two keys, Chess and Art."

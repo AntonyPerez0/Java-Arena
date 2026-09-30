@@ -60,10 +60,10 @@ drills:
     after: going-through
     body: |
       HashMap<String, Integer> jars = new HashMap<>();
-      jars.put("honey", 3);
+      jars.put("marmalade", 3);
       jars.put("pickles", 1);
       jars.put("mustard", 2);
-      jars.put("honey", 1);
+      jars.put("marmalade", 1);
       int total = 0;
       int low = 0;
       for (String food : jars.keySet()) {
@@ -73,7 +73,7 @@ drills:
           }
       }
       System.out.println(total + " " + low);
-    why: "The last `put` replaces honey's 3 with 1, so the values are 1, 1 and 2: 4 in all, and two foods with fewer than 2 jars. The loop goes through the keys in the map's own order, but a total and a count come out the same in any order."
+    why: "The last `put` replaces marmalade's 3 with 1, so the values are 1, 1 and 2: 4 in all, and two foods with fewer than 2 jars. The loop goes through the keys in the map's own order, but a total and a count come out the same in any order."
 
   - type: fill
     after: keys-and-values
@@ -89,7 +89,7 @@ drills:
     prompt: "Fill in the method call that gives the map's values, so that the program adds up the jars."
     body: |
       HashMap<String, Integer> jars = new HashMap<>();
-      jars.put("honey", 3);
+      jars.put("marmalade", 3);
       jars.put("pickles", 4);
       int total = 0;
       for (int count : jars.[[values()]]) {
@@ -103,7 +103,7 @@ drills:
     prompt: "The program should print `Salsa: 0`, but it crashes. Which line is wrong?"
     body: |
       HashMap<String, Integer> jars = new HashMap<>();
-      jars.put("honey", 3);
+      jars.put("marmalade", 3);
       int salsa = jars.get("salsa"); // BUG
       System.out.println("Salsa: " + salsa);
     fix: int salsa = jars.getOrDefault("salsa", 0);
@@ -123,37 +123,38 @@ drills:
 
   - type: bug
     after: map-in-a-class
-    prompt: "The program should print `2`, but it crashes with a NullPointerException. Which line is wrong?"
+    prompt: "The program should print `2`, but it prints `0`. `main` stays as it is. Which line is wrong?"
     classes: |
       class Tally {
           private HashMap<String, Integer> counts;
 
           public Tally() {
-              HashMap<String, Integer> counts = new HashMap<>(); // BUG
+              this.counts = new HashMap<>();
           }
 
           public void add(String key) {
-              this.counts.put(key, this.counts.getOrDefault(key, 0) + 1);
+              String tidy = key.trim().toUpperCase();
+              this.counts.put(tidy, this.counts.getOrDefault(tidy, 0) + 1);
           }
 
           public int count(String key) {
-              return this.counts.getOrDefault(key, 0);
+              return this.counts.getOrDefault(key, 0); // BUG
           }
       }
     body: |
       Tally tally = new Tally();
-      tally.add("HEL");
-      tally.add("HEL");
-      System.out.println(tally.count("HEL"));
-    fix: this.counts = new HashMap<>();
-    why: "With a type in front, the line makes a new local variable `counts`, which is gone when the constructor ends. The instance variable `this.counts` stays `null`, so `add` crashes. `this.counts = new HashMap<>();` gives the map to the instance variable."
+      tally.add("hel");
+      tally.add("HEL ");
+      System.out.println(tally.count(" Hel"));
+    fix: return this.counts.getOrDefault(key.trim().toUpperCase(), 0);
+    why: "`add` tidies each key, so both calls count under `HEL`. `count` looks up ` Hel` as it is, and that isn't a key of the map, so it gets the fallback 0. A key has to be tidied the same way when it's looked up as when it's put."
 
   - type: compiles
     after: keys-and-values
     body: |
       HashMap<String, int> jars = new HashMap<>();
-      jars.put("honey", 3);
-      System.out.println(jars.get("honey"));
+      jars.put("marmalade", 3);
+      System.out.println(jars.get("marmalade"));
     why: "No. A map's key and value types must be class types, as a list's must: `HashMap<String, Integer>`. `int` is a primitive type, and javac says `unexpected type`."
 
   - type: compiles

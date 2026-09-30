@@ -60,32 +60,19 @@ drills:
               this.clubs.get(club).add(student);
           }
 
-          public void leave(String club, String student) {
-              if (this.clubs.containsKey(club)) {
-                  ArrayList<String> members = this.clubs.get(club);
-                  members.remove(student);
-                  if (members.isEmpty()) {
-                      this.clubs.remove(club);
-                  }
-              }
-          }
-
-          public ArrayList<String> clubNames() {
-              ArrayList<String> names = new ArrayList<>(this.clubs.keySet());
-              Collections.sort(names);
-              return names;
+          public ArrayList<String> members(String club) {
+              return new ArrayList<>(this.clubs.getOrDefault(club, new ArrayList<>()));
           }
       }
     body: |
       Register register = new Register();
-      register.join("Drama", "Leo");
       register.join("Chess", "Amira");
-      register.join("Art", "Mei");
-      register.join("Chess", "Amira");
-      register.leave("Chess", "Amira");
-      register.leave("Drama", "Leo");
-      System.out.println(register.clubNames());
-    why: "Amira joined Chess twice, so its list has her twice, and `remove` takes out only the first copy: Chess still has a member. Leo was Drama's only member, so leaving empties the list and the club is removed. `clubNames` sorts what's left."
+      register.join("Chess", "Jonas");
+      register.members("Chess").add("Leo");
+      ArrayList<String> chess = register.members("Chess");
+      chess.remove("Amira");
+      System.out.println(chess + " " + register.members("Chess"));
+    why: "This `members` returns a copy: `new ArrayList<>(...)` makes a new list with the same names. So Leo is added to a copy that's thrown away at once, and Amira is removed only from the copy in `chess`. The list in the map still holds Amira and Jonas."
 
   - type: fill
     after: list-as-value
@@ -212,14 +199,14 @@ drills:
       - "The map goes through all its keys, but it does so faster than a list does"
       - "The map keeps the keys used most often at the front"
     answer: 1
-    why: "The hash code picks one bucket, and only the entries in that bucket are compared with the key. As the map grows, it adds buckets and spreads its entries out, so each bucket stays small. A HashMap doesn't keep its keys sorted, and it never goes through all of them to find one."
+    why: "The hash code picks one bucket, and only the entries in that bucket are compared with the key. As the map grows, it adds buckets and spreads its entries out, so each bucket stays small. A HashMap doesn't keep its keys sorted, and it looks only in the one bucket the hash code picks."
 
   - type: choice
     after: fast-lookups
     prompt: Which of these jobs fits a list better than a hash map?
     choices:
       - "Finding a student by card number"
-      - "Keeping every song a player has played, in the order played, the same song possibly many times"
+      - "Keeping every card scanned at a desk, in the order scanned, the same card possibly many times"
       - "Counting how many times each dish was ordered"
     answer: 2
     why: "A list keeps its values in order, and the same value as often as it's added. A map keeps each key once, in an order of its own, but finds a key fast, which suits finding a student by card and counting by dish."

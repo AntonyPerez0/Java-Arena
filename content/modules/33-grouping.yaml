@@ -1,0 +1,1690 @@
+id: grouping
+summary: Lists as the values of a hash map. Adding to the right list and creating it the first time a key is seen, counting and grouping by a key, a class that keeps its data in groups, and why finding a key in a hash map stays fast however big the map grows. MOOC sections 8.4 and 8.5.
+steps:
+  - id: grouping-list-values
+    slug: list-as-value
+    title: A list as a value
+    text: |
+      In module 31, each key of a hash map had one value, and a `put` with a key that was already there replaced the old value. But often one key has many things: a school club has many members, an album has many songs, a table in a restaurant orders many dishes. For those, the value can be a list. This module groups data that way, and then ends part 8 with a look at why a hash map finds its keys so fast.
+
+      ### A map whose values are lists
+
+      A school keeps track of its clubs and their members. The club's name is the key, and the value is the list of its members:
+
+      ```java main
+      HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+      clubs.put("Chess", new ArrayList<>());
+      clubs.put("Robotics", new ArrayList<>());
+
+      clubs.get("Chess").add("Amira");
+      clubs.get("Chess").add("Jonas");
+      clubs.get("Robotics").add("Priya");
+
+      System.out.println(clubs.get("Chess"));
+      System.out.println(clubs.get("Robotics").size());
+      ```
+
+      ```output
+      [Amira, Jonas]
+      1
+      ```
+
+      - The type tells the whole story: `HashMap<String, ArrayList<String>>` maps a String (the club) to a list of Strings (its members). The diamond in `new HashMap<>()` fills in both types.
+      - `clubs.put("Chess", new ArrayList<>())` puts a new, empty list in the map under the key `"Chess"`.
+      - `clubs.get("Chess")` gives back that list itself, not a copy: a reference to the same list object that's in the map (module 22). So `clubs.get("Chess").add("Amira")` adds Amira to the list in the map, and there's no need to put the list back.
+
+      ### A club's first member
+
+      Before a club gets its first member, the map has no list for it. `get` returns `null` for a key that isn't in the map, and `null` has no methods:
+
+      ```java run crash
+      import java.util.ArrayList;
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+              clubs.get("Drama").add("Leo");
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NullPointerException: Cannot invoke "java.util.ArrayList.add(Object)" because the return value of "java.util.HashMap.get(Object)" is null
+      	at Main.main(Main.java:7)
+      ```
+
+      So adding takes two parts: create the list the first time the key is seen, and then add to the list that's in the map. As a method:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+              join(clubs, "Chess", "Amira");
+              join(clubs, "Drama", "Leo");
+              join(clubs, "Chess", "Jonas");
+              join(clubs, "Drama", "Sofia");
+              join(clubs, "Chess", "Mei");
+              System.out.println(clubs.get("Chess"));
+              System.out.println(clubs.get("Drama"));
+          }
+
+          public static void join(HashMap<String, ArrayList<String>> clubs, String club, String name) {
+              if (!clubs.containsKey(club)) {
+                  clubs.put(club, new ArrayList<>());
+              }
+              clubs.get(club).add(name);
+          }
+      }
+      ```
+
+      ```output
+      [Amira, Jonas, Mei]
+      [Leo, Sofia]
+      ```
+
+      - The `if` runs only for a club's first member, and puts a new, empty list in the map for that club. Each club gets a list of its own.
+      - After the `if`, the club always has a list, so `clubs.get(club).add(name)` is safe.
+      - Each list is an ordinary ArrayList, so the members stay in the order they joined.
+      - `join` gets a reference to the caller's map, so the lists it adds and fills are in the caller's map too.
+
+      The same can be written with `getOrDefault(key, other)`, which returns the key's value, or `other` when the key isn't in the map:
+
+      ```java fragment
+      ArrayList<String> members = clubs.getOrDefault(club, new ArrayList<>());
+      members.add(name);
+      clubs.put(club, members);
+      ```
+
+      Here the last line matters. For a new club, the new list is only in the variable `members` until `put` stores it in the map. Without the `put`, the club's first member would be lost. For a club that already has a list, `put` stores the same list again, which changes nothing. Both ways work. For adding, this module uses the one with `containsKey`.
+
+      ### Getting a group back
+
+      A method that gives a club's members returns the club's list. For a club nobody has joined, it should return an **empty list**, not `null`:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+              join(clubs, "Chess", "Amira");
+              join(clubs, "Chess", "Jonas");
+              for (String name : membersOf(clubs, "Chess")) {
+                  System.out.println("Chess: " + name);
+              }
+              for (String name : membersOf(clubs, "Choir")) {
+                  System.out.println("Choir: " + name);
+              }
+              System.out.println(membersOf(clubs, "Choir").size() + " in the choir");
+          }
+
+          public static void join(HashMap<String, ArrayList<String>> clubs, String club, String name) {
+              if (!clubs.containsKey(club)) {
+                  clubs.put(club, new ArrayList<>());
+              }
+              clubs.get(club).add(name);
+          }
+
+          public static ArrayList<String> membersOf(HashMap<String, ArrayList<String>> clubs, String club) {
+              return clubs.getOrDefault(club, new ArrayList<>());
+          }
+      }
+      ```
+
+      ```output
+      Chess: Amira
+      Chess: Jonas
+      0 in the choir
+      ```
+
+      - With an empty list, the code that asks needs no special case: the for-each loop over the choir runs zero times, and `size()` is 0. With `null`, both would crash with a NullPointerException, so every caller would have to check for `null` first.
+      - The empty list for the choir is a new list that isn't in the map. That's fine for reading. To add a member, use `join`.
+
+      **Your turn:** a community garden keeps a list of the plants in each bed. Fill in the blanks of `plant(beds, bed, plant)`, which adds a plant to the bed's list, and creates the list for the bed's first plant. The check runs:
+
+      ```java fragment
+      HashMap<String, ArrayList<String>> beds = new HashMap<>();
+      plant(beds, "North", "kale");
+      plant(beds, "South", "beans");
+      plant(beds, "North", "leeks");
+      System.out.println(beds.get("North"));
+      System.out.println(beds.get("South"));
+      ```
+
+      and expects:
+
+      ```
+      [kale, leeks]
+      [beans]
+      ```
+    fill: |
+      import java.util.ArrayList;
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, ArrayList<String>> beds = new HashMap<>();
+              plant(beds, "North", "kale");
+              plant(beds, "South", "beans");
+              plant(beds, "North", "leeks");
+              System.out.println(beds.get("North"));
+              System.out.println(beds.get("South"));
+          }
+
+          public static void plant(HashMap<String, ArrayList<String>> beds, String bed, String plant) {
+              if (!beds.[[containsKey]](bed)) {
+                  beds.put(bed, [[new ArrayList<>()‖new ArrayList<String>()]]);
+              }
+              beds.[[get]](bed).add(plant);
+          }
+      }
+    hints:
+      - "It works like `join` above. The `if` asks whether the map already has the bed as a key, and the `!` makes it run only when it doesn't."
+      - "The bed's first plant needs a new, empty list: `new ArrayList<>()`. After the `if`, `beds.get(bed)` is the bed's list in the map, and `add` puts the plant on it."
+    tests:
+      - call: |
+          HashMap<String, ArrayList<String>> beds = new HashMap<>();
+          plant(beds, "North", "kale");
+          plant(beds, "South", "beans");
+          plant(beds, "North", "leeks");
+          System.out.println(beds.get("North"));
+          System.out.println(beds.get("South"));
+      - call: |
+          HashMap<String, ArrayList<String>> beds = new HashMap<>();
+          plant(beds, "East", "chard");
+          plant(beds, "East", "chard");
+          plant(beds, "West", "garlic");
+          plant(beds, "Herb", "mint");
+          plant(beds, "East", "peas");
+          System.out.println(beds.get("East"));
+          System.out.println(beds.get("West") + " " + beds.get("Herb") + " " + beds.size());
+        hidden: true
+      - call: |
+          HashMap<String, ArrayList<String>> beds = new HashMap<>();
+          plant(beds, "Pond", "iris");
+          System.out.println(beds.get("Pond") + " " + beds.get("Path"));
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Keep track of which variables refer to which list.
+        predict: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, ArrayList<String>> clubs = new HashMap<>();
+                  clubs.put("Chess", new ArrayList<>());
+                  ArrayList<String> chess = clubs.get("Chess");
+                  chess.add("Amira");
+                  clubs.get("Chess").add("Jonas");
+                  System.out.println(chess.size());
+
+                  ArrayList<String> choir = clubs.getOrDefault("Choir", new ArrayList<>());
+                  choir.add("Leo");
+                  System.out.println(choir);
+                  System.out.println(clubs.containsKey("Choir"));
+                  System.out.println(clubs.get("Chess"));
+              }
+          }
+        hints:
+          - "`chess` and `clubs.get(\"Chess\")` refer to the same list object, the one in the map. Two names were added to it, one through each."
+          - "There's no Choir in the map, so `getOrDefault` returns the new list it was given. Leo goes on that list, but nothing ever puts it in the map."
+      - task: |
+          A music app keeps the songs of each album. Write two methods:
+
+          - `addSong(HashMap<String, ArrayList<String>> albums, String album, String song)` adds the song to the album's list, and creates the list for the album's first song.
+          - `songsOn(HashMap<String, ArrayList<String>> albums, String album)` returns the album's list of songs, or an empty list for an album that has none.
+
+          The check runs:
+
+          ```java fragment
+          HashMap<String, ArrayList<String>> albums = new HashMap<>();
+          addSong(albums, "Blue Hour", "Morning");
+          addSong(albums, "Night Drive", "Neon");
+          addSong(albums, "Blue Hour", "Harbor");
+          System.out.println(songsOn(albums, "Blue Hour"));
+          System.out.println(songsOn(albums, "Quiet Rooms").size());
+          ```
+
+          and expects:
+
+          ```
+          [Morning, Harbor]
+          0
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, ArrayList<String>> albums = new HashMap<>();
+                  addSong(albums, "Blue Hour", "Morning");
+                  addSong(albums, "Night Drive", "Neon");
+                  addSong(albums, "Blue Hour", "Harbor");
+                  System.out.println(songsOn(albums, "Blue Hour"));
+                  System.out.println(songsOn(albums, "Quiet Rooms").size());
+              }
+
+              // Write the methods addSong and songsOn here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<String, ArrayList<String>> albums = new HashMap<>();
+                  addSong(albums, "Blue Hour", "Morning");
+                  addSong(albums, "Night Drive", "Neon");
+                  addSong(albums, "Blue Hour", "Harbor");
+                  System.out.println(songsOn(albums, "Blue Hour"));
+                  System.out.println(songsOn(albums, "Quiet Rooms").size());
+              }
+
+              public static void addSong(HashMap<String, ArrayList<String>> albums, String album, String song) {
+                  if (!albums.containsKey(album)) {
+                      albums.put(album, new ArrayList<>());
+                  }
+                  albums.get(album).add(song);
+              }
+
+              public static ArrayList<String> songsOn(HashMap<String, ArrayList<String>> albums, String album) {
+                  return albums.getOrDefault(album, new ArrayList<>());
+              }
+          }
+        hints:
+          - "`addSong` is the `join` of this step with new names: create the album's list when `containsKey` says it isn't there, and then add the song to `albums.get(album)`."
+          - "`songsOn` can be one line: `return albums.getOrDefault(album, new ArrayList<>());`. For an album with no songs, `get` would return `null`, and the check's `size()` would crash."
+        require:
+          - pattern: \bpublic\s+static\s+void\s+addSong\s*\(\s*HashMap\s*<\s*String\s*,\s*ArrayList\s*<\s*String\s*>\s*>\s+\w+\s*,\s*String\s+\w+\s*,\s*String\s+\w+\s*\)
+            message: "Write the first method as `public static void addSong(HashMap<String, ArrayList<String>> albums, String album, String song)`."
+          - pattern: \bpublic\s+static\s+ArrayList\s*<\s*String\s*>\s+songsOn\s*\(\s*HashMap\s*<\s*String\s*,\s*ArrayList\s*<\s*String\s*>\s*>\s+\w+\s*,\s*String\s+\w+\s*\)
+            message: "Write the second method as `public static ArrayList<String> songsOn(HashMap<String, ArrayList<String>> albums, String album)`."
+        tests:
+          - call: |
+              HashMap<String, ArrayList<String>> albums = new HashMap<>();
+              addSong(albums, "Blue Hour", "Morning");
+              addSong(albums, "Night Drive", "Neon");
+              addSong(albums, "Blue Hour", "Harbor");
+              System.out.println(songsOn(albums, "Blue Hour"));
+              System.out.println(songsOn(albums, "Quiet Rooms").size());
+          - call: |
+              HashMap<String, ArrayList<String>> albums = new HashMap<>();
+              addSong(albums, "Tides", "Low");
+              addSong(albums, "Sparks", "Flint");
+              addSong(albums, "Tides", "High");
+              addSong(albums, "Tides", "Low");
+              System.out.println(songsOn(albums, "Tides"));
+              System.out.println(songsOn(albums, "Sparks").size() + " " + albums.size());
+              System.out.println(albums.get("Tides").size());
+            hidden: true
+          - call: |
+              HashMap<String, ArrayList<String>> albums = new HashMap<>();
+              System.out.println(songsOn(albums, "Anything"));
+              for (String song : songsOn(albums, "Nothing")) {
+                  System.out.println(song);
+              }
+              addSong(albums, "Solo", "One");
+              System.out.println(songsOn(albums, "Solo") + " " + albums.size());
+            hidden: true
+
+  - id: grouping-counting
+    slug: counting-and-grouping
+    title: Counting and grouping
+    text: |
+      Step 1 added to the lists one call at a time. Often the data comes all at once, in a list, an array or a file, and a loop sorts it into groups. This step does that, first with counts and then with lists.
+
+      ### Counting with a map
+
+      A map from a String to an Integer can count how many times each thing comes up. Here it counts how many words start with each letter:
+
+      ```java main
+      String[] words = {"sun", "moon", "sea", "star", "mist"};
+      HashMap<String, Integer> counts = new HashMap<>();
+      for (String word : words) {
+          String first = word.substring(0, 1);
+          int count = counts.getOrDefault(first, 0);
+          counts.put(first, count + 1);
+      }
+      System.out.println(counts.get("s"));
+      System.out.println(counts.get("m"));
+      System.out.println(counts.getOrDefault("x", 0));
+      ```
+
+      ```output
+      3
+      2
+      0
+      ```
+
+      - `word.substring(0, 1)` is the word's first letter, as a String (module 16).
+      - The first time a letter comes up, `getOrDefault(first, 0)` gives 0, so its count becomes 1. After that, it gives the count so far.
+      - `put` with a key that's already there replaces the value, so the map always holds the latest count.
+
+      ### Grouping: a list for each key
+
+      Instead of counting the words of each letter, the program can keep them. The value becomes a list, and each word goes on the list of its first letter. It's step 1's `join`, in a loop:
+
+      ```java main
+      String[] words = {"sun", "moon", "sea", "star", "mist"};
+      HashMap<String, ArrayList<String>> byLetter = new HashMap<>();
+      for (String word : words) {
+          String first = word.substring(0, 1);
+          if (!byLetter.containsKey(first)) {
+              byLetter.put(first, new ArrayList<>());
+          }
+          byLetter.get(first).add(word);
+      }
+      System.out.println(byLetter.get("s"));
+      System.out.println(byLetter.get("m"));
+      System.out.println(byLetter.get("s").size());
+      ```
+
+      ```output
+      [sun, sea, star]
+      [moon, mist]
+      3
+      ```
+
+      Counting and grouping go together: the size of a group is its count.
+
+      ### Every group, in a fixed order
+
+      To print every group, go through the keys. But a HashMap goes through its keys in an order of its own, set by the keys' hash codes, and not in the order they were added. For String keys that order is the same on every run, but it's hard to predict, and adding more keys can change it. So it can't be relied on. When the order matters, sort the keys first: copy them into a list, and sort the list with `Collections.sort` (module 28).
+
+      ```java main
+      String[] words = {"tulip", "iris", "rose", "tansy", "ivy", "rue", "aster"};
+      HashMap<String, ArrayList<String>> byLetter = new HashMap<>();
+      for (String word : words) {
+          String first = word.substring(0, 1);
+          if (!byLetter.containsKey(first)) {
+              byLetter.put(first, new ArrayList<>());
+          }
+          byLetter.get(first).add(word);
+      }
+
+      ArrayList<String> letters = new ArrayList<>(byLetter.keySet());
+      Collections.sort(letters);
+      for (String letter : letters) {
+          System.out.println(letter + ": " + byLetter.get(letter));
+      }
+      ```
+
+      ```output
+      a: [aster]
+      i: [iris, ivy]
+      r: [rose, rue]
+      t: [tulip, tansy]
+      ```
+
+      - `new ArrayList<>(byLetter.keySet())` makes a new list that holds the map's keys. It's the same as creating an empty list and adding each key in a for-each loop over `keySet()`.
+      - Sorting that list doesn't change the map. The loop then goes through the letters in alphabetical order, and gets each letter's group with `get`.
+      - Within each group, the words keep the order they were added in. Only the order of the keys needed fixing.
+
+      ### Grouping objects by one of their values
+
+      The same pattern groups objects. Each Plant knows its name and the garden bed it grows in, and grouping the plants by bed gives a map from a bed to the list of its plants:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Plant> plants = new ArrayList<>();
+              plants.add(new Plant("kale", "North"));
+              plants.add(new Plant("basil", "Herb"));
+              plants.add(new Plant("leeks", "North"));
+              plants.add(new Plant("thyme", "Herb"));
+              plants.add(new Plant("beans", "South"));
+
+              HashMap<String, ArrayList<Plant>> byBed = groupByBed(plants);
+              ArrayList<String> beds = new ArrayList<>(byBed.keySet());
+              Collections.sort(beds);
+              for (String bed : beds) {
+                  System.out.println(bed + ": " + byBed.get(bed));
+              }
+          }
+
+          public static HashMap<String, ArrayList<Plant>> groupByBed(ArrayList<Plant> plants) {
+              HashMap<String, ArrayList<Plant>> byBed = new HashMap<>();
+              for (Plant plant : plants) {
+                  String bed = plant.getBed();
+                  if (!byBed.containsKey(bed)) {
+                      byBed.put(bed, new ArrayList<>());
+                  }
+                  byBed.get(bed).add(plant);
+              }
+              return byBed;
+          }
+      }
+      // ==== Plant.java ====
+      public class Plant {
+          private String name;
+          private String bed;
+
+          public Plant(String name, String bed) {
+              this.name = name;
+              this.bed = bed;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public String getBed() {
+              return this.bed;
+          }
+
+          public String toString() {
+              return this.name;
+          }
+      }
+      ```
+
+      ```output
+      Herb: [basil, thyme]
+      North: [kale, leeks]
+      South: [beans]
+      ```
+
+      - The values are lists of Plant objects, `ArrayList<Plant>`. Printing a list prints each plant with its `toString`.
+      - The key is one of the object's values, `plant.getBed()`. The lists hold the objects themselves, so everything about each plant is still at hand, not only its name.
+      - `groupByBed` builds a new map and returns it. The list of plants doesn't change.
+
+      **Your turn:** a restaurant's kitchen gets the dishes ordered during an evening, one per line, and an empty line at the end. Count how many times each dish was ordered, with a `HashMap<String, Integer>`. Then print each dish and its count, like `curry: 3`, with the dishes in alphabetical order: copy the keys into a list and sort it with `Collections.sort`. For the input shown, the program prints:
+
+      ```
+      curry: 3
+      salad: 1
+      soup: 2
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              HashMap<String, Integer> counts = new HashMap<>();
+
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              HashMap<String, Integer> counts = new HashMap<>();
+              while (true) {
+                  String dish = scanner.nextLine();
+                  if (dish.isEmpty()) {
+                      break;
+                  }
+                  counts.put(dish, counts.getOrDefault(dish, 0) + 1);
+              }
+
+              ArrayList<String> dishes = new ArrayList<>(counts.keySet());
+              Collections.sort(dishes);
+              for (String dish : dishes) {
+                  System.out.println(dish + ": " + counts.get(dish));
+              }
+          }
+      }
+    hints:
+      - "Read in a `while (true)` loop that stops with `break` at the empty line. Each dish adds one to its count: `counts.put(dish, counts.getOrDefault(dish, 0) + 1);`."
+      - "After the loop, `ArrayList<String> dishes = new ArrayList<>(counts.keySet());` and `Collections.sort(dishes);` give the dishes in alphabetical order. Go through that list, and get each dish's count with `counts.get(dish)`."
+    require:
+      - pattern: \bHashMap\s*<\s*String\s*,\s*Integer\s*>
+        message: "Count the dishes in a `HashMap<String, Integer>`."
+      - pattern: \bCollections\s*\.\s*sort\s*\(
+        message: "Sort the dish names with `Collections.sort` before printing them."
+    tests:
+      - stdin: |+
+          soup
+          curry
+          salad
+          curry
+          soup
+          curry
+
+      - stdin: |+
+          tea
+
+        hidden: true
+      - stdin: |+
+          pie
+          waffles
+          bagel
+          tea
+          omelet
+          pie
+          tea
+          juice
+          pie
+
+        hidden: true
+    more:
+      - task: |
+          A shopping list is grouped by the first letter of each item. What does this program print? Look closely at every word's first letter.
+        predict: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  String[] items = {"apple", "bread", "Avocado", "butter", "apple", "cheese"};
+                  HashMap<String, ArrayList<String>> groups = new HashMap<>();
+                  for (String item : items) {
+                      String first = item.substring(0, 1);
+                      if (!groups.containsKey(first)) {
+                          groups.put(first, new ArrayList<>());
+                      }
+                      groups.get(first).add(item);
+                  }
+                  System.out.println(groups.get("a"));
+                  System.out.println(groups.get("b").size());
+                  System.out.println(groups.size());
+                  System.out.println(groups.containsKey("A"));
+              }
+          }
+        hints:
+          - "A list can hold the same value twice, so both apples go on the list of `a`. `Avocado` starts with a capital A, and `\"A\"` is a different String from `\"a\"`, so it's a different key."
+          - "Count the keys: `a`, `b`, `A` and `c`. `groups.size()` is the number of keys, not the number of items."
+      - task: |
+          The music app now keeps its songs as objects. `Song.java` is ready: a song has a title, an album and a length in seconds, with the getters `getTitle()`, `getAlbum()` and `getSeconds()`, and its `toString` gives the title. In `Main.java`, write the method `byAlbum(ArrayList<Song> songs)`, which returns a new `HashMap<String, ArrayList<Song>>` from each album to the list of its songs, in the order they are in `songs`. The check runs:
+
+          ```java fragment
+          ArrayList<Song> songs = new ArrayList<>();
+          songs.add(new Song("Neon", "Night Drive", 214));
+          songs.add(new Song("Morning", "Blue Hour", 187));
+          songs.add(new Song("Tunnels", "Night Drive", 243));
+          songs.add(new Song("Harbor", "Blue Hour", 205));
+          songs.add(new Song("Static", "Night Drive", 198));
+          HashMap<String, ArrayList<Song>> albums = byAlbum(songs);
+          System.out.println(albums.get("Night Drive"));
+          System.out.println(albums.get("Blue Hour"));
+          ```
+
+          and expects:
+
+          ```
+          [Neon, Tunnels, Static]
+          [Morning, Harbor]
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Song> songs = new ArrayList<>();
+                    songs.add(new Song("Neon", "Night Drive", 214));
+                    songs.add(new Song("Morning", "Blue Hour", 187));
+                    songs.add(new Song("Tunnels", "Night Drive", 243));
+                    songs.add(new Song("Harbor", "Blue Hour", 205));
+                    songs.add(new Song("Static", "Night Drive", 198));
+                    HashMap<String, ArrayList<Song>> albums = byAlbum(songs);
+                    System.out.println(albums.get("Night Drive"));
+                    System.out.println(albums.get("Blue Hour"));
+                }
+
+                // Write the method byAlbum here.
+            }
+          Song.java: |
+            public class Song {
+                private String title;
+                private String album;
+                private int seconds;
+
+                public Song(String title, String album, int seconds) {
+                    this.title = title;
+                    this.album = album;
+                    this.seconds = seconds;
+                }
+
+                public String getTitle() {
+                    return this.title;
+                }
+
+                public String getAlbum() {
+                    return this.album;
+                }
+
+                public int getSeconds() {
+                    return this.seconds;
+                }
+
+                public String toString() {
+                    return this.title;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Song> songs = new ArrayList<>();
+                    songs.add(new Song("Neon", "Night Drive", 214));
+                    songs.add(new Song("Morning", "Blue Hour", 187));
+                    songs.add(new Song("Tunnels", "Night Drive", 243));
+                    songs.add(new Song("Harbor", "Blue Hour", 205));
+                    songs.add(new Song("Static", "Night Drive", 198));
+                    HashMap<String, ArrayList<Song>> albums = byAlbum(songs);
+                    System.out.println(albums.get("Night Drive"));
+                    System.out.println(albums.get("Blue Hour"));
+                }
+
+                public static HashMap<String, ArrayList<Song>> byAlbum(ArrayList<Song> songs) {
+                    HashMap<String, ArrayList<Song>> albums = new HashMap<>();
+                    for (Song song : songs) {
+                        String album = song.getAlbum();
+                        if (!albums.containsKey(album)) {
+                            albums.put(album, new ArrayList<>());
+                        }
+                        albums.get(album).add(song);
+                    }
+                    return albums;
+                }
+            }
+          Song.java: |
+            public class Song {
+                private String title;
+                private String album;
+                private int seconds;
+
+                public Song(String title, String album, int seconds) {
+                    this.title = title;
+                    this.album = album;
+                    this.seconds = seconds;
+                }
+
+                public String getTitle() {
+                    return this.title;
+                }
+
+                public String getAlbum() {
+                    return this.album;
+                }
+
+                public int getSeconds() {
+                    return this.seconds;
+                }
+
+                public String toString() {
+                    return this.title;
+                }
+            }
+        hints:
+          - "It's `groupByBed` from above, for songs. Create the map, go through the songs with a for-each loop, and use `song.getAlbum()` as the key."
+          - "Put a new list in the map when the album isn't a key yet, and then add the Song object itself to `albums.get(album)`. Return the map after the loop."
+        require:
+          - pattern: \bpublic\s+static\s+HashMap\s*<\s*String\s*,\s*ArrayList\s*<\s*Song\s*>\s*>\s+byAlbum\s*\(\s*ArrayList\s*<\s*Song\s*>\s+\w+\s*\)
+            message: "Write the method as `public static HashMap<String, ArrayList<Song>> byAlbum(ArrayList<Song> songs)`."
+        tests:
+          - call: |
+              ArrayList<Song> songs = new ArrayList<>();
+              songs.add(new Song("Neon", "Night Drive", 214));
+              songs.add(new Song("Morning", "Blue Hour", 187));
+              songs.add(new Song("Tunnels", "Night Drive", 243));
+              songs.add(new Song("Harbor", "Blue Hour", 205));
+              songs.add(new Song("Static", "Night Drive", 198));
+              HashMap<String, ArrayList<Song>> albums = byAlbum(songs);
+              System.out.println(albums.get("Night Drive"));
+              System.out.println(albums.get("Blue Hour"));
+          - call: |
+              ArrayList<Song> songs = new ArrayList<>();
+              songs.add(new Song("Rain", "Weather", 200));
+              songs.add(new Song("Snow", "Weather", 185));
+              songs.add(new Song("Echo", "Caves", 300));
+              songs.add(new Song("Fog", "Weather", 240));
+              HashMap<String, ArrayList<Song>> albums = byAlbum(songs);
+              int total = 0;
+              for (Song song : albums.get("Weather")) {
+                  total += song.getSeconds();
+              }
+              System.out.println(albums.size() + " " + total);
+              System.out.println(albums.get("Caves") + " " + songs.size());
+            hidden: true
+          - call: |
+              ArrayList<Song> songs = new ArrayList<>();
+              System.out.println(byAlbum(songs).size());
+              songs.add(new Song("Zero", "Numbers", 100));
+              songs.add(new Song("Alpha", "Letters", 110));
+              songs.add(new Song("One", "Numbers", 120));
+              songs.add(new Song("Mono", "Single", 130));
+              HashMap<String, ArrayList<Song>> albums = byAlbum(songs);
+              ArrayList<String> names = new ArrayList<>(albums.keySet());
+              Collections.sort(names);
+              for (String name : names) {
+                  System.out.println(name + ": " + albums.get(name));
+              }
+            hidden: true
+
+  - id: grouping-in-a-class
+    slug: groups-in-a-class
+    title: Groups inside a class
+    text: |
+      So far, the map of lists was passed to methods as a parameter. In a real program it usually lives inside a class, as an instance variable, the way module 24 kept a list inside an object. The class's methods are then the only way to change it. The rest of the program says what it wants done, like `register.join("Chess", "Amira")`, and doesn't need to know that there's a map of lists inside.
+
+      Here's a register of the school's clubs. `Main` is a test drive:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              ClubRegister register = new ClubRegister();
+              register.join("Robotics", "Priya");
+              register.join("Chess", "Amira");
+              register.join("Chess", "Jonas");
+              register.join("Art", "Leo");
+              System.out.println(register.clubNames());
+              System.out.println(register.members("Chess"));
+
+              register.leave("Chess", "Amira");
+              register.leave("Art", "Leo");
+              System.out.println(register.members("Chess"));
+              System.out.println(register.clubNames());
+              System.out.println(register.members("Art"));
+          }
+      }
+      // ==== ClubRegister.java ====
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+
+      public class ClubRegister {
+          private HashMap<String, ArrayList<String>> clubs;
+
+          public ClubRegister() {
+              this.clubs = new HashMap<>();
+          }
+
+          public void join(String club, String student) {
+              if (!this.clubs.containsKey(club)) {
+                  this.clubs.put(club, new ArrayList<>());
+              }
+              this.clubs.get(club).add(student);
+          }
+
+          public ArrayList<String> members(String club) {
+              return this.clubs.getOrDefault(club, new ArrayList<>());
+          }
+
+          public void leave(String club, String student) {
+              if (this.clubs.containsKey(club)) {
+                  ArrayList<String> members = this.clubs.get(club);
+                  members.remove(student);
+                  if (members.isEmpty()) {
+                      this.clubs.remove(club);
+                  }
+              }
+          }
+
+          public ArrayList<String> clubNames() {
+              ArrayList<String> names = new ArrayList<>(this.clubs.keySet());
+              Collections.sort(names);
+              return names;
+          }
+      }
+      ```
+
+      ```output
+      [Art, Chess, Robotics]
+      [Amira, Jonas]
+      [Jonas]
+      [Chess, Robotics]
+      []
+      ```
+
+      - The constructor creates the map. Without that line, `this.clubs` would be `null`, and the first `join` would crash (module 22).
+      - `join` and `members` are step 1's methods, with `this.clubs` in place of a parameter.
+      - `leave` uses the list's `remove(student)`, which removes the first copy of the student and does nothing if the student isn't there (module 14). When the last member leaves, `this.clubs.remove(club)` takes the club out of the map too. Without that, a club with an empty list would stay in the map, and in `clubNames`, forever.
+      - `clubNames` returns a new, sorted list of the keys. It's a list of its own: sorting it, or anything the caller does with it, doesn't change the map. The names come out in alphabetical order whatever order the map keeps its keys in.
+      - ClubRegister prints nothing. Its methods return their answers, and `Main` decides what to print.
+
+      One thing to be aware of: `members` returns the list that's in the map, so code outside the class could change it, for example with `register.members("Chess").clear()`. A class that wants to guard its data can return a copy instead: `new ArrayList<>(list)` makes a new list with the same elements as `list`.
+
+      **Your turn:** a restaurant keeps the dishes that each table has ordered. Tables have numbers, so the keys are `Integer`s: `HashMap<Integer, ArrayList<String>>`. In `TableOrders.java`, write:
+
+      - the constructor, which creates the map,
+      - `add(int table, String dish)`, which adds the dish to the table's list, and creates the list for the table's first dish,
+      - `dishesAt(int table)`, which returns the table's list of dishes, or an empty list for a table with no orders,
+      - `tables()`, which returns a new list of the table numbers that have orders, from the smallest to the largest.
+
+      `Main.java` is a test drive, and it prints:
+
+      ```
+      [3, 12, 21]
+      [soup, salad]
+      []
+      ```
+    seed:
+      TableOrders.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.HashMap;
+
+        public class TableOrders {
+            private HashMap<Integer, ArrayList<String>> orders;
+
+            public TableOrders() {
+                // Create the map here.
+            }
+
+            public void add(int table, String dish) {
+
+            }
+
+            public ArrayList<String> dishesAt(int table) {
+                return null;
+            }
+
+            public ArrayList<Integer> tables() {
+                return null;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                TableOrders orders = new TableOrders();
+                orders.add(12, "soup");
+                orders.add(3, "curry");
+                orders.add(12, "salad");
+                orders.add(21, "tea");
+                System.out.println(orders.tables());
+                System.out.println(orders.dishesAt(12));
+                System.out.println(orders.dishesAt(5));
+            }
+        }
+    solution:
+      TableOrders.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.HashMap;
+
+        public class TableOrders {
+            private HashMap<Integer, ArrayList<String>> orders;
+
+            public TableOrders() {
+                this.orders = new HashMap<>();
+            }
+
+            public void add(int table, String dish) {
+                if (!this.orders.containsKey(table)) {
+                    this.orders.put(table, new ArrayList<>());
+                }
+                this.orders.get(table).add(dish);
+            }
+
+            public ArrayList<String> dishesAt(int table) {
+                return this.orders.getOrDefault(table, new ArrayList<>());
+            }
+
+            public ArrayList<Integer> tables() {
+                ArrayList<Integer> tables = new ArrayList<>(this.orders.keySet());
+                Collections.sort(tables);
+                return tables;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                TableOrders orders = new TableOrders();
+                orders.add(12, "soup");
+                orders.add(3, "curry");
+                orders.add(12, "salad");
+                orders.add(21, "tea");
+                System.out.println(orders.tables());
+                System.out.println(orders.dishesAt(12));
+                System.out.println(orders.dishesAt(5));
+            }
+        }
+    hints:
+      - "The constructor is one line: `this.orders = new HashMap<>();`. `add` and `dishesAt` are ClubRegister's `join` and `members`, with an `int` table as the key. Java turns the `int` into an `Integer` key by itself."
+      - "For `tables()`, copy the keys into a new list, `new ArrayList<>(this.orders.keySet())`, sort it with `Collections.sort`, and return it. Integers sort by their value, so 3 comes before 12."
+    forbid:
+      - pattern: \bclass\s+TableOrders\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Main\b
+        message: "TableOrders doesn't print. Its methods return their answers, and `main` prints them."
+    tests:
+      - name: The test drive
+      - call: |
+          TableOrders orders = new TableOrders();
+          System.out.println(orders.tables() + " " + orders.dishesAt(1));
+          orders.add(17, "tea");
+          orders.add(5, "soup");
+          orders.add(30, "cake");
+          orders.add(16, "pie");
+          orders.add(5, "tea");
+          System.out.println(orders.tables());
+          System.out.println(orders.dishesAt(5) + " " + orders.dishesAt(17));
+        hidden: true
+      - call: |
+          TableOrders orders = new TableOrders();
+          orders.add(2, "soup");
+          orders.add(2, "soup");
+          orders.add(40, "salad");
+          orders.add(8, "juice");
+          System.out.println(orders.dishesAt(2).size() + " " + orders.tables());
+          for (String dish : orders.dishesAt(9)) {
+              System.out.println(dish);
+          }
+          System.out.println(orders.dishesAt(40));
+        hidden: true
+    more:
+      - task: |
+          A garden keeps the plants of each bed, and a bed with no plants left is taken out of the map. What does this test drive print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Garden garden = new Garden();
+                  garden.plant("North", "kale");
+                  garden.plant("South", "beans");
+                  garden.plant("North", "leeks");
+                  garden.plant("North", "kale");
+                  System.out.println(garden.plantsIn("North"));
+                  garden.pull("North", "kale");
+                  garden.pull("South", "beans");
+                  garden.pull("South", "peas");
+                  System.out.println(garden.plantsIn("North"));
+                  System.out.println(garden.bedCount() + " " + garden.plantsIn("South").size());
+              }
+          }
+          // ==== Garden.java ====
+          import java.util.ArrayList;
+          import java.util.HashMap;
+
+          public class Garden {
+              private HashMap<String, ArrayList<String>> beds;
+
+              public Garden() {
+                  this.beds = new HashMap<>();
+              }
+
+              public void plant(String bed, String plant) {
+                  if (!this.beds.containsKey(bed)) {
+                      this.beds.put(bed, new ArrayList<>());
+                  }
+                  this.beds.get(bed).add(plant);
+              }
+
+              public ArrayList<String> plantsIn(String bed) {
+                  return this.beds.getOrDefault(bed, new ArrayList<>());
+              }
+
+              public void pull(String bed, String plant) {
+                  if (this.beds.containsKey(bed)) {
+                      ArrayList<String> plants = this.beds.get(bed);
+                      plants.remove(plant);
+                      if (plants.isEmpty()) {
+                          this.beds.remove(bed);
+                      }
+                  }
+              }
+
+              public int bedCount() {
+                  return this.beds.size();
+              }
+          }
+        hints:
+          - "The North bed has two kale plants. A list's `remove(plant)` removes only the first one it finds, so one kale stays, after the leeks."
+          - "Pulling the beans leaves the South bed empty, so the bed is removed from the map. When the peas are pulled, South isn't a key any more, and nothing happens. `plantsIn` gives an empty list for a bed that isn't there."
+      - task: |
+          The restaurant needs two more methods in `TableOrders`. The class from the first task is ready. Add:
+
+          - `cancel(int table, String dish)`, which removes one of that dish from the table's list and returns `true`, or returns `false` when the table hasn't ordered that dish. When a table's last dish is canceled, the table is removed from the map, so that it isn't in `tables()` any more.
+          - `countOf(String dish)`, which returns how many of that dish have been ordered at all the tables together.
+
+          `Main.java` is a test drive, and it prints:
+
+          ```
+          3
+          true false false
+          2
+          [9]
+          ```
+        seed:
+          TableOrders.java: |
+            import java.util.ArrayList;
+            import java.util.Collections;
+            import java.util.HashMap;
+
+            public class TableOrders {
+                private HashMap<Integer, ArrayList<String>> orders;
+
+                public TableOrders() {
+                    this.orders = new HashMap<>();
+                }
+
+                public void add(int table, String dish) {
+                    if (!this.orders.containsKey(table)) {
+                        this.orders.put(table, new ArrayList<>());
+                    }
+                    this.orders.get(table).add(dish);
+                }
+
+                public ArrayList<String> dishesAt(int table) {
+                    return this.orders.getOrDefault(table, new ArrayList<>());
+                }
+
+                public ArrayList<Integer> tables() {
+                    ArrayList<Integer> tables = new ArrayList<>(this.orders.keySet());
+                    Collections.sort(tables);
+                    return tables;
+                }
+
+                // Write the methods cancel and countOf here.
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TableOrders orders = new TableOrders();
+                    orders.add(4, "soup");
+                    orders.add(9, "soup");
+                    orders.add(4, "pie");
+                    orders.add(9, "soup");
+                    System.out.println(orders.countOf("soup"));
+                    System.out.println(orders.cancel(9, "soup") + " " + orders.cancel(4, "tea") + " " + orders.cancel(6, "pie"));
+                    System.out.println(orders.countOf("soup"));
+                    orders.cancel(4, "soup");
+                    orders.cancel(4, "pie");
+                    System.out.println(orders.tables());
+                }
+            }
+        solution:
+          TableOrders.java: |
+            import java.util.ArrayList;
+            import java.util.Collections;
+            import java.util.HashMap;
+
+            public class TableOrders {
+                private HashMap<Integer, ArrayList<String>> orders;
+
+                public TableOrders() {
+                    this.orders = new HashMap<>();
+                }
+
+                public void add(int table, String dish) {
+                    if (!this.orders.containsKey(table)) {
+                        this.orders.put(table, new ArrayList<>());
+                    }
+                    this.orders.get(table).add(dish);
+                }
+
+                public ArrayList<String> dishesAt(int table) {
+                    return this.orders.getOrDefault(table, new ArrayList<>());
+                }
+
+                public ArrayList<Integer> tables() {
+                    ArrayList<Integer> tables = new ArrayList<>(this.orders.keySet());
+                    Collections.sort(tables);
+                    return tables;
+                }
+
+                public boolean cancel(int table, String dish) {
+                    ArrayList<String> dishes = this.dishesAt(table);
+                    if (!dishes.contains(dish)) {
+                        return false;
+                    }
+                    dishes.remove(dish);
+                    if (dishes.isEmpty()) {
+                        this.orders.remove(table);
+                    }
+                    return true;
+                }
+
+                public int countOf(String dish) {
+                    int count = 0;
+                    for (ArrayList<String> dishes : this.orders.values()) {
+                        for (String ordered : dishes) {
+                            if (ordered.equals(dish)) {
+                                count++;
+                            }
+                        }
+                    }
+                    return count;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TableOrders orders = new TableOrders();
+                    orders.add(4, "soup");
+                    orders.add(9, "soup");
+                    orders.add(4, "pie");
+                    orders.add(9, "soup");
+                    System.out.println(orders.countOf("soup"));
+                    System.out.println(orders.cancel(9, "soup") + " " + orders.cancel(4, "tea") + " " + orders.cancel(6, "pie"));
+                    System.out.println(orders.countOf("soup"));
+                    orders.cancel(4, "soup");
+                    orders.cancel(4, "pie");
+                    System.out.println(orders.tables());
+                }
+            }
+        hints:
+          - "In `cancel`, `this.dishesAt(table)` gives the table's list, or an empty one for a table with no orders. If the list doesn't contain the dish, return `false`. Otherwise remove it, remove the table too when its list is now empty, and return `true`."
+          - "`countOf` has to look at every table. Go through the lists with `for (ArrayList<String> dishes : this.orders.values())`, and count the dishes in each one that equal the one asked for. The order of the tables doesn't matter for a count."
+        forbid:
+          - pattern: \bclass\s+TableOrders\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Main\b
+            message: "TableOrders doesn't print. Its methods return their answers, and `main` prints them."
+        tests:
+          - name: The test drive
+          - call: |
+              TableOrders orders = new TableOrders();
+              System.out.println(orders.countOf("tea") + " " + orders.cancel(1, "tea"));
+              orders.add(3, "tea");
+              orders.add(3, "tea");
+              orders.add(8, "tea");
+              orders.add(20, "cake");
+              System.out.println(orders.countOf("tea") + " " + orders.countOf("cake"));
+              System.out.println(orders.cancel(3, "tea") + " " + orders.dishesAt(3));
+              System.out.println(orders.cancel(20, "cake") + " " + orders.tables() + " " + orders.countOf("cake"));
+            hidden: true
+          - call: |
+              TableOrders orders = new TableOrders();
+              orders.add(17, "soup");
+              orders.add(5, "juice");
+              orders.add(17, "juice");
+              System.out.println(orders.cancel(17, "juice") + " " + orders.cancel(17, "juice"));
+              System.out.println(orders.cancel(5, "juice") + " " + orders.tables() + " " + orders.countOf("juice"));
+              System.out.println(orders.cancel(17, "soup") + " " + orders.tables() + " " + orders.dishesAt(17));
+            hidden: true
+
+  - id: grouping-fast-lookups
+    slug: fast-lookups
+    title: Fast lookups, and the end of part 8
+    text: |
+      Before part 8, finding a value meant going through a list or an array. Module 28's linear search looks at the elements one at a time, and so do a list's `contains` and `indexOf`, which compare the value with each element using `equals`. To find a value near the end of a list of a million elements, or to find out that it isn't there at all, they make about a million comparisons. A hash map finds a key without going through its keys: whether it holds a hundred keys or a million, `get` and `containsKey` do about the same amount of work.
+
+      ### Where the map looks
+
+      Think of a shop that keeps orders for pickup on shelves marked with letters, one shelf for each first letter of the customer's last name. To find Ms. Okafor's order, nobody searches the whole back room: the name says which shelf to look on, and only the few orders on that shelf need checking.
+
+      A hash map works in a similar way. It keeps its entries in many small places, often called **buckets**. When a key is put in the map, the map works out the key's hash code (module 32), and that number picks the bucket the entry goes to. To find a key, `get` does the same calculation, and the hash code leads it straight to the one bucket where the key must be if it's in the map at all. There it compares the key only with the few entries in that bucket, and calls `equals` only on those whose hash code matches. The rest of the map isn't looked at.
+
+      As the map grows, it adds more buckets and spreads its entries out again, so that each bucket keeps only a few entries. That's why finding a key doesn't get slower as the map gets bigger.
+
+      ### Seeing the difference
+
+      A small experiment shows it. A `Card` is a student card with a number. Its `equals` and `hashCode` use the number, as in module 32, and for this experiment only, `equals` also counts how many times it's called. The program puts the same cards in a list and in a map, and then looks for the last card in both, each time with a new Card object that has its number:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              experiment(100);
+              experiment(1000);
+              experiment(10000);
+          }
+
+          public static void experiment(int size) {
+              ArrayList<Card> list = new ArrayList<>();
+              HashMap<Card, String> map = new HashMap<>();
+              for (int i = 1; i <= size; i++) {
+                  Card card = new Card("C" + i);
+                  list.add(card);
+                  map.put(card, "Student " + i);
+              }
+
+              Card wanted = new Card("C" + size);
+              Card again = new Card("C" + size);
+              if (list.contains(wanted) && map.containsKey(again)) {
+                  System.out.println(size + " cards: list " + wanted.getComparisons() + ", map " + again.getComparisons());
+              }
+          }
+      }
+      // ==== Card.java ====
+      public class Card {
+          private String number;
+          private int comparisons;
+
+          public Card(String number) {
+              this.number = number;
+              this.comparisons = 0;
+          }
+
+          public int getComparisons() {
+              return this.comparisons;
+          }
+
+          public boolean equals(Object compared) {
+              this.comparisons++;
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Card)) {
+                  return false;
+              }
+              Card other = (Card) compared;
+              return this.number.equals(other.number);
+          }
+
+          public int hashCode() {
+              return this.number.hashCode();
+          }
+      }
+      ```
+
+      ```output
+      100 cards: list 100, map 1
+      1000 cards: list 1000, map 1
+      10000 cards: list 10000, map 1
+      ```
+
+      - `list.contains(wanted)` compared the card with every card in the list before it reached the last one. Ten times the cards, ten times the comparisons.
+      - `map.containsKey(again)` went straight to the right bucket, and called `equals` once, on the card it was looking for. Here that's one comparison at every size.
+      - Comparisons aren't the whole cost. Working out the hash code takes a moment too: a String's hash code goes through its characters. But that work depends on the key, not on how many keys the map holds.
+
+      This relies on good hash codes. If many keys had the same hash code, they'd all land in the same bucket, and finding one of them would mean comparing it with many of the others: the map would lose much of its speed. That's one more reason why module 32's `hashCode` uses every value that `equals` compares. Java's own String and Integer already have good hash codes.
+
+      ### A list or a map?
+
+      Speed isn't the only thing that matters. Each collection is good at different things:
+
+      | What the program needs | Use |
+      | --- | --- |
+      | Things in order, and each one by its place: the first, the last, the one at index 3 | a list |
+      | The same value more than once, like every song a player has played | a list |
+      | A thing found by a key, like a student by card number | a map |
+      | One value for each key, where a new value replaces the old one | a map |
+      | Counts or groups by a key | a map, with Integer or list values |
+
+      A map pays for its speed: it keeps each key only once, and it goes through its keys in an order of its own. Binary search (module 28) is fast too, with at most 20 looks for a million values, but only on data that's kept sorted.
+
+      Often a program uses both. A list keeps the objects in the order they came, and a map finds them by a key. Building the map takes one loop over the list, and after that, every lookup goes straight to its key.
+
+      ### The end of part 8
+
+      This step ends the material of the MOOC's eighth part, the first part of Java Programming II. It started with a recap of parts 1 to 7, and then brought the hash map, which finds a value by its key. Module 32 showed how Java decides that two objects are the same, with `equals` and `hashCode`, so that objects of your own classes can be keys too. This module put lists in a map to group data, and showed why finding a key stays fast however big the map gets. Next, part 9 brings inheritance and interfaces. Part 8 closes with [the MOOC's page on fast data fetching and grouping information](https://java-programming.mooc.fi/part-8/5-fast-data-fetching-and-grouping-information) on its own site, for reading only.
+
+      **Your turn:** a school's library desk finds students by their card number. `Student.java` is ready: a student has a card number and a name, with the getters `getCard()` and `getName()`. In `Main.java`, write the method `indexByCard(ArrayList<Student> students)`, which returns a new `HashMap<String, Student>` from each student's card number to the student. Every card number belongs to one student. The check runs:
+
+      ```java fragment
+      ArrayList<Student> students = new ArrayList<>();
+      students.add(new Student("S-104", "Amira"));
+      students.add(new Student("S-231", "Jonas"));
+      students.add(new Student("S-087", "Priya"));
+      HashMap<String, Student> byCard = indexByCard(students);
+      System.out.println(byCard.get("S-231"));
+      System.out.println(byCard.get("S-500"));
+      System.out.println(byCard.size());
+      ```
+
+      and expects:
+
+      ```
+      Jonas (S-231)
+      null
+      3
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Student> students = new ArrayList<>();
+                students.add(new Student("S-104", "Amira"));
+                students.add(new Student("S-231", "Jonas"));
+                students.add(new Student("S-087", "Priya"));
+                HashMap<String, Student> byCard = indexByCard(students);
+                System.out.println(byCard.get("S-231"));
+                System.out.println(byCard.get("S-500"));
+                System.out.println(byCard.size());
+            }
+
+            // Write the method indexByCard here.
+        }
+      Student.java: |
+        public class Student {
+            private String card;
+            private String name;
+
+            public Student(String card, String name) {
+                this.card = card;
+                this.name = name;
+            }
+
+            public String getCard() {
+                return this.card;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public String toString() {
+                return this.name + " (" + this.card + ")";
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Student> students = new ArrayList<>();
+                students.add(new Student("S-104", "Amira"));
+                students.add(new Student("S-231", "Jonas"));
+                students.add(new Student("S-087", "Priya"));
+                HashMap<String, Student> byCard = indexByCard(students);
+                System.out.println(byCard.get("S-231"));
+                System.out.println(byCard.get("S-500"));
+                System.out.println(byCard.size());
+            }
+
+            public static HashMap<String, Student> indexByCard(ArrayList<Student> students) {
+                HashMap<String, Student> byCard = new HashMap<>();
+                for (Student student : students) {
+                    byCard.put(student.getCard(), student);
+                }
+                return byCard;
+            }
+        }
+      Student.java: |
+        public class Student {
+            private String card;
+            private String name;
+
+            public Student(String card, String name) {
+                this.card = card;
+                this.name = name;
+            }
+
+            public String getCard() {
+                return this.card;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public String toString() {
+                return this.name + " (" + this.card + ")";
+            }
+        }
+    hints:
+      - "Create a new `HashMap<String, Student>`, and go through the students with a for-each loop."
+      - "Each student goes in the map once, with the card number as the key: `byCard.put(student.getCard(), student);`. Return the map after the loop. A card that isn't in the map gives `null` from `get`."
+    require:
+      - pattern: \bpublic\s+static\s+HashMap\s*<\s*String\s*,\s*Student\s*>\s+indexByCard\s*\(\s*ArrayList\s*<\s*Student\s*>\s+\w+\s*\)
+        message: "Write the method as `public static HashMap<String, Student> indexByCard(ArrayList<Student> students)`."
+    tests:
+      - call: |
+          ArrayList<Student> students = new ArrayList<>();
+          students.add(new Student("S-104", "Amira"));
+          students.add(new Student("S-231", "Jonas"));
+          students.add(new Student("S-087", "Priya"));
+          HashMap<String, Student> byCard = indexByCard(students);
+          System.out.println(byCard.get("S-231"));
+          System.out.println(byCard.get("S-500"));
+          System.out.println(byCard.size());
+      - call: |
+          ArrayList<Student> students = new ArrayList<>();
+          for (int i = 1; i <= 500; i++) {
+              students.add(new Student("S-" + i, "Student " + i));
+          }
+          HashMap<String, Student> byCard = indexByCard(students);
+          System.out.println(byCard.size() + " " + byCard.get("S-377").getName());
+          System.out.println(byCard.get("S-0") + " " + byCard.containsKey("S-500"));
+        hidden: true
+      - call: |
+          ArrayList<Student> students = new ArrayList<>();
+          System.out.println(indexByCard(students).size());
+          students.add(new Student("K-9", "Mei"));
+          HashMap<String, Student> byCard = indexByCard(students);
+          System.out.println(byCard.get("K-9") + " " + students.size());
+        hidden: true
+    more:
+      - task: |
+          A music player keeps the songs it has played in a list, and counts the plays of each song in a map. It also remembers, in a second map, the index of each song's latest play. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  String[] plays = {"Neon", "Harbor", "Neon", "Static", "Neon"};
+                  ArrayList<String> history = new ArrayList<>();
+                  HashMap<String, Integer> counts = new HashMap<>();
+                  HashMap<String, Integer> lastPlay = new HashMap<>();
+                  for (int i = 0; i < plays.length; i++) {
+                      history.add(plays[i]);
+                      counts.put(plays[i], counts.getOrDefault(plays[i], 0) + 1);
+                      lastPlay.put(plays[i], i);
+                  }
+                  System.out.println(history.size() + " " + counts.size());
+                  System.out.println(history.get(2) + " " + counts.get("Neon"));
+                  System.out.println(history.indexOf("Neon") + " " + lastPlay.get("Neon"));
+                  System.out.println(history.contains("Echo") + " " + counts.containsKey("Static"));
+              }
+          }
+        hints:
+          - "The list keeps every play, so it has 5 elements. Each map keeps every song once, as a key: there are 3 different songs."
+          - "`indexOf` finds the first play of Neon. In `lastPlay`, each new play of a song replaces the index stored before, so the map keeps the latest one."
+      - task: |
+          To end part 8: a photo library. `Photo.java` is ready: a photo has a file name, a place and a year, with the getters `getFile()`, `getPlace()` and `getYear()`, and its `toString` gives the file name and the year. File names are unique. In `PhotoLibrary.java`, write:
+
+          - the constructor,
+          - `add(Photo photo)`, which adds a photo to the library,
+          - `find(String file)`, which returns the photo with that file name, or `null` if there's none,
+          - `photosAt(String place)`, which returns a list of the photos taken at that place, in the order they were added, or an empty list for a place with no photos,
+          - `places()`, which returns a new list of the places that have photos, in alphabetical order.
+
+          Keep the photos in two hash maps: one from a file name to its photo, so that `find` goes straight to it, and one from a place to the list of its photos. `add` puts each photo in both. `Main.java` is a test drive, and it prints:
+
+          ```
+          [Bergen, Hanoi, Namib]
+          [dunes.jpg (2023), sunset.jpg (2024)]
+          fjord.jpg (2022)
+          null
+          0
+          ```
+        seed:
+          PhotoLibrary.java: |
+            import java.util.ArrayList;
+            import java.util.Collections;
+            import java.util.HashMap;
+
+            public class PhotoLibrary {
+
+                public PhotoLibrary() {
+
+                }
+
+                public void add(Photo photo) {
+
+                }
+
+                public Photo find(String file) {
+                    return null;
+                }
+
+                public ArrayList<Photo> photosAt(String place) {
+                    return null;
+                }
+
+                public ArrayList<String> places() {
+                    return null;
+                }
+            }
+          Photo.java: |
+            public class Photo {
+                private String file;
+                private String place;
+                private int year;
+
+                public Photo(String file, String place, int year) {
+                    this.file = file;
+                    this.place = place;
+                    this.year = year;
+                }
+
+                public String getFile() {
+                    return this.file;
+                }
+
+                public String getPlace() {
+                    return this.place;
+                }
+
+                public int getYear() {
+                    return this.year;
+                }
+
+                public String toString() {
+                    return this.file + " (" + this.year + ")";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    PhotoLibrary library = new PhotoLibrary();
+                    library.add(new Photo("dunes.jpg", "Namib", 2023));
+                    library.add(new Photo("harbor.jpg", "Bergen", 2021));
+                    library.add(new Photo("sunset.jpg", "Namib", 2024));
+                    library.add(new Photo("fjord.jpg", "Bergen", 2022));
+                    library.add(new Photo("market.jpg", "Hanoi", 2024));
+                    System.out.println(library.places());
+                    System.out.println(library.photosAt("Namib"));
+                    System.out.println(library.find("fjord.jpg"));
+                    System.out.println(library.find("glacier.jpg"));
+                    System.out.println(library.photosAt("Lima").size());
+                }
+            }
+        solution:
+          PhotoLibrary.java: |
+            import java.util.ArrayList;
+            import java.util.Collections;
+            import java.util.HashMap;
+
+            public class PhotoLibrary {
+                private HashMap<String, Photo> byFile;
+                private HashMap<String, ArrayList<Photo>> byPlace;
+
+                public PhotoLibrary() {
+                    this.byFile = new HashMap<>();
+                    this.byPlace = new HashMap<>();
+                }
+
+                public void add(Photo photo) {
+                    this.byFile.put(photo.getFile(), photo);
+                    String place = photo.getPlace();
+                    if (!this.byPlace.containsKey(place)) {
+                        this.byPlace.put(place, new ArrayList<>());
+                    }
+                    this.byPlace.get(place).add(photo);
+                }
+
+                public Photo find(String file) {
+                    return this.byFile.get(file);
+                }
+
+                public ArrayList<Photo> photosAt(String place) {
+                    return this.byPlace.getOrDefault(place, new ArrayList<>());
+                }
+
+                public ArrayList<String> places() {
+                    ArrayList<String> places = new ArrayList<>(this.byPlace.keySet());
+                    Collections.sort(places);
+                    return places;
+                }
+            }
+          Photo.java: |
+            public class Photo {
+                private String file;
+                private String place;
+                private int year;
+
+                public Photo(String file, String place, int year) {
+                    this.file = file;
+                    this.place = place;
+                    this.year = year;
+                }
+
+                public String getFile() {
+                    return this.file;
+                }
+
+                public String getPlace() {
+                    return this.place;
+                }
+
+                public int getYear() {
+                    return this.year;
+                }
+
+                public String toString() {
+                    return this.file + " (" + this.year + ")";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    PhotoLibrary library = new PhotoLibrary();
+                    library.add(new Photo("dunes.jpg", "Namib", 2023));
+                    library.add(new Photo("harbor.jpg", "Bergen", 2021));
+                    library.add(new Photo("sunset.jpg", "Namib", 2024));
+                    library.add(new Photo("fjord.jpg", "Bergen", 2022));
+                    library.add(new Photo("market.jpg", "Hanoi", 2024));
+                    System.out.println(library.places());
+                    System.out.println(library.photosAt("Namib"));
+                    System.out.println(library.find("fjord.jpg"));
+                    System.out.println(library.find("glacier.jpg"));
+                    System.out.println(library.photosAt("Lima").size());
+                }
+            }
+        hints:
+          - "Two instance variables: `private HashMap<String, Photo> byFile;` and `private HashMap<String, ArrayList<Photo>> byPlace;`, both created in the constructor. `find` is then one line, `return this.byFile.get(file);`."
+          - "`add` puts the photo in `byFile` under `photo.getFile()`, and on its place's list in `byPlace`, creating the list for the place's first photo. `photosAt` and `places` work like `dishesAt` and `tables` in step 3."
+        require:
+          - pattern: \bHashMap\s*<\s*String\s*,\s*Photo\s*>
+            message: "Keep a `HashMap<String, Photo>` from a file name to its photo, so that `find` goes straight to the photo."
+          - pattern: \bHashMap\s*<\s*String\s*,\s*ArrayList\s*<\s*Photo\s*>\s*>
+            message: "Keep the photos of each place in a `HashMap<String, ArrayList<Photo>>`."
+        forbid:
+          - pattern: \bclass\s+PhotoLibrary\b[\s\S]*\bSystem\s*\.\s*out\b[\s\S]*\bclass\s+Photo\b
+            message: "PhotoLibrary doesn't print. Its methods return their answers, and `main` prints them."
+        tests:
+          - name: The test drive
+          - call: |
+              PhotoLibrary library = new PhotoLibrary();
+              System.out.println(library.places() + " " + library.photosAt("Oslo") + " " + library.find("a.jpg"));
+              library.add(new Photo("a.jpg", "Oslo", 2020));
+              library.add(new Photo("b.jpg", "Cusco", 2021));
+              library.add(new Photo("c.jpg", "Oslo", 2019));
+              library.add(new Photo("d.jpg", "Accra", 2022));
+              library.add(new Photo("e.jpg", "Zagreb", 2023));
+              System.out.println(library.places());
+              System.out.println(library.photosAt("Oslo") + " " + library.photosAt("Cusco").size());
+              System.out.println(library.find("d.jpg").getPlace() + " " + library.find("z.jpg"));
+            hidden: true
+          - call: |
+              PhotoLibrary library = new PhotoLibrary();
+              for (int i = 1; i <= 300; i++) {
+                  library.add(new Photo("img" + i + ".jpg", "Place " + (i % 4), 2000 + i % 20));
+              }
+              System.out.println(library.places());
+              System.out.println(library.photosAt("Place 2").size() + " " + library.photosAt("Place 1").get(0));
+              System.out.println(library.find("img250.jpg").getPlace() + " " + library.find("img301.jpg"));
+            hidden: true

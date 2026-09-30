@@ -279,7 +279,7 @@ function codeOf(where, value) {
 }
 
 /** Imports a ```java main example gets automatically, when it uses these classes. */
-const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", Collections: "java.util.Collections", HashMap: "java.util.HashMap", Objects: "java.util.Objects", Random: "java.util.Random" };
+const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", Collections: "java.util.Collections", HashMap: "java.util.HashMap", Objects: "java.util.Objects", Random: "java.util.Random", List: "java.util.List", Map: "java.util.Map", Set: "java.util.Set", HashSet: "java.util.HashSet", Collection: "java.util.Collection" };
 function importsFor(code) {
   // Comments and string and char literals don't count, and neither does a class of the program's own.
   const java = code.replace(/"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, " ");

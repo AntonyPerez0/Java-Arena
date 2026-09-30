@@ -217,6 +217,29 @@ await test('a step that loads late gets the focus on its heading; a lesson file 
   await ctx.close();
 });
 
+await test('the home and course pages fetch the lesson their Continue button opens', async () => {
+  const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
+  const steps = course.modules.find((m) => m.id === 'printing').steps;
+  const { ctx, page, errors } = await newPage();
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), { version: 1, steps: { [steps[0].id]: { done: true, challenges: {} } }, settings: { mobileData: true } });
+  await page.addInitScript(() => {
+    window.__sawLoading = false;
+    new MutationObserver(() => {
+      if (document.getElementById('loading-h')) window.__sawLoading = true;
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const fetched = (page, s) => page.waitForFunction((f) => performance.getEntriesByType('resource').some((e) => e.name.endsWith(f)), `/lessons/printing/${s.slug}-${s.hash}.json`);
+  for (const [address, button] of [['', `Continue: ${steps[1].title}`], ['learn/', `Continue: ${steps[1].title}`]]) {
+    await page.goto(BASE + address);
+    await fetched(page, steps[1]);
+    await page.getByRole('link', { name: button }).click();
+    await page.locator('h1:not(#loading-h)', { hasText: steps[1].title }).waitFor();
+    expect(!(await page.evaluate(() => window.__sawLoading)), `no loading message after Continue on /${address}`);
+  }
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 console.log('Lessons');
 const lessonSession = await newPage();
 {

@@ -1,6 +1,7 @@
 import { ArrowRight, BookOpen, CalendarCheck, Check, Compass, Cpu, Crosshair, Lightbulb, ListChecks, Smartphone, WifiOff } from "lucide-react";
 import { Link } from "react-router-dom";
-import { course, modules, plan, stepPath, totalChallenges, totalSteps, modulePath } from "../content";
+import { useEffect } from "react";
+import { course, modules, plan, prefetchStep, stepPath, totalChallenges, totalSteps, modulePath } from "../content";
 import { localDay, useStore } from "../state/store";
 import { nextStep, stepsDone } from "../state/derived";
 import { useTitle } from "../lib/title";
@@ -25,6 +26,9 @@ export default function Home() {
   const first = modules[0];
   const drillCount = modules.reduce((a, m) => a + m.drills, 0) + course.interviewDrills;
   const dailyDone = localDay() in s.daily;
+  // Fetch the lesson the Continue button opens, so it shows at once.
+  const nextKey = done && next ? [next.module.id, next.step.slug] : null;
+  useEffect(() => (nextKey ? prefetchStep(nextKey[0], nextKey[1]) : undefined), [nextKey?.[0], nextKey?.[1]]);
   return (
     <div className="landing">
       <section className="hero">

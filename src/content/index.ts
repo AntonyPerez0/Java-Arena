@@ -59,6 +59,16 @@ export function loadStep(moduleId: string, slug: string): Promise<Step | null> {
   return p;
 }
 
+/** Runs `fn` when the browser has nothing else to do; returns a function that cancels it. */
+function whenIdle(fn: () => void): () => void {
+  if ("requestIdleCallback" in window) {
+    const id = requestIdleCallback(fn, { timeout: 5000 });
+    return () => cancelIdleCallback(id);
+  }
+  const id = setTimeout(fn, 1500);
+  return () => clearTimeout(id);
+}
+
 /**
  * Fetches a module's steps in the background, when the browser has nothing else to do, so moving
  * to any of them is instant (the steps in `first` right away).
@@ -67,15 +77,16 @@ export function prefetchModule(moduleId: string, first: string[] = []) {
   const m = moduleById.get(moduleId);
   if (!m) return () => {};
   for (const slug of first) loadStep(moduleId, slug).catch(() => {});
-  const rest = () => {
+  return whenIdle(() => {
     for (const s of m.steps) loadStep(moduleId, s.slug).catch(() => {});
-  };
-  if ("requestIdleCallback" in window) {
-    const id = requestIdleCallback(rest, { timeout: 5000 });
-    return () => cancelIdleCallback(id);
-  }
-  const id = setTimeout(rest, 1500);
-  return () => clearTimeout(id);
+  });
+}
+
+/** Fetches one step in the background, when the browser has nothing else to do (a "Continue" link's). */
+export function prefetchStep(moduleId: string, slug: string) {
+  return whenIdle(() => {
+    loadStep(moduleId, slug).catch(() => {});
+  });
 }
 
 /**

@@ -331,7 +331,7 @@ steps:
 
       ### Keys must match exactly
 
-      `get`, `containsKey` and `remove` find a key only if it's equal to a key in the map. The map looks where the key's hash code points, and compares the keys it finds there with `equals`. (Module 32 shows why both of those matter.) For Strings, equal means that every character is the same: `"lis"` and `"LIS "` are different keys from `"LIS"`. Keys that people type often come with small letters or extra spaces, so tidy them into the map's form first:
+      `get`, `containsKey` and `remove` find a key only if it's equal to a key in the map. The map works out the key's hash code, looks only at the keys with that same hash code, and uses `equals` to tell whether one of them is equal. (Module 32 shows why both of those matter.) For Strings, equal means that every character is the same: `"lis"` and `"LIS "` are different keys from `"LIS"`. Keys that people type often come with small letters or extra spaces, so tidy them into the map's form first:
 
       ```java run
       import java.util.HashMap;
@@ -1150,22 +1150,21 @@ steps:
 
       Now `record("Night Bus")` and `record(" night bus")` count the same song, and `timesPlayed("NIGHT BUS")` finds it. A method that forgot to call `tidy` would look for another key, and find nothing.
 
-      **Your turn:** an airport's baggage storage keeps travelers' bags on numbered shelves. Each bag gets a tag such as `B-417`, and the staff type the tags in any form: ` b-417` must find the same bag. Write the class `BagStorage`, which keeps the shelf of each stored bag in a `HashMap<String, Integer>`, with the tags as keys. Tidy every tag with `trim()` and `toUpperCase()` before it's used as a key. A private method `tidy` keeps that in one place.
+      **Your turn:** an airport's baggage storage keeps travelers' bags on numbered shelves. Each bag gets a tag such as `B-417`, and the staff type the tags in any form: ` b-417` must find the same bag. Write the class `BagStorage`, which keeps the shelf of each bag in a `HashMap<String, Integer>`, with the tags as keys. Tidy every tag with `trim()` and `toUpperCase()` before it's used as a key. A private method `tidy` keeps that in one place.
 
       - The constructor creates the map.
-      - `store(String tag, int shelf)` puts the bag on the shelf and returns `true`. If a bag with that tag is already stored, it changes nothing and returns `false`.
-      - `shelfOf(String tag)` returns the bag's shelf, or -1 for a tag that isn't stored.
-      - `pickUp(String tag)` hands the bag back: it removes the tag from the map and returns `true`. For a tag that isn't stored, it returns `false`.
+      - `leave(String tag, int shelf)` puts the bag on the shelf. When a bag with that tag is already stored, the staff have moved it: the method gives back the shelf it was on before. For a new bag, it gives back -1.
+      - `collect(String tag)` is for a traveler who comes back for a bag. It gives back the shelf to fetch the bag from, and after that the bag isn't stored anymore. For a tag that isn't stored, it gives back -1.
       - `bagsStored()` returns how many bags are stored.
 
       `Main.java` is a test drive, and prints:
 
       ```
-      true
-      true
-      false
-      5 -1 2
-      true false 1
+      -1
+      -1
+      3
+      2
+      1 -1 1
       ```
     seed:
       BagStorage.java: |
@@ -1178,16 +1177,12 @@ steps:
                 // Create the map here.
             }
 
-            public boolean store(String tag, int shelf) {
-                return false;
+            public int leave(String tag, int shelf) {
+                return 0;
             }
 
-            public int shelfOf(String tag) {
-                return -1;
-            }
-
-            public boolean pickUp(String tag) {
-                return false;
+            public int collect(String tag) {
+                return 0;
             }
 
             public int bagsStored() {
@@ -1198,11 +1193,11 @@ steps:
         public class Main {
             public static void main(String[] args) {
                 BagStorage storage = new BagStorage();
-                System.out.println(storage.store("B-417", 3));
-                System.out.println(storage.store(" c-802", 5));
-                System.out.println(storage.store("b-417 ", 1));
-                System.out.println(storage.shelfOf("C-802") + " " + storage.shelfOf("A-100") + " " + storage.bagsStored());
-                System.out.println(storage.pickUp("b-417") + " " + storage.pickUp("B-417") + " " + storage.bagsStored());
+                System.out.println(storage.leave("B-417", 3));
+                System.out.println(storage.leave(" c-802", 5));
+                System.out.println(storage.leave("b-417 ", 1));
+                System.out.println(storage.bagsStored());
+                System.out.println(storage.collect("B-417") + " " + storage.collect("b-417") + " " + storage.bagsStored());
             }
         }
     solution:
@@ -1216,26 +1211,18 @@ steps:
                 this.shelves = new HashMap<>();
             }
 
-            public boolean store(String tag, int shelf) {
+            public int leave(String tag, int shelf) {
                 String key = tidy(tag);
-                if (this.shelves.containsKey(key)) {
-                    return false;
-                }
+                int before = this.shelves.getOrDefault(key, -1);
                 this.shelves.put(key, shelf);
-                return true;
+                return before;
             }
 
-            public int shelfOf(String tag) {
-                return this.shelves.getOrDefault(tidy(tag), -1);
-            }
-
-            public boolean pickUp(String tag) {
+            public int collect(String tag) {
                 String key = tidy(tag);
-                if (!this.shelves.containsKey(key)) {
-                    return false;
-                }
+                int shelf = this.shelves.getOrDefault(key, -1);
                 this.shelves.remove(key);
-                return true;
+                return shelf;
             }
 
             public int bagsStored() {
@@ -1250,23 +1237,27 @@ steps:
         public class Main {
             public static void main(String[] args) {
                 BagStorage storage = new BagStorage();
-                System.out.println(storage.store("B-417", 3));
-                System.out.println(storage.store(" c-802", 5));
-                System.out.println(storage.store("b-417 ", 1));
-                System.out.println(storage.shelfOf("C-802") + " " + storage.shelfOf("A-100") + " " + storage.bagsStored());
-                System.out.println(storage.pickUp("b-417") + " " + storage.pickUp("B-417") + " " + storage.bagsStored());
+                System.out.println(storage.leave("B-417", 3));
+                System.out.println(storage.leave(" c-802", 5));
+                System.out.println(storage.leave("b-417 ", 1));
+                System.out.println(storage.bagsStored());
+                System.out.println(storage.collect("B-417") + " " + storage.collect("b-417") + " " + storage.bagsStored());
             }
         }
     hints:
       - "The constructor needs `this.shelves = new HashMap<>();`, or the map stays `null`. Then write `private String tidy(String tag) { return tag.trim().toUpperCase(); }`, and call it first in every method that gets a tag."
-      - "`store` and `pickUp` check `containsKey` first, and return `false` when the answer isn't the one they need. Since `put` replaces, `store` must not reach its `put` for a tag that's there. `shelfOf` is a `getOrDefault` with -1, `pickUp` takes the bag out with `remove`, and `bagsStored` is the map's `size()`."
+      - "`leave` and `collect` both start by getting the shelf the map has for the tag, `getOrDefault(key, -1)`, which is -1 for a tag that isn't stored. Then `leave` puts the new shelf, which replaces an old one, and `collect` takes the tag out with `remove`. Both give back the shelf they got first."
     require:
       - pattern: \.trim\s*\(
         message: "Remove the extra spaces of a tag with `trim()`."
       - pattern: \.toUpperCase\s*\(
         message: "Turn a tag into capitals with `toUpperCase()`."
+      - pattern: \b(getOrDefault|containsKey)\s*\(
+        message: "Find out whether a tag is stored with `getOrDefault` or `containsKey`."
+      - pattern: \.put\s*\(
+        message: "Put a left bag's shelf in the map with `put`."
       - pattern: \.remove\s*\(
-        message: "Take a picked-up bag out of the map with `remove`."
+        message: "Take a collected bag out of the map with `remove`."
     forbid:
       - pattern: \bArrayList\b
         message: "Keep the tags and their shelves in the HashMap."
@@ -1274,17 +1265,17 @@ steps:
       - name: The test drive
       - call: |
           BagStorage s = new BagStorage();
-          System.out.println(s.bagsStored() + " " + s.shelfOf("X-1") + " " + s.pickUp("X-1"));
-          System.out.println(s.store("x-1", 7) + " " + s.store("X-2", 7) + " " + s.store(" X-1", 2));
-          System.out.println(s.shelfOf("X-1") + " " + s.shelfOf("x-2 ") + " " + s.bagsStored());
-          System.out.println(s.pickUp(" x-2") + " " + s.shelfOf("X-2") + " " + s.store("X-2", 4) + " " + s.shelfOf("x-2"));
+          System.out.println(s.bagsStored() + " " + s.collect("X-1"));
+          System.out.println(s.leave("x-1", 7) + " " + s.leave("X-2", 7) + " " + s.leave(" X-1", 2) + " " + s.leave("X-1", 4));
+          System.out.println(s.bagsStored() + " " + s.collect("x-2 ") + " " + s.bagsStored());
+          System.out.println(s.collect(" x-1") + " " + s.collect("X-1") + " " + s.bagsStored() + " " + s.leave("X-2", 6));
         hidden: true
       - call: |
           BagStorage a = new BagStorage();
           BagStorage b = new BagStorage();
-          a.store("K-9", 0);
-          System.out.println(a.shelfOf("k-9") + " " + b.shelfOf("k-9") + " " + b.bagsStored());
-          System.out.println(b.pickUp("K-9") + " " + a.pickUp("K-9 ") + " " + a.bagsStored() + " " + a.shelfOf("K-9"));
+          a.leave("K-9", 0);
+          System.out.println(b.collect("k-9") + " " + b.bagsStored() + " " + a.bagsStored());
+          System.out.println(a.leave("k-9 ", 12) + " " + a.collect("K-9") + " " + a.bagsStored());
         hidden: true
     more:
       - task: |

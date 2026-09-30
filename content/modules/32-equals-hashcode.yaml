@@ -1,0 +1,2054 @@
+id: equals-hashcode
+summary: Objects of your own classes as the keys of a hash map. equals again, and why a HashMap can't find a key that's made again with the same values, what a hash code is and the rule that ties it to equals, writing hashCode by hand and with Objects.hash, approximate comparison that ignores some values or capital letters, and a small program with objects as keys, printed in an order you choose. MOOC section 8.3.
+steps:
+  - id: equals-hashcode-equals-again
+    slug: equals-again
+    title: equals, again
+    text: |
+      Module 23 gave classes an `equals` of their own, so that two objects with the same values count as equal. Module 31 used Strings and Integers as the keys of hash maps. This module brings the two together: objects of your own classes as hash map keys. That takes one more method, `hashCode`, and this step shows why.
+
+      ### A quick recap
+
+      Here's the theater seat from module 23, with its `equals`:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              Seat mine = new Seat("B", 7);
+              Seat yours = new Seat("B", 7);
+              System.out.println(mine == yours);
+              System.out.println(mine.equals(yours));
+
+              ArrayList<Seat> booked = new ArrayList<>();
+              booked.add(mine);
+              booked.add(new Seat("C", 2));
+              System.out.println(booked.contains(new Seat("C", 2)));
+              System.out.println(booked.indexOf(new Seat("B", 7)));
+              booked.remove(new Seat("B", 7));
+              System.out.println(booked);
+          }
+      }
+      // ==== Seat.java ====
+      public class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+
+          public String toString() {
+              return this.row + this.number;
+          }
+      }
+      ```
+
+      ```output
+      false
+      true
+      true
+      0
+      [C2]
+      ```
+
+      - `==` on two objects asks whether both variables refer to the same object. `mine` and `yours` come from two `new`s, so they're two objects, and `==` says `false` even though their values are the same.
+      - `equals` is Seat's own method, written the classic way: the header `public boolean equals(Object compared)`, `true` for the very same object, `false` for anything that isn't a Seat (`instanceof`), and otherwise a cast to Seat and a comparison of the values. The row is a String, so it's compared with `equals`, and the number with `==`.
+      - A list's `contains`, `indexOf` and `remove(value)` compare with `equals`, so they find a brand-new Seat that's equal to one in the list.
+
+      ### Seats as hash map keys
+
+      A theater wants to look up who holds each seat, so it keeps a `HashMap<Seat, String>` from a seat to a name. It's the same Seat class, with the same `equals`:
+
+      ```java run
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<Seat, String> holders = new HashMap<>();
+              Seat seat = new Seat("B", 7);
+              holders.put(seat, "Ada");
+              System.out.println(holders.get(seat));
+              System.out.println(holders.get(new Seat("B", 7)));
+              System.out.println(holders.containsKey(new Seat("B", 7)));
+
+              holders.put(new Seat("B", 7), "Ben");
+              System.out.println(holders.size());
+          }
+      }
+      // ==== Seat.java ====
+      public class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+
+          public String toString() {
+              return this.row + this.number;
+          }
+      }
+      ```
+
+      ```output
+      Ada
+      null
+      false
+      2
+      ```
+
+      - With the very object that was put in, `get` finds Ada.
+      - `new Seat("B", 7)` is equal to that key, and a list would have found it. The map doesn't: `get` gives `null`, and `containsKey` gives `false`.
+      - It gets worse. A `put` with a key that's already in the map should replace its value (module 31), but the new B7 seat didn't replace Ada: the map added it as a second key. Now it holds B7 twice, once for Ada and once for Ben.
+
+      A hash map doesn't go through all of its keys and compare each one with `equals`, the way a list's `contains` does: that would be slow in a big map. It first asks the key for a number, its **hash code**, and uses that number to decide where to look. Seat has an `equals`, but no `hashCode` of its own, so the map looks in the wrong place. The next step shows what a hash code is, and step 3 gives Seat a `hashCode`. Until then, keep one rule in mind: a class whose objects are hash map keys needs both methods.
+
+      **Your turn:** a board game puts pieces on squares with names like `a1`. `Square` has an `equals`, but no `hashCode`. What does this program print?
+    predict: |
+      import java.util.ArrayList;
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              Square corner = new Square("a", 1);
+              ArrayList<Square> taken = new ArrayList<>();
+              taken.add(corner);
+              HashMap<Square, String> pieces = new HashMap<>();
+              pieces.put(corner, "rook");
+              pieces.put(new Square("a", 1), "king");
+
+              System.out.println(taken.contains(new Square("a", 1)));
+              System.out.println(pieces.get(corner));
+              System.out.println(pieces.containsKey(new Square("a", 1)));
+              System.out.println(pieces.size());
+          }
+      }
+      // ==== Square.java ====
+      public class Square {
+          private String column;
+          private int row;
+
+          public Square(String column, int row) {
+              this.column = column;
+              this.row = row;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Square)) {
+                  return false;
+              }
+              Square other = (Square) compared;
+              return this.column.equals(other.column) && this.row == other.row;
+          }
+
+          public String toString() {
+              return this.column + this.row;
+          }
+      }
+    hints:
+      - "The list compares with `equals`, and a new `Square(\"a\", 1)` is equal to `corner`. `pieces.get(corner)` looks up the very object that was put in with `rook`."
+      - "Without a `hashCode` of its own, every new Square looks like a different key to the map. So the `put` with a new a1 adds a second key instead of replacing `rook`, and `containsKey` with a third new a1 finds nothing."
+    more:
+      - task: |
+          A coin collector describes each coin by its country, its year and its value in cents. Two coins are equal when all three are the same. In `Coin.java`, write the method `equals` the classic way, as in the recap. The check runs:
+
+          ```java fragment
+          Coin mine = new Coin("Italy", 2002, 50);
+          System.out.println(mine.equals(new Coin("Italy", 2002, 50)));
+          System.out.println(mine.equals(new Coin("Italy", 2002, 20)));
+          ArrayList<Coin> album = new ArrayList<>();
+          album.add(new Coin("Kenya", 2005, 10));
+          album.add(mine);
+          System.out.println(album.indexOf(new Coin("Italy", 2002, 50)));
+          ```
+
+          and expects:
+
+          ```
+          true
+          false
+          1
+          ```
+        seed:
+          Coin.java: |
+            public class Coin {
+                private String country;
+                private int year;
+                private int cents;
+
+                public Coin(String country, int year, int cents) {
+                    this.country = country;
+                    this.year = year;
+                    this.cents = cents;
+                }
+
+                // Write the equals method here.
+
+                public String toString() {
+                    return this.country + " " + this.year + " " + this.cents + "c";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Coin mine = new Coin("Italy", 2002, 50);
+                    System.out.println(mine.equals(new Coin("Italy", 2002, 50)));
+                    System.out.println(mine.equals(new Coin("Italy", 2002, 20)));
+                    ArrayList<Coin> album = new ArrayList<>();
+                    album.add(new Coin("Kenya", 2005, 10));
+                    album.add(mine);
+                    System.out.println(album.indexOf(new Coin("Italy", 2002, 50)));
+                }
+            }
+        solution:
+          Coin.java: |
+            public class Coin {
+                private String country;
+                private int year;
+                private int cents;
+
+                public Coin(String country, int year, int cents) {
+                    this.country = country;
+                    this.year = year;
+                    this.cents = cents;
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Coin)) {
+                        return false;
+                    }
+                    Coin other = (Coin) compared;
+                    return this.country.equals(other.country) && this.year == other.year && this.cents == other.cents;
+                }
+
+                public String toString() {
+                    return this.country + " " + this.year + " " + this.cents + "c";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Coin mine = new Coin("Italy", 2002, 50);
+                    System.out.println(mine.equals(new Coin("Italy", 2002, 50)));
+                    System.out.println(mine.equals(new Coin("Italy", 2002, 20)));
+                    ArrayList<Coin> album = new ArrayList<>();
+                    album.add(new Coin("Kenya", 2005, 10));
+                    album.add(mine);
+                    System.out.println(album.indexOf(new Coin("Italy", 2002, 50)));
+                }
+            }
+        hints:
+          - "Follow Seat's `equals`: the header `public boolean equals(Object compared)`, the `this == compared` check, `instanceof Coin`, and the cast `Coin other = (Coin) compared;`."
+          - "The last line compares all three values: `return this.country.equals(other.country) && this.year == other.year && this.cents == other.cents;`. The country is a String, so it's compared with `equals`."
+        require:
+          - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+            message: "Write the header exactly as `public boolean equals(Object compared)`, so that lists and maps use your method."
+          - pattern: \binstanceof\s+Coin\b
+            message: "Check with `instanceof Coin` that the compared object is a coin, before the cast."
+        tests:
+          - call: |
+              Coin mine = new Coin("Italy", 2002, 50);
+              System.out.println(mine.equals(new Coin("Italy", 2002, 50)));
+              System.out.println(mine.equals(new Coin("Italy", 2002, 20)));
+              ArrayList<Coin> album = new ArrayList<>();
+              album.add(new Coin("Kenya", 2005, 10));
+              album.add(mine);
+              System.out.println(album.indexOf(new Coin("Italy", 2002, 50)));
+          - call: |
+              Coin coin = new Coin("Kenya", 2005, 10);
+              System.out.println(coin.equals(new Coin("Kenya", 2006, 10)));
+              System.out.println(coin.equals(new Coin("Chile", 2005, 10)));
+              System.out.println(coin.equals(coin));
+              System.out.println(coin.equals("Kenya 2005 10c"));
+              System.out.println(coin.equals(null));
+            hidden: true
+          - call: |
+              String start = "Ken";
+              Coin built = new Coin(start + "ya", 2005, 10);
+              Coin written = new Coin("Kenya", 2005, 10);
+              System.out.println(built.equals(written) + " " + written.equals(built));
+              ArrayList<Coin> album = new ArrayList<>();
+              album.add(written);
+              album.remove(built);
+              System.out.println(album.size());
+            hidden: true
+      - task: |
+          A drawing program keeps the color of every pixel of a small picture in a list. A color is three numbers from 0 to 255: how much red, green and blue it has. In `Color.java`, write `equals`: two colors are equal when all three numbers are the same. Then, in `Main.java`, write the method `countColors(ArrayList<Color> pixels)`, which returns how many different colors the picture uses. Keep a second list of the colors seen so far, and add a pixel's color to it only when an equal color isn't there yet. The check runs:
+
+          ```java fragment
+          ArrayList<Color> pixels = new ArrayList<>();
+          pixels.add(new Color(255, 0, 0));
+          pixels.add(new Color(0, 0, 255));
+          pixels.add(new Color(255, 0, 0));
+          pixels.add(new Color(255, 255, 255));
+          pixels.add(new Color(0, 0, 255));
+          System.out.println(countColors(pixels));
+          ```
+
+          and expects:
+
+          ```
+          3
+          ```
+        seed:
+          Color.java: |
+            public class Color {
+                private int red;
+                private int green;
+                private int blue;
+
+                public Color(int red, int green, int blue) {
+                    this.red = red;
+                    this.green = green;
+                    this.blue = blue;
+                }
+
+                // Write the equals method here.
+
+                public String toString() {
+                    return "(" + this.red + ", " + this.green + ", " + this.blue + ")";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Color> pixels = new ArrayList<>();
+                    pixels.add(new Color(255, 0, 0));
+                    pixels.add(new Color(0, 0, 255));
+                    pixels.add(new Color(255, 0, 0));
+                    pixels.add(new Color(255, 255, 255));
+                    pixels.add(new Color(0, 0, 255));
+                    System.out.println(countColors(pixels));
+                }
+
+                // Write the method countColors here.
+            }
+        solution:
+          Color.java: |
+            public class Color {
+                private int red;
+                private int green;
+                private int blue;
+
+                public Color(int red, int green, int blue) {
+                    this.red = red;
+                    this.green = green;
+                    this.blue = blue;
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Color)) {
+                        return false;
+                    }
+                    Color other = (Color) compared;
+                    return this.red == other.red && this.green == other.green && this.blue == other.blue;
+                }
+
+                public String toString() {
+                    return "(" + this.red + ", " + this.green + ", " + this.blue + ")";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Color> pixels = new ArrayList<>();
+                    pixels.add(new Color(255, 0, 0));
+                    pixels.add(new Color(0, 0, 255));
+                    pixels.add(new Color(255, 0, 0));
+                    pixels.add(new Color(255, 255, 255));
+                    pixels.add(new Color(0, 0, 255));
+                    System.out.println(countColors(pixels));
+                }
+
+                public static int countColors(ArrayList<Color> pixels) {
+                    ArrayList<Color> seen = new ArrayList<>();
+                    for (Color pixel : pixels) {
+                        if (!seen.contains(pixel)) {
+                            seen.add(pixel);
+                        }
+                    }
+                    return seen.size();
+                }
+            }
+        hints:
+          - "Color's `equals` is the classic one, with Color in place of Seat. All three values are ints, so the last line is `return this.red == other.red && this.green == other.green && this.blue == other.blue;`."
+          - "In `countColors`, make an `ArrayList<Color> seen`, go through the pixels with a for-each loop, and add a pixel to `seen` when `!seen.contains(pixel)`. The answer is `seen.size()`. Without `equals`, `contains` finds nothing, and every pixel counts as a new color."
+        require:
+          - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+            message: "Write the header exactly as `public boolean equals(Object compared)`, so that `contains` uses your method."
+          - pattern: \bpublic\s+static\s+int\s+countColors\s*\(\s*ArrayList<Color>\s+\w+\s*\)
+            message: "Write the method as `public static int countColors(ArrayList<Color> pixels)`."
+        tests:
+          - call: |
+              ArrayList<Color> pixels = new ArrayList<>();
+              pixels.add(new Color(255, 0, 0));
+              pixels.add(new Color(0, 0, 255));
+              pixels.add(new Color(255, 0, 0));
+              pixels.add(new Color(255, 255, 255));
+              pixels.add(new Color(0, 0, 255));
+              System.out.println(countColors(pixels));
+          - call: |
+              ArrayList<Color> pixels = new ArrayList<>();
+              System.out.println(countColors(pixels));
+              for (int i = 0; i < 4; i++) {
+                  pixels.add(new Color(10, 20, 30));
+              }
+              System.out.println(countColors(pixels));
+              pixels.add(new Color(10, 20, 31));
+              pixels.add(new Color(30, 20, 10));
+              pixels.add(new Color(10, 21, 30));
+              System.out.println(countColors(pixels) + " " + pixels.size());
+            hidden: true
+          - call: |
+              Color gray = new Color(128, 128, 128);
+              System.out.println(gray.equals(new Color(128, 128, 128)));
+              System.out.println(gray.equals(new Color(128, 128, 0)));
+              System.out.println(gray.equals("gray"));
+              System.out.println(gray.equals(null));
+            hidden: true
+
+  - id: equals-hashcode-what-hashcode-is
+    slug: what-hashcode-is
+    title: What a hash code is
+    text: |
+      ### A number for every object
+
+      Every object has a method `hashCode()`, just as every object has `equals` and `toString`. It returns an `int` called the object's **hash code**: a number worked out from the object, a kind of short summary of it. Strings and Integers have a `hashCode` of their own:
+
+      ```java main
+      System.out.println("abc".hashCode());
+      System.out.println("Ada".hashCode());
+
+      String start = "Ad";
+      String built = start + "a";
+      System.out.println(built == "Ada");
+      System.out.println(built.equals("Ada"));
+      System.out.println(built.hashCode());
+
+      System.out.println(Integer.valueOf(2024).hashCode());
+      ```
+
+      ```output
+      96354
+      65662
+      false
+      true
+      65662
+      2024
+      ```
+
+      - A String's hash code is worked out from its characters. `built` is made while the program runs, so it's a different object from the `"Ada"` in the code, and `==` says `false`. But it has the same characters, so it's equal to `"Ada"`, and it has the same hash code.
+      - String's `hashCode` starts from 0 and, for each character in turn, multiplies what it has by 31 and adds the character's code. The codes of `a`, `b` and `c` are 97, 98 and 99, so for `"abc"`: 0 * 31 + 97 is 97, 97 * 31 + 98 is 3105, and 3105 * 31 + 99 is 96354. A String of one character has that character's code as its hash code.
+      - For longer Strings, the number soon grows past the largest `int` and wraps around (module 4), so a hash code can be any `int`, a negative one too. `"Oakdale".hashCode()` is -22733073.
+      - An Integer's hash code is its own value.
+
+      ### How a hash map uses it
+
+      A hash map keeps its entries in many small groups, called **buckets**, and the key's hash code decides which bucket an entry goes into:
+
+      - `put(key, value)` works out the key's hash code, picks a bucket from it, and puts the key and the value there. If an equal key is in that bucket already, it replaces that key's value instead.
+      - `get(key)` works out the hash code of the key it's given, goes straight to that bucket, and looks only at the keys there. It compares a key with `equals` only when the two hash codes are the same.
+
+      So a lookup looks at a few keys, not at all of them, and a hash map finds a key about as fast among a million keys as among ten. A list's `contains` compares with every element in turn, like module 28's linear search.
+
+      Here's a picture of that with 8 buckets. One simple way to pick a bucket is the remainder of the hash code divided by the number of buckets. (Java's `HashMap` picks its bucket in a slightly different way, and adds more buckets as it grows, but the idea is the same.)
+
+      | Key | Hash code | Bucket: hash code % 8 |
+      | --- | --- | --- |
+      | `"Ada"` | 65662 | 6 |
+      | `"Ben"` | 66667 | 3 |
+      | `"Cy"` | 2198 | 6 |
+
+      `"Ada"` and `"Cy"` share bucket 6. `get("Cy")` goes to bucket 6, finds two keys there, and the hash codes and `equals` tell it which one is `"Cy"`. `get("Ben")` goes to bucket 3 and never looks at the other keys at all.
+
+      ### Why the seats weren't found
+
+      Seat in step 1 has no `hashCode` of its own, so it has the one every class gets from Java. Like the `equals` every class gets, it knows nothing about rows and numbers: it gives, as far as it can, a different number to every object, even to two seats with the same values. Java makes no promise about those numbers: they can change from one run of the program to the next, and from one Java system to another. That's why this course never prints them.
+
+      So `new Seat("B", 7)` has a different hash code from the B7 seat in the map. `get` looks in the bucket of the new hash code, and even if that happens to be the right bucket, the hash codes differ, so `equals` is never called: `null`. The second `put` went the same way: it found no equal key, so it added a second B7.
+
+      ### The rule
+
+      For a hash map to work, `equals` and `hashCode` must agree. Java's documentation of `hashCode` sets out the rule:
+
+      - If two objects are equal according to `equals`, calling `hashCode` on each of them must give the same `int`.
+      - Two objects that aren't equal may have the same hash code. That's allowed, but different hash codes for different objects can make a hash map faster, since fewer keys share a bucket.
+      - Calling `hashCode` on the same object again, while the program runs, must give the same number, as long as nothing that `equals` compares has changed.
+
+      Seat breaks the first rule: its `equals` says two B7 seats are equal, but their hash codes differ. Strings and Integers follow it, as the program above showed with `built` and `"Ada"`. That's why module 31's String and Integer keys just worked.
+
+      The rule goes one way only. Equal objects must have equal hash codes, but equal hash codes don't make two objects equal. There are far more possible Strings than `int` values, so some different Strings must share a hash code. The last challenge of this step shows two of them.
+
+      **Your turn:** a ticket machine keeps the fare to each station, in cents, in a `HashMap<String, Integer>`. What does this program print?
+    predict: |
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, Integer> fares = new HashMap<>();
+              fares.put("Oakdale", 450);
+
+              String first = "Oak";
+              String typed = first + "dale";
+              System.out.println(typed == "Oakdale");
+              System.out.println(typed.equals("Oakdale"));
+              System.out.println(typed.hashCode() == "Oakdale".hashCode());
+              System.out.println(fares.get(typed));
+              System.out.println(Integer.valueOf(450).hashCode());
+          }
+      }
+    hints:
+      - "`typed` is made while the program runs, so it's a different object from the `\"Oakdale\"` in the code, and `==` says false. But its characters are the same, so `equals` says true."
+      - "Equal Strings always have equal hash codes, so the map finds the key and gives its value. An Integer's hash code is its own value."
+    more:
+      - task: |
+          Work out buckets the way the table above does. Write the method `bucketOf(String key, int buckets)`, which returns the bucket of a key in a map with the given number of buckets: the remainder of the key's hash code divided by the number of buckets. A hash code can be negative, and then so is the remainder, so return it without its minus sign (`Math.abs`, module 7). The check runs:
+
+          ```java fragment
+          System.out.println(bucketOf("Ada", 8));
+          System.out.println(bucketOf("Ben", 8));
+          System.out.println(bucketOf("Cy", 8));
+          ```
+
+          and expects:
+
+          ```
+          6
+          3
+          6
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(bucketOf("Ada", 8));
+                  System.out.println(bucketOf("Ben", 8));
+                  System.out.println(bucketOf("Cy", 8));
+              }
+
+              // Write the method bucketOf here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(bucketOf("Ada", 8));
+                  System.out.println(bucketOf("Ben", 8));
+                  System.out.println(bucketOf("Cy", 8));
+              }
+
+              public static int bucketOf(String key, int buckets) {
+                  return Math.abs(key.hashCode() % buckets);
+              }
+          }
+        hints:
+          - "`key.hashCode()` gives the hash code, and `%` gives the remainder: `key.hashCode() % buckets`."
+          - "Put it inside `Math.abs(...)`, so that a negative remainder loses its minus sign: `return Math.abs(key.hashCode() % buckets);`."
+        require:
+          - pattern: \bpublic\s+static\s+int\s+bucketOf\s*\(\s*String\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static int bucketOf(String key, int buckets)`."
+          - pattern: \.hashCode\s*\(
+            message: "Work out the key's hash code with `key.hashCode()`."
+        tests:
+          - call: |
+              System.out.println(bucketOf("Ada", 8));
+              System.out.println(bucketOf("Ben", 8));
+              System.out.println(bucketOf("Cy", 8));
+          - call: |
+              System.out.println(bucketOf("Oakdale", 8));
+              System.out.println(bucketOf("Lisbon", 16));
+              System.out.println(bucketOf("Grace Hopper", 16));
+            hidden: true
+          - call: |
+              String start = "Ad";
+              System.out.println(bucketOf(start + "a", 8) + " " + bucketOf("Ada", 1) + " " + bucketOf("", 5));
+              System.out.println(bucketOf("Aa", 5) == bucketOf("BB", 5));
+            hidden: true
+      - task: |
+          Two different Strings can have the same hash code. What does this program print? The character codes are 65 for `A`, 66 for `B` and 97 for `a`.
+        predict: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("Aa".hashCode());
+                  System.out.println("BB".hashCode());
+                  System.out.println("Aa".equals("BB"));
+
+                  HashMap<String, Integer> points = new HashMap<>();
+                  points.put("Aa", 1);
+                  points.put("BB", 2);
+                  System.out.println(points.size());
+                  System.out.println(points.get("Aa"));
+              }
+          }
+        hints:
+          - "Use String's recipe: start from 0, and for each character, multiply by 31 and add the code. For `\"Aa\"`: 0 * 31 + 65 is 65, and 65 * 31 + 97 is 2112. Work out `\"BB\"` the same way."
+          - "The hash codes are the same, but the Strings aren't equal. The map keeps both keys in the same bucket, and `equals` tells them apart, so nothing is lost."
+
+  - id: equals-hashcode-writing-hashcode
+    slug: writing-hashcode
+    title: Writing hashCode
+    text: |
+      ### A hashCode for Seat
+
+      A class gets hash codes of its own the same way it gets its own `equals`: by writing the method. The header must be exactly `public int hashCode()`, with no parameters and an `int` back. A method with any other name, even `hashcode` with a small `c`, is just a new method, and no hash map ever calls it.
+
+      What should it return? The rule says that equal seats must get equal hash codes, and two seats are equal when their rows and numbers are. So work the hash code out from those two values, and from nothing else:
+
+      ```java fragment
+      public int hashCode() {
+          return 31 * this.row.hashCode() + this.number;
+      }
+      ```
+
+      - The row is a String, and equal Strings have equal hash codes. The number is an `int`, used as it is. So two equal seats give the same result, and the rule holds.
+      - Why times 31? `this.row.hashCode() + this.number` would follow the rule too, but many different seats would share a hash code. A one-letter String's hash code is the letter's code, so B7 would be 66 + 7 = 73, and so would C6 (67 + 6) and D5 (68 + 5). With the 31, B7 is 66 * 31 + 7 = 2053, and C6 is 67 * 31 + 6 = 2083. String's own `hashCode` uses the same trick.
+      - Use only the values that `equals` compares. A value that `equals` ignores could give two equal seats different hash codes, and that breaks the rule. (The last challenge of this step shows what happens then.)
+      - If the calculation grows past the largest `int` and wraps around, that's fine: any `int` will do as a hash code.
+
+      With both methods in Seat, step 1's program works:
+
+      ```java run
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<Seat, String> holders = new HashMap<>();
+              holders.put(new Seat("B", 7), "Ada");
+              System.out.println(holders.get(new Seat("B", 7)));
+              System.out.println(holders.containsKey(new Seat("B", 8)));
+
+              holders.put(new Seat("B", 7), "Ben");
+              System.out.println(holders.size() + " " + holders.get(new Seat("B", 7)));
+              System.out.println(new Seat("B", 7).hashCode());
+          }
+      }
+      // ==== Seat.java ====
+      public class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+
+          public int hashCode() {
+              return 31 * this.row.hashCode() + this.number;
+          }
+
+          public String toString() {
+              return this.row + this.number;
+          }
+      }
+      ```
+
+      ```output
+      Ada
+      false
+      1 Ben
+      2053
+      ```
+
+      - A new B7 seat has the same hash code as the key in the map, so `get` looks in the right bucket, and `equals` confirms the match.
+      - `put` with an equal key replaces the value, as it does with String keys. There's one B7 seat, and Ben holds it now.
+      - Seat's own hash code is the same on every run, so it's fine to print. Only the default one, of a class without a `hashCode` of its own, is never printed in this course.
+
+      ### Objects.hash
+
+      With more values, combining them by hand gets long. The class `Objects`, in `java.util`, has a method for it: `Objects.hash(...)` takes any number of values, and combines their hash codes with 31, much as String's `hashCode` combines its characters. Seat's `hashCode` could be:
+
+      ```java fragment
+      public int hashCode() {
+          return Objects.hash(this.row, this.number);
+      }
+      ```
+
+      - `Seat.java` then needs the line `import java.util.Objects;` at the top, just as a class that uses `ArrayList` needs its import.
+      - Give it the same values that `equals` compares. It takes numbers as well as objects.
+      - It doesn't give the same number as the hand-written version (for B7 it's 3014), and it doesn't need to: any `hashCode` that follows the rule works.
+      - A value that's `null` counts as 0, where `this.row.hashCode()` would crash with a NullPointerException.
+
+      ### Letting the editor write them
+
+      Writing `equals` and `hashCode` is routine enough that most Java editors, such as IntelliJ IDEA, Eclipse and NetBeans, can generate both from the instance variables you pick, each with a line `@Override` above it, which module 34 explains. However they're written, write them together: Java's documentation of `equals` says that a class with its own `equals` generally needs its own `hashCode` too.
+
+      **Your turn:** the board game's squares get hash codes of their own. In `Square.java`, write `hashCode`: 31 times the hash code of the column, plus the row. The check lets players claim squares, and looks them up with new squares:
+
+      ```java fragment
+      HashMap<Square, String> owners = new HashMap<>();
+      owners.put(new Square("a", 1), "Ada");
+      owners.put(new Square("e", 1), "Ben");
+      owners.put(new Square("a", 1), "Cy");
+      System.out.println(owners.get(new Square("a", 1)));
+      System.out.println(owners.containsKey(new Square("e", 2)));
+      System.out.println(owners.size());
+      System.out.println(new Square("e", 1).hashCode());
+      ```
+
+      and expects:
+
+      ```
+      Cy
+      false
+      2
+      3132
+      ```
+    seed:
+      Square.java: |
+        public class Square {
+            private String column;
+            private int row;
+
+            public Square(String column, int row) {
+                this.column = column;
+                this.row = row;
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Square)) {
+                    return false;
+                }
+                Square other = (Square) compared;
+                return this.column.equals(other.column) && this.row == other.row;
+            }
+
+            // Write the hashCode method here.
+
+            public String toString() {
+                return this.column + this.row;
+            }
+        }
+      Main.java: |
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                HashMap<Square, String> owners = new HashMap<>();
+                owners.put(new Square("a", 1), "Ada");
+                owners.put(new Square("e", 1), "Ben");
+                owners.put(new Square("a", 1), "Cy");
+                System.out.println(owners.get(new Square("a", 1)));
+                System.out.println(owners.containsKey(new Square("e", 2)));
+                System.out.println(owners.size());
+                System.out.println(new Square("e", 1).hashCode());
+            }
+        }
+    solution:
+      Square.java: |
+        public class Square {
+            private String column;
+            private int row;
+
+            public Square(String column, int row) {
+                this.column = column;
+                this.row = row;
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Square)) {
+                    return false;
+                }
+                Square other = (Square) compared;
+                return this.column.equals(other.column) && this.row == other.row;
+            }
+
+            public int hashCode() {
+                return 31 * this.column.hashCode() + this.row;
+            }
+
+            public String toString() {
+                return this.column + this.row;
+            }
+        }
+      Main.java: |
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                HashMap<Square, String> owners = new HashMap<>();
+                owners.put(new Square("a", 1), "Ada");
+                owners.put(new Square("e", 1), "Ben");
+                owners.put(new Square("a", 1), "Cy");
+                System.out.println(owners.get(new Square("a", 1)));
+                System.out.println(owners.containsKey(new Square("e", 2)));
+                System.out.println(owners.size());
+                System.out.println(new Square("e", 1).hashCode());
+            }
+        }
+    hints:
+      - "The header is `public int hashCode() {`. The column is a String, so its hash code is `this.column.hashCode()`."
+      - "`return 31 * this.column.hashCode() + this.row;`: the two values that `equals` compares, and nothing else."
+    require:
+      - pattern: \bpublic\s+int\s+hashCode\s*\(\s*\)
+        message: "Write the header exactly as `public int hashCode()`, so that the map uses your method."
+    tests:
+      - call: |
+          HashMap<Square, String> owners = new HashMap<>();
+          owners.put(new Square("a", 1), "Ada");
+          owners.put(new Square("e", 1), "Ben");
+          owners.put(new Square("a", 1), "Cy");
+          System.out.println(owners.get(new Square("a", 1)));
+          System.out.println(owners.containsKey(new Square("e", 2)));
+          System.out.println(owners.size());
+          System.out.println(new Square("e", 1).hashCode());
+      - call: |
+          HashMap<Square, String> owners = new HashMap<>();
+          owners.put(new Square("h", 8), "Ada");
+          String letter = "h";
+          System.out.println(owners.get(new Square(letter, 8)) + " " + owners.get(new Square("h", 7)) + " " + owners.get(new Square("g", 8)));
+          System.out.println(new Square("a", 1).hashCode() + " " + new Square("b", 2).hashCode());
+        hidden: true
+      - call: |
+          HashMap<Square, Integer> visits = new HashMap<>();
+          for (int row = 1; row <= 8; row++) {
+              visits.put(new Square("c", row), row * 10);
+          }
+          visits.put(new Square("c", 3), 99);
+          System.out.println(visits.size() + " " + visits.get(new Square("c", 3)) + " " + visits.get(new Square("c", 8)));
+        hidden: true
+    more:
+      - task: |
+          The coin collector from step 1 now counts coins in a `HashMap<Coin, Integer>`. `Coin.java` has its `equals`. Give it a `hashCode` too, with `Objects.hash` and the same three values that `equals` compares. Then, in `Main.java`, write the method `countCoins(ArrayList<Coin> coins)`, which returns a `HashMap<Coin, Integer>` from each different coin to how many times it's in the list. The check runs:
+
+          ```java fragment
+          ArrayList<Coin> box = new ArrayList<>();
+          box.add(new Coin("Italy", 2002, 50));
+          box.add(new Coin("Kenya", 2005, 10));
+          box.add(new Coin("Italy", 2002, 50));
+          box.add(new Coin("Italy", 2002, 20));
+          HashMap<Coin, Integer> counts = countCoins(box);
+          System.out.println(counts.get(new Coin("Italy", 2002, 50)));
+          System.out.println(counts.get(new Coin("Kenya", 2005, 10)));
+          System.out.println(counts.size());
+          ```
+
+          and expects:
+
+          ```
+          2
+          1
+          3
+          ```
+        seed:
+          Coin.java: |
+            public class Coin {
+                private String country;
+                private int year;
+                private int cents;
+
+                public Coin(String country, int year, int cents) {
+                    this.country = country;
+                    this.year = year;
+                    this.cents = cents;
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Coin)) {
+                        return false;
+                    }
+                    Coin other = (Coin) compared;
+                    return this.country.equals(other.country) && this.year == other.year && this.cents == other.cents;
+                }
+
+                // Write the hashCode method here.
+
+                public String toString() {
+                    return this.country + " " + this.year + " " + this.cents + "c";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Coin> box = new ArrayList<>();
+                    box.add(new Coin("Italy", 2002, 50));
+                    box.add(new Coin("Kenya", 2005, 10));
+                    box.add(new Coin("Italy", 2002, 50));
+                    box.add(new Coin("Italy", 2002, 20));
+                    HashMap<Coin, Integer> counts = countCoins(box);
+                    System.out.println(counts.get(new Coin("Italy", 2002, 50)));
+                    System.out.println(counts.get(new Coin("Kenya", 2005, 10)));
+                    System.out.println(counts.size());
+                }
+
+                // Write the method countCoins here.
+            }
+        solution:
+          Coin.java: |
+            import java.util.Objects;
+
+            public class Coin {
+                private String country;
+                private int year;
+                private int cents;
+
+                public Coin(String country, int year, int cents) {
+                    this.country = country;
+                    this.year = year;
+                    this.cents = cents;
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Coin)) {
+                        return false;
+                    }
+                    Coin other = (Coin) compared;
+                    return this.country.equals(other.country) && this.year == other.year && this.cents == other.cents;
+                }
+
+                public int hashCode() {
+                    return Objects.hash(this.country, this.year, this.cents);
+                }
+
+                public String toString() {
+                    return this.country + " " + this.year + " " + this.cents + "c";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Coin> box = new ArrayList<>();
+                    box.add(new Coin("Italy", 2002, 50));
+                    box.add(new Coin("Kenya", 2005, 10));
+                    box.add(new Coin("Italy", 2002, 50));
+                    box.add(new Coin("Italy", 2002, 20));
+                    HashMap<Coin, Integer> counts = countCoins(box);
+                    System.out.println(counts.get(new Coin("Italy", 2002, 50)));
+                    System.out.println(counts.get(new Coin("Kenya", 2005, 10)));
+                    System.out.println(counts.size());
+                }
+
+                public static HashMap<Coin, Integer> countCoins(ArrayList<Coin> coins) {
+                    HashMap<Coin, Integer> counts = new HashMap<>();
+                    for (Coin coin : coins) {
+                        if (counts.containsKey(coin)) {
+                            counts.put(coin, counts.get(coin) + 1);
+                        } else {
+                            counts.put(coin, 1);
+                        }
+                    }
+                    return counts;
+                }
+            }
+        hints:
+          - "In `Coin.java`, add `import java.util.Objects;` at the top, and the method `public int hashCode() { return Objects.hash(this.country, this.year, this.cents); }`."
+          - "In `countCoins`, make a new `HashMap<Coin, Integer>` and go through the coins. When the map already has the coin, put it back with its count plus one: `counts.put(coin, counts.get(coin) + 1);`. Otherwise put it with 1. Return the map at the end."
+        require:
+          - pattern: \bpublic\s+int\s+hashCode\s*\(\s*\)
+            message: "Write the header exactly as `public int hashCode()`, so that the map uses your method."
+          - pattern: \bObjects\s*\.\s*hash\s*\(
+            message: "Work out the hash code with `Objects.hash`."
+          - pattern: \bpublic\s+static\s+HashMap<Coin,\s*Integer>\s+countCoins\s*\(\s*ArrayList<Coin>\s+\w+\s*\)
+            message: "Write the method as `public static HashMap<Coin, Integer> countCoins(ArrayList<Coin> coins)`."
+        tests:
+          - call: |
+              ArrayList<Coin> box = new ArrayList<>();
+              box.add(new Coin("Italy", 2002, 50));
+              box.add(new Coin("Kenya", 2005, 10));
+              box.add(new Coin("Italy", 2002, 50));
+              box.add(new Coin("Italy", 2002, 20));
+              HashMap<Coin, Integer> counts = countCoins(box);
+              System.out.println(counts.get(new Coin("Italy", 2002, 50)));
+              System.out.println(counts.get(new Coin("Kenya", 2005, 10)));
+              System.out.println(counts.size());
+          - call: |
+              ArrayList<Coin> box = new ArrayList<>();
+              System.out.println(countCoins(box).size());
+              for (int year = 2000; year <= 2003; year++) {
+                  box.add(new Coin("Chile", year, 100));
+                  box.add(new Coin("Chile", 2001, 100));
+              }
+              HashMap<Coin, Integer> counts = countCoins(box);
+              System.out.println(counts.size() + " " + counts.get(new Coin("Chile", 2001, 100)) + " " + counts.get(new Coin("Chile", 2003, 100)));
+              System.out.println(counts.get(new Coin("Chile", 2004, 100)));
+            hidden: true
+          - call: |
+              Coin a = new Coin("Kenya", 2005, 10);
+              String start = "Ken";
+              Coin b = new Coin(start + "ya", 2005, 10);
+              System.out.println(a.hashCode() == b.hashCode());
+              System.out.println(a.hashCode() == new Coin("Kenya", 2005, 20).hashCode());
+            hidden: true
+      - task: |
+          A stamp has a country, a year and a condition, such as `mint` or `used`. `Stamp`'s `equals` says two stamps are equal when the country and the year match, whatever their condition. But its `hashCode` uses the condition too. What does this program print?
+        predict: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<Stamp, String> album = new HashMap<>();
+                  album.put(new Stamp("Chile", 1970, "mint"), "page 4");
+
+                  Stamp used = new Stamp("Chile", 1970, "used");
+                  System.out.println(used.equals(new Stamp("Chile", 1970, "mint")));
+                  System.out.println(album.get(used));
+                  System.out.println(album.get(new Stamp("Chile", 1970, "mint")));
+                  System.out.println(album.containsKey(new Stamp("Chile", 1971, "mint")));
+              }
+          }
+          // ==== Stamp.java ====
+          import java.util.Objects;
+
+          public class Stamp {
+              private String country;
+              private int year;
+              private String condition;
+
+              public Stamp(String country, int year, String condition) {
+                  this.country = country;
+                  this.year = year;
+                  this.condition = condition;
+              }
+
+              public boolean equals(Object compared) {
+                  if (this == compared) {
+                      return true;
+                  }
+                  if (!(compared instanceof Stamp)) {
+                      return false;
+                  }
+                  Stamp other = (Stamp) compared;
+                  return this.country.equals(other.country) && this.year == other.year;
+              }
+
+              public int hashCode() {
+                  return Objects.hash(this.country, this.year, this.condition);
+              }
+          }
+        hints:
+          - "`equals` ignores the condition, so the used stamp is equal to the mint one. But the condition is part of the hash code, so their hash codes differ, and the map looks for the used stamp with the wrong hash code."
+          - "A new mint Chile 1970 stamp has the same values as the key, so the same hash code, and the map finds it. The 1971 stamp isn't equal to any key."
+
+  - id: equals-hashcode-approximate
+    slug: approximate-comparison
+    title: "Equal enough: approximate comparison"
+    text: |
+      What counts as equal is up to the class (module 23). So far, equal has meant that every value matched. Sometimes two objects should count as equal even though some of their values differ, or even though they're written with different capital letters. That's **approximate comparison**, and `hashCode` has to follow the same idea of equal as `equals`.
+
+      ### Comparing only some values
+
+      A paint shop mixes colors from red, green and blue values, and each mix has a name. Customers call the same color by different names: "Sky" and "Sky blue" are both 135, 206, 235. For the shop that's one color, so `equals` compares the three numbers and leaves the name out, and so does `hashCode`:
+
+      ```java run
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<Color, Integer> cans = new HashMap<>();
+              cans.put(new Color("Sky", 135, 206, 235), 4);
+
+              Color asked = new Color("Sky blue", 135, 206, 235);
+              System.out.println(asked.equals(new Color("Sky", 135, 206, 235)));
+              System.out.println(cans.get(asked));
+              System.out.println(cans.containsKey(new Color("Sky", 135, 206, 200)));
+          }
+      }
+      // ==== Color.java ====
+      import java.util.Objects;
+
+      public class Color {
+          private String name;
+          private int red;
+          private int green;
+          private int blue;
+
+          public Color(String name, int red, int green, int blue) {
+              this.name = name;
+              this.red = red;
+              this.green = green;
+              this.blue = blue;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Color)) {
+                  return false;
+              }
+              Color other = (Color) compared;
+              return this.red == other.red && this.green == other.green && this.blue == other.blue;
+          }
+
+          public int hashCode() {
+              return Objects.hash(this.red, this.green, this.blue);
+          }
+
+          public String toString() {
+              return this.name + " (" + this.red + ", " + this.green + ", " + this.blue + ")";
+          }
+      }
+      ```
+
+      ```output
+      true
+      4
+      false
+      ```
+
+      - `equals` leaves the name out, and so does `hashCode`. If `Objects.hash` got the name too, "Sky" and "Sky blue" would be equal but have different hash codes, and the map wouldn't find the cans. That's what happened to the used stamp in the last challenge of step 3.
+      - In short: `hashCode` may use only what `equals` compares.
+
+      ### Ignoring capital letters
+
+      A stamp collector types countries as they come: `Chile`, `chile`, `CHILE`. To count them as the same country, compare the countries in lower case (`toLowerCase`, module 16), and give `hashCode` the lower-case country too:
+
+      ```java run
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<Stamp, String> album = new HashMap<>();
+              album.put(new Stamp("Chile", 1970), "page 4");
+              System.out.println(album.get(new Stamp("CHILE", 1970)));
+              System.out.println(album.containsKey(new Stamp("chile", 1971)));
+              System.out.println("Chile".hashCode() == "CHILE".hashCode());
+          }
+      }
+      // ==== Stamp.java ====
+      import java.util.Objects;
+
+      public class Stamp {
+          private String country;
+          private int year;
+
+          public Stamp(String country, int year) {
+              this.country = country;
+              this.year = year;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Stamp)) {
+                  return false;
+              }
+              Stamp other = (Stamp) compared;
+              return this.country.toLowerCase().equals(other.country.toLowerCase()) && this.year == other.year;
+          }
+
+          public int hashCode() {
+              return Objects.hash(this.country.toLowerCase(), this.year);
+          }
+
+          public String toString() {
+              return this.country + " " + this.year;
+          }
+      }
+      ```
+
+      ```output
+      page 4
+      false
+      false
+      ```
+
+      - `"Chile"` and `"CHILE"` are different Strings with different hash codes, as the last line shows. With `this.country` in `Objects.hash`, two stamps that `equals` calls equal would get different hash codes. `toLowerCase()` turns both into `"chile"` first, so their hash codes are the same.
+      - Both methods use the same lower-case text, so they can't disagree. `equalsIgnoreCase` (module 16) would give the same answers in `equals` for letters like these, but `hashCode` still needs the lower-case text.
+      - The stamp keeps the country as it was typed, so `toString` shows it that way.
+
+      ### Tidied String keys
+
+      Often the simplest way needs no class at all. When the key is a piece of text, tidy it before it's used as a key: `trim()` removes the spaces at the ends, and `toLowerCase()` the capital letters (both module 16). Do that before every `put` and every `get`, and the keys are ordinary Strings, which already have `equals` and `hashCode`. This program counts the stamps from each country:
+
+      ```java run
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashMap<String, Integer> stamps = new HashMap<>();
+              addStamp(stamps, "Chile");
+              addStamp(stamps, " chile");
+              addStamp(stamps, "CHILE ");
+              addStamp(stamps, "Japan");
+              System.out.println(stamps.get(tidy("Chile")));
+              System.out.println(stamps.get(tidy("japan ")));
+              System.out.println(stamps.size());
+          }
+
+          public static String tidy(String text) {
+              return text.trim().toLowerCase();
+          }
+
+          public static void addStamp(HashMap<String, Integer> stamps, String country) {
+              String key = tidy(country);
+              if (stamps.containsKey(key)) {
+                  stamps.put(key, stamps.get(key) + 1);
+              } else {
+                  stamps.put(key, 1);
+              }
+          }
+      }
+      ```
+
+      ```output
+      3
+      1
+      2
+      ```
+
+      - One `tidy` method makes every key, so a `put` and a `get` can't tidy the text in different ways.
+      - The keys are stored tidied, as `chile` and `japan`. If the spelling as typed matters for printing, keep it in the value.
+      - Which to choose? When the key is one piece of text, tidied String keys are the simplest. When the key is several values that belong together, such as a stamp's country and year, a class with `equals` and `hashCode` keeps them together and says in one place what equal means.
+
+      **Your turn:** a rail pass counts the trips made between stations, and station names get typed with any mix of capitals. In `Trip.java`, write `equals` and `hashCode`: two trips are equal when they go from the same station to the same station, whatever the capital letters. Compare the lower-case names in `equals`, and give `Objects.hash` the lower-case names in `hashCode`. The check runs:
+
+      ```java fragment
+      HashMap<Trip, Integer> trips = new HashMap<>();
+      trips.put(new Trip("Oakdale", "Harbor"), 3);
+      System.out.println(trips.get(new Trip("OAKDALE", "harbor")));
+      System.out.println(trips.get(new Trip("Harbor", "Oakdale")));
+      System.out.println(new Trip("oakdale", "Harbor").equals(new Trip("Oakdale", "HARBOR")));
+      ```
+
+      and expects:
+
+      ```
+      3
+      null
+      true
+      ```
+    seed:
+      Trip.java: |
+        import java.util.Objects;
+
+        public class Trip {
+            private String from;
+            private String to;
+
+            public Trip(String from, String to) {
+                this.from = from;
+                this.to = to;
+            }
+
+            // Write the equals and hashCode methods here.
+
+            public String toString() {
+                return this.from + " to " + this.to;
+            }
+        }
+      Main.java: |
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                HashMap<Trip, Integer> trips = new HashMap<>();
+                trips.put(new Trip("Oakdale", "Harbor"), 3);
+                System.out.println(trips.get(new Trip("OAKDALE", "harbor")));
+                System.out.println(trips.get(new Trip("Harbor", "Oakdale")));
+                System.out.println(new Trip("oakdale", "Harbor").equals(new Trip("Oakdale", "HARBOR")));
+            }
+        }
+    solution:
+      Trip.java: |
+        import java.util.Objects;
+
+        public class Trip {
+            private String from;
+            private String to;
+
+            public Trip(String from, String to) {
+                this.from = from;
+                this.to = to;
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Trip)) {
+                    return false;
+                }
+                Trip other = (Trip) compared;
+                return this.from.toLowerCase().equals(other.from.toLowerCase()) && this.to.toLowerCase().equals(other.to.toLowerCase());
+            }
+
+            public int hashCode() {
+                return Objects.hash(this.from.toLowerCase(), this.to.toLowerCase());
+            }
+
+            public String toString() {
+                return this.from + " to " + this.to;
+            }
+        }
+      Main.java: |
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                HashMap<Trip, Integer> trips = new HashMap<>();
+                trips.put(new Trip("Oakdale", "Harbor"), 3);
+                System.out.println(trips.get(new Trip("OAKDALE", "harbor")));
+                System.out.println(trips.get(new Trip("Harbor", "Oakdale")));
+                System.out.println(new Trip("oakdale", "Harbor").equals(new Trip("Oakdale", "HARBOR")));
+            }
+        }
+    hints:
+      - "`equals` is the classic one, with Trip in place of Stamp. Its last line compares both names in lower case: `this.from.toLowerCase().equals(other.from.toLowerCase())`, then `&&` and the same for `to`."
+      - "`hashCode` gives the same lower-case names to `Objects.hash`: `return Objects.hash(this.from.toLowerCase(), this.to.toLowerCase());`. Then trips that `equals` calls equal get the same hash code."
+    require:
+      - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+        message: "Write the header exactly as `public boolean equals(Object compared)`, so that the map uses your method."
+      - pattern: \bpublic\s+int\s+hashCode\s*\(\s*\)
+        message: "Write the header exactly as `public int hashCode()`, so that the map uses your method."
+      - pattern: \bObjects\s*\.\s*hash\s*\(
+        message: "Work out the hash code with `Objects.hash`, from the lower-case names."
+      - pattern: \.toLowerCase\s*\(
+        message: "Give `hashCode` the names in lower case, with `toLowerCase()`, so that it agrees with `equals`."
+    tests:
+      - call: |
+          HashMap<Trip, Integer> trips = new HashMap<>();
+          trips.put(new Trip("Oakdale", "Harbor"), 3);
+          System.out.println(trips.get(new Trip("OAKDALE", "harbor")));
+          System.out.println(trips.get(new Trip("Harbor", "Oakdale")));
+          System.out.println(new Trip("oakdale", "Harbor").equals(new Trip("Oakdale", "HARBOR")));
+      - call: |
+          Trip trip = new Trip("Lakeside", "Mill Road");
+          System.out.println(trip.equals(new Trip("lakeside", "MILL ROAD")));
+          System.out.println(trip.equals(new Trip("Lakeside", "Mill Lane")));
+          System.out.println(trip.equals(new Trip("Mill Road", "Lakeside")));
+          System.out.println(trip.equals("Lakeside to Mill Road"));
+          System.out.println(trip.hashCode() == new Trip("LAKESIDE", "mill road").hashCode());
+        hidden: true
+      - call: |
+          HashMap<Trip, Integer> trips = new HashMap<>();
+          String[] typed = {"Oakdale Harbor", "oakdale HARBOR", "Harbor Oakdale", "OAKDALE harbor", "Oakdale Hillside"};
+          for (String line : typed) {
+              String[] parts = line.split(" ");
+              Trip trip = new Trip(parts[0], parts[1]);
+              if (trips.containsKey(trip)) {
+                  trips.put(trip, trips.get(trip) + 1);
+              } else {
+                  trips.put(trip, 1);
+              }
+          }
+          System.out.println(trips.size() + " " + trips.get(new Trip("oakdale", "harbor")) + " " + trips.get(new Trip("harbor", "oakdale")));
+        hidden: true
+    more:
+      - task: |
+          `Station`'s `equals` ignores capital letters, but its `hashCode` doesn't. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Station> visited = new ArrayList<>();
+                  visited.add(new Station("Oakdale"));
+                  HashMap<Station, Integer> fares = new HashMap<>();
+                  fares.put(new Station("Oakdale"), 450);
+
+                  Station typed = new Station("OAKDALE");
+                  System.out.println(typed.equals(new Station("Oakdale")));
+                  System.out.println(visited.contains(typed));
+                  System.out.println(fares.get(typed));
+                  System.out.println(fares.get(new Station("Oakdale")));
+              }
+          }
+          // ==== Station.java ====
+          public class Station {
+              private String name;
+
+              public Station(String name) {
+                  this.name = name;
+              }
+
+              public boolean equals(Object compared) {
+                  if (this == compared) {
+                      return true;
+                  }
+                  if (!(compared instanceof Station)) {
+                      return false;
+                  }
+                  Station other = (Station) compared;
+                  return this.name.equalsIgnoreCase(other.name);
+              }
+
+              public int hashCode() {
+                  return this.name.hashCode();
+              }
+          }
+        hints:
+          - "`equals` ignores capitals, so `OAKDALE` is equal to `Oakdale`, and the list's `contains`, which uses only `equals`, finds it."
+          - "`\"OAKDALE\"` and `\"Oakdale\"` have different hash codes, so the map looks for the typed station with the wrong hash code and never calls `equals`. A new `Oakdale` has the same hash code as the key, and is found."
+      - task: |
+          A ticket machine looks up fares, however the station is typed. Write the class `FareTable`, which keeps the fares, in cents, in a `HashMap<String, Integer>` whose keys are tidied station names. It has:
+
+          - a constructor without parameters, which creates the map
+          - `setFare(String station, int cents)`, which sets the fare to a station, replacing an old fare
+          - `fareTo(String station)`, which returns the fare to a station, or -1 if the station has no fare
+
+          Tidy every name with `trim` and `toLowerCase`, in both methods. The check runs:
+
+          ```java fragment
+          FareTable fares = new FareTable();
+          fares.setFare("Oakdale", 450);
+          fares.setFare("River Street", 280);
+          System.out.println(fares.fareTo("oakdale"));
+          System.out.println(fares.fareTo("  RIVER STREET "));
+          System.out.println(fares.fareTo("Hillside"));
+          ```
+
+          and expects:
+
+          ```
+          450
+          280
+          -1
+          ```
+        seed:
+          FareTable.java: |
+            import java.util.HashMap;
+
+            public class FareTable {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    FareTable fares = new FareTable();
+                    fares.setFare("Oakdale", 450);
+                    fares.setFare("River Street", 280);
+                    System.out.println(fares.fareTo("oakdale"));
+                    System.out.println(fares.fareTo("  RIVER STREET "));
+                    System.out.println(fares.fareTo("Hillside"));
+                }
+            }
+        solution:
+          FareTable.java: |
+            import java.util.HashMap;
+
+            public class FareTable {
+                private HashMap<String, Integer> fares;
+
+                public FareTable() {
+                    this.fares = new HashMap<>();
+                }
+
+                public void setFare(String station, int cents) {
+                    this.fares.put(tidy(station), cents);
+                }
+
+                public int fareTo(String station) {
+                    String key = tidy(station);
+                    if (this.fares.containsKey(key)) {
+                        return this.fares.get(key);
+                    }
+                    return -1;
+                }
+
+                private String tidy(String name) {
+                    return name.trim().toLowerCase();
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    FareTable fares = new FareTable();
+                    fares.setFare("Oakdale", 450);
+                    fares.setFare("River Street", 280);
+                    System.out.println(fares.fareTo("oakdale"));
+                    System.out.println(fares.fareTo("  RIVER STREET "));
+                    System.out.println(fares.fareTo("Hillside"));
+                }
+            }
+        hints:
+          - "The class has one instance variable, `private HashMap<String, Integer> fares;`, which the constructor creates. A small helper method `tidy(String name)` that returns `name.trim().toLowerCase()` keeps both methods tidying the same way."
+          - "`setFare` puts `tidy(station)` with the cents. `fareTo` tidies the name, and returns `this.fares.get(key)` when `containsKey(key)` is true, or -1 otherwise."
+        require:
+          - pattern: HashMap<String,\s*Integer>
+            message: "Keep the fares in a `HashMap<String, Integer>`."
+          - pattern: \.trim\s*\(
+            message: "Remove the spaces at the ends of the names with `trim()`."
+          - pattern: \.toLowerCase\s*\(
+            message: "Make the names lower case with `toLowerCase()`."
+        tests:
+          - call: |
+              FareTable fares = new FareTable();
+              fares.setFare("Oakdale", 450);
+              fares.setFare("River Street", 280);
+              System.out.println(fares.fareTo("oakdale"));
+              System.out.println(fares.fareTo("  RIVER STREET "));
+              System.out.println(fares.fareTo("Hillside"));
+          - call: |
+              FareTable fares = new FareTable();
+              fares.setFare(" Hillside", 300);
+              fares.setFare("HILLSIDE ", 320);
+              System.out.println(fares.fareTo("hillside"));
+              fares.setFare("Depot", 0);
+              System.out.println(fares.fareTo("depot") + " " + fares.fareTo("Dep"));
+            hidden: true
+          - call: |
+              FareTable fares = new FareTable();
+              System.out.println(fares.fareTo("Oakdale"));
+              fares.setFare("oak dale", 100);
+              System.out.println(fares.fareTo("Oakdale") + " " + fares.fareTo("OAK DALE"));
+            hidden: true
+
+  - id: equals-hashcode-objects-as-keys
+    slug: objects-as-keys
+    title: Objects as keys in practice
+    text: |
+      All the pieces are here now: a key class with `equals` and `hashCode`, and a `HashMap` that uses it. This step puts them to work in a small program, and deals with one more thing: the order in which to print what's in the map.
+
+      ### A game board
+
+      A board game keeps its pieces in a `HashMap<Square, String>`, from a square to the piece on it. Square is the class from steps 1 and 3, now with both methods. The class `Board` places pieces, looks up squares, moves pieces and prints them all:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Board board = new Board();
+              board.place(new Square("e", 1), "king");
+              board.place(new Square("a", 1), "rook");
+              board.place(new Square("e", 2), "pawn");
+              board.move(new Square("e", 2), new Square("e", 4));
+              System.out.println(board.pieceAt(new Square("e", 4)));
+              System.out.println(board.pieceAt(new Square("e", 2)));
+              board.printPieces();
+          }
+      }
+      // ==== Board.java ====
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+
+      public class Board {
+          private HashMap<Square, String> pieces;
+
+          public Board() {
+              this.pieces = new HashMap<>();
+          }
+
+          public void place(Square square, String piece) {
+              this.pieces.put(square, piece);
+          }
+
+          public String pieceAt(Square square) {
+              if (this.pieces.containsKey(square)) {
+                  return this.pieces.get(square);
+              }
+              return "empty";
+          }
+
+          public void move(Square from, Square to) {
+              if (this.pieces.containsKey(from)) {
+                  String piece = this.pieces.get(from);
+                  this.pieces.remove(from);
+                  this.pieces.put(to, piece);
+              }
+          }
+
+          public void printPieces() {
+              ArrayList<String> lines = new ArrayList<>();
+              for (Square square : this.pieces.keySet()) {
+                  lines.add(square + " " + this.pieces.get(square));
+              }
+              Collections.sort(lines);
+              for (String line : lines) {
+                  System.out.println(line);
+              }
+          }
+      }
+      // ==== Square.java ====
+      public class Square {
+          private String column;
+          private int row;
+
+          public Square(String column, int row) {
+              this.column = column;
+              this.row = row;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Square)) {
+                  return false;
+              }
+              Square other = (Square) compared;
+              return this.column.equals(other.column) && this.row == other.row;
+          }
+
+          public int hashCode() {
+              return 31 * this.column.hashCode() + this.row;
+          }
+
+          public String toString() {
+              return this.column + this.row;
+          }
+      }
+      ```
+
+      ```output
+      pawn
+      empty
+      a1 rook
+      e1 king
+      e4 pawn
+      ```
+
+      - Every method is given a Square made with `new`, never the object that was put in. `containsKey`, `get`, `put` and `remove` still find the right key, because Square has both `equals` and `hashCode`.
+      - `remove(key)` takes a key and its value out of the map. `move` gets the piece, removes the old square, and puts the piece on the new one.
+      - `pieceAt` checks `containsKey` first, so an empty square gives `empty` instead of `null`.
+
+      ### The order of the keys
+
+      `printPieces` goes through the keys with `keySet()`, as in module 31. A hash map goes through its keys in an order set by their hash codes, not in the order they were added, and it's no order to rely on. With keys of your own class, it depends on how `hashCode` is written. So `printPieces` makes its own order: it builds a line for each piece, puts the lines in a list, and sorts the list with `Collections.sort` (module 28). Square names sort well as Strings on this board: the column's letter first, then the row, which is always one digit.
+
+      Two other ways to get an order you can count on:
+
+      - Keep the keys in an `ArrayList` too, next to the map, in the order they were added. Go through the list, and get each value from the map.
+      - Go through the keys you want in the order you want, such as the squares of one row from `a` to `h`, and look each one up with `containsKey` and `get`.
+
+      One warning: never go through, or print, a hash map whose keys have no `hashCode` of their own. Their hash codes are Java's default ones, which can change from run to run, and the order would change with them.
+
+      ### Keys that don't change
+
+      A key goes into the bucket of the hash code it has when it's put in. If the key object changed later, its hash code would change too, and the map would look for it in the wrong bucket. So key classes usually have no setters: none of the key classes in this module can be changed once an object is made. That's why `move` doesn't change a Square: it removes the old key and puts in a new one.
+
+      **Your turn:** a theater keeps its bookings in a `HashMap<Seat, String>`, from a seat to the name it's booked for. `Seat.java` is ready, with `equals`, `hashCode` and `toString`. Write the class `Bookings`, with:
+
+      - a constructor without parameters, which creates the map
+      - `book(Seat seat, String name)`, which books the seat for the name and returns `true`, or returns `false` and changes nothing when the seat is booked already
+      - `holderOf(Seat seat)`, which returns the name the seat is booked for, or `free`
+      - `cancel(Seat seat)`, which removes the seat's booking
+
+      The check runs:
+
+      ```java fragment
+      Bookings bookings = new Bookings();
+      System.out.println(bookings.book(new Seat("B", 7), "Ada"));
+      System.out.println(bookings.book(new Seat("B", 7), "Ben"));
+      System.out.println(bookings.holderOf(new Seat("B", 7)));
+      bookings.cancel(new Seat("B", 7));
+      System.out.println(bookings.holderOf(new Seat("B", 7)));
+      ```
+
+      and expects:
+
+      ```
+      true
+      false
+      Ada
+      free
+      ```
+    seed:
+      Bookings.java: |
+        import java.util.HashMap;
+
+        public class Bookings {
+
+        }
+      Seat.java: |
+        import java.util.Objects;
+
+        public class Seat {
+            private String row;
+            private int number;
+
+            public Seat(String row, int number) {
+                this.row = row;
+                this.number = number;
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Seat)) {
+                    return false;
+                }
+                Seat other = (Seat) compared;
+                return this.row.equals(other.row) && this.number == other.number;
+            }
+
+            public int hashCode() {
+                return Objects.hash(this.row, this.number);
+            }
+
+            public String toString() {
+                return this.row + this.number;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Bookings bookings = new Bookings();
+                System.out.println(bookings.book(new Seat("B", 7), "Ada"));
+                System.out.println(bookings.book(new Seat("B", 7), "Ben"));
+                System.out.println(bookings.holderOf(new Seat("B", 7)));
+                bookings.cancel(new Seat("B", 7));
+                System.out.println(bookings.holderOf(new Seat("B", 7)));
+            }
+        }
+    solution:
+      Bookings.java: |
+        import java.util.HashMap;
+
+        public class Bookings {
+            private HashMap<Seat, String> holders;
+
+            public Bookings() {
+                this.holders = new HashMap<>();
+            }
+
+            public boolean book(Seat seat, String name) {
+                if (this.holders.containsKey(seat)) {
+                    return false;
+                }
+                this.holders.put(seat, name);
+                return true;
+            }
+
+            public String holderOf(Seat seat) {
+                if (this.holders.containsKey(seat)) {
+                    return this.holders.get(seat);
+                }
+                return "free";
+            }
+
+            public void cancel(Seat seat) {
+                this.holders.remove(seat);
+            }
+        }
+      Seat.java: |
+        import java.util.Objects;
+
+        public class Seat {
+            private String row;
+            private int number;
+
+            public Seat(String row, int number) {
+                this.row = row;
+                this.number = number;
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Seat)) {
+                    return false;
+                }
+                Seat other = (Seat) compared;
+                return this.row.equals(other.row) && this.number == other.number;
+            }
+
+            public int hashCode() {
+                return Objects.hash(this.row, this.number);
+            }
+
+            public String toString() {
+                return this.row + this.number;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Bookings bookings = new Bookings();
+                System.out.println(bookings.book(new Seat("B", 7), "Ada"));
+                System.out.println(bookings.book(new Seat("B", 7), "Ben"));
+                System.out.println(bookings.holderOf(new Seat("B", 7)));
+                bookings.cancel(new Seat("B", 7));
+                System.out.println(bookings.holderOf(new Seat("B", 7)));
+            }
+        }
+    hints:
+      - "Bookings has one instance variable, `private HashMap<Seat, String> holders;`, and the constructor creates it with `new HashMap<>()`. Seat already has `equals` and `hashCode`, so a new Seat finds an equal key."
+      - "`book` returns false when `containsKey(seat)` is true; otherwise it puts the seat with the name and returns true. `holderOf` returns `get(seat)` when the seat is there, or `\"free\"`. `cancel` is one line: `this.holders.remove(seat);`."
+    require:
+      - pattern: HashMap<Seat,\s*String>
+        message: "Keep the bookings in a `HashMap<Seat, String>`."
+    tests:
+      - call: |
+          Bookings bookings = new Bookings();
+          System.out.println(bookings.book(new Seat("B", 7), "Ada"));
+          System.out.println(bookings.book(new Seat("B", 7), "Ben"));
+          System.out.println(bookings.holderOf(new Seat("B", 7)));
+          bookings.cancel(new Seat("B", 7));
+          System.out.println(bookings.holderOf(new Seat("B", 7)));
+      - call: |
+          Bookings bookings = new Bookings();
+          System.out.println(bookings.book(new Seat("A", 1), "Cy") + " " + bookings.book(new Seat("A", 2), "Cy") + " " + bookings.book(new Seat("B", 1), "Dee"));
+          System.out.println(bookings.holderOf(new Seat("A", 2)) + " " + bookings.holderOf(new Seat("B", 1)) + " " + bookings.holderOf(new Seat("C", 1)));
+          bookings.cancel(new Seat("C", 1));
+          bookings.cancel(new Seat("A", 1));
+          System.out.println(bookings.book(new Seat("A", 1), "Eve") + " " + bookings.holderOf(new Seat("A", 1)));
+        hidden: true
+      - call: |
+          Bookings bookings = new Bookings();
+          String row = "D";
+          bookings.book(new Seat(row, 12), "Finn");
+          System.out.println(bookings.book(new Seat("D", 12), "Gus") + " " + bookings.holderOf(new Seat("D", 12)));
+        hidden: true
+    more:
+      - task: |
+          Here `Coin`'s `hashCode` uses only the country, so every Italian coin has the same hash code. Does the map still work? What does this program print?
+        predict: |
+          import java.util.HashMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashMap<Coin, String> places = new HashMap<>();
+                  places.put(new Coin("Italy", 2002, 50), "box 1");
+                  places.put(new Coin("Italy", 1999, 20), "box 2");
+                  places.put(new Coin("Italy", 2002, 50), "box 3");
+                  places.remove(new Coin("Italy", 1999, 20));
+
+                  System.out.println(places.size());
+                  System.out.println(places.get(new Coin("Italy", 2002, 50)));
+                  System.out.println(places.containsKey(new Coin("Italy", 1999, 20)));
+                  System.out.println(places.get(new Coin("Italy", 2002, 20)));
+              }
+          }
+          // ==== Coin.java ====
+          public class Coin {
+              private String country;
+              private int year;
+              private int cents;
+
+              public Coin(String country, int year, int cents) {
+                  this.country = country;
+                  this.year = year;
+                  this.cents = cents;
+              }
+
+              public boolean equals(Object compared) {
+                  if (this == compared) {
+                      return true;
+                  }
+                  if (!(compared instanceof Coin)) {
+                      return false;
+                  }
+                  Coin other = (Coin) compared;
+                  return this.country.equals(other.country) && this.year == other.year && this.cents == other.cents;
+              }
+
+              public int hashCode() {
+                  return this.country.hashCode();
+              }
+          }
+        hints:
+          - "The rule only asks equal coins to have equal hash codes, and equal coins have the same country. So this `hashCode` follows it: the Italian coins all share one bucket, and `equals` tells them apart there."
+          - "The third `put` replaces box 1 with box 3, and `remove` takes the 1999 coin out. No 2002 coin worth 20 cents was ever put in."
+      - task: |
+          A train's seats are reserved by car and seat number. Read lines such as `3 12 Ada` (a car, a seat and a name) until an empty line. For each line, if the seat is free, reserve it for the name and print `Reserved: car 3 seat 12 for Ada`. If it's reserved already, print `Taken: car 3 seat 12`. At the end, print `Reservations:` and then each reservation, in the order they were made, like `car 3 seat 12: Ada`.
+
+          `TrainSeat.java` has the car, the seat and a `toString`: write its `equals` and `hashCode`. In `Main.java`, keep the reservations in the `HashMap<TrainSeat, String>`, and the seats in the `ArrayList<TrainSeat>` in the order they were reserved. Go through the list for the last part. For the input shown, the program prints:
+
+          ```
+          Reserved: car 3 seat 12 for Ada
+          Reserved: car 1 seat 4 for Ben
+          Taken: car 3 seat 12
+          Reserved: car 3 seat 21 for Cy
+          Reservations:
+          car 3 seat 12: Ada
+          car 1 seat 4: Ben
+          car 3 seat 21: Cy
+          ```
+        seed:
+          TrainSeat.java: |
+            public class TrainSeat {
+                private int car;
+                private int seat;
+
+                public TrainSeat(int car, int seat) {
+                    this.car = car;
+                    this.seat = seat;
+                }
+
+                // Write the equals and hashCode methods here.
+
+                public String toString() {
+                    return "car " + this.car + " seat " + this.seat;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    HashMap<TrainSeat, String> reserved = new HashMap<>();
+                    ArrayList<TrainSeat> order = new ArrayList<>();
+
+                }
+            }
+        solution:
+          TrainSeat.java: |
+            import java.util.Objects;
+
+            public class TrainSeat {
+                private int car;
+                private int seat;
+
+                public TrainSeat(int car, int seat) {
+                    this.car = car;
+                    this.seat = seat;
+                }
+
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof TrainSeat)) {
+                        return false;
+                    }
+                    TrainSeat other = (TrainSeat) compared;
+                    return this.car == other.car && this.seat == other.seat;
+                }
+
+                public int hashCode() {
+                    return Objects.hash(this.car, this.seat);
+                }
+
+                public String toString() {
+                    return "car " + this.car + " seat " + this.seat;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    HashMap<TrainSeat, String> reserved = new HashMap<>();
+                    ArrayList<TrainSeat> order = new ArrayList<>();
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.isEmpty()) {
+                            break;
+                        }
+                        String[] parts = line.split(" ");
+                        TrainSeat seat = new TrainSeat(Integer.valueOf(parts[0]), Integer.valueOf(parts[1]));
+                        if (reserved.containsKey(seat)) {
+                            System.out.println("Taken: " + seat);
+                        } else {
+                            reserved.put(seat, parts[2]);
+                            order.add(seat);
+                            System.out.println("Reserved: " + seat + " for " + parts[2]);
+                        }
+                    }
+                    System.out.println("Reservations:");
+                    for (TrainSeat seat : order) {
+                        System.out.println(seat + ": " + reserved.get(seat));
+                    }
+                }
+            }
+        hints:
+          - "TrainSeat's `equals` compares two ints, `this.car == other.car && this.seat == other.seat`, and `hashCode` can be `Objects.hash(this.car, this.seat)` (with `import java.util.Objects;`) or `31 * this.car + this.seat`."
+          - "Read in a `while (true)` loop that breaks at the empty line, split each line at the spaces, and make the seat from `Integer.valueOf(parts[0])` and `Integer.valueOf(parts[1])`. A free seat goes into both the map and the list. At the end, loop over the list and print `seat + \": \" + reserved.get(seat)`."
+        require:
+          - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+            message: "Write the header exactly as `public boolean equals(Object compared)`, so that the map uses your method."
+          - pattern: \bpublic\s+int\s+hashCode\s*\(\s*\)
+            message: "Write the header exactly as `public int hashCode()`, so that the map uses your method."
+        tests:
+          - stdin: |+
+              3 12 Ada
+              1 4 Ben
+              3 12 Dee
+              3 21 Cy
+
+          - stdin: |+
+              12 3 Eve
+              3 12 Finn
+              12 3 Gus
+
+            hidden: true
+          - stdin: |+
+
+            hidden: true
+          - stdin: |+
+              1 1 Hal
+              1 2 Ivy
+              2 1 Jo
+              1 1 Kai
+              1 2 Lu
+              2 2 Max
+
+            hidden: true
+          - call: |
+              TrainSeat a = new TrainSeat(2, 15);
+              System.out.println(a.equals(new TrainSeat(2, 15)) + " " + a.equals(new TrainSeat(15, 2)) + " " + a.equals(new TrainSeat(2, 16)));
+              System.out.println(a.hashCode() == new TrainSeat(2, 15).hashCode());
+              System.out.println(a.equals("car 2 seat 15"));
+            hidden: true

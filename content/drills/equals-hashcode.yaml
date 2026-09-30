@@ -1,0 +1,497 @@
+topic: equals-hashcode
+drills:
+  - type: predict
+    after: equals-again
+    classes: |
+      class Stamp {
+          private String country;
+          private int year;
+
+          public Stamp(String country, int year) {
+              this.country = country;
+              this.year = year;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Stamp)) {
+                  return false;
+              }
+              Stamp other = (Stamp) compared;
+              return this.country.equals(other.country) && this.year == other.year;
+          }
+      }
+    body: |
+      ArrayList<Stamp> album = new ArrayList<>();
+      album.add(new Stamp("Peru", 1985));
+      HashMap<Stamp, Integer> pages = new HashMap<>();
+      pages.put(new Stamp("Peru", 1985), 12);
+      System.out.println(album.contains(new Stamp("Peru", 1985)) + " " + pages.get(new Stamp("Peru", 1985)));
+    why: "The list's `contains` compares with `equals`, which Stamp has, so it finds the equal stamp. The map compares hash codes first, and Stamp has no `hashCode` of its own: each new Stamp gets Java's default one, a different number, so `get` never gets as far as `equals` and gives `null`."
+
+  - type: predict
+    after: what-hashcode-is
+    body: |
+      String word = "tea";
+      String loud = word.toUpperCase();
+      String quiet = loud.toLowerCase();
+      System.out.println((word == quiet) + " " + word.equals(quiet) + " " + (word.hashCode() == quiet.hashCode()));
+    why: "`toLowerCase` makes a new String object, so `==` is false. It has the same characters as `word`, so `equals` is true, and equal Strings always have equal hash codes."
+
+  - type: predict
+    after: writing-hashcode
+    classes: |
+      class Tile {
+          private int x;
+          private int y;
+
+          public Tile(int x, int y) {
+              this.x = x;
+              this.y = y;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Tile)) {
+                  return false;
+              }
+              Tile other = (Tile) compared;
+              return this.x == other.x && this.y == other.y;
+          }
+
+          public int hashCode() {
+              return 31 * this.x + this.y;
+          }
+      }
+    body: |
+      Tile a = new Tile(2, 5);
+      Tile b = new Tile(1, 36);
+      System.out.println(a.hashCode() + " " + b.hashCode() + " " + a.equals(b));
+    why: "31 * 2 + 5 is 67, and so is 31 * 1 + 36. The two tiles have the same hash code, but they aren't equal. That's allowed: the rule only asks equal objects to have equal hash codes. A map would keep both tiles as keys, in the same bucket, and `equals` would tell them apart."
+
+  - type: predict
+    after: writing-hashcode
+    classes: |
+      class Ticket {
+          private int train;
+          private int seat;
+
+          public Ticket(int train, int seat) {
+              this.train = train;
+              this.seat = seat;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Ticket)) {
+                  return false;
+              }
+              Ticket other = (Ticket) compared;
+              return this.train == other.train && this.seat == other.seat;
+          }
+
+          public int hashCode() {
+              return Objects.hash(this.train, this.seat);
+          }
+      }
+    body: |
+      HashMap<Ticket, String> sold = new HashMap<>();
+      sold.put(new Ticket(402, 17), "Ada");
+      sold.put(new Ticket(402, 17), "Ben");
+      sold.put(new Ticket(17, 402), "Cy");
+      System.out.println(sold.size() + " " + sold.get(new Ticket(402, 17)));
+    why: "Ticket has both `equals` and `hashCode`, so the second `put` finds the equal key and replaces Ada with Ben. `new Ticket(17, 402)` is another ticket, train 17, seat 402, so the map has two keys."
+
+  - type: predict
+    after: approximate-comparison
+    body: |
+      HashMap<String, Integer> votes = new HashMap<>();
+      String[] typed = {"Red", "red ", " RED", "Blue"};
+      for (String color : typed) {
+          String key = color.trim().toLowerCase();
+          if (votes.containsKey(key)) {
+              votes.put(key, votes.get(key) + 1);
+          } else {
+              votes.put(key, 1);
+          }
+      }
+      System.out.println(votes.size() + " " + votes.get("red") + " " + votes.get("Red"));
+    why: "Each color is tidied before it's used as a key, so the three reds all become `red`, and there are two keys: `red` with 3 votes and `blue` with 1. The keys are stored tidied, so `get(\"Red\")` finds nothing: a lookup has to tidy its text too."
+
+  - type: fill
+    after: writing-hashcode
+    prompt: "Fill in the blank, a method name, so that the map finds the seat."
+    classes: |
+      class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Seat)) {
+                  return false;
+              }
+              Seat other = (Seat) compared;
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+
+          public int [[hashCode]]() {
+              return 31 * this.row.hashCode() + this.number;
+          }
+      }
+    body: |
+      HashMap<Seat, String> holders = new HashMap<>();
+      holders.put(new Seat("D", 3), "Ada");
+      System.out.println(holders.get(new Seat("D", 3)));
+    why: "A hash map calls only a method with exactly the header `public int hashCode()`. Any other name, even `hashcode` with a small `c`, makes a new method that the map never calls, and then a new D3 seat isn't found."
+
+  - type: fill
+    after: approximate-comparison
+    prompt: "Fill in the blank, an expression, so that `hashCode` agrees with `equals`, which ignores capital letters."
+    classes: |
+      class Stamp {
+          private String country;
+          private int year;
+
+          public Stamp(String country, int year) {
+              this.country = country;
+              this.year = year;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Stamp)) {
+                  return false;
+              }
+              Stamp other = (Stamp) compared;
+              return this.country.toLowerCase().equals(other.country.toLowerCase()) && this.year == other.year;
+          }
+
+          public int hashCode() {
+              return Objects.hash([[this.country.toLowerCase()‖country.toLowerCase()‖this.country.toUpperCase()‖country.toUpperCase()]], this.year);
+          }
+      }
+    body: |
+      HashMap<Stamp, Integer> pages = new HashMap<>();
+      pages.put(new Stamp("Peru", 1985), 12);
+      System.out.println(pages.get(new Stamp("PERU", 1985)));
+    why: "`equals` compares the countries in lower case, so `Peru` and `PERU` are equal. `hashCode` must then give them the same hash code, so it uses the same lower-case text. (Upper case would work too for letters like these: what matters is that both spellings become the same text.) With `this.country` as it was typed, the two would have different hash codes, and `get` would give `null`."
+
+  - type: bug
+    after: writing-hashcode
+    prompt: "Two bookings are equal when the train and the seat match, whatever the passenger's name, and `equals` is right. The program should print `true`. Which line is wrong?"
+    classes: |
+      class Booking {
+          private int train;
+          private int seat;
+          private String passenger;
+
+          public Booking(int train, int seat, String passenger) {
+              this.train = train;
+              this.seat = seat;
+              this.passenger = passenger;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Booking)) {
+                  return false;
+              }
+              Booking other = (Booking) compared;
+              return this.train == other.train && this.seat == other.seat;
+          }
+
+          public int hashCode() {
+              return Objects.hash(this.train, this.seat, this.passenger); // BUG
+          }
+      }
+    body: |
+      HashMap<Booking, String> meals = new HashMap<>();
+      meals.put(new Booking(402, 17, "Ada"), "vegan");
+      System.out.println(meals.containsKey(new Booking(402, 17, "A. Lovelace")));
+    fix: return Objects.hash(this.train, this.seat);
+    why: "`hashCode` may use only what `equals` compares. With the passenger in it, the two bookings are equal but get different hash codes, so `containsKey` looks with the wrong hash code and says `false`."
+
+  - type: bug
+    after: approximate-comparison
+    prompt: "Station names count as equal whatever their capital letters, and `equals` is right. The program should print `450`. Which line is wrong?"
+    classes: |
+      class Station {
+          private String name;
+
+          public Station(String name) {
+              this.name = name;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Station)) {
+                  return false;
+              }
+              Station other = (Station) compared;
+              return this.name.toLowerCase().equals(other.name.toLowerCase());
+          }
+
+          public int hashCode() {
+              return this.name.hashCode(); // BUG
+          }
+      }
+    body: |
+      HashMap<Station, Integer> fares = new HashMap<>();
+      fares.put(new Station("Oakdale"), 450);
+      System.out.println(fares.get(new Station("OAKDALE")));
+    fix: return this.name.toLowerCase().hashCode();
+    why: "`equals` says `Oakdale` and `OAKDALE` are equal, but the two Strings have different hash codes, so the map looks for `OAKDALE` with the wrong one and gives `null`. Working out the hash code from the lower-case name gives equal stations the same hash code."
+
+  - type: compiles
+    after: equals-again
+    classes: |
+      class Seat {
+          private String row;
+          private int number;
+
+          public Seat(String row, int number) {
+              this.row = row;
+              this.number = number;
+          }
+
+          public boolean equals(Seat other) {
+              return this.row.equals(other.row) && this.number == other.number;
+          }
+      }
+    body: |
+      Seat a = new Seat("A", 1);
+      System.out.println(a.equals(new Seat("A", 1)));
+    why: "Yes, and here it even prints `true`, since `a.equals(...)` is given a Seat. But it's a new method next to the `equals(Object)` that every class has. A list's `contains` and a hash map call only the one with an `Object` parameter, so they never use this one. Write the header as `public boolean equals(Object compared)`."
+
+  - type: compiles
+    after: writing-hashcode
+    classes: |
+      class Coin {
+          private String country;
+          private int year;
+
+          public Coin(String country, int year) {
+              this.country = country;
+              this.year = year;
+          }
+
+          public int hashCode() {
+              return 31 * this.year + this.country;
+          }
+      }
+    body: |
+      System.out.println(new Coin("Chile", 1990).hashCode());
+    why: "No. `31 * this.year + this.country` adds a String to a number, which gives a String, and a String can't be returned as an `int`: javac says `incompatible types: String cannot be converted to int`. Use the String's hash code: `31 * this.year + this.country.hashCode()`."
+
+  - type: choice
+    after: what-hashcode-is
+    prompt: "`a.hashCode() == b.hashCode()` is true. What does that tell you about `a.equals(b)`?"
+    choices:
+      - "It must be true"
+      - "It must be false"
+      - "It may be true or false"
+    answer: 3
+    why: "The rule goes one way only: equal objects must have equal hash codes, but unequal objects may share one too. `\"Aa\"` and `\"BB\"` both have the hash code 2112, and they aren't equal. Only `equals` can tell."
+
+  - type: choice
+    after: objects-as-keys
+    prompt: "A `HashMap<Square, String>` holds four pieces, and Square has its own `equals` and `hashCode`. A for-each loop over `keySet()` prints the squares. In which order do they come?"
+    choices:
+      - "In the order the pieces were put in"
+      - "Sorted by the squares' names"
+      - "In an order set by the hash codes, which the program shouldn't rely on"
+    answer: 3
+    why: "A hash map goes through its keys bucket by bucket, in an order that depends on their hash codes, not on when they were added or on their names. To print in an order you choose, copy the lines or keys into a list and sort it, or keep the keys in a list of their own."
+
+  - type: boss
+    after: objects-as-keys
+    prompt: |
+      A picture is a list of pixel colors. In `Color.java`, write `equals` and `hashCode`: two colors are equal when red, green and blue all match. Then, in `Main.java`, write the method `mostCommon(ArrayList<Color> pixels)`, which returns the color that appears most often in the list. Count the colors in a `HashMap<Color, Integer>`. When several colors are equally common, return the one whose first pixel comes first in the list. The list always has at least one pixel. The check runs:
+
+      ```java fragment
+      ArrayList<Color> pixels = new ArrayList<>();
+      pixels.add(new Color(255, 0, 0));
+      pixels.add(new Color(0, 0, 255));
+      pixels.add(new Color(0, 0, 255));
+      pixels.add(new Color(255, 0, 0));
+      pixels.add(new Color(0, 0, 255));
+      System.out.println(mostCommon(pixels));
+      ```
+
+      and expects:
+
+      ```
+      (0, 0, 255)
+      ```
+    seed:
+      Color.java: |
+        public class Color {
+            private int red;
+            private int green;
+            private int blue;
+
+            public Color(int red, int green, int blue) {
+                this.red = red;
+                this.green = green;
+                this.blue = blue;
+            }
+
+            // Write the equals and hashCode methods here.
+
+            public String toString() {
+                return "(" + this.red + ", " + this.green + ", " + this.blue + ")";
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Color> pixels = new ArrayList<>();
+                pixels.add(new Color(255, 0, 0));
+                pixels.add(new Color(0, 0, 255));
+                pixels.add(new Color(0, 0, 255));
+                pixels.add(new Color(255, 0, 0));
+                pixels.add(new Color(0, 0, 255));
+                System.out.println(mostCommon(pixels));
+            }
+
+            // Write the method mostCommon here.
+        }
+    solution:
+      Color.java: |
+        import java.util.Objects;
+
+        public class Color {
+            private int red;
+            private int green;
+            private int blue;
+
+            public Color(int red, int green, int blue) {
+                this.red = red;
+                this.green = green;
+                this.blue = blue;
+            }
+
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Color)) {
+                    return false;
+                }
+                Color other = (Color) compared;
+                return this.red == other.red && this.green == other.green && this.blue == other.blue;
+            }
+
+            public int hashCode() {
+                return Objects.hash(this.red, this.green, this.blue);
+            }
+
+            public String toString() {
+                return "(" + this.red + ", " + this.green + ", " + this.blue + ")";
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.HashMap;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Color> pixels = new ArrayList<>();
+                pixels.add(new Color(255, 0, 0));
+                pixels.add(new Color(0, 0, 255));
+                pixels.add(new Color(0, 0, 255));
+                pixels.add(new Color(255, 0, 0));
+                pixels.add(new Color(0, 0, 255));
+                System.out.println(mostCommon(pixels));
+            }
+
+            public static Color mostCommon(ArrayList<Color> pixels) {
+                HashMap<Color, Integer> counts = new HashMap<>();
+                for (Color pixel : pixels) {
+                    if (counts.containsKey(pixel)) {
+                        counts.put(pixel, counts.get(pixel) + 1);
+                    } else {
+                        counts.put(pixel, 1);
+                    }
+                }
+                Color best = pixels.get(0);
+                for (Color pixel : pixels) {
+                    if (counts.get(pixel) > counts.get(best)) {
+                        best = pixel;
+                    }
+                }
+                return best;
+            }
+        }
+    hints:
+      - "Color's `equals` compares the three ints, and `hashCode` can be `Objects.hash(this.red, this.green, this.blue)`, with `import java.util.Objects;` at the top of `Color.java`."
+      - "First count: go through the pixels, and put each one in the map with its count plus one, or with 1. Then go through the list again, not the map, and keep the pixel whose count is bigger than the best so far, with `>`. Going through the list in its own order makes the first color win a tie."
+    require:
+      - pattern: \bpublic\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+        message: "Write the header exactly as `public boolean equals(Object compared)`, so that the map uses your method."
+      - pattern: \bpublic\s+int\s+hashCode\s*\(\s*\)
+        message: "Write the header exactly as `public int hashCode()`, so that the map uses your method."
+      - pattern: HashMap<Color,\s*Integer>
+        message: "Count the colors in a `HashMap<Color, Integer>`."
+      - pattern: \bpublic\s+static\s+Color\s+mostCommon\s*\(\s*ArrayList<Color>\s+\w+\s*\)
+        message: "Write the method as `public static Color mostCommon(ArrayList<Color> pixels)`."
+    tests:
+      - call: |
+          ArrayList<Color> pixels = new ArrayList<>();
+          pixels.add(new Color(255, 0, 0));
+          pixels.add(new Color(0, 0, 255));
+          pixels.add(new Color(0, 0, 255));
+          pixels.add(new Color(255, 0, 0));
+          pixels.add(new Color(0, 0, 255));
+          System.out.println(mostCommon(pixels));
+      - call: |
+          ArrayList<Color> pixels = new ArrayList<>();
+          pixels.add(new Color(0, 128, 0));
+          pixels.add(new Color(9, 9, 9));
+          pixels.add(new Color(9, 9, 9));
+          pixels.add(new Color(0, 128, 0));
+          System.out.println(mostCommon(pixels));
+          pixels.add(0, new Color(9, 9, 9));
+          System.out.println(mostCommon(pixels));
+        hidden: true
+      - call: |
+          ArrayList<Color> one = new ArrayList<>();
+          one.add(new Color(1, 2, 3));
+          System.out.println(mostCommon(one));
+          ArrayList<Color> pixels = new ArrayList<>();
+          for (int i = 0; i < 5; i++) {
+              pixels.add(new Color(i, i, i));
+          }
+          for (int i = 0; i < 2; i++) {
+              pixels.add(new Color(4, 4, 4));
+          }
+          System.out.println(mostCommon(pixels));
+        hidden: true
+      - call: |
+          Color c = new Color(10, 20, 30);
+          System.out.println(c.equals(new Color(10, 20, 30)) + " " + (c.hashCode() == new Color(10, 20, 30).hashCode()) + " " + c.equals(new Color(30, 20, 10)));
+          System.out.println(c.equals("(10, 20, 30)"));
+        hidden: true

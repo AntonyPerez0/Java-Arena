@@ -1,6 +1,6 @@
 // Checks a learner's program: compile with javac 21, run every test in the browser's JVM, and
 // compare with the expected output (which came from a real JDK at build time).
-import { compile, runClasses, DEFAULT_TIME_LIMIT_MS, type Diagnostic, type RunResult } from "../engine/client";
+import { compile, runClasses, DEFAULT_TIME_LIMIT_MS, type Diagnostic, type RunResult, type SourceFile } from "../engine/client";
 import { explainCrash, explainDiagnostic } from "../engine/friendly";
 import type { Exercise } from "../content/types";
 import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, normalizeOutput } from "./assemble.js";
@@ -51,8 +51,9 @@ export type GradeResult = {
 };
 
 
-export function friendlyDiagnostics(list: Diagnostic[]): FriendlyDiagnostic[] {
-  return list.map((d) => ({ ...d, friendly: explainDiagnostic(d) }));
+/** `sources` are the learner's files, so that notes can name the program's own classes. */
+export function friendlyDiagnostics(list: Diagnostic[], sources: SourceFile[] = []): FriendlyDiagnostic[] {
+  return list.map((d) => ({ ...d, friendly: explainDiagnostic(d, sources) }));
 }
 
 /** A sentence about what went wrong in a run, or undefined when it ended normally. `sources` are
@@ -103,7 +104,7 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
       else c = alone;
     } else callProblems = explainCalls(c.diagnostics, check.ranges, ex.tests, code);
   }
-  const base = { diagnostics: friendlyDiagnostics(callProblems.length ? [] : c.diagnostics), javacOutput: callProblems.length ? "" : c.output ?? "", ruleProblems, styleProblems, styleNotes, callProblems, compileMs: c.ms, multiFile: own.length > 1 };
+  const base = { diagnostics: friendlyDiagnostics(callProblems.length ? [] : c.diagnostics, own), javacOutput: callProblems.length ? "" : c.output ?? "", ruleProblems, styleProblems, styleNotes, callProblems, compileMs: c.ms, multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", tests: [], internalError: c.internalError };
   if (callProblems.length) return { ...base, status: "call-error", tests: [] };
   if (!c.ok) return { ...base, status: "compile-error", tests: [] };
@@ -136,7 +137,7 @@ async function gradeJUnit(ex: Exercise, own: { path: string; text: string }[], r
   const changedGiven = own.filter((f) => given.has(f.path) && given.get(f.path)!.trim() !== f.text.trim()).map((f) => f.path);
   const withRunner = (replace?: Record<string, string>) => [...own.map((f) => ({ path: f.path, text: replace?.[f.path] ?? given.get(f.path) ?? f.text })), { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }];
   const c = await compile(withRunner(), { libraries });
-  const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", ...rest, callProblems: [], compileMs: c.ms, multiFile: own.length > 1 };
+  const base = { diagnostics: friendlyDiagnostics(c.diagnostics, own), javacOutput: c.output ?? "", ...rest, callProblems: [], compileMs: c.ms, multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", tests: [], internalError: c.internalError };
   if (!c.ok) return { ...base, status: "compile-error", tests: [] };
   const tests: TestResult[] = [];
@@ -207,7 +208,7 @@ export async function runOnly(code: string, stdin: string, files?: Record<string
   // Without a @Test, the classes that use JUnit are run, so the report says why no test ran.
   const testClasses = libraries.length && noMain ? (found.length ? found : own.filter((f) => /\borg\s*\.\s*junit\b/.test(f.text)).map((f) => f.path.replace(/\.java$/, "").replace(/\//g, "."))) : [];
   const c = await compile(testClasses.length ? [...own, { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }] : own, { libraries });
-  const base = { diagnostics: friendlyDiagnostics(c.diagnostics), javacOutput: c.output ?? "", multiFile: own.length > 1 };
+  const base = { diagnostics: friendlyDiagnostics(c.diagnostics, own), javacOutput: c.output ?? "", multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", internalError: c.internalError };
   if (!c.ok) return { ...base, status: "compile-error" };
   const [run] = testClasses.length

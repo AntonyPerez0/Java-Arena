@@ -1,0 +1,492 @@
+topic: inheritance
+drills:
+  - type: predict
+    after: object
+    classes: |
+      class Vase {
+          private String color;
+
+          public Vase(String color) {
+              this.color = color;
+          }
+      }
+    body: |
+      Vase a = new Vase("blue");
+      Vase b = new Vase("blue");
+      Vase c = a;
+      System.out.println(a.equals(b) + " " + a.equals(c) + " " + b.getClass().getName());
+    why: "Vase has no `equals` of its own, so it inherits Object's, which is `true` only for the very same object, like `==`. `c` refers to the same object as `a`, but `b` is another object that happens to have the same color. `getClass().getName()` gives the name of the class, `Vase`."
+
+  - type: predict
+    after: extends
+    classes: |
+      class Instrument {
+          private int minutes;
+
+          public void practice(int minutes) {
+              this.minutes += minutes;
+          }
+
+          public int getMinutes() {
+              return this.minutes;
+          }
+      }
+
+      class Cello extends Instrument {
+          public void practiceScales() {
+              this.practice(15);
+          }
+      }
+    body: |
+      Cello cello = new Cello();
+      cello.practice(30);
+      cello.practiceScales();
+      cello.practiceScales();
+      System.out.println(cello.getMinutes());
+    why: "Cello inherits `practice` and `getMinutes` from Instrument, and its own `practiceScales` calls the inherited `practice`. 30 + 15 + 15 is 60, all added to the one `minutes` variable in the cello's Instrument part."
+
+  - type: predict
+    after: super-constructor
+    classes: |
+      class Account {
+          public Account(String owner) {
+              System.out.println("Account for " + owner);
+          }
+      }
+
+      class Savings extends Account {
+          public Savings(String owner) {
+              super(owner.toUpperCase());
+              System.out.println("Savings ready");
+          }
+      }
+    body: |
+      Savings savings = new Savings("mia");
+    why: "The Savings constructor starts with `super(...)`, which runs Account's constructor all the way through first, with the name in capitals. Only then does the rest of the Savings constructor run. The superclass's part of an object is always set up first."
+
+  - type: predict
+    after: overriding
+    classes: |
+      class Shipment {
+          public String label() {
+              return "shipment";
+          }
+      }
+
+      class Parcel extends Shipment {
+          @Override
+          public String label() {
+              return "big " + super.label();
+          }
+      }
+    body: |
+      Shipment plain = new Shipment();
+      Parcel parcel = new Parcel();
+      System.out.println(plain.label() + ", " + parcel.label());
+    why: "The plain Shipment runs Shipment's `label`. The Parcel runs its own, which calls Shipment's version with `super.label()` and puts `big ` in front of it."
+
+  - type: predict
+    after: actual-type
+    classes: |
+      class Adventurer {
+          public int attack() {
+              return 2;
+          }
+
+          public String report() {
+              return "hits for " + this.attack();
+          }
+      }
+
+      class Knight extends Adventurer {
+          @Override
+          public int attack() {
+              return 9;
+          }
+      }
+    body: |
+      Adventurer hero = new Knight();
+      Adventurer pip = new Adventurer();
+      System.out.println(hero.report() + ", " + pip.report());
+    why: "`report` is written only in Adventurer, but it calls `this.attack()`, and the version that runs is the one of the object's class. `hero` refers to a Knight, so that's Knight's 9, even though the variable's type is Adventurer. `pip` is a plain Adventurer."
+
+  - type: fill
+    after: overriding
+    prompt: "Fill in the blank, a keyword, so that NightTour's plan starts with the flashlights and then follows Tour's plan."
+    classes: |
+      class Tour {
+          public String plan() {
+              return "entrance, halls, shop";
+          }
+      }
+
+      class NightTour extends Tour {
+          @Override
+          public String plan() {
+              return "flashlights, " + [[super]].plan();
+          }
+      }
+    body: |
+      System.out.println(new NightTour().plan());
+    why: "`super.plan()` runs Tour's version of `plan`, even though NightTour overrides it. With `this.plan()`, NightTour's `plan` would call itself again and again, until the program crashes with a StackOverflowError."
+
+  - type: fill
+    after: abstract-classes
+    prompt: "Fill in the blank, a keyword, so that every subclass of Shipment must write its own `price()`."
+    classes: |
+      abstract class Shipment {
+          public [[abstract]] int price();
+
+          public String label() {
+              return "costs " + this.price();
+          }
+      }
+
+      class Letter extends Shipment {
+          @Override
+          public int price() {
+              return 2;
+          }
+      }
+    body: |
+      Shipment letter = new Letter();
+      System.out.println(letter.label());
+    why: "A method with no body, just a header and a semicolon, must be marked `abstract`. It can only be in an abstract class, and every subclass that isn't abstract itself must write it."
+
+  - type: bug
+    after: overriding
+    prompt: "Films should be lent for 7 days, and LibraryItem is right. Which line is wrong?"
+    classes: |
+      class LibraryItem {
+          public int loanDays() {
+              return 21;
+          }
+      }
+
+      class Film extends LibraryItem {
+          public int loanDay() { // BUG
+              return 7;
+          }
+      }
+    body: |
+      LibraryItem film = new Film();
+      System.out.println(film.loanDays());
+    fix: "public int loanDays() {"
+    why: "`loanDay` has a different name, so it's a new method, not an override of `loanDays`, and the film gets LibraryItem's 21. With `@Override` above it, javac would have caught the mistake: `method does not override or implement a method from a supertype`."
+
+  - type: bug
+    after: super-constructor
+    prompt: "A savings account should start with the balance it's given. Which line is wrong?"
+    classes: |
+      class BankAccount {
+          private int balance;
+
+          public BankAccount(int balance) {
+              this.balance = balance;
+          }
+
+          public int getBalance() {
+              return this.balance;
+          }
+      }
+
+      class SavingsAccount extends BankAccount {
+          private int interestPercent;
+
+          public SavingsAccount(int balance, int interestPercent) {
+              super(0); // BUG
+              this.interestPercent = interestPercent;
+          }
+      }
+    body: |
+      SavingsAccount savings = new SavingsAccount(500, 3);
+      System.out.println(savings.getBalance());
+    fix: super(balance);
+    why: "`super(...)` hands values to BankAccount's constructor, which sets the balance. With `super(0)`, every savings account starts at 0, whatever balance it's given. The balance is private to BankAccount, so the constructor call is the only way to set it."
+
+  - type: bug
+    after: abstract-classes
+    prompt: "Instrument is right. Which line is wrong?"
+    classes: |
+      abstract class Instrument {
+          public abstract String sound();
+      }
+
+      class Horn extends Instrument {
+          public String sounds() { // BUG
+              return "toot";
+          }
+      }
+    body: |
+      Instrument horn = new Horn();
+      System.out.println(horn.sound());
+    fix: "public String sound() {"
+    why: "Horn must write every abstract method of Instrument, with the same header. `sounds` is a different method, so Horn still lacks `sound()`, and javac says `Horn is not abstract and does not override abstract method sound() in Instrument`."
+
+  - type: compiles
+    after: super-constructor
+    classes: |
+      class Instrument {
+          private int minutes;
+
+          public int getMinutes() {
+              return this.minutes;
+          }
+      }
+
+      class Drum extends Instrument {
+          private int sticks;
+
+          public Drum(int sticks) {
+              this.sticks = sticks;
+          }
+      }
+    body: |
+      Drum drum = new Drum(2);
+      System.out.println(drum.getMinutes());
+    why: "Yes, and it prints 0. The Drum constructor has no `super(...)`, so Java puts `super();` there, a call to Instrument's constructor without parameters. Instrument has no constructor of its own, so it has the default one, and that call works."
+
+  - type: compiles
+    after: protected
+    classes: |
+      class BankAccount {
+          private int balance;
+
+          public BankAccount(int balance) {
+              this.balance = balance;
+          }
+      }
+
+      class SavingsAccount extends BankAccount {
+          public SavingsAccount(int balance) {
+              super(balance);
+          }
+
+          public void addBonus() {
+              this.balance += 10;
+          }
+      }
+    body: |
+      SavingsAccount savings = new SavingsAccount(100);
+      savings.addBonus();
+    why: "No. Every SavingsAccount has a balance, but it's `private` to BankAccount, so only BankAccount's code may use it: javac says `balance has private access in BankAccount`. Use a public method of BankAccount, such as a `deposit`, or make the variable `protected`."
+
+  - type: compiles
+    after: actual-type
+    classes: |
+      class Adventurer {
+          public int attack() {
+              return 2;
+          }
+      }
+
+      class Knight extends Adventurer {
+          @Override
+          public int attack() {
+              return 9;
+          }
+
+          public void raiseShield() {
+              System.out.println("Shield up");
+          }
+      }
+    body: |
+      Adventurer hero = new Knight();
+      hero.raiseShield();
+    why: "No. The object is a Knight, but javac checks each call against the variable's type, and an Adventurer has no `raiseShield`: `cannot find symbol`. The variable's type decides which methods may be called; the object's class decides which version runs. `Knight hero = new Knight();` would compile."
+
+  - type: choice
+    after: protected
+    prompt: "BankAccount's `balance` is `protected`, in a program without a `package` line. Which classes can use it directly?"
+    choices:
+      - "Only BankAccount"
+      - "BankAccount and its subclasses, and no other class"
+      - "BankAccount, its subclasses, and every other class in the same package, which here is every class of the program"
+    answer: 3
+    why: "`protected` opens a variable to subclasses and to every class in the same package. A program without a `package` line keeps all its classes in one package, the default one, so even `Main` could use `balance`. That's why `private` with methods is the usual choice, and `protected` is kept for what subclasses really need."
+
+  - type: choice
+    after: is-a-has-a
+    prompt: Which of these is a good use of `extends`?
+    choices:
+      - "`class Parcel extends Address`, so that a parcel gets a street and a city"
+      - "`class Archer extends Bow`, so that an archer can shoot"
+      - "`class Film extends LibraryItem`, since every film is one of the library's items"
+      - "`class Playlist extends Song`, so that a playlist can be played"
+    answer: 3
+    why: "Use `extends` when \"every X is a Y\" is true, and an X works wherever a Y is expected. Every film is a library item. A parcel has an address, an archer has a bow, and a playlist has songs: those are instance variables."
+
+  - type: boss
+    after: abstract-classes
+    prompt: |
+      A museum insures its exhibits. `Exhibit.java` is ready: an abstract class with a name, `getName()`, an abstract method `int insuranceValue()`, and a `toString` that shows the name and the value. Write two subclasses of Exhibit:
+
+      - `Painting(String name, int width, int height)`, with the size in centimeters. Its value is 20 dollars for every square centimeter: the width times the height times 20.
+      - `Fossil(String name, int millionYears)`. Its value is 1000 dollars plus 50 for every million years.
+
+      Then, in `Main.java`, write the method `totalInsurance(ArrayList<Exhibit> exhibits)`, which returns the values of all the exhibits added up. The check runs:
+
+      ```java fragment
+      ArrayList<Exhibit> hall = new ArrayList<>();
+      hall.add(new Painting("Harbor at Dawn", 100, 80));
+      hall.add(new Fossil("Shark tooth", 15));
+      System.out.println(hall.get(0));
+      System.out.println(hall.get(1));
+      System.out.println(totalInsurance(hall));
+      ```
+
+      and expects:
+
+      ```
+      Harbor at Dawn: insured for 160000 dollars
+      Shark tooth: insured for 1750 dollars
+      161750
+      ```
+    seed:
+      Painting.java: |
+        public class Painting {
+
+        }
+      Fossil.java: |
+        public class Fossil {
+
+        }
+      Exhibit.java: |
+        public abstract class Exhibit {
+            private String name;
+
+            public Exhibit(String name) {
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public abstract int insuranceValue();
+
+            @Override
+            public String toString() {
+                return this.name + ": insured for " + this.insuranceValue() + " dollars";
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Exhibit> hall = new ArrayList<>();
+                hall.add(new Painting("Harbor at Dawn", 100, 80));
+                hall.add(new Fossil("Shark tooth", 15));
+                System.out.println(hall.get(0));
+                System.out.println(hall.get(1));
+                System.out.println(totalInsurance(hall));
+            }
+
+            // Write the method totalInsurance here.
+        }
+    solution:
+      Painting.java: |
+        public class Painting extends Exhibit {
+            private int width;
+            private int height;
+
+            public Painting(String name, int width, int height) {
+                super(name);
+                this.width = width;
+                this.height = height;
+            }
+
+            @Override
+            public int insuranceValue() {
+                return this.width * this.height * 20;
+            }
+        }
+      Fossil.java: |
+        public class Fossil extends Exhibit {
+            private int millionYears;
+
+            public Fossil(String name, int millionYears) {
+                super(name);
+                this.millionYears = millionYears;
+            }
+
+            @Override
+            public int insuranceValue() {
+                return 1000 + 50 * this.millionYears;
+            }
+        }
+      Exhibit.java: |
+        public abstract class Exhibit {
+            private String name;
+
+            public Exhibit(String name) {
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public abstract int insuranceValue();
+
+            @Override
+            public String toString() {
+                return this.name + ": insured for " + this.insuranceValue() + " dollars";
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Exhibit> hall = new ArrayList<>();
+                hall.add(new Painting("Harbor at Dawn", 100, 80));
+                hall.add(new Fossil("Shark tooth", 15));
+                System.out.println(hall.get(0));
+                System.out.println(hall.get(1));
+                System.out.println(totalInsurance(hall));
+            }
+
+            public static int totalInsurance(ArrayList<Exhibit> exhibits) {
+                int total = 0;
+                for (Exhibit exhibit : exhibits) {
+                    total += exhibit.insuranceValue();
+                }
+                return total;
+            }
+        }
+    hints:
+      - "Each subclass starts `public class Painting extends Exhibit {`, keeps its own numbers in private variables, and hands the name to Exhibit with `super(name);`. Then it overrides `public int insuranceValue()`, with `@Override`."
+      - "Painting returns `this.width * this.height * 20`, and Fossil returns `1000 + 50 * this.millionYears`. `totalInsurance` goes through the list and adds up `exhibit.insuranceValue()`: each object runs its own version."
+    require:
+      - pattern: \bclass\s+Painting\s+extends\s+Exhibit\b
+        message: "Write the header as `public class Painting extends Exhibit`."
+      - pattern: \bclass\s+Fossil\s+extends\s+Exhibit\b
+        message: "Write the header as `public class Fossil extends Exhibit`."
+      - pattern: \bpublic\s+static\s+int\s+totalInsurance\s*\(\s*ArrayList<Exhibit>\s+\w+\s*\)
+        message: "Write the method as `public static int totalInsurance(ArrayList<Exhibit> exhibits)`."
+    tests:
+      - call: |
+          ArrayList<Exhibit> hall = new ArrayList<>();
+          hall.add(new Painting("Harbor at Dawn", 100, 80));
+          hall.add(new Fossil("Shark tooth", 15));
+          System.out.println(hall.get(0));
+          System.out.println(hall.get(1));
+          System.out.println(totalInsurance(hall));
+      - call: |
+          ArrayList<Exhibit> hall = new ArrayList<>();
+          System.out.println(totalInsurance(hall));
+          hall.add(new Fossil("Fern", 0));
+          hall.add(new Painting("Sketch", 10, 3));
+          hall.add(new Fossil("Ammonite", 200));
+          System.out.println(totalInsurance(hall));
+          System.out.println(hall.get(2).getName() + " " + hall.get(2).insuranceValue());
+        hidden: true
+      - call: |
+          Exhibit tiny = new Painting("Stamp portrait", 1, 1);
+          System.out.println(tiny);
+          ArrayList<Exhibit> one = new ArrayList<>();
+          one.add(tiny);
+          System.out.println(totalInsurance(one));
+        hidden: true

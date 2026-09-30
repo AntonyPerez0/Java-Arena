@@ -44,6 +44,9 @@ marked.use({
       if (lang && LABELS[lang]) return `<figure class="io io-${lang}"><figcaption>${LABELS[lang]}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       return `<pre${lang === "java" ? ' class="code-java"' : ""}><code>${esc(text)}</code></pre>\n`;
     },
+    codespan({ text }) {
+      return `<code>${text.replace(/-&gt;/g, '<span class="nw">-&gt;</span>')}</code>`;
+    },
   },
 });
 /** Markdown whose shallowest heading becomes <h{top}>, so the outline has no gaps. */

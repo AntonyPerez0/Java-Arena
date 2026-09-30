@@ -27,6 +27,10 @@ marked.use({
       if (label) return `<figure class="io io-${lang}"><figcaption>${label}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       return false;
     },
+    codespan({ text }) {
+      // A lambda's arrow stays in one piece when running text wraps on a phone.
+      return `<code>${text.replace(/-&gt;/g, '<span class="nw">-&gt;</span>')}</code>`;
+    },
   },
 });
 

@@ -190,22 +190,34 @@ await test('a lesson page downloads its own step first and the rest of the modul
   await ctx.close();
 });
 
-await test('a step that loads late gets the focus on its heading; a lesson file gone after an update says so', async () => {
+await test('a link focused before the app starts keeps the focus; a step that loads late gets the focus on its heading; a lesson file gone after an update says so', async () => {
   const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
   const steps = course.modules.find((m) => m.id === 'printing').steps;
   const { ctx, page } = await newPage();
-  // The last step's file comes only when the test lets it; the fourth one is gone, as after a new
-  // version of the site.
-  let release;
-  const held = new Promise((r) => (release = r));
-  await page.route(`**/lessons/printing/${steps[4].slug}-*.json`, async (route) => {
-    await held;
-    await route.continue();
-  });
+  // Lesson files that come only when the test lets them.
+  const hold = async (s) => {
+    let release;
+    const held = new Promise((r) => (release = r));
+    await page.route(`**/lessons/printing/${s.slug}-*.json`, async (route) => {
+      await held;
+      await route.continue();
+    });
+    return release;
+  };
+  // The first step's file, so the app starts only when the test lets it, and the last step's; the
+  // fourth one is gone, as after a new version of the site.
+  const start = await hold(steps[0]);
+  const release = await hold(steps[4]);
   await page.route(`**/lessons/printing/${steps[3].slug}-*.json`, (route) => route.fulfill({ status: 404, body: 'not found' }));
   await page.goto(BASE + `learn/printing/${steps[0].slug}/`);
-  await page.locator('.challenge-tab').first().waitFor();
-  await page.getByRole('link', { name: `Step 5: ${steps[4].title}` }).focus();
+  // A keyboard user on the pre-rendered page: once the app has replaced it (the app's tabs are
+  // buttons, the pre-rendered ones are not), the app's own link has the focus.
+  const step5 = `Step 5: ${steps[4].title}`;
+  await page.getByRole('link', { name: step5 }).focus();
+  start();
+  await page.locator('button.challenge-tab').first().waitFor();
+  const kept = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
+  expect(kept === step5, `focus on the app's own link: ${kept}`);
   await page.keyboard.press('Enter');
   await page.locator('#loading-h').waitFor();
   release();

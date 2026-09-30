@@ -697,6 +697,30 @@ await test('part 9 mistakes are explained: a missing abstract method, a cast to 
   await ctx.close();
 });
 
+await test('part 10 mistakes are explained: a lambda that changes a local variable, the average of an empty stream, and Comparable without a type', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  const imports = 'import java.util.ArrayList;\nimport java.util.List;\n\n';
+  await setCode(page, imports + MAIN('        List<Integer> points = new ArrayList<>();\n        int total = 0;\n        points.forEach(p -> total += p);\n        System.out.println(total);'));
+  let out = await check(page);
+  expect(/line 8/i.test(out) && out.includes('local variables referenced from a lambda expression must be final or effectively final') && out.includes("total is a local variable of the method, and a lambda can't change it") && out.includes('mapToInt(...).sum()'), out);
+  // The stream of an empty list has no average: getAsDouble() crashes, and the note says why and what to use instead.
+  await setCode(page, imports + MAIN('        List<Integer> points = new ArrayList<>();\n        int total = points.stream().mapToInt(p -> p).sum();\n        System.out.println(total);\n        System.out.println(points.stream().mapToInt(p -> p).average().getAsDouble());'));
+  out = await check(page);
+  expect(/NoSuchElementException \(line 9\)/.test(out) && out.includes('empty OptionalDouble with getAsDouble()') && out.includes('average().orElse(0)'), out);
+  // A note that quotes a generic type shows it as it is written (the note is plain text, not Markdown).
+  await setCode(page, MAIN('        System.out.println(new Player("Ada", 3));'));
+  await page.click('text=Add a class');
+  await page.fill('#new-class', 'Player');
+  await page.click('.file-add-form button[type=submit]');
+  await setCode(page, 'public class Player implements Comparable {\n    private String name;\n    private int points;\n\n    public Player(String name, int points) {\n        this.name = name;\n        this.points = points;\n    }\n\n    public int compareTo(Player other) {\n        return this.points - other.points;\n    }\n}\n');
+  out = await check(page);
+  expect(/Player\.java, line 1/i.test(out) && out.includes('Player implements Comparable without a type in angle brackets') && out.includes('implements Comparable<Player>. Then the compareTo(Player other) that Player already has'), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('playground: run a program with input, share it, open the link elsewhere', async () => {
   const { ctx, page, errors } = await newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);

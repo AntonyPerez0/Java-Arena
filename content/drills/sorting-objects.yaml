@@ -1,0 +1,451 @@
+topic: sorting-objects
+drills:
+  - type: predict
+    after: comparable
+    classes: |
+      class Loaf implements Comparable<Loaf> {
+          private String name;
+          private int grams;
+
+          public Loaf(String name, int grams) {
+              this.name = name;
+              this.grams = grams;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          @Override
+          public int compareTo(Loaf other) {
+              return Integer.compare(this.grams, other.grams);
+          }
+      }
+    body: |
+      ArrayList<Loaf> shelf = new ArrayList<>();
+      shelf.add(new Loaf("rye", 800));
+      shelf.add(new Loaf("baguette", 250));
+      shelf.add(new Loaf("sourdough", 800));
+      shelf.add(new Loaf("brioche", 400));
+      Collections.sort(shelf);
+      System.out.println(shelf.get(0).getName() + " " + shelf.get(3).getName());
+    why: "`compareTo` puts the lighter loaf first, so the order is 250, 400, 800, 800 grams, with the baguette first. Rye and sourdough tie at 800 grams, and Java's sort keeps ties in the order the list had: rye stays before sourdough, so sourdough is last."
+
+  - type: predict
+    after: comparable
+    body: |
+      boolean first = "pear".compareTo("peach") < 0;
+      boolean second = "Zebra".compareTo("apple") < 0;
+      boolean third = "cat".compareTo("catalog") < 0;
+      System.out.println(first + " " + second + " " + third);
+    why: "Strings are compared letter by letter. pear and peach share `pea`, and then r comes after c, so pear comes after peach: `false`. Every capital from A to Z comes before every small letter from a to z, so Zebra comes before apple. When one String is the start of the other, the shorter one comes first."
+
+  - type: predict
+    after: comparator
+    body: |
+      ArrayList<String> rides = new ArrayList<>();
+      rides.add("tram");
+      rides.add("bus");
+      rides.add("ferry");
+      rides.add("taxi");
+      rides.sort((a, b) -> Integer.compare(b.length(), a.length()));
+      System.out.println(rides);
+    why: "The lambda compares `b`'s length with `a`'s, the two swapped, so the longest comes first. tram and taxi both have 4 letters, and a tie keeps the order the list had: tram was in it first."
+
+  - type: predict
+    after: several-criteria
+    body: |
+      ArrayList<String> animals = new ArrayList<>();
+      animals.add("lynx");
+      animals.add("yak");
+      animals.add("otter");
+      animals.add("emu");
+      animals.add("ibis");
+      animals.add("ant");
+      animals.sort((a, b) -> {
+          int byLength = Integer.compare(a.length(), b.length());
+          if (byLength != 0) {
+              return byLength;
+          }
+          return a.compareTo(b);
+      });
+      System.out.println(animals);
+    why: "The length comes first: the three-letter names, then the four-letter ones, then otter. Only names of the same length get to the second criterion, alphabetical order: ant, emu, yak, and ibis before lynx."
+
+  - type: predict
+    after: several-criteria
+    classes: |
+      class Cruise implements Comparable<Cruise> {
+          private String route;
+          private int km;
+
+          public Cruise(String route, int km) {
+              this.route = route;
+              this.km = km;
+          }
+
+          public String getRoute() {
+              return this.route;
+          }
+
+          @Override
+          public int compareTo(Cruise other) {
+              return Integer.compare(this.km, other.km);
+          }
+      }
+    body: |
+      List<Cruise> cruises = new ArrayList<>();
+      cruises.add(new Cruise("Fjord", 14));
+      cruises.add(new Cruise("Harbor", 6));
+      cruises.add(new Cruise("Islands", 21));
+      cruises.add(new Cruise("Canal", 9));
+      cruises.stream()
+              .sorted((a, b) -> b.compareTo(a))
+              .limit(2)
+              .forEach(cruise -> System.out.println(cruise.getRoute()));
+      System.out.println(cruises.get(0).getRoute());
+    why: "`b.compareTo(a)` asks the natural order with the two swapped, so the longest cruise comes first: Islands, 21 km, then Fjord, 14 km, and `limit(2)` stops there. The stream sorts only what passes through it, so the list itself still starts with Fjord."
+
+  - type: fill
+    after: comparable
+    prompt: "Fill in the blank, an expression, so that the contestants with the most points come first."
+    classes: |
+      class Contestant implements Comparable<Contestant> {
+          private String name;
+          private int points;
+
+          public Contestant(String name, int points) {
+              this.name = name;
+              this.points = points;
+          }
+
+          @Override
+          public int compareTo(Contestant other) {
+              return Integer.compare([[other.points]], this.points);
+          }
+
+          @Override
+          public String toString() {
+              return this.name;
+          }
+      }
+    body: |
+      ArrayList<Contestant> quiz = new ArrayList<>();
+      quiz.add(new Contestant("Mila", 12));
+      quiz.add(new Contestant("Tomas", 19));
+      quiz.add(new Contestant("Wen", 15));
+      Collections.sort(quiz);
+      System.out.println(quiz);
+    why: "`Integer.compare(other.points, this.points)` is negative when `this` has *more* points than `other`, so the contestant with more points comes first. With `this.points` first, it would be the usual order, fewest points first."
+
+  - type: fill
+    after: comparator
+    prompt: "Fill in the blank, a method name, so that the diners are sorted by name, from A to Z."
+    classes: |
+      class Diner {
+          private String name;
+          private int table;
+
+          public Diner(String name, int table) {
+              this.name = name;
+              this.table = table;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + " at " + this.table;
+          }
+      }
+    body: |
+      ArrayList<Diner> diners = new ArrayList<>();
+      diners.add(new Diner("Rosa", 4));
+      diners.add(new Diner("Anil", 7));
+      diners.add(new Diner("Greta", 2));
+      diners.sort((a, b) -> a.getName().[[compareTo‖compareToIgnoreCase]](b.getName()));
+      System.out.println(diners);
+    why: "The lambda must answer with an int, as a comparator does, and String's `compareTo` gives one: negative when `a`'s name comes first in alphabetical order. Diner itself has no natural order, so the whole rule is in the lambda."
+
+  - type: bug
+    after: comparator
+    prompt: "The kittens should be listed with the youngest first. Which line is wrong?"
+    classes: |
+      class Kitten {
+          private String name;
+          private int weeks;
+
+          public Kitten(String name, int weeks) {
+              this.name = name;
+              this.weeks = weeks;
+          }
+
+          public int getWeeks() {
+              return this.weeks;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + " (" + this.weeks + " weeks)";
+          }
+      }
+    body: |
+      ArrayList<Kitten> kittens = new ArrayList<>();
+      kittens.add(new Kitten("Miso", 9));
+      kittens.add(new Kitten("Pip", 6));
+      kittens.add(new Kitten("Juniper", 11));
+      kittens.sort((a, b) -> a.getWeeks() < b.getWeeks()); // BUG
+      System.out.println(kittens);
+    fix: "kittens.sort((a, b) -> Integer.compare(a.getWeeks(), b.getWeeks()));"
+    why: "A comparator answers with an int, negative, zero or positive, not with `true` or `false`. javac says `bad return type in lambda expression` and `boolean cannot be converted to int`. `Integer.compare(a.getWeeks(), b.getWeeks())` gives the int, with the youngest first."
+
+  - type: bug
+    after: several-criteria
+    prompt: "A warehouse robot visits the storage bins in order: by aisle, and by shelf within an aisle. Which line is wrong?"
+    classes: |
+      class Bin implements Comparable<Bin> {
+          private int aisle;
+          private int shelf;
+
+          public Bin(int aisle, int shelf) {
+              this.aisle = aisle;
+              this.shelf = shelf;
+          }
+
+          @Override
+          public int compareTo(Bin other) {
+              int byAisle = Integer.compare(this.aisle, other.aisle);
+              if (byAisle == 0) { // BUG
+                  return byAisle;
+              }
+              return Integer.compare(this.shelf, other.shelf);
+          }
+
+          @Override
+          public String toString() {
+              return this.aisle + "/" + this.shelf;
+          }
+      }
+    body: |
+      ArrayList<Bin> route = new ArrayList<>();
+      route.add(new Bin(3, 1));
+      route.add(new Bin(1, 7));
+      route.add(new Bin(3, 5));
+      route.add(new Bin(1, 2));
+      Collections.sort(route);
+      System.out.println(route);
+    fix: "if (byAisle != 0) {"
+    why: "The aisle settles the order when the aisles *differ*, so `byAisle` is the answer when it isn't 0. As written, two bins in the same aisle count as a tie, and bins in different aisles are ordered by shelf, the other way around. With `!=`, the shelves are compared only within an aisle."
+
+  - type: compiles
+    after: comparable
+    classes: |
+      class Ladder {
+          private int length;
+
+          public Ladder(int length) {
+              this.length = length;
+          }
+
+          public int getLength() {
+              return this.length;
+          }
+      }
+    body: |
+      ArrayList<Ladder> ladders = new ArrayList<>();
+      ladders.add(new Ladder(520));
+      ladders.add(new Ladder(430));
+      Collections.sort(ladders);
+      System.out.println(ladders.get(0).getLength());
+    why: "No. `Collections.sort(list)` sorts by the elements' natural order, and Ladder has none: it doesn't implement `Comparable<Ladder>`. javac says `no suitable method found for sort(ArrayList<Ladder>)`. Give Ladder a `compareTo`, or give the sort a comparator."
+
+  - type: compiles
+    after: comparator
+    classes: |
+      class Ladder {
+          private int length;
+
+          public Ladder(int length) {
+              this.length = length;
+          }
+
+          public int getLength() {
+              return this.length;
+          }
+      }
+    body: |
+      ArrayList<Ladder> ladders = new ArrayList<>();
+      ladders.add(new Ladder(520));
+      ladders.add(new Ladder(430));
+      ladders.sort((a, b) -> Integer.compare(a.getLength(), b.getLength()));
+      System.out.println(ladders.get(0).getLength());
+    why: "Yes. Ladder has no natural order, but this sort doesn't need one: the lambda is a comparator, which says how to compare two ladders. It prints 430."
+
+  - type: choice
+    after: comparable
+    prompt: "`a.compareTo(b)` returns -5. What does that mean?"
+    choices:
+      - "`a` comes before `b`"
+      - "`a` comes after `b`"
+      - "`a` is 5 smaller than `b`"
+      - "Nothing: `compareTo` must return -1, 0 or 1"
+    answer: 1
+    why: "Only the sign counts: any negative number means that `a` comes before `b`, zero means a tie, and a positive number means after. The size of the number says nothing, and String's `compareTo`, for one, often returns numbers other than -1 and 1."
+
+  - type: choice
+    after: several-criteria
+    prompt: "A scoreboard should show the highest score first, and teams with the same score from A to Z. Which comparator does that?"
+    choices:
+      - "`Comparator.comparing(Team::getScore).thenComparing(Team::getName).reversed()`"
+      - "`Comparator.comparing(Team::getScore).reversed().thenComparing(Team::getName)`"
+      - "`Comparator.comparing(Team::getName).thenComparing(Team::getScore).reversed()`"
+      - "`Comparator.comparing(Team::getScore).thenComparing(Team::getName)`"
+    answer: 2
+    why: "`reversed()` turns around everything to its left. Right after the score, it turns around only the score, and `thenComparing` then adds the names from A to Z. At the end of the chain, it would turn the names around too, from Z to A. The third one sorts by name first, and the last puts the lowest score first."
+
+  - type: choice
+    after: choosing
+    prompt: "A recipe app lists its recipes by cooking time on one page, by rating on another, and by name in the search. None of these is the one order of a recipe. Where should the orders go?"
+    choices:
+      - "A comparator for each page, where that page sorts, and no `compareTo` in Recipe"
+      - "One `compareTo` in Recipe that compares the cooking time, then the rating, then the name"
+      - "Three `compareTo` methods in Recipe, one for each order"
+      - "Nowhere: `Collections.sort(recipes)` works out an order from Recipe's instance variables"
+    answer: 1
+    why: "A natural order is for the one order everybody expects of a class, like a version number's. Here each page wants its own, so each page sorts with its own comparator. A class can have only one `compareTo(Recipe other)`, and `Collections.sort(recipes)` compiles only if Recipe implements Comparable."
+
+  - type: boss
+    after: several-criteria
+    prompt: |
+      A freelance designer prints a list of the unpaid invoices that are past their due date. `Invoice.java` is ready. In `Main.java`, write the method `overdueReport(List<Invoice> invoices)`, which returns a new list of the invoices, the most days late first, and invoices that are equally late by client, from A to Z. The list it's given stays as it was. The check runs:
+
+      ```java fragment
+      List<Invoice> invoices = new ArrayList<>();
+      invoices.add(new Invoice("Pine Bakery", 3));
+      invoices.add(new Invoice("Harbor Dental", 12));
+      invoices.add(new Invoice("Blue Door Books", 3));
+      invoices.add(new Invoice("Nordic Yoga", 7));
+      System.out.println(overdueReport(invoices));
+      System.out.println(invoices.get(0));
+      ```
+
+      and expects:
+
+      ```
+      [Harbor Dental (12 days late), Nordic Yoga (7 days late), Blue Door Books (3 days late), Pine Bakery (3 days late)]
+      Pine Bakery (3 days late)
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Comparator;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Invoice> invoices = new ArrayList<>();
+                invoices.add(new Invoice("Pine Bakery", 3));
+                invoices.add(new Invoice("Harbor Dental", 12));
+                invoices.add(new Invoice("Blue Door Books", 3));
+                invoices.add(new Invoice("Nordic Yoga", 7));
+                System.out.println(overdueReport(invoices));
+                System.out.println(invoices.get(0));
+            }
+
+            // Write the method overdueReport here.
+        }
+      Invoice.java: |
+        public class Invoice {
+            private String client;
+            private int daysLate;
+
+            public Invoice(String client, int daysLate) {
+                this.client = client;
+                this.daysLate = daysLate;
+            }
+
+            public String getClient() {
+                return this.client;
+            }
+
+            public int getDaysLate() {
+                return this.daysLate;
+            }
+
+            @Override
+            public String toString() {
+                return this.client + " (" + this.daysLate + " days late)";
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Comparator;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Invoice> invoices = new ArrayList<>();
+                invoices.add(new Invoice("Pine Bakery", 3));
+                invoices.add(new Invoice("Harbor Dental", 12));
+                invoices.add(new Invoice("Blue Door Books", 3));
+                invoices.add(new Invoice("Nordic Yoga", 7));
+                System.out.println(overdueReport(invoices));
+                System.out.println(invoices.get(0));
+            }
+
+            public static List<Invoice> overdueReport(List<Invoice> invoices) {
+                List<Invoice> report = new ArrayList<>(invoices);
+                report.sort(Comparator.comparing(Invoice::getDaysLate).reversed().thenComparing(Invoice::getClient));
+                return report;
+            }
+        }
+      Invoice.java: |
+        public class Invoice {
+            private String client;
+            private int daysLate;
+
+            public Invoice(String client, int daysLate) {
+                this.client = client;
+                this.daysLate = daysLate;
+            }
+
+            public String getClient() {
+                return this.client;
+            }
+
+            public int getDaysLate() {
+                return this.daysLate;
+            }
+
+            @Override
+            public String toString() {
+                return this.client + " (" + this.daysLate + " days late)";
+            }
+        }
+    hints:
+      - "Sort a copy, `new ArrayList<>(invoices)`, and return it, or use a stream with `sorted(...)` and `collect`. Either way the given list keeps its order."
+      - "Only the days are reversed, so `reversed()` goes right after them: `Comparator.comparing(Invoice::getDaysLate).reversed().thenComparing(Invoice::getClient)`."
+    tests:
+      - call: |
+          List<Invoice> invoices = new ArrayList<>();
+          invoices.add(new Invoice("Pine Bakery", 3));
+          invoices.add(new Invoice("Harbor Dental", 12));
+          invoices.add(new Invoice("Blue Door Books", 3));
+          invoices.add(new Invoice("Nordic Yoga", 7));
+          System.out.println(overdueReport(invoices));
+          System.out.println(invoices.get(0));
+      - call: |
+          List<Invoice> invoices = new ArrayList<>();
+          System.out.println(overdueReport(invoices));
+          invoices.add(new Invoice("Oak Street Garage", 1));
+          invoices.add(new Invoice("Green Leaf Florist", 20));
+          invoices.add(new Invoice("Kite Studio", 1));
+          invoices.add(new Invoice("Delta Print", 20));
+          invoices.add(new Invoice("Apex Plumbing", 1));
+          List<Invoice> report = overdueReport(invoices);
+          System.out.println(report);
+          System.out.println(invoices);
+        hidden: true

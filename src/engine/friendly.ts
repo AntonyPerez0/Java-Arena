@@ -1,7 +1,7 @@
 // Plain-English explanations for javac errors (keyed by javac's diagnostic code) and for
 // uncaught exceptions (keyed by the exception class).
 
-import { ancestorsOf, classAt, declares, droppedLink, fileName, isRealSubtype, isSubtype, ownClasses, parameterTypes, splitTopLevel, subtypesOf, type HeaderLink, type OwnClass, type OwnClasses } from "./own-classes";
+import { ancestorsOf, classAt, declares, droppedLink, fileName, isRealSubtype, isSubtype, ownClasses, parameterTypes, splitTopLevel, subtypesOf, type HeaderLink, type OwnClass, type OwnClasses, type OwnMember } from "./own-classes";
 import type { Diagnostic, SourceFile } from "./types";
 
 /**
@@ -12,22 +12,35 @@ import type { Diagnostic, SourceFile } from "./types";
 type Rule = { code: string; when?: RegExp; explain: (d: Diagnostic, own: OwnClasses) => string | null };
 
 const quoted = (m: string) => /'([^']+)'/.exec(m)?.[1];
+/** javac couldn't work out the types of a generic call because of a lambda in its parentheses: "cannot infer type-variable(s) T (argument mismatch; bad return type in lambda expression ...)". */
+const LAMBDA_IN_GENERIC_CALL = /cannot infer type-variable\(s\)[^\n]*\n\s*\(argument mismatch; (?:bad return type in lambda expression|lambda body is not compatible)/;
 
 const RULES: Rule[] = [
   { code: "compiler.err.expected", when: /^';' expected/, explain: () => "Java needs a semicolon ; at the end of this statement. Look at the end of the line the arrow points to (or the line before it)." },
   { code: "compiler.err.expected", explain: (d) => `Java expected ${quoted(d.message) ? `'${quoted(d.message)}'` : "something else"} here. Check for a missing bracket, parenthesis or semicolon just before the arrow.` },
   { code: "compiler.err.expected3", explain: () => "Java expected a different symbol here. Check for a missing bracket, parenthesis or semicolon just before the arrow." },
-  { code: "compiler.err.cant.resolve.location", when: /location: variable \w+ of type Object$/m, explain: (d) => objectHasNo(d.message) },
-  { code: "compiler.err.cant.resolve.location.args", when: /location: variable \w+ of type Object$/m, explain: (d) => objectHasNo(d.message) },
+  { code: "compiler.err.cant.resolve.location", when: /location: variable \w+ of type Object$/m, explain: objectHasNo },
+  { code: "compiler.err.cant.resolve.location.args", when: /location: variable \w+ of type Object$/m, explain: objectHasNo },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable [\w$]+\n\s*location: (?:class|interface|enum|record) /, explain: enumConstant },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+(?:variable|class) [\w$]+\n/, explain: importFor },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable length\n/, explain: lengthOf },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: () => "Java doesn't know a variable with this name here. Check the spelling (upper and lower case matter) and that the variable was created before this line, inside the same block { }." },
-  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class (Scanner|ArrayList|HashMap|List|Map|Random|HashSet|Set|Arrays|Collections|LocalDate|Files|Paths|Path)\b/, explain: (d) => `To use ${/symbol:\s+class (\w+)/.exec(d.message)?.[1]}, import it at the top of the file, for example import java.util.Scanner;` },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: () => "Java doesn't know a class with this name. Check the spelling and capital letters, and whether it needs an import at the top of the file." },
   { code: "compiler.err.doesnt.exist", when: /^package system does not exist/, explain: () => "System needs a capital S. With a small s, Java reads system as the name of a package (a folder of classes), and there is no such package." },
   { code: "compiler.err.doesnt.exist", explain: () => "Java can't find this package. Check the spelling of the import or name before the dot, for example java.util.Scanner." },
   { code: "compiler.err.cant.resolve.location.args", explain: notInOwnType },
+  { code: "compiler.err.cant.resolve.location.args", explain: libraryMethod },
   { code: "compiler.err.cant.resolve.location.args", explain: () =>"There is no method with this name that takes these arguments. Check the spelling, and which methods this type really has." },
   { code: "compiler.err.cant.resolve.location", explain: () => "Java can't find this name. Check the spelling and capital letters." },
   { code: "compiler.err.cant.resolve", explain: () => "Java can't find this name. Check the spelling and capital letters." },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: bad return type in lambda expression/, explain: lambdaResult },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: lambda body is not compatible with a void functional interface/, explain: lambdaResult },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: unexpected return value/, explain: lambdaResult },
+  // A lambda given to a generic method, such as Collections.sort(list, (a, b) -> ...): javac reports the call whose types it can't work out.
+  { code: "compiler.err.prob.found.req", when: LAMBDA_IN_GENERIC_CALL, explain: lambdaResult },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: Optional(?:Double|Int|Long)?(?:<.*>)? cannot be converted to /, explain: optionalAsValue },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: (?:no instance\(s\) of type variable\(s\) [\w$, ]+ exist so that )?(?:Stream|IntStream|DoubleStream|LongStream)(?:<.*?>)? (?:conforms to|cannot be converted to) /, explain: streamAsValue },
+  { code: "compiler.err.prob.found.req", when: /no instance\(s\) of type variable\(s\) .* exist so that Collector<.*> conforms to Supplier<R>/, explain: numberStreamCollect },
   { code: "compiler.err.prob.found.req", when: /possible lossy conversion/, explain: () => "This would squeeze a bigger or more precise number type into a smaller one and could lose information, for example a double into an int. Convert it on purpose with a cast such as (int), or use a variable of the bigger type." },
   {
     code: "compiler.err.prob.found.req",
@@ -47,6 +60,8 @@ const RULES: Rule[] = [
     },
   },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+ cannot be converted to [\w$.]+$/m, explain: ownConversion },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: String cannot be converted to [\w$.]+$/m, explain: textToEnum },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: void cannot be converted to /, explain: voidValue },
   { code: "compiler.err.prob.found.req", when: /cannot be converted to/, explain: () => "The value on the right has a different type than the variable or parameter expects. For example text in quotes is a String, not an int; Integer.valueOf(...) turns text into a number." },
   { code: "compiler.err.prob.found.req", when: /unexpected return value/, explain: () => "This method is void, so it can't return a value. Change void to the value's type, or remove the value after return." },
   { code: "compiler.err.prob.found.req", when: /missing return value/, explain: () => "This method must return a value: write return followed by the value." },
@@ -86,6 +101,14 @@ const RULES: Rule[] = [
     when: /^constructor /,
     explain: (d) => `The values in new ${/^constructor ([\w$]+)/.exec(d.message)?.[1]}(...) don't match the constructor's parameters. Compare their number, order and types (Java lists what it required and what it found).`,
   },
+  { code: "compiler.err.cant.apply.symbol", when: /bad return type in lambda expression|lambda body is not compatible/, explain: lambdaResult },
+  {
+    code: "compiler.err.cant.apply.symbol",
+    // javac names the class for a list whose class has a sort of its own: "method sort in class ArrayList<E>".
+    when: /^method (?:sort in (?:interface List|class (?:ArrayList|Vector|CopyOnWriteArrayList))|(?:max|min) in interface Stream)<[\w$]+> cannot be applied[\s\S]*required: Comparator<[\s\S]*found:\s+no arguments/,
+    explain: needsComparator,
+  },
+  { code: "compiler.err.cant.apply.symbol", when: /^method collect in interface (?:Int|Double|Long)Stream cannot be applied/, explain: numberStreamCollect },
   { code: "compiler.err.cant.apply.symbol", explain: () => "The method was called with the wrong number or types of arguments. Compare the call with the method's parameter list (Java lists what it required and what it found)." },
   {
     code: "compiler.err.cant.apply.symbols",
@@ -97,6 +120,7 @@ const RULES: Rule[] = [
     },
   },
   { code: "compiler.err.cant.apply.symbols", when: /^no suitable constructor found for ([\w$]+)/, explain: (d) => `None of the constructors of ${/^no suitable constructor found for ([\w$]+)/.exec(d.message)?.[1]} takes these values. Check the number, order and types of the values in the parentheses.` },
+  { code: "compiler.err.cant.apply.symbols", when: /^no suitable method found for sort\([\w$.]+<[\w$.]+>\)[\s\S]*upper bounds: Comparable<\? super/, explain: sortNotComparable },
   { code: "compiler.err.cant.apply.symbols", explain: () => "None of the versions of this method accepts these arguments. Check the number and types of values in the parentheses." },
   { code: "compiler.err.non-static.cant.be.ref", explain: () => "main is static, so it can't use this object's methods or variables directly. Create an object first (new ...) and call the method on it, or make the method static if it doesn't need an object." },
   { code: "compiler.err.var.might.not.have.been.initialized", explain: () => "This variable is used before it has a value. Give it a starting value where you create it, for example int sum = 0;" },
@@ -111,6 +135,7 @@ const RULES: Rule[] = [
       return `This class already has a ${kind} ${name} that ${takes}. Methods and constructors can share a name only when their parameters differ in number, types or order. The parameter names and the return type don't count.`;
     },
   },
+  { code: "compiler.err.already.defined", when: /^variable [\w$]+ is already defined in/, explain: lambdaParameterTaken },
   { code: "compiler.err.already.defined", explain: () => "A variable or method with this name already exists here. Use a different name, or drop the type to change the existing variable (name = ... instead of String name = ...)." },
   { code: "compiler.err.report.access", explain: privateInParent },
   { code: "compiler.err.report.access", explain: () => "This is private, so only code inside its own class can use it. Use a public method of that class (for example a getter) instead." },
@@ -118,7 +143,9 @@ const RULES: Rule[] = [
   { code: "compiler.err.illegal.start.of.expr", explain: () => "Something here isn't a valid start of an expression. Often a bracket or parenthesis is missing earlier, or a method was declared inside another method." },
   { code: "compiler.err.illegal.start.of.type", explain: () => "Java didn't expect this here. Check for a missing or extra bracket around this line." },
   { code: "compiler.err.not.stmt", explain: () => "This isn't a complete statement on its own. Perhaps it should be assigned to a variable or printed, or = was mixed up with ==." },
+  { code: "compiler.err.cant.deref", when: /^void cannot be dereferenced/, explain: voidDereferenced },
   { code: "compiler.err.cant.deref", explain: () => "Primitive values like int, double and boolean have no methods, so you can't put a dot after them. Use a wrapper or a helper, for example String.valueOf(number)." },
+  { code: "compiler.err.operator.cant.be.applied.1", when: /^\s*(?:first|second) type:\s+Optional/m, explain: optionalInArithmetic },
   { code: "compiler.err.operator.cant.be.applied.1", explain: () => "This operator doesn't work with these two types, for example subtracting a String, or comparing a String with <." },
   { code: "compiler.err.operator.cant.be.applied", explain: () => "This operator doesn't work with this type, for example ! on a number." },
   { code: "compiler.err.incomparable.types", explain: () => "These two values have types that can never be equal, so comparing them with == makes no sense." },
@@ -145,14 +172,69 @@ const RULES: Rule[] = [
   { code: "compiler.err.call.must.be.first.stmt.in.ctor", explain: () => "A call to super(...) or this(...) must be the first line of the constructor." },
   { code: "compiler.err.ref.ambiguous", explain: () => "Java found more than one thing with this name and can't tell which one you mean." },
   { code: "compiler.err.var.not.initialized.in.default.constructor", explain: () => "This final variable never gets a value. Give it one where it is declared or in every constructor." },
+  { code: "compiler.err.cant.ref.non.effectively.final.var", explain: effectivelyFinal },
+  { code: "compiler.err.lambda.body.neither.value.nor.void.compatible", explain: valueOnEveryPath },
+  { code: "compiler.err.enum.cant.be.instantiated", explain: newEnum },
+  { code: "compiler.err.mod.not.allowed.here", explain: modifierNotAllowed },
+  { code: "compiler.err.invalid.mref", explain: invalidMethodReference },
+  { code: "compiler.err.name.clash.same.erasure.no.override", explain: nameClash },
 ];
 
-/** A name looked up on a variable of type Object, such as equals' parameter used before its cast. */
-function objectHasNo(m: string): string {
+/** A name looked up on a variable of type Object, such as equals' parameter used before its cast, or a lambda's parameter. */
+function objectHasNo(d: Diagnostic, own: OwnClasses): string {
+  const m = d.message;
   const v = /location: variable (\w+) of type Object$/m.exec(m)?.[1] ?? "it";
   const what = /symbol:\s+(variable|method) (\w+)/.exec(m);
   const member = what ? (what[1] === "method" ? `${what[2]}()` : what[2]) : "";
+  const lambda = v !== "it" && what ? objectInLambda(d, own, v, what[1] === "method", what[2]) : null;
+  if (lambda) return lambda;
   return `${v} has the type Object, and Object has no ${what?.[1] ?? "member"} ${member}. Java goes by the variable's type, even when the object in it is one of yours. Cast it to your own class first, for example Parcel other = (Parcel) ${v}; with your class's name instead of Parcel, and then use other.${member}.`;
+}
+
+/** Whether one of the program's own types declares a method with this name. */
+const ownMethod = (own: OwnClasses, name: string) => [...own.types.values()].some((t) => declares(t, name, true));
+
+/** "incompatible types: void cannot be converted to int": the value of a void method stored or returned. */
+function voidValue(d: Diagnostic, own: OwnClasses): string {
+  const to = /void cannot be converted to (.+)$/m.exec(d.message)?.[1].trim() || "int";
+  const c = atCaret(d);
+  // javac's caret is on the ( of the call.
+  const name = c ? /([\w$]+)\s*$/.exec(beforeCaret(c))?.[1] : undefined;
+  if (name && ownMethod(own, name))
+    return `${name}(...) is void: it gives back nothing, so there is no value to store or return here. If it should give a value, give it a return type (such as ${to}) in its header and end it with return and the value. Otherwise call it on a line of its own.`;
+  return `The method called here is void: it gives back nothing, so there is no value to store or return. If it's your own method and it should give a value, give it a return type (such as ${to}) and a return statement. Otherwise, call it on a line of its own. (sort, for example, sorts the list itself: call list.sort(...) and then use list.)`;
+}
+
+/**
+ * The name of the method whose call ends right before javac's caret (a dot): forEach in
+ * "names.forEach(...).count()", also when the dot starts a line of its own below the call.
+ */
+function callBefore(d: Diagnostic, own: OwnClasses): string | null {
+  const c = atCaret(d);
+  if (!c) return null;
+  const lines = own.code.get(fileName(d.file));
+  const same = lines?.[d.line - 1]?.length === c.line.length;
+  const above = same ? lines!.slice(Math.max(0, d.line - 9), d.line - 1) : [];
+  const before = [...above, (same ? lines![d.line - 1] : c.line).slice(0, c.line.length - c.at.length)].join("\n").trimEnd();
+  if (!before.endsWith(")")) return null;
+  let depth = 0;
+  for (let k = before.length - 1; k >= 0; k--) {
+    if (before[k] === ")") depth++;
+    else if (before[k] === "(" && --depth === 0) return /([\w$]+)\s*$/.exec(before.slice(0, k))?.[1] ?? null;
+  }
+  return null;
+}
+
+/** "void cannot be dereferenced": a dot after a call of a void method, such as forEach(...).count(). */
+function voidDereferenced(d: Diagnostic, own: OwnClasses): string {
+  const name = callBefore(d, own);
+  const start = `${name ? `${name}(...)` : "The method before this dot"} is void: it gives back nothing, so there is no value to call a method on.`;
+  if (name && /^forEach(?:Ordered)?$/.test(name))
+    return `${start} ${name} only does something with each value, so nothing can come after it: make it the last step. To get a value, such as a count or a list, end a stream with count() or collect(...) instead of ${name}.`;
+  if (name && ownMethod(own, name))
+    return `${start} If ${name} should give back a value, change void in its header to the value's type, and end it with return and the value. Otherwise call it on a line of its own.`;
+  const yours = name ? "" : " If it's a method of your own and it should give back a value, change void to that type and end it with return.";
+  return `${start} Call it on a line of its own, and then use the object it worked on, as in Collections.sort(names); and then names.get(0).${yours}`;
 }
 
 // ---- Inheritance, abstract classes and interfaces (MOOC part 9) ----
@@ -215,6 +297,9 @@ function missingAbstractMethod(d: Diagnostic, own: OwnClasses): string | null {
   const same = declares(own.types.get(cls), method, true)
     ? `${cls} has a method ${method}, but with other parameter types: to count, they must be exactly (${params}).`
     : `If ${cls} already has a method like it, compare the name and the parameter types: they must match exactly.`;
+  // class Person implements Comparable, without <Person>: the method it must have takes Object.
+  if (((parent === "Comparable" && method === "compareTo") || (parent === "Comparator" && method === "compare")) && /^Object(,Object)?$/.test(m[3]) && rawIn(own, cls, parent))
+    return rawComparison(own, cls, parent);
   if (parent === "Comparable" && method === "compareTo")
     return `${cls} implements Comparable, so it must have the method compareTo, which tells how two ${cls} objects compare. Add it to ${cls}: public int compareTo(${params} other) { ... }, returning a negative number, zero or a positive number. ${same}`;
   if (isInterface(own, parent))
@@ -386,6 +471,10 @@ function overridesNothing(d: Diagnostic, own: OwnClasses): string {
   }
   if (name === "equals" && where === "Object")
     return `@Override says that this equals replaces the equals every class gets from Object, but that one takes an Object: write public boolean equals(Object compared), not equals(${params}). Inside it, check the type with instanceof and cast compared to your class.`;
+  if ((where === "Comparable" || where === "Comparator") && cls && rawIn(own, cls.name, where)) {
+    const types = parameterTypes(params);
+    return `@Override says that ${name} replaces the method ${name} of ${where}, but ${cls.name} implements ${where} without a type in angle brackets, so that ${name} takes ${where === "Comparable" ? "an Object" : "two Objects"}, and ${name}(${spaced(types)}) doesn't replace it. Write the type in the header of ${cls.name}: implements ${where}<${types.split(",")[0] || cls.name}>.`;
+  }
   if (where) return `@Override says that ${name} replaces the method ${name} of ${where}, but its parameter types are different, so it doesn't replace it. Give it exactly the same parameter types as in ${where}${found?.params == null ? "" : found.params ? `: (${spaced(found.params)})` : ", where it takes none"}.${remove}`;
   const hidden = parents.find((p) => p.members.some((m) => m.method && m.private && m.name === name));
   if (hidden) return `${name} is private in ${hidden.name}, so ${cls?.name ?? "a subclass"} can't see it, and a method can't replace what it can't see. If it should be replaceable, make it protected or public in ${hidden.name}.${remove}`;
@@ -646,6 +735,1253 @@ function missingBody(d: Diagnostic, own: OwnClasses): string {
   return `${base} If it's meant to be abstract, so that each subclass writes its own, write abstract in front of it${cls.abstract ? "" : `, and make the class abstract too: abstract class ${cls.name}`}.`;
 }
 
+// ---- Lambdas, streams, Optional, Comparable and Comparator, enums (MOOC part 10) ----
+
+/** "a" or "an" before a word, also a lower-case one: an int, an OptionalDouble, a double. */
+const anWord = (word: string) => `${/^[aeiou]/i.test(word) ? "an" : "a"} ${word}`;
+/** "a, b and c". */
+const listed = (items: string[]) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** The text before javac's caret on its line. */
+const beforeCaret = (c: { line: string; at: string }) => c.line.slice(0, c.line.length - c.at.length);
+/** A word with a capital first letter: Int for int, as in mapToInt. */
+const cap = (word: string) => word[0].toUpperCase() + word.slice(1);
+/** The plain number type a number object holds: int for Integer. */
+const UNBOXED: Record<string, "int" | "long" | "double" | undefined> = { Integer: "int", Long: "long", Double: "double" };
+const BOXED: Record<string, string> = { int: "Integer", long: "Long", double: "Double" };
+/** The number types a stream can hold, from narrowest to widest: a value can go to a wider one without a cast. */
+const WIDTH: Record<string, number | undefined> = { int: 0, long: 1, double: 2 };
+
+/** Where Java's classes are, for the ones beginners use most: what to import. */
+const PACKAGES: Record<string, string> = {
+  ...Object.fromEntries(
+    ["Scanner", "ArrayList", "HashMap", "List", "Map", "Random", "HashSet", "Set", "Arrays", "Collections", "Collection", "Iterator", "Comparator", "Optional", "OptionalDouble", "OptionalInt", "LinkedList", "TreeMap", "TreeSet", "Objects"].map((c) => [c, "java.util"]),
+  ),
+  ...Object.fromEntries(["Collectors", "Stream", "IntStream", "DoubleStream", "LongStream"].map((c) => [c, "java.util.stream"])),
+  ...Object.fromEntries(["Function", "Predicate", "Consumer", "Supplier", "BiFunction", "UnaryOperator", "BinaryOperator"].map((c) => [c, "java.util.function"])),
+  ...Object.fromEntries(["Pattern", "Matcher"].map((c) => [c, "java.util.regex"])),
+  ...Object.fromEntries(["Files", "Paths", "Path"].map((c) => [c, "java.nio.file"])),
+  ...Object.fromEntries(["File", "IOException", "PrintWriter", "FileWriter"].map((c) => [c, "java.io"])),
+  LocalDate: "java.time",
+};
+
+/** "cannot find symbol" for one of Java's classes that isn't imported, whether used as a type (class) or through its name (variable), as in Collectors.toList(). */
+function importFor(d: Diagnostic, own: OwnClasses): string | null {
+  const name = /symbol:\s+(?:variable|class) ([\w$]+)/.exec(d.message)?.[1];
+  const pkg = name && PACKAGES[name];
+  if (!name || !pkg) return null;
+  // import java.util.*; doesn't reach into java.util.stream or java.util.function.
+  const star = pkg.startsWith("java.util.") && own.code.get(fileName(d.file))?.some((l) => /^\s*import\s+java\.util\.\*\s*;/.test(l));
+  return `To use ${name}, import it at the top of the file: import ${pkg}.${name};${star ? ` (import java.util.*; covers only java.util itself, not ${pkg}.)` : ""}`;
+}
+
+/** "cannot find symbol: variable length" on a String or a collection. */
+function lengthOf(d: Diagnostic): string | null {
+  const [, v, type] = /location: variable ([\w$]+) of type ([\w$.]+)/.exec(d.message) ?? [];
+  if (!v) return null;
+  if (type === "String") return `A String's length is a method: write ${v}.length(), with parentheses. (An array's length is written without them.)`;
+  const noun = /^(?:List|ArrayList|LinkedList|Collection)$/.test(type) ? "list" : /^(?:Set|HashSet|TreeSet)$/.test(type) ? "set" : /^(?:Map|HashMap|TreeMap)$/.test(type) ? "map" : null;
+  return noun ? `The number of elements in a ${noun} is given by the method size(): write ${v}.size(). length is for arrays.` : null;
+}
+
+/** An enum constant written without its enum's name (HEARTS for Suit.HEARTS), or a constant the enum doesn't have. */
+function enumConstant(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+variable ([\w$]+)\n\s*location: \w+ ([\w$.]+)/.exec(d.message);
+  if (!m) return null;
+  const [name, location] = [m[1], simple(m[2])];
+  const here = own.types.get(location);
+  const c = atCaret(d);
+  // Suit.HEART: the enum's name before the dot, and a constant it doesn't have.
+  if (here?.kind === "enum" && here.constants.length && !here.constants.includes(name) && c && classNameBefore(d, own, c, location)) {
+    const near = here.constants.find((k) => k.toLowerCase() === name.toLowerCase() || editDistance(k.toLowerCase(), name.toLowerCase()) <= 2);
+    return `${location} has no constant ${name}. Its constants are ${listed(here.constants)}.${near ? ` Did you mean ${near}? Upper and lower case matter.` : ""}`;
+  }
+  const enums = [...own.types.values()].filter((t) => t.kind === "enum" && t.name !== location && t.constants.includes(name)).map((t) => t.name);
+  if (!enums.length) return null;
+  if (enums.length > 1) return `${name} is a constant of the enums ${listed(enums)}. Outside its enum, a constant needs the enum's name in front: ${enums.map((e) => `${e}.${name}`).join(" or ")}, whichever you mean.`;
+  const e = enums[0];
+  return `${name} is a constant of the enum ${e}, and outside ${e} a constant needs its enum's name in front: write ${e}.${name}. (Only the case labels of a switch on ${anWord(e)} value can use the name alone.)`;
+}
+
+/**
+ * The value javac's caret is in, as written (with its strings), when its line is a plain
+ * `Type v = value;`, `v = value;` or `return value;`: scanner.nextLine() in "Suit s = scanner.nextLine();".
+ */
+function assignedValue(d: Diagnostic, own: OwnClasses): string | null {
+  const c = atCaret(d);
+  const code = own.code.get(fileName(d.file))?.[d.line - 1];
+  const text = own.lines.get(fileName(d.file))?.[d.line - 1];
+  if (!c || code == null || text == null || code.length !== c.line.length) return null;
+  const m = /^(\s*(?:return\s+|(?:final\s+)?(?:[\w$.]+(?:\s*<[^<>;=]*>)?(?:\s*\[\s*\])*\s+)?[\w$.]+(?:\[[^\]]*\])?\s*=(?!=)\s*))(.*?)(\s*);\s*$/.exec(code);
+  if (!m || !m[2]) return null;
+  // Up to the ;, since a string at the end of the value is blanked out in the code.
+  const [from, to] = [m[1].length, m[1].length + m[2].length + m[3].length];
+  const caret = c.line.length - c.at.length;
+  // Two variables declared on one line (Suit a = ..., b = ...): which value is meant isn't certain.
+  if (caret < from || caret > to || splitTopLevel(m[2]).length > 1) return null;
+  const value = text.slice(from, to).trim();
+  return value.length <= 60 ? value : null;
+}
+
+/** Text put in a variable of one of the program's enums: "incompatible types: String cannot be converted to Suit". */
+function textToEnum(d: Diagnostic, own: OwnClasses): string | null {
+  const to = simple(/String cannot be converted to ([\w$.]+)$/m.exec(d.message)?.[1] ?? "");
+  const t = own.types.get(to);
+  if (t?.kind !== "enum") return null;
+  const upper = t.constants.length > 0 && t.constants.every((k) => k === k.toUpperCase());
+  const literal = /^"((?:[^"\\]|\\.)*)"/.exec(atCaret(d)?.at ?? "");
+  if (literal) {
+    const text = literal[1];
+    const constant = t.constants.find((k) => k === text) ?? t.constants.find((k) => k.toLowerCase() === text.trim().toLowerCase());
+    const valueOf = ` To turn text (such as a line of input) into a constant, use ${to}.valueOf(text).`;
+    if (constant) return `Text in quotes is a String, not ${anWord(to)}, even when it is the name of a constant. Write the constant itself, without quotes${constant === text ? "" : " and spelled as in the enum"}: ${to}.${constant}.${valueOf}`;
+    const all = t.constants.length ? ` Its constants are ${listed(t.constants.map((k) => `${to}.${k}`))}.` : "";
+    return `Text in quotes is a String, not ${anWord(to)}. Write one of the enum's constants instead, without quotes.${all}${valueOf}`;
+  }
+  // A String from a variable or a method, such as a line of input: valueOf finds the constant with its name.
+  const value = assignedValue(d, own);
+  const v = value ?? "text";
+  // A value such as x + "" needs parentheses before .trim() can follow it.
+  let bare = v;
+  while (/\([^()]*\)/.test(bare)) bare = bare.replace(/\([^()]*\)/g, "");
+  const whole = /[^\w$.[\]]/.test(bare) ? `(${v})` : v;
+  const clean = upper ? `${whole}.trim().toUpperCase()` : `${whole}.trim()`;
+  const done = upper ? /\.toUpperCase\(\)/.test(v) : /\.(?:trim|strip)\(\)/.test(v);
+  const exactly = `The text must be exactly the name of a constant${upper ? ", in capital letters" : ", capital letters included"}, or valueOf stops the program with an error${done ? "." : `: if it may have spaces around it${upper ? " or small letters" : ""}, use ${to}.valueOf(${clean}).`}`;
+  return `${value ? `${value} ${/\)$/.test(value) ? "gives" : "is"} a String` : "This is a String"}, not ${anWord(to)}. To get the constant whose name is in the text, use ${to}.valueOf(${v}). ${exactly}`;
+}
+
+/** new on an enum: "enum classes may not be instantiated". */
+function newEnum(d: Diagnostic, own: OwnClasses): string {
+  const m = /^new\s+([\w$.]+)\s*\(\s*(\S)?/.exec(atCaret(d)?.at ?? "");
+  if (!m) return "An enum's objects are its constants, and Java creates them itself, so new can't create one. Use a constant, written with the enum's name in front, such as Suit.HEARTS.";
+  const name = simple(m[1]);
+  const constants = own.types.get(name)?.constants ?? [];
+  const first = constants[0] ?? "CONSTANT";
+  const values = m[2] && m[2] !== ")" ? ` The values in the parentheses belong in the enum itself, after each constant's name, as in ${first}(...).` : "";
+  return `${name} is an enum: its objects are its constants${constants.length ? ` (${listed(constants)})` : ""}, and Java creates them itself, so new ${name}(...) isn't allowed. Use a constant instead, such as ${name}.${first}.${values} To get the constant whose name is in a String, use ${name}.valueOf(text).`;
+}
+
+/** "modifier public not allowed here", most often on an enum's constructor. */
+function modifierNotAllowed(d: Diagnostic, own: OwnClasses): string | null {
+  const words = /^modifier ([\w,]+) not allowed here/.exec(d.message)?.[1].split(",");
+  if (!words) return null;
+  const c = atCaret(d);
+  const cls = classAt(own, d.file, d.line);
+  const them = words.length > 1 ? "them" : "it";
+  if (cls?.kind === "enum" && c && new RegExp(`^${escapeRegExp(cls.name)}\\s*\\(`).test(c.at))
+    return `The constructor of the enum ${cls.name} can't be ${listed(words)}: only the enum's own constants call it, when Java creates them. Remove ${words.length > 1 ? "those words" : words[0]} (an enum's constructor is private by itself).`;
+  return `${words.length > 1 ? `The words ${listed(words)} aren't` : `The word ${words[0]} isn't`} allowed here. Remove ${them}.`;
+}
+
+const COLLECTION_METHODS = ["add", "get", "set", "size", "contains", "remove", "isEmpty", "indexOf", "stream"];
+const MAP_METHODS = ["get", "put", "containsKey", "getOrDefault", "keySet", "values", "entrySet", "remove", "size"];
+/** Methods of Java's classes that a method reference often names, by class: what "Did you mean" can suggest for them. */
+const JDK_METHODS: Record<string, string[]> = {
+  PrintStream: ["println", "print", "printf"],
+  String: ["length", "charAt", "toUpperCase", "toLowerCase", "trim", "strip", "isEmpty", "isBlank", "equals", "equalsIgnoreCase", "compareTo", "compareToIgnoreCase", "substring", "split", "contains", "startsWith", "endsWith", "indexOf", "valueOf", "repeat", "concat"],
+  Integer: ["parseInt", "valueOf", "compare", "sum", "max", "min", "intValue", "toString"],
+  Double: ["parseDouble", "valueOf", "compare", "sum", "max", "min", "doubleValue", "toString"],
+  Long: ["parseLong", "valueOf", "compare", "sum", "max", "min", "longValue", "toString"],
+  Character: ["isDigit", "isLetter", "isLetterOrDigit", "isUpperCase", "isLowerCase", "isWhitespace", "toUpperCase", "toLowerCase", "getNumericValue"],
+  Math: ["abs", "sqrt", "pow", "max", "min", "round", "floor", "ceil", "random"],
+  Objects: ["equals", "hash", "isNull", "nonNull", "requireNonNull", "toString"],
+  StringBuilder: ["append", "insert", "reverse", "toString", "length", "charAt"],
+  ...Object.fromEntries(["List", "ArrayList", "LinkedList", "Collection", "Set", "HashSet", "TreeSet"].map((c) => [c, COLLECTION_METHODS])),
+  ...Object.fromEntries(["Map", "HashMap", "TreeMap"].map((c) => [c, MAP_METHODS])),
+};
+
+/** "invalid method reference" for a method that doesn't exist, as in Person::getNmae or System.out::printn. */
+function invalidMethodReference(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /cannot find symbol\n\s*symbol:\s+method ([\w$]+)\((.*)\)\n\s*location: \w+ ([\w$.]+)(?:<[^\n]*?>)?((?:\[\])*)/.exec(d.message);
+  if (!m) return null;
+  const [method, args] = [m[1], m[2]];
+  const cls = simple(m[3]) + m[4];
+  const names = own.types.get(cls)?.members.filter((x) => x.method).map((x) => x.name) ?? JDK_METHODS[cls] ?? [];
+  const near = names.find((n) => n !== method && (n.toLowerCase() === method.toLowerCase() || editDistance(n.toLowerCase(), method.toLowerCase()) <= 2));
+  // javac writes the parameters of the interface the reference is for, which may be its type variables (T for a Consumer<T>): they mean nothing to the learner.
+  const typeVariables = new Set([...d.formatted.matchAll(/where ([\w$, ]+?) (?:is a|are) (?:fresh )?type-variables?:/g)].flatMap((w) => w[1].split(/,\s*/)));
+  const params = args ? splitTopLevel(args).map((a) => a.trim()) : [];
+  const takes = params.length && !params.some((p) => typeVariables.has(p) || /^[A-Z]\d*$/.test(p)) ? ` that takes (${spaced(args)})` : "";
+  // What is before the :: as written: a class (String::lenght), an object (System.out::printn, p::greeet), this or super.
+  const q = /^([\w$.]+)\s*::/.exec(atCaret(d)?.at ?? "")?.[1];
+  const of = !q || simple(q) === cls ? cls : q === "this" ? `this object, ${anWord(cls)}` : q === "super" ? `the parent class ${cls}` : `${q} (${anWord(cls)})`;
+  return `${q ?? cls}::${method} refers to the method ${method} of ${of}, and ${cls} has no method ${method}${takes}. ${near ? `Did you mean ${near}? ` : ""}Check the spelling: upper and lower case matter.`;
+}
+
+/** "name clash: compareTo(Object) in Car and compareTo(Car) in Comparable have the same erasure, yet neither overrides the other". */
+function nameClash(d: Diagnostic): string | null {
+  const m = /^name clash: ([\w$]+)\((.*?)\) in ([\w$.]+) and [\w$]+\((.*?)\) in ([\w$.]+) have the same erasure, yet neither overrides the other/.exec(d.message);
+  if (!m) return null;
+  const [, method, mine, cls, theirs, parent] = m;
+  const example = /^[\w$.]+$/.test(theirs) ? `, as in ${method}(${simple(theirs)} other)` : "";
+  return `${method}(${spaced(mine)}) in ${simple(cls)} doesn't replace ${method}(${spaced(theirs)}) of ${simple(parent)}, because the parameter types differ, and Java can't keep both. Give it exactly the parameter types of the one in ${simple(parent)}${example}.`;
+}
+
+/** Whether the header of one of the program's types names a library interface without a type in angle brackets, as in class Person implements Comparable. */
+function rawIn(own: OwnClasses, cls: string, iface: string): boolean {
+  const t = own.types.get(cls);
+  const lines = t && own.code.get(t.file);
+  if (!t || !lines) return false;
+  const text = lines.slice(t.from - 1, t.from + 4).join("\n");
+  const header = text.slice(0, text.includes("{") ? text.indexOf("{") : text.length);
+  return new RegExp(`\\b${iface}\\b(?!\\s*<)`).test(header);
+}
+
+/** A class that implements Comparable or Comparator without a type in angle brackets, so the method it must have takes Object. */
+function rawComparison(own: OwnClasses, cls: string, parent: "Comparable" | "Comparator"): string {
+  const method = parent === "Comparable" ? "compareTo" : "compare";
+  const has = own.types.get(cls)?.members.find((x) => x.method && x.name === method && x.params && !/^Object(,Object)?$/.test(x.params));
+  const type = has?.params?.split(",")[0] ?? (parent === "Comparable" ? cls : null);
+  if (parent === "Comparable") {
+    const then = has ? `Then the compareTo(${type} other) that ${cls} already has is the one it needs.` : `Then add public int compareTo(${type} other) { ... } to ${cls}, returning a negative number, zero or a positive number.`;
+    return `${cls} implements Comparable without a type in angle brackets, so Java expects compareTo(Object other), which takes any object. Write which objects ${cls} is compared with in its header: implements Comparable<${type}>. ${then}`;
+  }
+  const then = has ? `Then the compare(${spaced(has.params!)}) that ${cls} already has is the one it needs.` : "Then add public int compare with two parameters of that type.";
+  return `${cls} implements Comparator without a type in angle brackets, so Java expects compare(Object a, Object b), which takes any two objects. Write the type of the objects it compares in its header: implements Comparator<${type ?? "..."}>${type ? "" : ", with their type in the angle brackets"}. ${then}`;
+}
+
+/** Whether values of a type have an order of their own (they are Comparable): numbers, text, an enum, or one of the program's types that implements Comparable. */
+function comparable(own: OwnClasses, type: string): boolean {
+  if (/^(?:String|int|long|double|float|short|byte|char|boolean|Integer|Long|Double|Float|Short|Byte|Character|Boolean)$/.test(type)) return true;
+  const t = own.types.get(type);
+  return !!t && (t.kind === "enum" || [t, ...ancestorsOf(own, t.name)].some((a) => a.supers.includes("Comparable")));
+}
+
+/** A getter of one of the program's types (or a record's accessor) whose values have an order, for an example such as Comparator.comparing(Person::getName). */
+function sortKey(own: OwnClasses, t: OwnClass | undefined): string | undefined {
+  const accessor = (name: string) => t?.kind === "record" && t.members.some((f) => !f.method && f.name === name);
+  return t?.members.find((x) => x.method && !x.static && !x.private && x.params === "" && (/^get[A-Z]/.test(x.name) || accessor(x.name)) && comparable(own, x.type))?.name;
+}
+
+/** Collections.sort on a list whose elements aren't Comparable: "no suitable method found for sort(List<Dog>)". */
+function sortNotComparable(d: Diagnostic, own: OwnClasses): string | null {
+  const type = simple(/^no suitable method found for sort\([\w$.]+<([\w$.]+)>\)/.exec(d.message)?.[1] ?? "");
+  if (!type) return null;
+  const v = /^\.?\s*sort\(\s*([\w$]+)\s*\)/.exec(atCaret(d)?.at ?? "")?.[1] ?? "list";
+  const t = own.types.get(type);
+  const getter = sortKey(own, t);
+  const comparator = `${v}.sort(Comparator.comparing(${getter ? `${type}::${getter}` : "..."}))`;
+  const two = t ? `two ${type} objects` : `two objects of type ${type}`;
+  const order = `Collections.sort(${v}) sorts by the elements' own order, and ${type} has none: it doesn't implement Comparable, so Java doesn't know which of ${two} comes first.`;
+  if (!t) return `${order} Give the sort a Comparator that says how to compare ${two}, as in ${comparator}.`;
+  return `${order} Make ${type} implement Comparable<${type}>, with a method public int compareTo(${type} other), or give the sort a Comparator that says how to compare ${two}, as in ${comparator}.`;
+}
+
+/** sort() on a list, or max() or min() on a stream of objects, without a Comparator. */
+function needsComparator(d: Diagnostic): string {
+  // Only a list has sort(Comparator), and only a stream has max and min.
+  const method = /^method (\w+) in /.exec(d.message)?.[1] ?? "max";
+  const type = simple(/required: Comparator<\? super ([\w$.]+)>/.exec(d.message)?.[1] ?? "");
+  const c = atCaret(d);
+  const v = (c && /([\w$]+)\s*$/.exec(beforeCaret(c))?.[1]) || "list";
+  if (method === "sort") return `A list's sort needs a Comparator that says how to compare two elements, as in ${v}.sort(Comparator.comparing(...)). To sort by the elements' own order (numbers, text, or a class with compareTo), write ${v}.sort(null) or Collections.sort(${v}).`;
+  const how = /^(Integer|Double|Long)$/.test(type) ? `${type}::compare` : type === "String" ? "Comparator.naturalOrder()" : "Comparator.comparing(...)";
+  return `${method}() on a stream of objects needs a Comparator that says which of two values is bigger, as in ${method}(${how}). It gives an Optional: get() takes the value out.`;
+}
+
+/** collect(Collectors...) on an IntStream, DoubleStream or LongStream (javac names which only in the first of its two errors). */
+function numberStreamCollect(d: Diagnostic): string {
+  const kind = /interface (Int|Double|Long)Stream/.exec(d.message)?.[1];
+  if (!kind) return "A stream of plain numbers (an IntStream, DoubleStream or LongStream, such as mapToInt gives) can't collect with a Collector such as Collectors.toList(). Call boxed() first, which turns the numbers into objects: ...boxed().collect(Collectors.toList()).";
+  const box = { Int: "Integer", Double: "Double", Long: "Long" }[kind];
+  return `${kind === "Int" ? "An" : "A"} ${kind}Stream holds plain ${kind.toLowerCase()} values, and its collect doesn't take a Collector such as Collectors.toList(). Call boxed() first, which turns them into ${box} objects: ...boxed().collect(Collectors.toList()). (If the values don't need to be numbers, map instead of mapTo${kind} keeps a stream of objects.)`;
+}
+
+const STREAM_METHODS = /^(filter|map|mapToInt|mapToDouble|mapToLong|mapToObj|flatMap|collect|reduce|sorted|distinct|limit|skip|anyMatch|allMatch|noneMatch|findFirst|findAny|count|sum|average|max|min|boxed|peek)$/;
+const OPTIONAL_GET: Record<string, string> = { OptionalDouble: "getAsDouble()", OptionalInt: "getAsInt()", OptionalLong: "getAsLong()", Optional: "get()" };
+
+/** "cannot find symbol" for a method of Java's own types: a stream method on a list or an array, sum() on a stream of objects. */
+function libraryMethod(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+method ([\w$]+)\((.*)\)\n\s*location: (?:variable ([\w$]+) of type |class |interface )([\w$.]+)(?:<(.*)>)?((?:\[\])*)$/m.exec(d.message);
+  if (!m) return null;
+  const [, method, args, variable, rawType, rawElement = "", dims] = m;
+  const element = simple(rawElement);
+  const type = simple(rawType);
+  const dots = args ? "..." : "";
+  if (dims) {
+    const call = (method: string) => `Arrays.${method}(${variable ?? "..."})`;
+    if (method === "stream") return `${variable ?? "This"} is an array, and an array has no methods such as stream(). Write ${call("stream")} instead (with import java.util.Arrays; at the top): it gives a stream of the array's values. Lists have stream(); arrays don't.`;
+    if (method === "length") return `${variable ?? "This"} is an array, and an array's length isn't a method: write ${variable ?? "array"}.length, without parentheses. (length() with parentheses is for a String, and size() for a list.)`;
+    if (method === "size") return `${variable ?? "This"} is an array, and arrays have no size(): write ${variable ?? "array"}.length, without parentheses. size() is for lists.`;
+    return `${variable ?? "This"} is an array (${type}${dims}), and an array has no method ${method}. The class Arrays has methods for arrays, such as ${call("sort")}, ${call("toString")} and ${call("stream")}.`;
+  }
+  const v = variable ?? "list";
+  if (/^(?:List|ArrayList|LinkedList|Collection|Set|HashSet|TreeSet)$/.test(type) && STREAM_METHODS.test(method)) {
+    const noun = /Set$/.test(type) ? "set" : "list";
+    if (method === "count") return `The number of elements in a ${noun} is size(): write ${v}.size(). count() is a method of streams, where it counts the values that are left, as in ${v}.stream().filter(...).count().`;
+    const number = UNBOXED[element];
+    // The Comparator the program gives, as written (javac's message shortens a lambda).
+    const comparator = args ? argumentsAt(d, method) : null;
+    if (/^(max|min)$/.test(method) && (!number || comparator)) return largestElement(own, v, noun, method, element, comparator);
+    if (/^(sum|average|max|min)$/.test(method)) {
+      const p = number ?? "int";
+      const box = method === "sum" ? "" : method === "average" ? ", which gives an OptionalDouble (getAsDouble() takes the number out)" : `, which gives an Optional${cap(p)} (getAs${cap(p)}() takes the number out)`;
+      return `${v} is a ${noun}, and a ${noun} has no ${method}(). A stream of numbers has it: ${v}.stream().mapTo${cap(p)}(${number ? "n -> n" : "..."}).${method}()${box}.`;
+    }
+    if (method === "sorted" && noun === "list") {
+      if (comparator)
+        return `A list sorts itself with sort, which takes a Comparator too: ${v}.sort(${comparator}) sorts the list itself and gives back nothing, as does Collections.sort(${v}, ${comparator}). sorted(...) is a method of streams: ${v}.stream().sorted(${comparator}) gives the values in order without changing the list (and .collect(Collectors.toList()) after it puts them in a new list).`;
+      const t = own.types.get(element);
+      if (t && !comparable(own, element)) {
+        const getter = sortKey(own, t);
+        const by = `Comparator.comparing(${getter ? `${element}::${getter}` : "..."})`;
+        return `A list sorts itself with sort, and ${element} has no order of its own (it doesn't implement Comparable), so give it a Comparator that says how to compare two ${element} objects: ${v}.sort(${by}) sorts the list itself. sorted(...) is a method of streams: ${v}.stream().sorted(${by}) gives the values in order without changing the list.`;
+      }
+      return `A list sorts itself with sort: ${v}.sort(null) or Collections.sort(${v}) sorts it by the elements' own order. sorted() is a method of streams: ${v}.stream().sorted() gives the values in order without changing the list.`;
+    }
+    return `${v} is a ${noun}, and ${method}(${dots}) is a method of streams, not of ${noun}s. Call stream() first: ${v}.stream().${method}(${dots}).`;
+  }
+  if (/^(?:Map|HashMap|TreeMap)$/.test(type) && method === "stream") return `A map has no stream(). Make a stream of its keys, its values or its key-value pairs: ${variable ?? "map"}.keySet().stream(), ${variable ?? "map"}.values().stream() or ${variable ?? "map"}.entrySet().stream().`;
+  if (type === "Stream" && /^(sum|average)$/.test(method)) {
+    const number = UNBOXED[element];
+    return `A stream of objects has no ${method}(): only a stream of numbers (an IntStream, a LongStream or a DoubleStream) has. Turn the values into numbers first: ...mapTo${cap(number ?? "int")}(${number ? "n -> n" : "..."}).${method}()${method === "average" ? ", which gives an OptionalDouble (getAsDouble() takes the number out)" : ""}.`;
+  }
+  if (/Stream$/.test(type) && /^(size|length)$/.test(method)) return `A stream has no ${method}(): count() counts its values.`;
+  if (/^Optional(?:Double|Int|Long)$/.test(type) && method === "get") return `${type} has no get(): its method for taking the value out is ${OPTIONAL_GET[type]}. (On an empty stream there is no value, and it crashes with "No value present"; orElse(0) gives 0 then.)`;
+  return null;
+}
+
+/**
+ * max() or min() on a list or a set of values that aren't numbers, or with a Comparator (as the
+ * program wrote it): Collections.max gives the largest element, by the elements' own order or by a
+ * Comparator.
+ */
+function largestElement(own: OwnClasses, v: string, noun: string, method: string, element: string, comparator: string | null = null): string {
+  const which = method === "max" ? "largest" : "smallest";
+  const start = `${v} is a ${noun}, and a ${noun} has no ${method}().`;
+  const empty = (comparator: boolean) => `(It needs import java.util.Collections;${comparator ? " and import java.util.Comparator;" : ""}, and it stops the program with an error on an empty ${noun}.)`;
+  if (comparator)
+    return `${start} Collections.${method}(${v}, ${comparator}) gives its ${which} element by that Comparator. ${empty(false)} Or ${v}.stream().${method}(${comparator}) gives an Optional, which is empty for an empty ${noun}: get() takes the value out.`;
+  const t = own.types.get(element);
+  if (t && !comparable(own, element)) {
+    const getter = sortKey(own, t);
+    const by = `Comparator.comparing(${getter ? `${element}::${getter}` : "..."})`;
+    return `${start} ${element} has no order of its own (it doesn't implement Comparable), so give Collections.${method} a Comparator that says how to compare two ${element} objects: Collections.${method}(${v}, ${by}) gives the ${which} one. ${empty(true)} Or ${v}.stream().${method}(${by}) gives an Optional, which is empty for an empty ${noun}: get() takes the value out.`;
+  }
+  if (element && comparable(own, element))
+    return `${start} Collections.${method}(${v}) gives its ${which} element, by the elements' own order. ${empty(false)} Or ${v}.stream().${method}(Comparator.naturalOrder()) gives an Optional, which is empty for an empty ${noun}: get() takes the value out.`;
+  return `${start} Collections.${method}(${v}) gives its ${which} element, when the elements have an order of their own (numbers, text, or a class that implements Comparable). Otherwise give it a Comparator that says how to compare two elements: Collections.${method}(${v}, Comparator.comparing(...)). ${empty(true)}`;
+}
+
+/** What an Optional holds, by the stream method that gave it. */
+const OPTIONAL_HOLDS: Record<string, string> = { average: "the average", max: "the largest value", min: "the smallest value", findFirst: "the first value", findAny: "a value", reduce: "the result" };
+/** The plain value an OptionalInt, OptionalLong or OptionalDouble holds. */
+const OPTIONAL_VALUE: Record<string, string> = { OptionalInt: "int", OptionalLong: "long", OptionalDouble: "double" };
+/** For each primitive type, the types a value of it can go to without a cast (itself and the wider ones). */
+const WIDER: Record<string, string[]> = {
+  byte: ["byte", "short", "int", "long", "float", "double"],
+  short: ["short", "int", "long", "float", "double"],
+  char: ["char", "int", "long", "float", "double"],
+  int: ["int", "long", "float", "double"],
+  long: ["long", "float", "double"],
+  float: ["float", "double"],
+  double: ["double"],
+  boolean: ["boolean"],
+};
+/** The primitive type a wrapper class holds: int for Integer. */
+const UNBOX: Record<string, string> = { Integer: "int", Long: "long", Double: "double", Float: "float", Short: "short", Byte: "byte", Character: "char", Boolean: "boolean" };
+const BOX: Record<string, string> = Object.fromEntries(Object.entries(UNBOX).map(([box, prim]) => [prim, box]));
+
+/** Whether a value of type `from` can go in a variable of type `to` without a cast: the same type, a wider number, boxing, unboxing, or a parent type. */
+function assignable(own: OwnClasses, from: string, to: string): boolean {
+  if (from === to || to === "Object") return true;
+  const parents = (t: string) => (UNBOX[t] ? `Number|Comparable|Serializable` : t === "String" ? "CharSequence|Comparable|Serializable" : "");
+  if (WIDER[from]) return WIDER[to] ? WIDER[from].includes(to) : to === BOX[from] || (!/^(?:boolean|char)$/.test(from) && new RegExp(`^(?:${parents(BOX[from])})(?:<.*>)?$`).test(to));
+  if (WIDER[to]) return !!UNBOX[from] && WIDER[UNBOX[from]].includes(to);
+  const p = parents(from);
+  if (p && new RegExp(`^(?:${p})(?:<.*>)?$`).test(to)) return !(to === "Number" && /^(?:Boolean|Character)$/.test(from));
+  return own.types.has(from) && isSubtype(own, from, to.replace(/<.*$/, ""));
+}
+
+/** A value for orElse(...) on an Optional of this type: 0 for an OptionalInt or an Optional<Integer>, 0L for an Optional<Long>. */
+const orElseFor = (kind: string, value: string | null) =>
+  kind !== "Optional" ? (kind === "OptionalDouble" ? "0.0" : "0") : ({ Integer: "0", Long: "0L", Double: "0.0", Float: "0.0f", String: '""', Boolean: "false" } as Record<string, string>)[value ?? ""] ?? null;
+
+/** What is in the parentheses of a call whose ( starts this text: "Integer::compare" for (Integer::compare), "..." when it's long or not on the line. */
+function callArguments(text: string, max = 40): string {
+  if (!text.startsWith("(")) return "...";
+  let depth = 0;
+  for (let k = 0; k < text.length; k++) {
+    if (text[k] === "(") depth++;
+    else if (text[k] === ")" && --depth === 0) {
+      const inside = text.slice(1, k).trim();
+      return inside.length <= max ? inside : "...";
+    }
+  }
+  return "...";
+}
+
+/** What is in the parentheses of the call of `method` at javac's caret (on the . before its name), as written; "..." when it's long or goes on to another line. */
+function argumentsAt(d: Diagnostic, method: string): string {
+  const at = atCaret(d)?.at ?? "";
+  const name = new RegExp(`^\\.?\\s*${escapeRegExp(method)}\\s*(?=\\()`).exec(at);
+  return name ? callArguments(at.slice(name[0].length), 60) : "...";
+}
+
+/**
+ * "incompatible types: OptionalDouble cannot be converted to double", or another Optional put in a
+ * variable: of its value's type (take the value out), of another Optional type, a boolean, a list
+ * or a type its value can't go in.
+ */
+function optionalAsValue(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: (Optional(?:Double|Int|Long)?)(?:<(.*)>)? cannot be converted to (.+)$/m.exec(d.message);
+  if (!m) return null;
+  const [, kind, inner] = m;
+  const target = m[3].trim();
+  const full = inner ? `${kind}<${inner}>` : kind;
+  // The value in the box: int for an OptionalInt, Integer for an Optional<Integer> (unknown for an Optional without a type).
+  const value = OPTIONAL_VALUE[kind] ?? (inner && /^[\w$.]+$/.test(inner) ? simple(inner) : (inner ?? null));
+  const get = OPTIONAL_GET[kind];
+  const c = atCaret(d);
+  const method = c ? /([\w$]+)\s*$/.exec(beforeCaret(c))?.[1] : undefined;
+  const known = method && OPTIONAL_HOLDS[method] ? method : null;
+  // The call as written, with what is in its parentheses: max(Integer::compare).
+  const call = known && c ? `${known}(${callArguments(c.at)})` : null;
+  const take = call ? `${call}.${get}` : get;
+  const is = call ? `${call} gives ${anWord(full)}, not ${anWord(target)}` : `This is ${anWord(full)}, not ${anWord(target)}`;
+  const what = `${is}: a box that holds ${known ? OPTIONAL_HOLDS[known] : "a value"}, or nothing when the stream ${known ? "is" : "it came from is"} empty`;
+  const zero = orElseFor(kind, value);
+  const orElse = (then: string) => (zero ? `orElse(${zero}) instead, which gives ${zero} ${then}` : `orElse(...) instead, with the value to use ${then} in the parentheses`);
+  // Another kind of Optional: the variable's type is the one to change.
+  if (/^Optional(?:Int|Long|Double)?\b/.test(target)) {
+    const prim = OPTIONAL_VALUE[kind];
+    const boxed = prim && target === `Optional<${BOX[prim]}>` && known && /^(?:max|min|findFirst|findAny)$/.test(known) ? ` Or, for ${anWord(target)}, turn the numbers into ${BOX[prim]} objects first with boxed(), as in boxed().${known}(${/^(?:max|min)$/.test(known) ? `${BOX[prim]}::compare` : ""}).` : "";
+    return `${is}. Give the variable the type ${full}${call ? `, which ${known}(...) gives here` : ""}.${boxed}`;
+  }
+  if (!value || assignable(own, value, target))
+    return `${what}. Take the value out with ${take}. On an empty stream ${get} crashes with "No value present", so if the stream can be empty, use ${orElse("then")}.`;
+  if (target === "boolean") {
+    // filter(test).findFirst(): anyMatch(test) says the same, as a boolean.
+    const before = c ? beforeCaret(c).replace(/\s*\.\s*[\w$]+\s*$/, "") : "";
+    let test: string | null = null;
+    if (known && /^find(?:First|Any)$/.test(known) && before.endsWith(")")) {
+      let depth = 0;
+      for (let k = before.length - 1; k >= 0 && test == null; k--) {
+        if (before[k] === ")") depth++;
+        else if (before[k] === "(" && --depth === 0) test = /(?:^|[^\w$])filter\s*$/.test(before.slice(0, k)) ? before.slice(k + 1, -1).trim() : "";
+      }
+    }
+    const any = test ? `anyMatch(${test}) in place of filter(${test}).${known}()` : "anyMatch(...), with the test in its parentheses,";
+    return `${what}. An Optional isn't true or false, but isPresent() tells whether it holds a value, as in ${take.replace(/\.[\w$]+\(\)$/, ".isPresent()")}. To check whether some value passes a test, ${any} gives true or false straight away.`;
+  }
+  const collection = /^(?:[\w$]+\.)*(List|ArrayList|LinkedList|Collection|Iterable|Set|HashSet|TreeSet|LinkedHashSet)\b/.exec(target)?.[1];
+  const array = /^([\w$.]+)\[\]$/.exec(target)?.[1];
+  if (collection || (array && (array === value || !WIDER[array]))) {
+    const set = /Set$/.test(collection ?? "");
+    const boxed = OPTIONAL_VALUE[kind] && !array ? "boxed()." : "";
+    const end = array ? (array === value && WIDER[array] ? "toArray()" : `toArray(${array}[]::new)`) : `${boxed}collect(Collectors.${set ? "toSet" : "toList"}())`;
+    return `${is}: one value (or nothing, when the stream is empty), not all of them. To keep all the values the stream has, end it with ${end}${known ? ` in place of ${known}(...)` : ""}.`;
+  }
+  const number = (t: string) => /^(?:byte|short|char|int|long|float|double)$/.test(UNBOX[t] ?? t);
+  if (number(value) && number(target)) {
+    const v = UNBOX[value] ?? value;
+    const t = UNBOX[target] ?? target;
+    if (WIDER[target] && !WIDER[v].includes(t)) {
+      const loses = /^(?:double|float)$/.test(v) ? (/^(?:double|float)$/.test(t) ? "can lose digits" : "drops the decimals") : "changes a number that doesn't fit";
+      // A cast can't unbox and narrow at once: a Double becomes an int with intValue().
+      const value0 = `...${call ?? ""}.orElse(${zero ?? "0"})`;
+      const convert = UNBOX[value] && /^(?:int|long|short|byte|float|double)$/.test(t) ? `convert it on purpose: ${value0}.${t}Value()` : `cast it on purpose: (${target}) ${value0}`;
+      return `${what}. Its value is ${anWord(v)}, and Java won't put ${anWord(v)} in ${anWord(target)} variable by itself, because that ${loses}. Give the variable the type ${v} and take the value out with ${take}, or orElse(${zero ?? "0"}) if the stream can be empty. To make it ${anWord(target)} anyway, ${convert}.`;
+    }
+    return `${what}, and its value is ${anWord(value)}, which Java won't put in ${anWord(target)} variable. Give the variable the type ${value} and take the value out with ${take}. On an empty stream ${get} crashes with "No value present", so if the stream can be empty, use ${orElse("then")}.`;
+  }
+  const text = target === "String" && number(value) ? ` To turn the number into text, use String.valueOf(...), as in String.valueOf(${take}).` : "";
+  return `${what}, and its value is ${anWord(value)}, not ${anWord(target)}. Give the variable the type ${value} and take the value out with ${take}.${text}`;
+}
+
+/** Arithmetic or a comparison with an Optional: "bad operand types for binary operator '/'", first type OptionalDouble. */
+function optionalInArithmetic(d: Diagnostic): string {
+  const op = /operator '([^']+)'/.exec(d.message)?.[1];
+  const kind = /^\s*(?:first|second) type:\s+(Optional(?:Double|Int|Long)?)/m.exec(d.message)?.[1] ?? "Optional";
+  return `${kind === "Optional" ? "An Optional" : `An ${kind}`} isn't a number: it's a box that holds one, or nothing when the stream was empty (there is no average of no values, for example). So ${op ?? "this operator"} can't work on it. Take the number out first with ${OPTIONAL_GET[kind]}, or with orElse(0), which gives 0 when there is none.`;
+}
+
+/** What a stream holds, for a sentence: "an IntStream holds plain int values", "a Stream<String> holds String objects". */
+function streamHolds(stream: string, element: string | null): string {
+  const number = /^(Int|Long|Double)Stream$/.exec(stream)?.[1].toLowerCase();
+  if (number) return `${anWord(stream)} holds plain ${number} values`;
+  return element ? `a Stream<${element}> holds ${element} objects` : "this stream holds objects";
+}
+
+/** A stream put in a variable of another type: a list, a set, a map, an array, another kind of stream, an Optional or a single value. */
+function streamAsValue(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /(Stream|IntStream|DoubleStream|LongStream)(?:<(.*?)>)? (?:conforms to|cannot be converted to) (.+)$/m.exec(d.message);
+  if (!m) return null;
+  const [, kind, raw = ""] = m;
+  const target = m[3].trim();
+  const base = simple(target.replace(/<.*$/, ""));
+  const arg = /^[^<]*<([\w$.]+)[,>]/.exec(target)?.[1];
+  const targetArg = arg ? simple(arg) : null;
+  // A stream of plain numbers: int for an IntStream.
+  const prim = kind === "Stream" ? null : kind.slice(0, -"Stream".length).toLowerCase();
+  // What a Stream<X> holds, unless javac knows it only as a type variable (Stream<R> right after map).
+  const element = !prim && raw && !/^[A-Z]\d*$/.test(raw) ? simple(raw) : null;
+  const c = atCaret(d);
+  const afterMap = !prim && !!c && /(?:^|[^\w$])map\s*$/.test(beforeCaret(c));
+  const boxed = prim ? "boxed()." : "";
+  const start = (what: string) => `A stream isn't ${what}: it only passes values from one step to the next.`;
+  // A lambda that turns each value of a Stream<X> into a plain number of type p.
+  const toNumber = (p: string) => {
+    const u = element ? UNBOXED[element] : undefined;
+    return u ? (WIDTH[u]! <= WIDTH[p]! ? "x -> x" : `x -> x.${p}Value()`) : "...";
+  };
+  // The step that turns plain numbers of one type into another: asDoubleStream() for int to double.
+  const convert = (from: string, to: string) => (WIDTH[from]! < WIDTH[to]! ? `as${cap(to)}Stream()` : `mapTo${cap(to)}(x -> (${to}) x)`);
+  if (/\[\]$/.test(target)) {
+    const of = target.slice(0, -2);
+    let fix: string;
+    if (prim) {
+      if (of === prim) fix = ".toArray()";
+      else if (WIDTH[of] != null) fix = `.${convert(prim, of)}.toArray()`;
+      else if (of === BOXED[prim]) fix = `.boxed().toArray(${of}[]::new) (boxed() turns the plain numbers into ${of} objects)`;
+      else fix = `.mapToObj(...).toArray(${of}[]::new) (mapToObj(...) turns each number into ${anWord(of)})`;
+    } else if (WIDTH[of] != null) {
+      if (afterMap) return `${start("an array")} Use mapTo${cap(of)}(...) in place of map(...): it makes a stream of plain ${of} values. Then end the stream with toArray(), which gives ${anWord(`${of}[]`)}.`;
+      fix = `.mapTo${cap(of)}(${toNumber(of)}).toArray() (mapTo${cap(of)} makes a stream of plain ${of} values, whose toArray() gives ${anWord(`${of}[]`)}; toArray() on a stream of objects gives an Object[])`;
+    } else {
+      const other = element && element !== of && (own.types.has(of) || /^(?:String|Integer|Long|Double|Character|Boolean)$/.test(of)) && !isSubtype(own, element, of);
+      fix = `${other ? ".map(...)" : ""}.toArray(${of}[]::new) (${of}[]::new tells toArray which kind of array to make; without it, toArray() gives an Object[])`;
+    }
+    return `${start("an array")} At the end, put the values in an array with toArray: ${fix}.`;
+  }
+  if (/^(?:Int|Long|Double)?Stream$/.test(base)) {
+    const want = base === "Stream" ? null : base.slice(0, -"Stream".length).toLowerCase();
+    const both = `${cap(streamHolds(kind, element))}, and ${streamHolds(base, targetArg)}, so one can't go in a variable of the other.`;
+    let how: string;
+    if (prim && want) how = `Add .${convert(prim, want)} at the end: it turns ${WIDTH[prim]! < WIDTH[want]! ? `the values into ${want} values` : `each value into ${anWord(want)} with a cast`}.`;
+    else if (prim) how = targetArg === BOXED[prim] ? `Add .boxed() at the end: it turns the numbers into ${targetArg} objects.` : `Add .mapToObj(...) at the end, which turns each number into ${targetArg ? anWord(targetArg) : "an object"}, as in .mapToObj(x -> ...).`;
+    else if (want) how = afterMap ? `Use mapTo${cap(want)}(...) in place of map(...): it gives ${anWord(base)}.` : `Add .mapTo${cap(want)}(${toNumber(want)}) at the end: it turns each value into a plain ${want}.`;
+    else how = afterMap ? `Check what the lambda in map(...) gives: it must give ${targetArg ? anWord(targetArg) : "the values the variable holds"}.` : `Add .map(...) at the end, which turns each value into ${targetArg ? anWord(targetArg) : "the kind of value the variable holds"}, as in .map(x -> ...).`;
+    return `${both} ${how}`;
+  }
+  if (/^(?:Map|HashMap|TreeMap|LinkedHashMap)$/.test(base)) {
+    const why = prim ? " (boxed() first turns the plain numbers into objects: only a stream of objects can collect with a Collector)" : "";
+    const wrap = base === "Map" ? "" : ` For ${anWord(base)}, put that in new ${base}<>(...).`;
+    return `${start("a map")} At the end, collect the values into one: .${boxed}collect(Collectors.groupingBy(...)) makes a list of the values for each key, and .${boxed}collect(Collectors.toMap(..., ...)) makes a key and a value out of each one${why}.${wrap}`;
+  }
+  if (base === "Optional") {
+    if (prim)
+      return `${start("an Optional")} ${cap(anWord(kind))} ends with max(), min() or findFirst(), which give an Optional${cap(prim)}: give the variable the type Optional${cap(prim)}. For ${anWord(target)}, call boxed() first, as in .boxed().max(${BOXED[prim]}::compare).`;
+    const by = element && UNBOXED[element] ? `${element}::compare` : element === "String" ? "Comparator.naturalOrder()" : "Comparator.comparing(...)";
+    return `${start("an Optional")} End it with a step that gives one: findFirst() gives the first value, and max(${by}) or min(${by}) the largest or smallest.`;
+  }
+  const optional = /^Optional(Int|Long|Double)$/.exec(base)?.[1].toLowerCase();
+  if (optional) {
+    const ends = `max(), min()${optional === "double" ? ", average()" : ""} or findFirst()`;
+    if (prim === optional) return `${start(anWord(base))} End it with a step that gives one, such as ${ends}.`;
+    if (prim && optional === "double") return `${start("an OptionalDouble")} End it with average(), which gives one. (max(), min() and findFirst() of ${anWord(kind)} give an Optional${cap(prim)}.)`;
+    if (prim) return `${start(anWord(base))} The max(), min() and findFirst() of ${anWord(kind)} give an Optional${cap(prim)}: give the variable that type, or turn the values into ${optional} values first with ${convert(prim, optional)}.`;
+    if (afterMap) return `${start(anWord(base))} Use mapTo${cap(optional)}(...) in place of map(...), and end the stream with a step that gives one, such as ${ends}.`;
+    return `${start(anWord(base))} Turn the values into plain ${optional} values first, and end the stream with a step that gives one, as in .mapTo${cap(optional)}(${toNumber(optional)}).${optional === "double" ? "average()" : "max()"}.`;
+  }
+  if (/^(?:List|ArrayList|LinkedList|Collection|Iterable)$/.test(base)) {
+    const why = prim ? " (boxed() turns the plain numbers into objects, which a list can hold)" : "";
+    const wrap = /^(?:ArrayList|LinkedList)$/.test(base) ? ` For ${anWord(base)}, put that in new ${base}<>(...).` : "";
+    return `${start("a list")} At the end, collect them into a list: .${boxed}collect(Collectors.toList())${why}.${wrap}`;
+  }
+  if (/^(?:Set|HashSet|TreeSet)$/.test(base)) {
+    const wrap = base === "Set" ? "" : ` For ${anWord(base)}, put that in new ${base}<>(...).`;
+    return `${start("a set")} At the end, collect them into one: .${boxed}collect(Collectors.toSet()).${wrap}`;
+  }
+  if (/^(?:LinkedHashSet|Queue|Deque|ArrayDeque|PriorityQueue)$/.test(base)) {
+    const make = /^(?:LinkedHashSet|PriorityQueue)$/.test(base) ? base : "ArrayDeque";
+    return `${start(base === "LinkedHashSet" ? "a set" : "a queue")} At the end, collect them into one with Collectors.toCollection(...), which takes the kind of collection to make: .${boxed}collect(Collectors.toCollection(${make}::new)).`;
+  }
+  if (base === "Iterator") return `${start("an iterator")} It can give one, though: end it with .iterator().`;
+  const valueType = /^(?:int|long|double|float|short|byte|char|boolean|Integer|Long|Double|Float|Short|Byte|Character|Boolean|String)$/.test(base);
+  // One of the stream's values, such as a Person from a Stream<Person>.
+  if (!valueType && (base === element || own.types.has(base)))
+    return `${start("a single value")} End it with a step that gives one value, such as findFirst() or max(...), which give an Optional: get() takes the ${base} out, as in .findFirst().get().`;
+  const number = element ? UNBOXED[element] : undefined;
+  const sum = number && /^(?:int|long|double|float|short|byte|Integer|Long|Double|Float|Short|Byte)$/.test(base) ? `count(), or mapTo${cap(number)}(x -> x).sum() for a sum` : null;
+  const ends = base === "String" ? 'collect(Collectors.joining(", ")), which joins text' : prim ? "sum(), count() or max()" : (sum ?? "count(), findFirst() or collect(...)");
+  return `${start("a single value")} End it with a step that gives one value, such as ${ends}.`;
+}
+
+/**
+ * Where the body of the lambda whose -> is at `arrow` ends: after the } that closes a block body, or at
+ * the , ; or closing bracket after an expression body.
+ */
+function lambdaEnd(code: string, arrow: number): number {
+  let k = arrow + 2;
+  while (/\s/.test(code[k] ?? "")) k++;
+  const block = code[k] === "{";
+  let depth = 0;
+  for (; k < code.length; k++) {
+    const ch = code[k];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      if (--depth < 0) return k;
+      if (block && depth === 0) return k + 1;
+    } else if (depth === 0 && (ch === "," || ch === ";")) return k;
+  }
+  return code.length;
+}
+
+/** The lambda whose body holds this offset of the code: where its -> is, and where its body ends. */
+function lambdaAround(code: string, at: number): { arrow: number; end: number } | null {
+  // Backwards from the offset: brackets closed before it don't hold it, and a , or ; at the level
+  // looked at ends a lambda's body there, so an arrow before it on that level isn't around the offset.
+  let depth = 0;
+  let min = 0;
+  let separated = false;
+  for (let k = at - 1; k > 0; k--) {
+    const ch = code[k];
+    if (ch === ")" || ch === "]" || ch === "}") depth++;
+    else if (ch === "(" || ch === "[" || ch === "{") {
+      if (--depth < min) [min, separated] = [depth, false];
+    } else if (depth === min && (ch === "," || ch === ";")) separated = true;
+    else if (depth === min && !separated && ch === ">" && code[k - 1] === "-") return { arrow: k - 1, end: lambdaEnd(code, k - 1) };
+  }
+  return null;
+}
+
+/** A file's code (comments and strings blanked out) and its text as one string each, with the offset of javac's caret in them. */
+function caretIn(d: Diagnostic, own: OwnClasses): { code: string; text: string; at: number } | null {
+  const lines = own.code.get(fileName(d.file));
+  const text = own.lines.get(fileName(d.file));
+  const c = atCaret(d);
+  if (!lines || !text || !c || lines[d.line - 1]?.length !== c.line.length) return null;
+  let at = 0;
+  for (let i = 0; i < d.line - 1; i++) at += lines[i].length + 1;
+  return { code: lines.join("\n"), text: text.join("\n"), at: at + c.line.length - c.at.length };
+}
+
+type LambdaInfo = {
+  /** Its parameters' names. */
+  params: string[];
+  /** Its body as written: an expression, or a block in { }. */
+  body: string;
+  /** The same with comments and strings blanked out (each character where it is in body). */
+  bodyCode: string;
+  block: boolean;
+  /** The method it is given to (forEach, filter, sort), or else the type of the variable it is put in (Comparator). */
+  method: string | null;
+  type: string | null;
+  /** javac's caret is on its parameters, not in its body. */
+  onParams: boolean;
+};
+
+/**
+ * The -> of the lambda that a "cannot infer type-variable(s)" error is about. javac's caret is then on
+ * the ( of the generic call it couldn't work out (Collections.sort(, or the collect( around
+ * Collectors.partitioningBy), or on the <> of new PriorityQueue<>(...), and the lambda is the first
+ * one in those parentheses that is given straight to a method or a class the message's "where"
+ * lines name (sort, partitioningBy, PriorityQueue).
+ */
+function lambdaInGenericCall(d: Diagnostic, code: string, at: number): number | null {
+  const methods = [...d.formatted.matchAll(/declared in (?:method <.*?>([\w$]+)\(|class ([\w$.]+))/g)].map((m) => m[1] ?? simple(m[2]));
+  // The diamond of new PriorityQueue<>(...): its ( is after the <>.
+  const diamond = /^<\s*>\s*\(/.exec(code.slice(at, at + 20));
+  if (diamond) at += diamond[0].length - 1;
+  if (!methods.length || code[at] !== "(") return null;
+  // The method of each ( that is open at the offset looked at (null for other brackets).
+  const open: (string | null)[] = [];
+  for (let k = at; k < code.length; k++) {
+    const ch = code[k];
+    if (ch === "(" || ch === "[" || ch === "{") open.push(ch === "(" ? (/([\w$]+)\s*(?:<[^<>()]*>)?\s*$/.exec(code.slice(Math.max(0, k - 100), k))?.[1] ?? null) : null);
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      open.pop();
+      if (!open.length) return null;
+    } else if (ch === "-" && code[k + 1] === ">" && methods.includes(open[open.length - 1] ?? "")) return k;
+  }
+  return null;
+}
+
+/**
+ * The -> of the first lambda given straight to a call that javac couldn't apply ("method map in
+ * interface Stream<T> cannot be applied to given types"), with javac's caret on the . before the
+ * method's name.
+ */
+function lambdaInCall(d: Diagnostic, code: string, at: number): number | null {
+  const name = /^method ([\w$]+) in /.exec(d.message)?.[1];
+  const call = name ? new RegExp(`^\\.?\\s*${escapeRegExp(name)}\\s*\\(`).exec(code.slice(at)) : null;
+  if (!call) return null;
+  let depth = 0;
+  for (let k = at + call[0].length; k < code.length; k++) {
+    const ch = code[k];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      if (--depth < 0) return null;
+    } else if (depth === 0 && ch === "-" && code[k + 1] === ">") return k;
+  }
+  return null;
+}
+
+/** The lambda at javac's caret: the caret on its parameters, or in its body (or, see lambdaInGenericCall and lambdaInCall, on the call it is given to). */
+function lambdaAt(d: Diagnostic, own: OwnClasses): LambdaInfo | null {
+  const pos = caretIn(d, own);
+  if (!pos) return null;
+  const { code, text, at } = pos;
+  // Only in javac's short form of the message, "incompatible types: cannot infer ...", is the caret on the call's (.
+  const generic = /^incompatible types: /.test(d.message) && LAMBDA_IN_GENERIC_CALL.test(d.message);
+  const inCall = generic ? lambdaInGenericCall(d, code, at) : null;
+  const ahead = generic ? null : /^(\([^()]*\)|[\w$]+)\s*->/.exec(code.slice(at, at + 300));
+  // In a generic call, a lambda around the caret is another one, such as that of a forEach the call is in.
+  const arrow = generic ? inCall : ahead ? at + ahead[0].length - 2 : (lambdaInCall(d, code, at) ?? lambdaAround(code, at)?.arrow);
+  if (arrow == null) return null;
+  const before = code.slice(Math.max(0, arrow - 500), arrow);
+  const p = /(\([^()]*\)|[\w$]+)\s*$/.exec(before);
+  if (!p) return null;
+  const head = before.slice(0, p.index);
+  // The method, or the class of new ...<>(, with type arguments or not.
+  const method = /([\w$]+)\s*(?:<[^<>()]*>)?\s*\((?:[^()]*,)?\s*$/.exec(head)?.[1] ?? null;
+  const type = method ? null : (/([\w$]+)\s*(?:<[^;=(){}]*>)?\s+[\w$]+\s*=\s*$/.exec(head)?.[1] ?? null);
+  const end = lambdaEnd(code, arrow);
+  const raw = text.slice(arrow + 2, end);
+  const body = raw.trim();
+  // The code at the same places as the text, character for character.
+  const from = arrow + 2 + raw.length - raw.trimStart().length;
+  const params = p[1].replace(/[()]/g, "").split(",").map((x) => x.trim().split(/\s+/).pop() ?? "").filter(Boolean);
+  return { params, body, bodyCode: code.slice(from, from + body.length), block: body.startsWith("{"), method, type, onParams: !!ahead || inCall != null };
+}
+
+/**
+ * The two sides of a lambda body that is one subtraction, first - second (also in a block that only
+ * returns it, or in parentheses), or null. A cast to int in front of the first side is left out: it
+ * is what the comparator shouldn't do.
+ */
+function difference(l: LambdaInfo): [string, string] | null {
+  // Without comments: the blanked-out body is the body without them when it has no text in quotes.
+  let body: string | null = !/["']/.test(l.body) ? l.bodyCode : /\/[/*]/.test(l.body) ? null : l.body;
+  if (body == null) return null;
+  body = body.replace(/\s+/g, " ").trim();
+  const only = /^\{ ?return ([^;{}]+); ?\}$/.exec(body);
+  if (only) body = only[1].trim();
+  else if (l.block) return null;
+  const closing = (s: string) => {
+    let depth = 0;
+    for (let k = 0; k < s.length; k++) {
+      if (s[k] === "(") depth++;
+      else if (s[k] === ")" && --depth === 0) return k;
+    }
+    return -1;
+  };
+  if (body.startsWith("(") && closing(body) === body.length - 1) body = body.slice(1, -1).trim();
+  // The - between the sides: outside all brackets, after a value (not a minus sign), and not part of -- or ->.
+  const cuts: number[] = [];
+  let depth = 0;
+  for (let k = 0; k < body.length; k++) {
+    const ch = body[k];
+    if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch)) {
+      if (--depth < 0) return null;
+    } else if (ch === "-" && depth === 0 && !"->".includes(body[k + 1] ?? "") && body[k - 1] !== "-" && /[\w$)\]] ?$/.test(body.slice(0, k))) cuts.push(k);
+  }
+  if (depth !== 0 || cuts.length !== 1) return null;
+  const first = body.slice(0, cuts[0]).trim().replace(/^\( ?int ?\) ?/, "");
+  const second = body.slice(cuts[0] + 1).trim();
+  return first && second && !/[;{}]/.test(first + second) ? [first, second] : null;
+}
+
+/** Methods and types whose lambda only does something and gives back nothing (a void lambda). */
+const VOID_LAMBDA = /^(forEach|forEachOrdered|ifPresent|Runnable|Consumer|BiConsumer)$/;
+/** Methods and types whose lambda must give true or false. */
+const TEST_LAMBDA = /^(filter|anyMatch|allMatch|noneMatch|removeIf|takeWhile|dropWhile|Predicate|BiPredicate)$/;
+/** Methods, constructors and types whose lambda with two parameters compares two values. */
+const ORDER_LAMBDA = /^(sort|sorted|max|min|Comparator|thenComparing|comparing|reverseOrder|nullsFirst|nullsLast|maxBy|minBy|binarySearch|PriorityQueue|PriorityBlockingQueue|TreeSet|TreeMap|ConcurrentSkipListSet|ConcurrentSkipListMap)$/;
+
+/** A lambda's parameters as written before its ->: x, or (a, b). */
+const signature = (l: LambdaInfo) => (l.params.length === 1 ? l.params[0] : `(${l.params.join(", ")})`);
+
+/**
+ * A block body whose last statement declares a variable, as in { int result = x * 2; }: the
+ * variable's type and name, the value it gets (as written), and whether that declaration is all the
+ * block.
+ */
+function blockValue(l: LambdaInfo): { type: string; name: string; value: string; only: boolean } | null {
+  if (!l.block) return null;
+  const m = /(?:^\{|[;{}])\s*(?:final\s+)?([\w$.]+(?:\s*<[^;=(){}]*>)?(?:\s*\[\s*\])*)\s+([\w$]+)\s*=(?!=)([^;]*);\s*\}$/d.exec(l.bodyCode);
+  if (!m || /^(?:return|new|throw|else|case|yield|var)$/.test(m[1]) || !m.indices?.[3]) return null;
+  const value = l.body.slice(m.indices[3][0], m.indices[3][1]).trim();
+  return value ? { type: m[1].replace(/\s+/g, ""), name: m[2], value, only: m.index === 0 } : null;
+}
+
+/** A lambda that gives back the wrong type of value, a value where it must give none, or none where it must give one. */
+function lambdaResult(d: Diagnostic, own: OwnClasses): string | null {
+  const msg = d.message;
+  const call = /^method ([\w$]+) in (?:interface|class) .* cannot be applied/.exec(msg)?.[1];
+  const l = lambdaAt(d, own);
+  // "unexpected return value" is also a void method's return with a value: then the caret isn't on a lambda.
+  if (/^incompatible types: unexpected return value/.test(msg) && !l?.onParams) return null;
+  const where = call ?? l?.method ?? l?.type ?? null;
+  // What needs the lambda: forEach(...) (a method's name stays as it is, also at the start of a sentence), or a Runnable.
+  const name = !where ? "this place" : /^[A-Z]/.test(where) ? anWord(where) : `${where}(...)`;
+  const Name = !where ? "Here Java" : /^[A-Z]/.test(where) ? name[0].toUpperCase() + name.slice(1) : name;
+  const needs = !where ? "Java needs" : `${name} needs`;
+  const p = l?.params[0] ?? "x";
+  const doesNothing = `${Name} needs a lambda that only does something and gives back nothing (a void lambda)`;
+  const toMap = where === "forEach" ? " To turn each value into a new one, use map instead of forEach." : "";
+  // A value where there must be none.
+  if (/lambda body is not compatible with a void functional interface/.test(msg) || (/missing return value/.test(msg) && where && VOID_LAMBDA.test(where) && l && !l.block)) {
+    const print = l && !l.block && l.body.length <= 60 ? `, as in ${signature(l)} -> System.out.println(${l.body})` : "";
+    return `${doesNothing}, and this lambda's body is only a value, which would be thrown away. Make the body do something with it, such as print it${print}.${toMap}`;
+  }
+  if (/unexpected return value/.test(msg)) return `${doesNothing}, so its lambda can't return a value. Remove the return, and do something with the value instead, such as print it.${toMap}`;
+  if (/missing return value/.test(msg)) {
+    if (where && /^(map|mapToInt|mapToDouble|mapToLong|mapToObj)$/.test(where)) {
+      // A return with a value (in the text, where a value in quotes isn't blanked out).
+      const some = !!l && [...l.bodyCode.matchAll(/\breturn\b/g)].some((m) => /^\s*[^\s;]/.test(l.body.slice(m.index! + 6)));
+      return `${where}(...) turns each value into a new one, so its lambda must give back a value, and this block ${some ? "doesn't give one back on every path" : "has no return"}. To only do something with each value, such as print it, use forEach instead of ${where}. Otherwise end the block with return and the new value.`;
+    }
+    const two = l?.params.length === 2 && ((where && ORDER_LAMBDA.test(where)) || where == null);
+    const test = l?.params.length === 1 && !!where && TEST_LAMBDA.test(where);
+    // A block that ends by declaring a variable of the type the lambda must give, as in { int result = x * 2; }: return that variable.
+    const last = l && blockValue(l);
+    const kept = last && (test ? /^(?:boolean|Boolean)$/.test(last.type) : two ? /^(?:int|Integer|short|byte|char)$/.test(last.type) : true) ? last : null;
+    const returnIt = kept ? `, as in return ${kept.name}; at the end` : "";
+    // A lambda that is one expression: the value the block computes, or an example that fits the values the lambda gets.
+    const example = !l ? null : kept?.only ? kept.value : two ? comparatorFor(own, comparedType(d, own), l.params[0], l.params[1]) : test ? testOn(own, valuesOf(d, own, TESTED)?.element ?? null, p) : null;
+    const single = !l || !example ? "" : kept?.only ? ` Or leave out the braces and the variable: a lambda that is a single expression, such as ${signature(l)} -> ${example}, gives back its value without return.` : ` A lambda that is a single expression, such as ${signature(l)} -> ${example}, gives back its value without return.`;
+    return `This lambda's body is a block in { }, and a block gives back nothing unless it says return, but ${needs} a value from it. End the block with return and the value, on every path through it (also when an if isn't true)${returnIt}.${single}`;
+  }
+  const lossy = /possible lossy conversion from (\w+) to (\w+)/.exec(msg);
+  if (lossy) {
+    const [, from, to] = lossy;
+    const two = l?.params.length === 2;
+    if (to === "int" && two && ((where && ORDER_LAMBDA.test(where)) || where == null)) {
+      const diff = l && difference(l);
+      const compare = from === "long" ? "Long.compare" : "Double.compare";
+      const fix = diff ? `: (${l!.params.join(", ")}) -> ${compare}(${diff[0]}, ${diff[1]})` : "";
+      const cast = from === "long" ? "a cast to int would cut a big difference down to a wrong number, even one with the wrong sign" : "a cast would turn a difference such as 0.5 into 0, as if the two were equal";
+      return `A comparator's lambda must give an int: negative when the first value comes first, zero when they're equal, positive when the second comes first. This one gives ${anWord(from)}, and ${cast}. Use ${compare}(first, second), which gives the right int${fix}.`;
+    }
+    if (where && /^mapTo(Int|Long)$/.test(where) && /^(double|float|long)$/.test(from)) {
+      const use = from === "long" ? "mapToLong" : "mapToDouble";
+      return `${where}(...) needs ${anWord(to)} from its lambda, and this one gives ${anWord(from)}. Use ${use} instead: it makes a stream of ${from === "long" ? "long" : "double"} values, which also has sum(), average() and max().`;
+    }
+    if (where && /^comparing(Int|Long)$/.test(where) && /^(double|float|long)$/.test(from)) {
+      const use = from === "long" ? "comparingLong" : "comparingDouble";
+      return `${where}(...) needs ${anWord(to)} from its lambda, and this one gives ${anWord(from)}. Use Comparator.${use}(...) instead: it compares the ${from} values as they are, where a cast to ${to} could make different values equal.`;
+    }
+    return `This lambda gives ${anWord(from)}, but ${needs} one that gives ${anWord(to)}, and Java won't drop the extra precision by itself. Convert the value on purpose, for example with a cast such as (${to}), or use a method that works with ${from} values.`;
+  }
+  // In a generic call's message, the line ends with the ) that closes "(argument mismatch; ...".
+  const conv = /(\S+) cannot be converted to (\S+?)\)?$/m.exec(msg);
+  if (!conv) return null;
+  const [, from, to] = conv;
+  if (to === "boolean" || (where && TEST_LAMBDA.test(where))) {
+    // What the lambda gives: its body, or the values its block returns (not the = of a variable it declares).
+    const given = !l ? "" : l.block ? [...l.bodyCode.matchAll(/\breturn\b([^;]*);/g)].map((m) => m[1]).join(" ") : l.bodyCode;
+    const assign = /(^|[^=!<>])=(?!=)/.test(given) ? " (= puts a value in a variable; == or equals compares)" : "";
+    // An example built from the body, so that it fits the values: n -> n > 3 for n -> n, p -> p.getAge() > 3 for p -> p.getAge().
+    let example: string | null = null;
+    if (l && !l.block) {
+      const set = /^([\w$]+)\s*=(?!=)/.exec(l.bodyCode);
+      const value = set ? l.body.slice(set[0].length).trim() : "";
+      // A choice such as w.equals("a") ? 1 : 0: its condition is the test.
+      let depth = 0;
+      let choice = -1;
+      for (let k = 0; k < l.bodyCode.length && choice < 0; k++) {
+        const ch = l.bodyCode[k];
+        if ("([{".includes(ch)) depth++;
+        else if (")]}".includes(ch)) depth--;
+        else if (ch === "?" && depth === 0) choice = k;
+      }
+      if (set && value) example = /^[a-z]/.test(from) ? `${set[1]} == ${value}` : `${set[1]}.equals(${value})`;
+      else if (choice > 0 && !assign) example = l.body.slice(0, choice).trim();
+      else if (!assign) example = testOn(own, from, l.body, l.bodyCode);
+    } else if (l) example = testOn(own, valuesOf(d, own, TESTED)?.element ?? null, p);
+    const such = example && l ? `, such as ${signature(l)} -> ${example}` : ", for example with >, == or equals(...)";
+    return `${Name} keeps or checks values by the lambda's answer, so the lambda must give a boolean (true or false), and this one gives ${anWord(from)}${assign}. Make it a comparison or a test${such}.`;
+  }
+  if (to === "int" && l?.params.length === 2 && ((where && ORDER_LAMBDA.test(where)) || where == null)) {
+    const [a, b] = l.params;
+    const first = `A comparator's lambda must give an int: negative when the first value comes first, zero when they're equal, positive when the second comes first.`;
+    if (from === "boolean") {
+      const start = `${first} This one gives a boolean, which has only two answers where a comparator needs three.`;
+      const type = comparedType(d, own);
+      // A comparison such as a.getAge() > b.getAge(): the same two values in a method that gives the int.
+      const sides = l.block ? null : comparisonSides(l.bodyCode, l.body);
+      if (sides) {
+        const sideType = typeOfValue(own, sides.first, l.params, type) ?? typeOfValue(own, sides.second, l.params, type);
+        const code = sideType && compareCode(own, sideType, sides.first, sides.second);
+        if (code) return `${start} Compare the two values with a method that gives such an int: (${a}, ${b}) -> ${code}.`;
+        return `${start} For int values, Integer.compare gives such an int: (${a}, ${b}) -> Integer.compare(${sides.first}, ${sides.second}). For double values, use Double.compare in the same way, and for text, compareTo.`;
+      }
+      const code = comparatorFor(own, type, a, b);
+      if (code) return `${start} Use a method that gives such an int, as in (${a}, ${b}) -> ${code}.`;
+      return `${start} For int values, Integer.compare(first, second) gives such an int (Double.compare for double values), and for text, first.compareTo(second).`;
+    }
+    if (from === "String") {
+      // The same text for the second value: a replaced by b, when the body doesn't use b already.
+      const word = (x: string) => new RegExp(`(?<![\\w$.])${escapeRegExp(x)}(?![\\w$])`, "g");
+      let mirrored: string | null = null;
+      if (word(a).test(l.bodyCode) && !word(b).test(l.bodyCode)) {
+        let last = 0;
+        mirrored = "";
+        for (const m of l.bodyCode.matchAll(word(a))) {
+          mirrored += l.body.slice(last, m.index) + b;
+          last = m.index! + a.length;
+        }
+        mirrored += l.body.slice(last);
+      }
+      return `${first} This one gives a String. Compare text with compareTo, which gives such an int${mirrored && !l.block ? `: (${a}, ${b}) -> ${callable(l.body)}.compareTo(${mirrored})` : ""}.`;
+    }
+    return `${first} This one gives ${anWord(from)}.`;
+  }
+  if (where && /^mapTo(Int|Double|Long)$/.test(where) && from === "String") {
+    const such = l && !l.block ? `, such as ${signature(l)} -> ${callable(l.body)}.length(), or ${signature(l)} -> Integer.valueOf(${l.body}) for text that is a number` : ", for example with length(), or with Integer.valueOf(...) for text that is a number";
+    return `${where}(...) needs a number for each value, and this lambda gives a String. Make it give a number${such}.`;
+  }
+  return `This lambda gives ${anWord(from)}, but ${needs} one that gives ${anWord(to)}. Change what the lambda computes${call || l?.method ? `, or check that ${where} is the method you meant` : ""}.`;
+}
+
+/** "lambda body is neither value nor void compatible": a block that returns a value on some paths and reaches its end on others. */
+function valueOnEveryPath(d: Diagnostic, own: OwnClasses): string {
+  const start = "Some paths through this lambda's block end with return and a value, and others reach the end without one. Every path must give a value: add a return with a value at the end of the block, for the case the ifs above it don't cover";
+  const l = lambdaAt(d, own);
+  const where = l?.method ?? l?.type ?? null;
+  if (l && where && l.params.length === 2 && ORDER_LAMBDA.test(where)) {
+    // A comparator that returns in ifs, as in if (a.length() > b.length()) return 1;: one compare covers every case, in the same order.
+    const [a, b] = l.params;
+    const cond = /\bif\s*\(((?:[^()]|\([^()]*\))*)\)\s*\{?\s*return\s*(-?)/d.exec(l.bodyCode);
+    const sides = cond?.indices?.[1] ? comparisonSides(cond[1], l.body.slice(cond.indices[1][0], cond.indices[1][1])) : null;
+    const type = comparedType(d, own);
+    let code: string | null = null;
+    if (sides) {
+      const sideType = typeOfValue(own, sides.first, l.params, type) ?? typeOfValue(own, sides.second, l.params, type);
+      const [x, y] = sides.greater === (cond![2] !== "-") ? [sides.first, sides.second] : [sides.second, sides.first];
+      code = sideType && compareCode(own, sideType, x, y);
+    } else code = comparatorFor(own, type, a, b);
+    const one = code ? `, as in (${a}, ${b}) -> ${code}` : ": Integer.compare(first, second) for int values, Double.compare for double values, or first.compareTo(second) for text";
+    return `${start}. In a comparator, one return with a method that compares the two values covers every case, also when they're equal${one}.`;
+  }
+  const literal = where && TEST_LAMBDA.test(where) ? "return false;" : where && /^mapTo(?:Int|Long)$/.test(where) ? "return 0;" : where === "mapToDouble" ? "return 0.0;" : null;
+  return `${start}${literal ? ` (for example ${literal})` : ""}.`;
+}
+
+/** A lambda's parameter named like a variable of the method around it. */
+function lambdaParameterTaken(d: Diagnostic): string | null {
+  const name = /^variable ([\w$]+) is already defined/.exec(d.message)?.[1];
+  const at = atCaret(d)?.at ?? "";
+  if (!name || !new RegExp(`^${escapeRegExp(name)}\\s*(?:->|(?:,\\s*[\\w$]+\\s*)*\\)\\s*->)`).test(at)) return null;
+  return `${name} is already a variable of this method, and a lambda's parameter can't have the name of a variable that is in use around the lambda. Give the parameter another name, and use that name in the lambda's body.`;
+}
+
+/** A name that's one of this lambda's parameters, in its header on the caret's line: p in "p -> p.getAge()" or "(a, b) -> ...". */
+function isLambdaParameter(d: Diagnostic, own: OwnClasses, name: string): boolean {
+  const c = atCaret(d);
+  const code = own.code.get(fileName(d.file))?.[d.line - 1];
+  const line = code?.length === c?.line.length ? code : c?.line;
+  const n = escapeRegExp(name);
+  return !!line && new RegExp(`(?:^|[^\\w$.])(?:${n}|\\([^()]*(?<![\\w$])${n}(?![\\w$])[^()]*\\))\\s*->`).test(line);
+}
+
+/**
+ * Where a lambda gets its values: the functional interface a variable for it is declared with, the
+ * steps of a stream it may be given to, the methods of a list, and the static methods of
+ * Collections and Arrays that take the list first.
+ */
+type ValuesFrom = { iface: string; steps: string; methods: string; statics: string | null };
+const COMPARED: ValuesFrom = { iface: "Comparator", steps: "sorted|max|min", methods: "sort", statics: "sort|max|min" };
+const TESTED: ValuesFrom = { iface: "Predicate", steps: "filter|anyMatch|allMatch|noneMatch|takeWhile|dropWhile", methods: "removeIf", statics: null };
+
+/**
+ * The values a lambda on the caret's line gets, from the code around it: for a comparator, Person
+ * for people.sort(...), Collections.sort(people, ...) or people.stream().sorted(...) with a
+ * List<Person> people, or for Comparator<Person> c = .... Not after a step such as map, which
+ * changes what the stream holds. With the list or array they come from, when there is one, and its
+ * type as declared (null for var, or when no declaration is found).
+ */
+function valuesOf(d: Diagnostic, own: OwnClasses, from: ValuesFrom): { element: string | null; receiver?: string; type?: string | null } | null {
+  const pos = caretIn(d, own);
+  const line = own.code.get(fileName(d.file))?.[d.line - 1];
+  if (!pos || line == null) return null;
+  const declared = new RegExp(`\\b(?:${from.iface})\\s*<\\s*([\\w$.]+)\\s*>\\s*[\\w$]+\\s*=`).exec(line)?.[1];
+  if (declared) return { element: simple(declared) };
+  const stream = new RegExp(`(?:\\bArrays\\s*\\.\\s*stream\\s*\\(\\s*([\\w$]+)\\s*\\)|([\\w$]+)\\s*\\.\\s*stream\\s*\\(\\s*\\))([^;]*?)\\.\\s*(?:${from.steps})\\s*\\(`).exec(line);
+  const receiver =
+    (from.statics ? new RegExp(`\\b(?:Collections|Arrays)\\s*\\.\\s*(?:${from.statics})\\s*\\(\\s*([\\w$]+)\\s*,`).exec(line)?.[1] : undefined) ??
+    new RegExp(`([\\w$]+)\\s*\\.\\s*(?:${from.methods})\\s*\\(`).exec(line)?.[1] ??
+    (stream && !/\.\s*(?:map|flatMap|mapToObj|mapMulti)\b/.test(stream[3]) ? (stream[1] ?? stream[2]) : undefined);
+  if (!receiver || /^(?:Collections|Arrays)$/.test(receiver)) return null;
+  const type = changesOf(pos.code, receiver, pos.at).type;
+  const element = /^(?:[\w$]+\.)*(?:List|ArrayList|LinkedList|Collection|Set|HashSet|TreeSet|LinkedHashSet|Stream|Iterable|Queue|Deque|ArrayDeque|PriorityQueue|Vector)<([\w$.]+)>$/.exec(type ?? "")?.[1] ?? /^([\w$.]+)\[\]$/.exec(type ?? "")?.[1];
+  return { element: element ? simple(element) : null, receiver, type };
+}
+
+/** The type of the values a comparator on the caret's line compares (see valuesOf). */
+const comparedType = (d: Diagnostic, own: OwnClasses) => valuesOf(d, own, COMPARED)?.element ?? null;
+
+/** The class whose static compare compares two values of a type, as in Integer.compare(a, b). */
+const COMPARE_CLASS: Record<string, string> = { int: "Integer", long: "Long", double: "Double", float: "Float", short: "Short", byte: "Byte", char: "Character", boolean: "Boolean" };
+for (const box of Object.values(COMPARE_CLASS)) COMPARE_CLASS[box] = box;
+const NUMBER_TYPE = /^(?:int|long|double|float|short|byte|Integer|Long|Double|Float|Short|Byte)$/;
+
+/** Code that compares a and b, two values of this type, as a comparator must (with an int): Integer.compare(a, b) for ints, a.compareTo(b) for text. */
+function compareCode(own: OwnClasses, type: string, a: string, b: string): string | null {
+  if (COMPARE_CLASS[type]) return `${COMPARE_CLASS[type]}.compare(${a}, ${b})`;
+  if (type === "String" || (own.types.has(type) && comparable(own, type))) return `${a}.compareTo(${b})`;
+  return null;
+}
+
+/** A getter of one of the program's types or its parents (or a record's accessor) whose type fits, for an example such as p.getAge() > 3. */
+function getterOf(own: OwnClasses, type: string, fits: (type: string) => boolean): OwnMember | undefined {
+  const t = own.types.get(type);
+  if (!t) return undefined;
+  const accessor = (name: string) => t.kind === "record" && t.members.some((f) => !f.method && f.name === name);
+  return [t, ...ancestorsOf(own, t.name)].flatMap((a) => a.members).find((x) => x.method && !x.static && !x.private && x.params === "" && (/^(?:get|is)[A-Z]/.test(x.name) || accessor(x.name)) && fits(x.type));
+}
+
+/** A comparator's body for two values of this type, a and b: Integer.compare(a, b), or by a getter, as in a.getName().compareTo(b.getName()). */
+function comparatorFor(own: OwnClasses, type: string | null, a: string, b: string): string | null {
+  if (!type) return null;
+  const direct = compareCode(own, type, a, b);
+  if (direct) return direct;
+  const key = getterOf(own, type, (t) => compareCode(own, t, "", "") != null);
+  return key ? compareCode(own, key.type, `${a}.${key.name}()`, `${b}.${key.name}()`) : null;
+}
+
+/**
+ * A test on `value`, a value of this type as written, for an example: value > 3 for a number (value
+ * == 0 for a remainder), value.startsWith("A") for text, or one with a getter of one of the program's
+ * types.
+ */
+function testOn(own: OwnClasses, type: string | null, value: string, code = value): string | null {
+  if (!type) return null;
+  const v = value.trim();
+  // The operators are looked for in the code, where text in quotes is blanked out.
+  if (NUMBER_TYPE.test(type)) {
+    if (/[=<>!&|?:^]/.test(code)) return `(${v}) > 3`;
+    // A remainder is tested against 0, and so is what indexOf (-1 for none) and compareTo give.
+    return /%/.test(code) ? `${v} == 0` : /\bindexOf\s*\([^()]*\)\s*$/.test(code) ? `${v} >= 0` : /\bcompareTo\s*\([^()]*\)\s*$/.test(code) ? `${v} < 0` : `${v} > 3`;
+  }
+  if (type === "String") return `${callable(v)}.startsWith("A")`;
+  const flag = getterOf(own, type, (t) => /^(?:boolean|Boolean)$/.test(t));
+  if (flag) return `${callable(v)}.${flag.name}()`;
+  const number = getterOf(own, type, (t) => NUMBER_TYPE.test(t));
+  if (number) return `${callable(v)}.${number.name}() > 3`;
+  const text = getterOf(own, type, (t) => t === "String");
+  return text ? `${callable(v)}.${text.name}().startsWith("A")` : null;
+}
+
+/**
+ * The type of a value as a lambda's body writes it, from the type of the lambda's parameters: a
+ * parameter itself, or a getter or variable of it, such as a.getAge() (int) or a.length() for text.
+ */
+function typeOfValue(own: OwnClasses, value: string, params: string[], type: string | null): string | null {
+  const m = /^([\w$]+)(?:\s*\.\s*([\w$]+)\s*(\(\s*\))?)?$/.exec(value.trim());
+  if (!m || !type || !params.includes(m[1])) return null;
+  if (!m[2]) return type;
+  if (type === "String" && m[2] === "length" && m[3]) return "int";
+  const t = own.types.get(type);
+  if (!t) return null;
+  return [t, ...ancestorsOf(own, t.name)].flatMap((a) => a.members).find((x) => x.name === m[2] && x.method === !!m[3] && (!m[3] || x.params === ""))?.type ?? null;
+}
+
+/**
+ * The two sides of a comparison with <, >, <= or >= that is all of an expression (one, outside
+ * brackets), or null. `code` is the expression with its strings blanked out, and `text` the same as
+ * written, which the sides are taken from.
+ */
+function comparisonSides(code: string, text = code): { first: string; second: string; greater: boolean } | null {
+  const cuts: number[] = [];
+  let depth = 0;
+  for (let k = 0; k < code.length; k++) {
+    const ch = code[k];
+    if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch)) depth--;
+    else if (depth !== 0) continue;
+    else if ((ch === "<" || ch === ">") && !"<>".includes(code[k + 1] ?? "") && !"<>-".includes(code[k - 1] ?? "")) cuts.push(k);
+    else if (/[=!&|?]/.test(ch) && !(ch === "=" && (code[k - 1] === "<" || code[k - 1] === ">"))) return null;
+  }
+  if (cuts.length !== 1) return null;
+  const k = cuts[0];
+  const [first, second] = [text.slice(0, k).trim(), text.slice(k + (code[k + 1] === "=" ? 2 : 1)).trim()];
+  return first && second ? { first, second, greater: code[k] === ">" } : null;
+}
+
+/** A value written so that a method call can follow it: as it is when it's a name or a chain of calls, and otherwise in parentheses. */
+const callable = (value: string) => (/^[\w$]+(?:\s*\([^()]*\))?(?:\s*\.\s*[\w$]+(?:\s*\([^()]*\))?)*$/.test(value.trim()) ? value.trim() : `(${value.trim()})`);
+
+/**
+ * The statement that holds the offset `at` of the code, from after the ; or { before it to its ;
+ * (brackets it is in belong to it, and so do the ; and blocks of lambdas inside it).
+ */
+function statementAt(code: string, at: number): string {
+  let depth = 0;
+  let inside = 0;
+  let start = 0;
+  for (let k = at - 1; k >= 0 && !start; k--) {
+    const ch = code[k];
+    if (ch === ")" || ch === "]" || ch === "}") {
+      if (ch === "}" && depth === 0 && inside === 0) start = k + 1;
+      else depth++;
+    } else if (ch === "(" || ch === "[" || ch === "{") {
+      if (depth > 0) depth--;
+      else if (ch === "{") start = k + 1;
+      else inside++;
+    } else if (ch === ";" && depth === 0) start = k + 1;
+  }
+  let end = code.length;
+  depth = 0;
+  for (let k = at; k < code.length && end === code.length; k++) {
+    const ch = code[k];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      if (depth > 0) depth--;
+      else if (ch === "}") end = k;
+    } else if (ch === ";" && depth === 0) end = k;
+  }
+  return code.slice(start, end);
+}
+
+/** A lambda's parameter that Java gave the type Object, as in Comparator.comparing(p -> p.getAge()).reversed(). */
+function objectInLambda(d: Diagnostic, own: OwnClasses, v: string, method: boolean, member: string): string | null {
+  if (!isLambdaParameter(d, own, v)) return null;
+  const use = method ? `${member}()` : member;
+  // The class to name: the type of the values being compared, when the code shows it; otherwise the one class that has the member.
+  const has = (t: OwnClass | undefined) => !!t && [t, ...ancestorsOf(own, t.name)].some((a) => declares(a, member, method));
+  const holders = [...own.types.values()].filter((t) => declares(t, member, method));
+  const compared = comparedType(d, own);
+  const owner = compared && (own.types.has(compared) ? has(own.types.get(compared)) : /^[A-Z]/.test(compared)) ? compared : holders.length === 1 ? holders[0].name : undefined;
+  // Several classes have the member, and the code doesn't show which one the values are: name them all.
+  const names = owner ? [owner] : holders.slice(0, 3).map((t) => t.name);
+  const or = (items: string[]) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`);
+  const whichever = names.length > 1 ? ", whichever class the values have" : "";
+  const c = atCaret(d);
+  const line = c?.line ?? "";
+  if (/\bcomparing(?:Int|Double|Long)?\s*\(/.test(line)) {
+    const typed = names.length ? `${or(names.map((n) => `(${n} ${v}) -> ${v}.${use}`))}${whichever}` : `(Person ${v}) -> ${v}.${use}, with your class's name instead of Person`;
+    const start = `${v} is the parameter of a lambda, and Java couldn't work out its type, so it made it Object, which has no ${method ? "method" : "variable"} ${use}.`;
+    const fix = `${method ? ` Or use a method reference, which names the class: ${names.length ? or(names.map((n) => `${n}::${member}`)) : `Person::${member}`}.` : ""}`;
+    // What hides the type: .reversed() or .thenComparing(...) after comparing(...) in the statement, a list declared without a type in angle brackets, or neither.
+    const pos = caretIn(d, own);
+    const chain = !!pos && /\bcomparing(?:Int|Double|Long)?\s*\([\s\S]*?\.\s*(?:reversed|thenComparing\w*)\s*\(/.test(statementAt(pos.code, pos.at));
+    const values = valuesOf(d, own, COMPARED);
+    const raw = values?.receiver && values.type && /^(?:[\w$]+\.)*(?:List|ArrayList|LinkedList|Collection|Set|HashSet|TreeSet|LinkedHashSet|Iterable|Queue|Deque|ArrayDeque|PriorityQueue|Vector)$/.test(values.type) ? values : null;
+    const follows = ".reversed() or .thenComparing(...) follows Comparator.comparing(...)";
+    const alone = "Java reads comparing(...) on its own, before it sees what the comparator is for";
+    const typedList = raw ? `${raw.type}<${names.length === 1 ? names[0] : "..."}>` : "";
+    if (raw && chain)
+      return `${start} Two things hide its type here: ${raw.receiver} is declared without a type in angle brackets, and ${follows}, so ${alone}. Declare ${raw.receiver} with its type, such as ${typedList}, and give the parameter its type: ${typed}.${fix}`;
+    if (chain) return `${start} That happens when ${follows}: ${alone}. Give the parameter its type: ${typed}.${fix}`;
+    if (raw)
+      return `${start} That happens here because ${raw.receiver} is declared without a type in angle brackets, so Java doesn't know what its elements are, or what the comparator compares. Declare ${raw.receiver} with its type, such as ${typedList}, or give the parameter its type: ${typed}.${fix}`;
+    return `${start} That happens when nothing around Comparator.comparing(...) says what it compares, as with var, or with a Comparator variable or a new TreeSet(...) without a type in angle brackets (such as Comparator<${names.length === 1 ? names[0] : "Person"}>). Give the parameter its type: ${typed}.${fix}`;
+  }
+  // A list without a type: if none of the program's classes has the member, it may be text (length()).
+  const list = names.length ? `${or(names.map((n) => `List<${n}> list = new ArrayList<>();`))}${whichever}` : "List<String> list = new ArrayList<>();";
+  return `${v} is the parameter of a lambda, and it has the type of the values the lambda gets, here Object, which has no ${method ? "method" : "variable"} ${use}. That usually means the list or stream has no type in angle brackets, as in List list = new ArrayList();. Give it its type, such as ${list}, and ${v} gets that type too.`;
+}
+
+/**
+ * The local variable `name` that is in use at `at`: its type as declared (null for var, or when no
+ * declaration is found), and the offsets where the code changes it (=, +=, ++ and so on), from its
+ * declaration to the end of the block it's declared in.
+ */
+function changesOf(code: string, name: string, at: number): { type: string | null; changes: number[] } {
+  const n = escapeRegExp(name);
+  let type: string | null = null;
+  let from = 0;
+  let nameAt = -1;
+  const declaration = new RegExp(`(?<![\\w$.])((?:[\\w$]+\\.)*[\\w$]+(?:\\s*<[^;{}()=]*>)?(?:\\s*\\[\\s*\\])*)\\s+${n}(?![\\w$])(?=\\s*[=;:,)])`, "g");
+  for (const m of code.slice(0, at).matchAll(declaration)) {
+    if (/^(return|new|throw|else|case|yield|assert|instanceof)$/.test(m[1])) continue;
+    [type, from, nameAt] = [m[1].replace(/\s+/g, ""), m.index, m.index + m[0].length - name.length];
+  }
+  // The variable exists up to the } that closes the block it's declared in (or up to another declaration of the name).
+  let end = code.length;
+  let depth = 0;
+  for (let k = from; k < code.length; k++) {
+    if (code[k] === "{") depth++;
+    else if (code[k] === "}" && --depth < 0) {
+      end = k;
+      break;
+    }
+  }
+  const later = [...code.slice(at, end).matchAll(declaration)].find((m) => !/^(return|new|throw|else|case|yield|assert|instanceof)$/.test(m[1]));
+  if (later) end = at + later.index;
+  const change = new RegExp(`(?<![\\w$.])${n}\\s*(?:(?:[-+*/%&|^]|<<|>>>?)?=(?!=)|\\+\\+|--)|(?:\\+\\+|--)\\s*${n}(?![\\w$])`, "g");
+  const changes = [...code.slice(from, end).matchAll(change)].map((m) => from + m.index).filter((k) => k !== nameAt);
+  return { type: type === "var" ? null : type, changes };
+}
+
+/**
+ * The for loop whose header changes a variable at the offset `change`, in its update part (after the
+ * header's second ;), and whose body holds the offset `at`: where its for is, and whether its body is
+ * a block in { } or one statement without braces. Null when the change isn't in such a loop's header.
+ */
+function counterLoop(code: string, change: number, at: number): { at: number; block: boolean } | null {
+  // Back from the change to the ( that is open there, which must be a for's.
+  let depth = 0;
+  let open = -1;
+  for (let k = change - 1; k >= 0 && open < 0; k--) {
+    const ch = code[k];
+    if (ch === ")" || ch === "]" || ch === "}") depth++;
+    else if (ch === "(" || ch === "[" || ch === "{") {
+      if (depth === 0) {
+        if (ch !== "(") return null;
+        open = k;
+      } else depth--;
+    }
+  }
+  if (open < 0) return null;
+  const from = Math.max(0, open - 20);
+  const keyword = /(?<![\w$.])for\s*$/.exec(code.slice(from, open));
+  if (!keyword) return null;
+  // The header's two ; (a for-each header has none), and the ) that closes it.
+  const semicolons: number[] = [];
+  let close = -1;
+  depth = 0;
+  for (let k = open + 1; k < code.length && close < 0; k++) {
+    const ch = code[k];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      if (depth === 0) close = k;
+      else depth--;
+    } else if (ch === ";" && depth === 0) semicolons.push(k);
+  }
+  if (close < 0 || semicolons.length !== 2 || change < semicolons[1]) return null;
+  // The body: a block in { } right after the header, or else the one statement up to its ;.
+  let body = close + 1;
+  while (/\s/.test(code[body] ?? "")) body++;
+  const block = code[body] === "{";
+  let end = -1;
+  depth = 0;
+  for (let k = body; k < code.length && end < 0; k++) {
+    const ch = code[k];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      if (--depth < 0) return null;
+      if (block && depth === 0) end = k + 1;
+    } else if (!block && ch === ";" && depth === 0) end = k + 1;
+  }
+  return end >= 0 && at > body && at < end ? { at: from + keyword.index, block } : null;
+}
+
+/** "local variables referenced from a lambda expression must be final or effectively final". */
+function effectivelyFinal(d: Diagnostic, own: OwnClasses): string {
+  const inner = /inner class/.test(d.message);
+  const who = inner ? "code in an inner class (such as new Runnable() { ... })" : "a lambda";
+  const it = inner ? "the inner class" : "the lambda";
+  const rule = `${who[0].toUpperCase()}${who.slice(1)} can use a local variable of the method around it only if the variable never changes after it gets its value (Java calls that effectively final)`;
+  const name = /^[\w$]+/.exec(atCaret(d)?.at ?? "")?.[0];
+  const pos = caretIn(d, own);
+  if (!name || !pos) return `${rule}. To count or add up values, use an ordinary for-each loop, or let a stream compute the value, such as count() or sum(). Otherwise copy the variable into a new one that never changes, and use that instead.`;
+  const { code, at } = pos;
+  const { type, changes } = changesOf(code, name, at);
+  const line = (k: number) => code.slice(0, k).split("\n").length;
+  const lambda = inner ? null : lambdaAround(code, at);
+  const inside = lambda ? changes.filter((k) => k > lambda.arrow && k < lambda.end) : changes.filter((k) => line(k) === d.line);
+  if (inside.length)
+    return `${name} is a local variable of the method, and ${who} can't change it: it can only use local variables that never change after they get their value (Java calls that effectively final). To count, add up or find the largest value, let the stream compute it with count(), sum() or max(), as in int sum = list.stream().mapToInt(...).sum();. Or go through the values with an ordinary for-each loop, which can change ${name}.`;
+  const copy = `${name}Copy`;
+  const lines = [...new Set(changes.map(line))];
+  // The counter of a for loop, changed in its header, used in the loop's body: the copy goes inside the loop.
+  const loop = changes.map((k) => counterLoop(code, k, at)).find((x) => x != null);
+  if (loop) {
+    const start = `${it[0].toUpperCase()}${it.slice(1)} uses ${name}, the counter of the for loop on line ${line(loop.at)}, which changes in every round. ${rule}.`;
+    const declare = type ? `: ${type} ${copy} = ${name}; Then use ${copy} in ${it}.` : `, and use that in ${it}.`;
+    if (loop.block) return `${start} Copy the counter into a new variable inside the loop, right before ${it}${declare}`;
+    return `${start} The loop's body is one statement without { }, and a new variable can't be declared there, so first put braces around the body: for (...) { ... }. Then, inside the braces, copy the counter into a new variable right before ${it}${declare}`;
+  }
+  const where = lines.length ? `, and ${name} gets a new value on line ${listed(lines.slice(0, 3).map(String))}` : `, which changes somewhere in the method`;
+  const declare = type ? `: ${type} ${copy} = ${name}; Then use ${copy} in ${it}.` : `, and use that in ${it}.`;
+  return `${it[0].toUpperCase()}${it.slice(1)} uses the local variable ${name}${where}. ${rule}. If ${name} doesn't need to change, remove the change. Otherwise copy its value into a new variable right before ${it}${declare}`;
+}
 /**
  * The message of a ClassCastException: "class Dog cannot be cast to class Cat (Dog and Cat are in
  * unnamed module of loader 'app')". `library` is whether it was thrown in Java's own code (its first
@@ -762,7 +2098,27 @@ function explainNumber(m: string): string {
   return `The program tried to turn the text "${text}" into a number, but it isn't one.`;
 }
 
-function explainStringIndex(m: string): string {
+/** A StringBuilder's index error: `method` is the StringBuilder method the program called, such as insert or deleteCharAt. */
+function stringBuilderIndex(m: string, method: string): string | null {
+  const one = /^Index (-?\d+) out of bounds for length (\d+)$/.exec(m);
+  if (one) {
+    const [i, n] = [Number(one[1]), Number(one[2])];
+    if (n === 0) return `The program called ${method}(${i}) on an empty StringBuilder, which has no characters.`;
+    const hint = i === n ? ` Index ${n} is one past the end.` : i < 0 ? " Indexes start at 0, so a negative index never works." : "";
+    return `The program called ${method}(${i}) on a StringBuilder of ${plural(n, "character", "characters")}, whose indexes go from 0 to ${n - 1}.${hint}`;
+  }
+  const range = /^Range \[(-?\d+), (-?\d+)\) out of bounds for length (\d+)$/.exec(m);
+  if (!range) return null;
+  const [a, n] = [range[1], Number(range[3])];
+  if (method === "insert") return `The program called insert(${a}, ...) on a StringBuilder of ${plural(n, "character", "characters")}. insert can put text at an index from 0 to ${n} (${n} adds it at the end).`;
+  return `The program called ${method}(${a}, ...) on a StringBuilder of ${plural(n, "character", "characters")}. The start index must be from 0 to ${n}, and not larger than the end index.`;
+}
+
+function explainStringIndex(m: string, _library = false, frames: string[] = []): string {
+  // The outermost StringBuilder method in Java's own frames is the one the program called.
+  const builder = frames.map((f) => /^java\.lang\.StringBuilder\.(\w+)$/.exec(f)?.[1]).filter((x) => x != null).pop();
+  const inBuilder = builder ? stringBuilderIndex(m, builder) : null;
+  if (inBuilder) return inBuilder;
   const plain = outOfBounds(m, "string");
   if (plain) return plain;
   const r = /^Range \[(-?\d+), (-?\d+)\) out of bounds for length (\d+)$/.exec(m) ?? /^begin (-?\d+), end (-?\d+), length (\d+)$/.exec(m);
@@ -770,8 +2126,133 @@ function explainStringIndex(m: string): string {
   return `The program used an index that isn't inside the string. ${m}. A string's indexes go from 0 to length() - 1.`;
 }
 
-/** Each exception's explanation, from its message and whether it was thrown in Java's own code (see explainCast). */
-const EXCEPTIONS: [RegExp, (message: string, library: boolean) => string][] = [
+/** An empty Optional's value asked for: "No value present". `frames` name the Optional method, such as java.util.OptionalDouble.getAsDouble. */
+function emptyOptional(frames: string[]): string {
+  const [, type = "Optional", method = "get"] = /^java\.util\.(Optional\w*)\.(\w+)$/.exec(frames.find((f) => f.startsWith("java.util.Optional")) ?? "") ?? [];
+  // The type of the value isn't in the stack trace, so a plain Optional's example can't be one of the right type.
+  const [steps, example] =
+    type === "OptionalDouble"
+      ? ["average(), max(), min() and findFirst()", ", as in average().orElse(0)"]
+      : type === "Optional"
+        ? ["findFirst(), max(...), min(...) and reduce(...) without a start value", '. Put a value of the type the stream holds in them, such as orElse(0) for numbers or orElse("none") for text']
+        : ["max(), min(), findFirst() and reduce(...) without a start value", ", as in max().orElse(0)"];
+  return `The program took the value out of an empty ${type} with ${method}(): there was none ("No value present"). ${steps} give an empty one when the stream has no values, for example when the list is empty or filter let nothing through. Check with isPresent() first, or use orElse(...), which gives the value in its parentheses instead${example}.`;
+}
+
+/** A method of Java's own as a learner would write it: Collections.max for java.util.Collections.max. */
+const javaMethod = (frame: string) => frame.replace(/^(?:[a-z_][\w]*\.)+/, "");
+
+function explainNoSuchElement(m: string, _library: boolean, frames: string[]): string {
+  if (/No line found/.test(m)) return "The program asked for more input than it was given: it read another line after the input ran out.";
+  if (m === "No value present") return emptyOptional(frames);
+  if (frames.some((f) => f.startsWith("java.util.Scanner."))) return "The program asked for more input than it was given: it read another value after the input ran out.";
+  const iterator = frames.map((f) => /\$\w*(?:Itr|Iterator)\.next\w*$/.test(f)).lastIndexOf(true);
+  if (iterator >= 0) {
+    // The program's own next() is the outermost frame (also that of a wrapper's iterator, such as Collections$UnmodifiableCollection$1.next).
+    if (/\.next\w*$/.test(frames[frames.length - 1]))
+      return "The program called next() on an iterator that had already given every element, so there was no next one. Call next() only when hasNext() is true, and only once in each round of a while (it.hasNext()) loop: keep the element it gives in a variable if you need it more than once.";
+    // Otherwise a method the program called went through an empty collection, such as Collections.max: the first frame outside the iterators' classes.
+    const called = frames.slice(iterator + 1).find((f) => !f.slice(0, f.lastIndexOf(".")).includes("$"));
+    if (called) return `The program called ${javaMethod(called)}(...) on an empty collection, so there was no element to give. Check isEmpty() first.`;
+  }
+  const empty = frames.map((f) => /\.(getFirst|getLast|removeFirst|removeLast|first|last|firstKey|lastKey|element|pop|remove)$/.exec(f)?.[1]).filter((x) => x != null).pop();
+  if (empty) return `The program called ${empty}() on an empty collection, so there was no element to give. Check isEmpty() first.`;
+  return "The program asked for the next element, but there wasn't one.";
+}
+
+/**
+ * The enum and the text of "No enum constant Main.Suit.hearts": Suit and hearts. The text can have
+ * dots of its own, so the enum's name comes from the stack frame of its valueOf, the caller of
+ * java.lang.Enum.valueOf (Main$Suit.valueOf, whose name in the message is Main.Suit, just as long).
+ * An enum declared inside a method has no such name: the message says null.hearts.
+ */
+function enumValueText(m: string, frames: string[], caller?: string): [string, string] | null {
+  if (!m.startsWith("No enum constant ")) return null;
+  const rest = m.slice("No enum constant ".length);
+  const cls = frames[frames.length - 1] === "java.lang.Enum.valueOf" ? /^([\w$.]+)\.valueOf$/.exec(caller ?? "")?.[1] : undefined;
+  if (cls) {
+    const local = /\$\d+([\w$]+)$/.exec(cls)?.[1];
+    if (local && rest.startsWith("null.")) return [local, rest.slice("null.".length)];
+    const written = rest.slice(0, cls.length);
+    if (rest[cls.length] === "." && written.replace(/\$/g, ".") === cls.replace(/\$/g, ".")) return [written.split(".").pop()!, rest.slice(cls.length + 1)];
+  }
+  const plain = /^([\w$.]+)\.([^.]*)$/.exec(rest);
+  return plain ? [binarySimple(plain[1]), plain[2]] : null;
+}
+
+/** IllegalStateException and IllegalArgumentException, thrown by the program itself or by one of Java's methods. */
+function explainIllegal(m: string, library: boolean, frames: string[], _more: string[] = [], caller?: string): string {
+  if (/^stream has already been operated upon or closed/.test(m))
+    return "A stream can be used only once: after a step such as count(), forEach or collect has gone through it, it's used up, and the program used the same stream again. Make a new stream for each use, with list.stream() again, instead of keeping one in a variable.";
+  if (!m && frames.some((f) => /\$\w*(?:Itr|Iterator)\.remove$/.test(f)))
+    return "The program called remove() on an iterator without calling next() first (or called it twice after one next()). remove() removes the element that the last next() gave, so each remove() needs its own next() before it: while (it.hasNext()) { int number = it.next(); if (number < 0) { it.remove(); } }";
+  const constant = enumValueText(m, frames, caller);
+  if (constant) {
+    const [e, name] = constant;
+    const hint = !name.trim()
+      ? " The text was empty."
+      : name.trim() !== name
+        ? ` The text has spaces around it: trim() removes them, as in ${e}.valueOf(text.trim()).`
+        : name.toUpperCase() !== name
+          ? ` If the text comes from input, change it to capitals first: ${e}.valueOf(text.toUpperCase()).`
+          : "";
+    return `${e}.valueOf gives the constant whose name it gets, and ${e} has no constant named "${name}": the name must match exactly, capital letters included.${hint}`;
+  }
+  if (/^Comparison method violates its general contract/.test(m))
+    return "Sorting found that the program's compareTo or Comparator gives answers that contradict each other, such as that a comes before b and also that b comes before a. It must give a negative number when the first comes first, 0 when they're equal and a positive number when the second comes first, the same way every time. For numbers, Integer.compare(first, second) or Double.compare(first, second) does that.";
+  if (!m) return "A method rejected its arguments.";
+  return library ? `A method of Java's own that the program called stopped it with this message: ${m}` : `The program stopped itself with this message: ${m}`;
+}
+
+/** Why a regular expression doesn't compile, from the description in a PatternSyntaxException's message. */
+function regexProblem(description: string): string {
+  const dangling = /^Dangling meta character '(.)'/.exec(description);
+  if (dangling) {
+    const x = dangling[1];
+    const does = x === "?" ? `? makes the part before it optional, and nothing that can be made optional` : `${x} means "repeat the part before it", and nothing that can be repeated`;
+    return `${does} comes before it. To match a plain ${x}, put two backslashes in front of it in Java code, "\\\\${x}", or put it in brackets, "[${x}]".`;
+  }
+  if (/^Unclosed character class/.test(description)) return `[ starts a set of characters, such as [a-z], and there is no ] to end it. Add the ]. To match a plain [, write "\\\\[".`;
+  if (/^Unclosed group/.test(description)) return `( starts a group, and there is no ) to end it. Add the ). To match a plain (, write "\\\\(".`;
+  if (/^Unmatched closing '\)'/.test(description)) return `) ends a group, but no ( started one. Remove it, or, to match a plain ), write "\\\\)".`;
+  if (/^Illegal repetition range/.test(description)) return "a count of repeats, such as {2,4}, must go from the smaller number to the larger one.";
+  if (/^Illegal repetition/.test(description)) return `{ starts a count of repeats, such as {3} or {2,4}, and what follows it isn't one. To match a plain {, write "\\\\{".`;
+  if (/^Illegal\/unsupported escape sequence/.test(description)) return `a backslash followed by this character means nothing in a regular expression. Check it: "\\\\d" is a digit, "\\\\s" a space and "\\\\w" a letter, digit or _ (with two backslashes in Java code).`;
+  if (/^Illegal character range/.test(description)) return "a range in [ ] goes from one character to another, as in [a-z], and this one runs backwards or has no end. Check its order. To match a plain -, put it first or last in the brackets, as in [a-z-].";
+  if (/^Unescaped trailing backslash/.test(description)) return `it ends with a backslash that has nothing after it. To match a plain backslash, write four in Java code: "\\\\\\\\".`;
+  return `${description}. Characters such as . * + ? [ ] ( ) { } | and \\ have special meanings in a regular expression. To match one as a plain character, put two backslashes in front of it in Java code, as in "\\\\.".`;
+}
+
+/** PatternSyntaxException: "Unclosed character class near index 3", with the pattern (and a caret) on the lines after it. */
+function explainRegex(m: string, _library: boolean, frames: string[], more: string[]): string {
+  const [, description, index] = /^(.*?)(?: near index (-?\d+))?$/.exec(m) ?? [];
+  const pattern = more[0];
+  const used = frames.map((f) => /^java\.lang\.String\.(split|matches|replaceAll|replaceFirst)$/.exec(f)?.[1]).find((x) => x != null);
+  // The pattern as Java reads it, without quotes; the suggestions are Java code, where each backslash is written twice.
+  const source = pattern?.includes("\\") ? ` (written "${pattern.replace(/[\\"]/g, "\\$&")}" in Java code)` : "";
+  const which = pattern != null ? `the pattern ${pattern}${source}` : "the one the program gave";
+  const intro = used
+    ? `${used}(...) reads its first text as a regular expression, and ${which} isn't a valid one`
+    : pattern != null
+      ? `The regular expression ${pattern}${source} isn't valid`
+      : "The regular expression the program gave isn't valid";
+  const at = index != null ? ` (the problem is at index ${index}, counting from 0)` : "";
+  return `${intro}${at}: ${regexProblem(description || m)}`;
+}
+
+function explainConcurrent(_m: string, _library: boolean, frames: string[]): string {
+  if (frames.some((f) => /^java\.util\.(?:Linked)?(?:HashMap|TreeMap)\b/.test(f)))
+    return "The program added to or removed from a map or a set while a loop was going through it. Collect the changes and make them after the loop. To remove elements while going through them, use an Iterator: its remove() removes the element that next() gave last.";
+  return "The program added to or removed from a list while a for-each loop was going through it. Loop over the indexes instead (going backwards when removing), or collect the changes and make them after the loop. To remove elements while going through the list, use an Iterator: its remove() removes the element that next() gave last.";
+}
+
+/**
+ * Each exception's explanation, from its message, whether it was thrown in Java's own code (see
+ * explainCast), the methods of Java's own that it went through before the learner's code, innermost
+ * first (such as java.util.ArrayList$Itr.remove), the lines of its message after the first, and the
+ * first method in the learner's code, which called the outermost of those (such as Main$Suit.valueOf).
+ */
+const EXCEPTIONS: [RegExp, (message: string, library: boolean, frames: string[], more: string[], caller?: string) => string][] = [
   [/ArithmeticException$/, (m) => (/by zero/.test(m) ? "The program divided a whole number by zero (or took % 0)." : "A calculation failed.")],
   [/ArrayIndexOutOfBoundsException$/, (m) => outOfBounds(m, "array") ?? `The program used an array index that doesn't exist. ${m}. Indexes go from 0 to length - 1.`],
   [/StringIndexOutOfBoundsException$/, explainStringIndex],
@@ -786,17 +2267,18 @@ const EXCEPTIONS: [RegExp, (message: string, library: boolean) => string][] = [
   [/NullPointerException$/, explainNull],
   [/NumberFormatException$/, explainNumber],
   [/InputMismatchException$/, () => "The program asked the Scanner for a number, but the next input wasn't one."],
-  [/NoSuchElementException$/, (m) => (/No line found/.test(m) ? "The program asked for more input than it was given: it read another line after the input ran out." : "The program asked for the next element, but there wasn't one.")],
+  [/NoSuchElementException$/, explainNoSuchElement],
   [/ClassCastException$/, explainCast],
-  [/ConcurrentModificationException$/, () => "The program added to or removed from a list while a for-each loop was going through it. Loop over the indexes instead (going backwards when removing), or collect the changes and make them after the loop."],
+  [/ConcurrentModificationException$/, explainConcurrent],
+  [/PatternSyntaxException$/, explainRegex],
   [/StackOverflowError$/, () => "A method kept calling itself (or methods kept calling each other) without stopping, until the call stack ran out of room. Check the stopping condition of the recursion."],
   [/OutOfMemoryError$/, () => "The program used up all its memory, for example by adding to a list forever."],
-  [/UnsupportedOperationException$/, () => "This collection can't be changed (lists from List.of(...) are fixed). Copy it into a new ArrayList<>(...) first."],
+  [/UnsupportedOperationException$/, () => "This collection can't be changed (lists from List.of(...), Arrays.asList(...) and a stream's toList() are fixed). Copy it into a new ArrayList<>(...) first."],
   [/FileNotFoundException$|NoSuchFileException$/, (m) => `The program tried to open a file that doesn't exist: ${m}.`],
   [/NegativeArraySizeException$/, () => "The program tried to create an array with a negative size."],
   [/ArrayStoreException$/, () => "The program put an object of the wrong type into an array."],
   [/ExceptionInInitializerError$/, () => "Setting up a class failed: code in a static field or static block threw an exception."],
-  [/IllegalArgumentException$|IllegalStateException$/, (m) => (m ? `The program stopped itself with this message: ${m}` : "A method rejected its arguments.")],
+  [/IllegalArgumentException$|IllegalStateException$/, explainIllegal],
 ];
 
 const LAUNCHER: [RegExp, (m: RegExpExecArray) => Crash][] = [
@@ -839,20 +2321,53 @@ export function explainCrash(stderr: string, sourceFiles: string[] = ["Main.java
   let line: number | null = null;
   let method: string | null = null;
   let file: string | undefined;
+  // The frame just inside the one looked at, and the valueOf that javac writes for an enum, when that was the first frame in the learner's files.
+  let inner = "";
+  let enumValueOf: RegExpExecArray | null = null;
   for (const l of lines.slice(headIndex + 1)) {
     if (l.startsWith("Caused by: ")) break;
+    const frame = /^\s+at (?:[\w.$@]+\/)?([\w.$<>]+)\(/.exec(l)?.[1];
+    if (!frame) continue;
     const m = /^\s+at (?:[\w.$]+\/)?[\w.$]+\.([\w$<>]+)\(([\w$]+\.java):(\d+)\)/.exec(l);
+    const called = inner;
+    inner = frame;
     if (!m || !files.includes(m[2])) continue;
+    // An enum's valueOf has no code of its own to show (its line is the enum's header): the line that called it is the one to report.
+    if (m[1] === "valueOf" && called === "java.lang.Enum.valueOf" && !enumValueOf) {
+      enumValueOf = m;
+      continue;
+    }
     line = Number(m[3]);
     file = m[2];
     method = m[1].startsWith("lambda$") ? m[1].split("$")[1] : m[1];
     break;
   }
+  if (line == null && enumValueOf) [line, file, method] = [Number(enumValueOf[3]), enumValueOf[2], enumValueOf[1]];
+  const trace = lines.slice(headIndex + 1);
   // Thrown in Java's own code: its first stack frame isn't in one of the learner's files.
-  const top = lines.slice(headIndex + 1).find((l) => /^\s+at /.test(l));
+  const top = trace.find((l) => /^\s+at /.test(l));
   const library = !!top && !files.includes(/\(([\w$]+\.java):\d+\)/.exec(top)?.[1]);
+  // The message's other lines (a PatternSyntaxException's show the pattern), up to the stack trace.
+  const more: string[] = [];
+  for (const l of trace) {
+    if (/^\s+at |^Caused by: |^\s+\.\.\. \d+ more/.test(l)) break;
+    more.push(l);
+  }
+  // The methods of Java's own it went through before the learner's code, innermost first.
+  const frames: string[] = [];
+  let caller: string | undefined;
+  for (const l of trace) {
+    if (l.startsWith("Caused by: ")) break;
+    const f = /^\s+at (?:[\w.$@]+\/)?([\w.$<>]+)\(([^)]*)\)/.exec(l);
+    if (!f) continue;
+    if (files.includes(/^([\w$]+\.java):\d+$/.exec(f[2])?.[1])) {
+      caller = f[1];
+      break;
+    }
+    frames.push(f[1]);
+  }
   const short = exception.split(".").pop()!;
   const rule = EXCEPTIONS.find(([re]) => re.test(exception));
-  const explanation = rule ? rule[1](message, library) : `The program stopped with ${short}${message ? ": " + message : ""}.`;
+  const explanation = rule ? rule[1](message, library, frames, more, caller) : `The program stopped with ${short}${message ? ": " + message : ""}.`;
   return { exception: short, message, file, line, method, explanation };
 }

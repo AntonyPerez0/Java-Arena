@@ -1,0 +1,3339 @@
+id: streams
+summary: Streams, a second way to go through a collection's values. stream(), lambda expressions and method references, terminal operations (count, sum, average, forEach, collect) and intermediate ones (filter, map, sorted, distinct, limit, skip), streams of input lines and of objects, reduce and IntStream, reading a file's lines as a stream, and when a loop reads better than a stream. MOOC section 10.1.
+steps:
+  - id: streams-why
+    slug: why-streams
+    title: "Why streams: filter and count"
+    text: |
+      Since module 14, you've gone through lists with loops: a for-each loop, an `if` inside it, and a variable that counts or adds up. Java has a second way to do the same work, the **stream**. With a stream, you say *what* should happen to the values, one step after another, and Java does the looping for you.
+
+      ### One question, two ways
+
+      A cycling club keeps the distance of each ride, in kilometers. How many rides were longer than 50 km? Here's the answer with a loop, as you'd write it now:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> rides = new ArrayList<>();
+              rides.add(42);
+              rides.add(65);
+              rides.add(18);
+              rides.add(80);
+              rides.add(51);
+              rides.add(30);
+
+              int count = 0;
+              for (int km : rides) {
+                  if (km > 50) {
+                      count++;
+                  }
+              }
+              System.out.println("Long rides: " + count);
+          }
+      }
+      ```
+
+      ```output
+      Long rides: 3
+      ```
+
+      And here's the same question with a stream:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> rides = new ArrayList<>();
+              rides.add(42);
+              rides.add(65);
+              rides.add(18);
+              rides.add(80);
+              rides.add(51);
+              rides.add(30);
+
+              long count = rides.stream()
+                      .filter(km -> km > 50)
+                      .count();
+              System.out.println("Long rides: " + count);
+          }
+      }
+      ```
+
+      ```output
+      Long rides: 3
+      ```
+
+      - `rides.stream()` makes a **stream** of the list's values, in the list's order. A stream isn't a list: it's a flow of values that passes through the steps you chain after it.
+      - `.filter(km -> km > 50)` lets through only the values for which the condition is true. `km -> km > 50` reads "take a value, call it `km`, and answer: is `km` greater than 50?" It's a **lambda expression**, and step 2 is all about them.
+      - `.count()` counts the values that got through, and ends the stream. It returns a `long`, the bigger whole-number type that module 22 mentioned, so the variable is a `long`. It prints just like an `int`.
+
+      The chain is one statement, with one semicolon at the very end. It's split into lines before each dot, so that each line holds one step. Java doesn't mind the line breaks: `rides.stream().filter(km -> km > 50).count()` on one line works the same. The lines after the first are indented a little further, which shows that they continue the statement.
+
+      ### Read it out loud
+
+      The loop says *how* to find the answer: make a counter, go through the list, check each value, add one. The stream says *what* the answer is: from the rides, keep those over 50 km, and count them. The counter, the loop and the `if` are still there, but inside Java's code, not yours.
+
+      Both versions are right, and both are good Java. This module teaches the stream's tools one at a time, and step 9 comes back to when each way reads better.
+
+      ### The list stays as it was
+
+      `filter` doesn't remove anything from the list. The stream only reads the list's values, and the list is the same afterwards:
+
+      ```java main
+      ArrayList<Integer> rides = new ArrayList<>();
+      rides.add(42);
+      rides.add(65);
+      rides.add(18);
+      long shortRides = rides.stream()
+              .filter(km -> km < 20)
+              .count();
+      System.out.println(shortRides);
+      System.out.println(rides);
+      ```
+
+      ```output
+      1
+      [42, 65, 18]
+      ```
+
+      ### Two filters in a row
+
+      Each step passes the values it lets through on to the next step. Two filters in a row keep only the values that pass both, just like a condition with `&&`. The rides from 30 to 60 km:
+
+      ```java main
+      ArrayList<Integer> rides = new ArrayList<>();
+      rides.add(42);
+      rides.add(65);
+      rides.add(18);
+      rides.add(80);
+      rides.add(51);
+      rides.add(30);
+      long middle = rides.stream()
+              .filter(km -> km >= 30)
+              .filter(km -> km <= 60)
+              .count();
+      System.out.println(middle);
+      ```
+
+      ```output
+      3
+      ```
+
+      42, 51 and 30 pass both filters. `.filter(km -> km >= 30 && km <= 60)` would give the same count.
+
+      **Your turn:** the club counts the rides of 100 km or more. Fill in the blanks: make a stream of the list, keep the rides of 100 km or more, and count them. The program prints:
+
+      ```
+      Rides of 100 km or more: 3
+      ```
+    fill: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> rides = new ArrayList<>();
+              rides.add(104);
+              rides.add(35);
+              rides.add(120);
+              rides.add(99);
+              rides.add(100);
+              rides.add(47);
+
+              long count = rides.[[stream]]()
+                      .[[filter]](km -> km >= 100)
+                      .[[count]]();
+              System.out.println("Rides of 100 km or more: " + count);
+          }
+      }
+    hints:
+      - "The chain starts with the method that turns the list into a stream, then lets through only some values, then counts them."
+      - "`rides.stream()`, then `.filter(km -> km >= 100)`, then `.count()`."
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> rides = new ArrayList<>();
+                  rides.add(25);
+                  rides.add(60);
+                  rides.add(12);
+                  rides.add(60);
+                  rides.add(33);
+                  rides.add(48);
+
+                  long first = rides.stream()
+                          .filter(km -> km >= 25)
+                          .filter(km -> km < 60)
+                          .count();
+                  long second = rides.stream()
+                          .filter(km -> km == 60)
+                          .count();
+                  System.out.println(first + " " + second);
+                  System.out.println(rides.size() + " " + rides.get(2));
+              }
+          }
+        hints:
+          - "The first stream keeps the rides of at least 25 km, and of those, the ones under 60 km. The second keeps the rides of exactly 60 km."
+          - "25, 33 and 48 pass both filters of the first stream, and 60 is in the list twice. The streams don't change the list: it still has 6 rides, and index 2 is still 12."
+      - task: |
+          The club's app counts the short rides, under 20 km, with a loop. Rewrite the body of `shortRides` with a stream: `stream()`, `filter` and `count`, and no loop. Keep the method's header as it is. The check runs:
+
+          ```java fragment
+          ArrayList<Integer> rides = new ArrayList<>();
+          rides.add(15);
+          rides.add(42);
+          rides.add(8);
+          rides.add(20);
+          System.out.println(shortRides(rides));
+          ```
+
+          and expects:
+
+          ```
+          2
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> rides = new ArrayList<>();
+                  rides.add(15);
+                  rides.add(42);
+                  rides.add(8);
+                  rides.add(20);
+                  System.out.println(shortRides(rides));
+              }
+
+              public static long shortRides(ArrayList<Integer> rides) {
+                  long count = 0;
+                  for (int km : rides) {
+                      if (km < 20) {
+                          count++;
+                      }
+                  }
+                  return count;
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> rides = new ArrayList<>();
+                  rides.add(15);
+                  rides.add(42);
+                  rides.add(8);
+                  rides.add(20);
+                  System.out.println(shortRides(rides));
+              }
+
+              public static long shortRides(ArrayList<Integer> rides) {
+                  return rides.stream()
+                          .filter(km -> km < 20)
+                          .count();
+              }
+          }
+        hints:
+          - "The whole body can be one `return` statement: `return rides.stream()...;`. `count()` already gives a `long`, the method's return type."
+          - "`return rides.stream().filter(km -> km < 20).count();`"
+        require:
+          - pattern: \.stream\s*\(\s*\)
+            message: "Start the chain with `rides.stream()`."
+          - pattern: \.filter\s*\(
+            message: "Keep the short rides with `filter`."
+          - pattern: \.count\s*\(\s*\)
+            message: "Count the rides that get through with `count()`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Use a stream in place of the loop: no `for` or `while` this time."
+        tests:
+          - call: |
+              ArrayList<Integer> rides = new ArrayList<>();
+              rides.add(15);
+              rides.add(42);
+              rides.add(8);
+              rides.add(20);
+              System.out.println(shortRides(rides));
+          - call: |
+              ArrayList<Integer> none = new ArrayList<>();
+              System.out.println(shortRides(none));
+              ArrayList<Integer> rides = new ArrayList<>();
+              rides.add(19);
+              rides.add(21);
+              rides.add(0);
+              rides.add(19);
+              rides.add(100);
+              System.out.println(shortRides(rides) + " " + rides.size());
+            hidden: true
+
+  - id: streams-lambdas
+    slug: lambdas
+    title: Lambda expressions and method references
+    text: |
+      `km -> km > 50` in step 1 is a **lambda expression**, or a lambda for short: a small method without a name, written right where it's used. `filter` calls it once for each value in the stream. The value goes into the parameter `km`, and the lambda's answer, `true` or `false`, says whether the value gets through.
+
+      ### The parts of a lambda
+
+      A lambda has a parameter list, an arrow `->`, and a body:
+
+      - With one parameter, the parentheses around it may be left out: `km -> km > 50` is the same as `(km) -> km > 50`.
+      - The parameter's name is yours to pick, with one limit: no variable of that name may exist at that point of the method around the lambda. After `int km = 50;`, the lambda `km -> km > 50` gives `error: variable km is already defined in method main(String[])`. A variable made inside a loop is gone once the loop ends, so after a loop that read into `String line`, the lambda `line -> !line.isEmpty()` is fine. `x -> x > 50` does the same thing as `km -> km > 50`, but a name like `km` or `title` says what the value is.
+      - There's no need to write the parameter's type. Java knows that a stream made from an `ArrayList<Integer>` holds Integers. `(Integer km) -> km > 50` works too, but it's rarely written.
+      - Two parameters need parentheses, with a comma between them: `(a, b) -> a + b`. Step 7 uses this kind.
+      - A short body is one expression, with no `return` and no semicolon: its value is the lambda's answer.
+
+      A bookshop keeps the titles on its "staff picks" table. The short titles, with `forEach`, which runs a lambda for each value that reaches it:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> titles = new ArrayList<>();
+              titles.add("Beloved");
+              titles.add("Emma");
+              titles.add("Middlemarch");
+              titles.add("Dune");
+              titles.add("Persuasion");
+
+              titles.stream()
+                      .filter(title -> title.length() <= 5)
+                      .forEach(title -> System.out.println("Short title: " + title));
+          }
+      }
+      ```
+
+      ```output
+      Short title: Emma
+      Short title: Dune
+      ```
+
+      `forEach` ends the stream, like `count`, but it gives back no value: its lambda does the work, here printing. So the statement isn't stored in a variable.
+
+      ### A body in braces
+
+      When a lambda needs more than one expression, its body goes in braces, as in a method: statements with semicolons, and a `return` for the answer, when the lambda must give one:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> titles = new ArrayList<>();
+              titles.add("Beloved");
+              titles.add("Emma");
+              titles.add("Middlemarch");
+              titles.add("Dune");
+              titles.add("Persuasion");
+
+              titles.stream().filter(title -> {
+                  String first = title.substring(0, 1);
+                  return first.equals("D") || first.equals("E");
+              }).forEach(title -> {
+                  System.out.println(title);
+                  System.out.println("  " + title.length() + " letters");
+              });
+          }
+      }
+      ```
+
+      ```output
+      Emma
+        4 letters
+      Dune
+        4 letters
+      ```
+
+      The lambda given to `filter` must answer `true` or `false`, so its block ends with `return`. The one given to `forEach` answers nothing, so it has no `return`, just like a `void` method. The `}` that closes a lambda's body is followed by the `)` that closes the method call, which makes `})` a common sight in stream code.
+
+      ### Method references
+
+      The lambda `title -> System.out.println(title)` only hands its value to another method. For that case Java has a shorter form, a **method reference**: `System.out::println`. Two colons stand between where the method is and its name, and there are no parentheses or parameters, since the stream gives the value:
+
+      ```java main
+      ArrayList<String> titles = new ArrayList<>();
+      titles.add("Beloved");
+      titles.add("Emma");
+      titles.add("Dune");
+      titles.stream()
+              .filter(title -> title.length() == 4)
+              .forEach(System.out::println);
+      ```
+
+      ```output
+      Emma
+      Dune
+      ```
+
+      Three method references you'll use in this module, and the lambdas they're short for:
+
+      - `System.out::println` is `value -> System.out.println(value)`.
+      - `Integer::valueOf` is `text -> Integer.valueOf(text)`: it turns a String such as `"42"` into a number.
+      - `String::toUpperCase` is `text -> text.toUpperCase()`: a method of the value itself, named by its class.
+
+      Step 4 puts `String::toUpperCase` to work, and step 5 `Integer::valueOf`. A method reference is never required: the lambda always works too. Use the reference when it reads more easily.
+
+      ### Variables from outside the lambda
+
+      A lambda can use the variables of the method it's in, such as a limit:
+
+      ```java main
+      ArrayList<String> titles = new ArrayList<>();
+      titles.add("Beloved");
+      titles.add("Emma");
+      titles.add("Middlemarch");
+      int maxLength = 7;
+      titles.stream()
+              .filter(title -> title.length() <= maxLength)
+              .forEach(System.out::println);
+      ```
+
+      ```output
+      Beloved
+      Emma
+      ```
+
+      But it can't change them. Counting with a variable of your own inside `forEach` doesn't compile:
+
+      ```java error
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> titles = new ArrayList<>();
+              titles.add("Beloved");
+              titles.add("Emma");
+              int count = 0;
+              titles.stream().forEach(title -> count++);
+              System.out.println(count);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:9: error: local variables referenced from a lambda expression must be final or effectively final
+              titles.stream().forEach(title -> count++);
+                                               ^
+      1 error
+      ```
+
+      *Effectively final* means a variable that's never changed after it gets its value, such as `maxLength` above. A lambda may use only such variables of its method. That's no loss: the stream's way to count is `filter` and `count`, as in step 1, with no variable of your own.
+
+      **Your turn:** in `Main`, write the method `printLongTitles(ArrayList<String> titles, int limit)`. It prints, one per line, the titles that are longer than `limit` characters, in the list's order. Use a stream with `filter`, and end it with `forEach(System.out::println)`. The check runs:
+
+      ```java fragment
+      ArrayList<String> titles = new ArrayList<>();
+      titles.add("Beloved");
+      titles.add("Emma");
+      titles.add("Middlemarch");
+      titles.add("Dune");
+      titles.add("Persuasion");
+      printLongTitles(titles, 7);
+      ```
+
+      and expects:
+
+      ```
+      Middlemarch
+      Persuasion
+      ```
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> titles = new ArrayList<>();
+              titles.add("Beloved");
+              titles.add("Emma");
+              titles.add("Middlemarch");
+              titles.add("Dune");
+              titles.add("Persuasion");
+              printLongTitles(titles, 7);
+          }
+
+          // Write the method printLongTitles here.
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> titles = new ArrayList<>();
+              titles.add("Beloved");
+              titles.add("Emma");
+              titles.add("Middlemarch");
+              titles.add("Dune");
+              titles.add("Persuasion");
+              printLongTitles(titles, 7);
+          }
+
+          public static void printLongTitles(ArrayList<String> titles, int limit) {
+              titles.stream()
+                      .filter(title -> title.length() > limit)
+                      .forEach(System.out::println);
+          }
+      }
+    hints:
+      - "The header is `public static void printLongTitles(ArrayList<String> titles, int limit)`. Inside, the lambda may use `limit`, since the method never changes it."
+      - "`titles.stream().filter(title -> title.length() > limit).forEach(System.out::println);`"
+    require:
+      - pattern: \bpublic\s+static\s+void\s+printLongTitles\s*\(\s*ArrayList<String>\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the method as `public static void printLongTitles(ArrayList<String> titles, int limit)`."
+      - pattern: \.filter\s*\(
+        message: "Keep the long titles with `filter`."
+      - pattern: \.forEach\s*\(\s*System\s*\.\s*out\s*::\s*println\s*\)
+        message: "End the stream with `forEach(System.out::println)`."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Use a stream this time, not a loop."
+    tests:
+      - call: |
+          ArrayList<String> titles = new ArrayList<>();
+          titles.add("Beloved");
+          titles.add("Emma");
+          titles.add("Middlemarch");
+          titles.add("Dune");
+          titles.add("Persuasion");
+          printLongTitles(titles, 7);
+      - call: |
+          ArrayList<String> titles = new ArrayList<>();
+          titles.add("Emma");
+          titles.add("Kindred");
+          titles.add("Ivanhoe");
+          titles.add("Emma");
+          printLongTitles(titles, 3);
+          System.out.println("--");
+          printLongTitles(titles, 7);
+          System.out.println("--");
+          printLongTitles(titles, 6);
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> titles = new ArrayList<>();
+                  titles.add("Walden");
+                  titles.add("Hamlet");
+                  titles.add("Candide");
+                  titles.add("Ulysses");
+
+                  titles.stream().filter(title -> {
+                      int length = title.length();
+                      return length % 2 == 1;
+                  }).forEach(title -> {
+                      System.out.println(title.substring(0, 3));
+                  });
+                  titles.stream()
+                          .filter(title -> title.startsWith("W") || title.endsWith("t"))
+                          .forEach(System.out::println);
+              }
+          }
+        hints:
+          - "The first filter keeps the titles whose length is odd, and `substring(0, 3)` is a title's first three letters. The second stream starts again from the whole list, and `||` lets a title through when either test is true."
+          - "Walden and Hamlet have 6 letters, Candide and Ulysses have 7, so the first stream prints Can and Uly. Walden starts with W and Hamlet ends with t; Candide and Ulysses do neither."
+      - task: |
+          `countStartingWith` should count the titles that start with the given text, but it doesn't compile. Read javac's message, and rewrite the method's body with a stream that uses `filter` and `count`, with no variable of your own for the count. Keep the header as it is. The check runs:
+
+          ```java fragment
+          ArrayList<String> titles = new ArrayList<>();
+          titles.add("The Hobbit");
+          titles.add("Beloved");
+          titles.add("The Road");
+          titles.add("Theo");
+          System.out.println(countStartingWith(titles, "The "));
+          ```
+
+          and expects:
+
+          ```
+          2
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> titles = new ArrayList<>();
+                  titles.add("The Hobbit");
+                  titles.add("Beloved");
+                  titles.add("The Road");
+                  titles.add("Theo");
+                  System.out.println(countStartingWith(titles, "The "));
+              }
+
+              public static long countStartingWith(ArrayList<String> titles, String start) {
+                  long count = 0;
+                  titles.stream().forEach(title -> {
+                      if (title.startsWith(start)) {
+                          count++;
+                      }
+                  });
+                  return count;
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> titles = new ArrayList<>();
+                  titles.add("The Hobbit");
+                  titles.add("Beloved");
+                  titles.add("The Road");
+                  titles.add("Theo");
+                  System.out.println(countStartingWith(titles, "The "));
+              }
+
+              public static long countStartingWith(ArrayList<String> titles, String start) {
+                  return titles.stream()
+                          .filter(title -> title.startsWith(start))
+                          .count();
+              }
+          }
+        hints:
+          - "javac says that `count` must be *effectively final*: a lambda can't change a variable of its method. The stream can count by itself."
+          - "Let `filter` keep the titles for which `title.startsWith(start)` is true, and return what `count()` gives: `return titles.stream().filter(title -> title.startsWith(start)).count();`"
+        require:
+          - pattern: \.filter\s*\(
+            message: "Keep the matching titles with `filter`."
+          - pattern: \.count\s*\(\s*\)
+            message: "Let the stream count with `count()`."
+        forbid:
+          - pattern: \+\+|\+=
+            message: "Let the stream count: no `++` or `+=` of your own."
+          - pattern: \b(for|while)\b
+            message: "Use a stream this time, not a loop."
+        tests:
+          - call: |
+              ArrayList<String> titles = new ArrayList<>();
+              titles.add("The Hobbit");
+              titles.add("Beloved");
+              titles.add("The Road");
+              titles.add("Theo");
+              System.out.println(countStartingWith(titles, "The "));
+          - call: |
+              ArrayList<String> titles = new ArrayList<>();
+              titles.add("Kindred");
+              titles.add("Kim");
+              titles.add("Beloved");
+              System.out.println(countStartingWith(titles, "Ki"));
+              System.out.println(countStartingWith(titles, "Z"));
+              System.out.println(countStartingWith(new ArrayList<>(), "The"));
+            hidden: true
+
+  - id: streams-terminal
+    slug: terminal-operations
+    title: "Ending a stream: count, sum, average, collect"
+    text: |
+      A stream chain has two kinds of steps. The steps in the middle, such as `filter`, are **intermediate operations**: each one gives a new stream, so another step can follow it. The last step is a **terminal operation**: it ends the stream with a result, such as the count, or with an action, such as `forEach`'s printing. After a terminal operation, the stream is used up.
+
+      This step goes through the terminal operations you'll use most. The data is a household budget: a month's expenses, in whole dollars.
+
+      ### count
+
+      `count()` returns how many values reach it, as a `long`. A `long` doesn't fit into an `int` variable, even when the number is small:
+
+      ```java error
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> expenses = new ArrayList<>();
+              expenses.add(54);
+              expenses.add(120);
+              int count = expenses.stream().filter(amount -> amount > 100).count();
+              System.out.println(count);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:8: error: incompatible types: possible lossy conversion from long to int
+              int count = expenses.stream().filter(amount -> amount > 100).count();
+                                                                                ^
+      1 error
+      ```
+
+      Make the variable a `long`, as in step 1.
+
+      ### sum, with mapToInt
+
+      A stream made from an `ArrayList<Integer>` holds Integer objects, and such a stream has no `sum` method. `mapToInt` turns it into an **IntStream**, a stream of plain `int` values, which has `sum`:
+
+      ```java main
+      ArrayList<Integer> expenses = new ArrayList<>();
+      expenses.add(54);
+      expenses.add(120);
+      expenses.add(18);
+      expenses.add(35);
+      expenses.add(9);
+      expenses.add(64);
+      int total = expenses.stream()
+              .mapToInt(amount -> amount)
+              .sum();
+      int small = expenses.stream()
+              .filter(amount -> amount < 40)
+              .mapToInt(amount -> amount)
+              .sum();
+      System.out.println("Total: " + total);
+      System.out.println("Under 40: " + small);
+      ```
+
+      ```output
+      Total: 300
+      Under 40: 62
+      ```
+
+      - `mapToInt(amount -> amount)` gives each Integer back as an `int`: the lambda returns its value as it is, and Java turns the Integer into an `int` by itself, as module 13 described. `mapToInt(Integer::intValue)` says the same with a method reference.
+      - `sum()` returns an `int`: 54 + 120 + 18 + 35 + 9 + 64 = 300.
+      - `filter` can come before `mapToInt`, and then only the values that got through are added: 18 + 35 + 9 = 62.
+
+      ### average, with getAsDouble
+
+      An IntStream also has `average()`: the sum divided by the count, as a double. There's a catch: an empty stream has no average, so `average()` doesn't return a plain double. It returns an **OptionalDouble**, a box that may hold a double or be empty. `getAsDouble()` takes the double out:
+
+      ```java main
+      ArrayList<Integer> expenses = new ArrayList<>();
+      expenses.add(54);
+      expenses.add(120);
+      expenses.add(18);
+      expenses.add(35);
+      double average = expenses.stream()
+              .mapToInt(amount -> amount)
+              .average()
+              .getAsDouble();
+      System.out.println("Average: " + average);
+      ```
+
+      ```output
+      Average: 56.75
+      ```
+
+      227 / 4 is 56.75. When the box is empty, `getAsDouble()` crashes the program, here because no expense is over 500:
+
+      ```java run crash
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> expenses = new ArrayList<>();
+              expenses.add(54);
+              expenses.add(120);
+              double average = expenses.stream()
+                      .filter(amount -> amount > 500)
+                      .mapToInt(amount -> amount)
+                      .average()
+                      .getAsDouble();
+              System.out.println(average);
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.util.NoSuchElementException: No value present
+      	at Main.main(Main.java:12)
+      ```
+
+      So before you ask for an average, make sure there's at least one value: check that the list isn't empty, or that the filter's `count()` is above 0.
+
+      ### collect
+
+      `collect(Collectors.toList())` gathers the values that reach it into a new list. `Collectors` lives in `java.util.stream`, so it needs an import, and the new list's type is `List` (module 35):
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+      import java.util.stream.Collectors;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> expenses = new ArrayList<>();
+              expenses.add(54);
+              expenses.add(120);
+              expenses.add(18);
+              expenses.add(35);
+              expenses.add(9);
+              expenses.add(64);
+
+              List<Integer> big = expenses.stream()
+                      .filter(amount -> amount >= 50)
+                      .collect(Collectors.toList());
+              System.out.println(big);
+              System.out.println(big.size() + " of " + expenses.size());
+          }
+      }
+      ```
+
+      ```output
+      [54, 120, 64]
+      3 of 6
+      ```
+
+      The new list keeps the stream's order, and the old list doesn't change. Java 16 added a shorter ending, `.toList()`, whose list can't be changed afterwards; this course uses `collect(Collectors.toList())`, which you'll see in a lot of Java code.
+
+      ### forEach
+
+      You met `forEach` in step 2. It's a terminal operation too: it runs its lambda for each value, and returns nothing.
+
+      | Terminal operation | Gives |
+      | --- | --- |
+      | `count()` | how many values, as a `long` |
+      | `sum()` (after `mapToInt`) | their sum, as an `int` |
+      | `average()` (after `mapToInt`) | an OptionalDouble; `getAsDouble()` takes out the average |
+      | `collect(Collectors.toList())` | a new `List` of the values |
+      | `forEach(...)` | nothing: runs the lambda for each value |
+
+      **Your turn:** fill in the blanks so that the program prints the month's total and the average expense. The average is the stream's own `average()`, which divides the sum by the count. The program prints:
+
+      ```
+      Total: 240
+      Average: 48.0
+      ```
+    fill: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> expenses = new ArrayList<>();
+              expenses.add(72);
+              expenses.add(15);
+              expenses.add(98);
+              expenses.add(31);
+              expenses.add(24);
+
+              int total = expenses.stream()
+                      .[[mapToInt]](amount -> amount)
+                      .sum();
+              double average = expenses.stream()
+                      .[[mapToInt]](amount -> amount)
+                      .average()
+                      .[[getAsDouble]]();
+              System.out.println("Total: " + total);
+              System.out.println("Average: " + average);
+          }
+      }
+    hints:
+      - "A stream of Integers has no `sum` or `average`: it needs a step that turns it into a stream of `int` values first. And `average()` gives a box, not the double itself."
+      - "The step that turns the Integers into `int` values is `mapToInt`. `average()` returns an OptionalDouble, and the method that takes the double out of it is `getAsDouble()`."
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.stream.Collectors;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> expenses = new ArrayList<>();
+                  expenses.add(40);
+                  expenses.add(8);
+                  expenses.add(150);
+                  expenses.add(22);
+
+                  List<Integer> cheap = expenses.stream()
+                          .filter(amount -> amount < 50)
+                          .collect(Collectors.toList());
+                  int cheapTotal = cheap.stream()
+                          .mapToInt(amount -> amount)
+                          .sum();
+                  long pricey = expenses.stream()
+                          .filter(amount -> amount >= 50)
+                          .count();
+                  System.out.println(cheap + " " + cheapTotal);
+                  System.out.println(pricey + " " + expenses.size());
+              }
+          }
+        hints:
+          - "`collect` makes a new list of the expenses under 50, in the old list's order. A list can make a stream of its own, so `cheap.stream()` works like any other."
+          - "The cheap ones are 40, 8 and 22, which add up to 70. Only 150 is 50 or more, and `expenses` still has all 4."
+      - task: |
+          Write the method `bigExpenses(List<Integer> expenses, int limit)`, which returns a new list of the expenses of at least `limit` dollars, in the same order. Use a stream that ends with `collect(Collectors.toList())`. The import for Collectors is there already. The check runs:
+
+          ```java fragment
+          List<Integer> expenses = new ArrayList<>();
+          expenses.add(54);
+          expenses.add(120);
+          expenses.add(18);
+          expenses.add(64);
+          System.out.println(bigExpenses(expenses, 60));
+          ```
+
+          and expects:
+
+          ```
+          [120, 64]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.stream.Collectors;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Integer> expenses = new ArrayList<>();
+                  expenses.add(54);
+                  expenses.add(120);
+                  expenses.add(18);
+                  expenses.add(64);
+                  System.out.println(bigExpenses(expenses, 60));
+              }
+
+              // Write the method bigExpenses here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.stream.Collectors;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Integer> expenses = new ArrayList<>();
+                  expenses.add(54);
+                  expenses.add(120);
+                  expenses.add(18);
+                  expenses.add(64);
+                  System.out.println(bigExpenses(expenses, 60));
+              }
+
+              public static List<Integer> bigExpenses(List<Integer> expenses, int limit) {
+                  return expenses.stream()
+                          .filter(amount -> amount >= limit)
+                          .collect(Collectors.toList());
+              }
+          }
+        hints:
+          - "The header is `public static List<Integer> bigExpenses(List<Integer> expenses, int limit)`. The method can return the stream's result straight away."
+          - "`return expenses.stream().filter(amount -> amount >= limit).collect(Collectors.toList());`"
+        require:
+          - pattern: \bpublic\s+static\s+List<Integer>\s+bigExpenses\s*\(\s*List<Integer>\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static List<Integer> bigExpenses(List<Integer> expenses, int limit)`."
+          - pattern: \.collect\s*\(\s*Collectors\s*\.\s*toList\s*\(\s*\)\s*\)
+            message: "End the stream with `collect(Collectors.toList())`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Use a stream this time, not a loop."
+        tests:
+          - call: |
+              List<Integer> expenses = new ArrayList<>();
+              expenses.add(54);
+              expenses.add(120);
+              expenses.add(18);
+              expenses.add(64);
+              System.out.println(bigExpenses(expenses, 60));
+          - call: |
+              List<Integer> expenses = new ArrayList<>();
+              expenses.add(30);
+              expenses.add(29);
+              expenses.add(31);
+              expenses.add(30);
+              List<Integer> big = bigExpenses(expenses, 30);
+              System.out.println(big + " " + expenses);
+              System.out.println(bigExpenses(expenses, 100) + " " + bigExpenses(expenses, 0).size());
+            hidden: true
+
+  - id: streams-intermediate
+    slug: intermediate-operations
+    title: "Steps in the middle: map, sorted, distinct, limit, skip"
+    text: |
+      `filter` is one intermediate operation. There are more, and each of them takes a stream and gives a new stream, so you can chain as many as you need before the terminal operation. This step's data comes from a cinema: the films it shows today, and the tickets sold for each screening.
+
+      ### map
+
+      `map` turns each value into another one: the lambda's result goes on down the stream in place of the value. A ticket costs 12 dollars, so each screening's takings are its tickets times 12:
+
+      ```java main
+      ArrayList<Integer> tickets = new ArrayList<>();
+      tickets.add(85);
+      tickets.add(140);
+      tickets.add(32);
+      tickets.add(120);
+      tickets.stream()
+              .map(sold -> sold * 12)
+              .forEach(System.out::println);
+      ```
+
+      ```output
+      1020
+      1680
+      384
+      1440
+      ```
+
+      The new value can be of another type. Here Strings become other Strings, and then numbers:
+
+      ```java main
+      ArrayList<String> films = new ArrayList<>();
+      films.add("Vertigo");
+      films.add("Alien");
+      films.add("Casablanca");
+      films.stream()
+              .map(String::toUpperCase)
+              .forEach(System.out::println);
+      films.stream()
+              .map(film -> film.length())
+              .forEach(System.out::println);
+      ```
+
+      ```output
+      VERTIGO
+      ALIEN
+      CASABLANCA
+      7
+      5
+      10
+      ```
+
+      Step 3's `mapToInt` is a `map` whose results are `int` values: its stream is an IntStream, with `sum` and `average`. A plain `map` gives a stream of objects, such as Integers or Strings, which has neither.
+
+      ### sorted and distinct
+
+      `sorted()` passes the values on in increasing order: numbers from the smallest, Strings in alphabetical order, as `Collections.sort` sorts them (module 28). `distinct()` lets each value through only once, the first time it arrives, and drops the copies that come later. It compares values with `equals` and `hashCode` (module 32), so it works for Strings and numbers.
+
+      ```java main
+      ArrayList<Integer> tickets = new ArrayList<>();
+      tickets.add(85);
+      tickets.add(140);
+      tickets.add(32);
+      tickets.add(120);
+      tickets.stream()
+              .sorted()
+              .forEach(System.out::println);
+      ArrayList<String> films = new ArrayList<>();
+      films.add("Heat");
+      films.add("Alien");
+      films.add("Heat");
+      films.add("Up");
+      films.add("Alien");
+      films.stream()
+              .distinct()
+              .forEach(System.out::println);
+      System.out.println(films);
+      ```
+
+      ```output
+      32
+      85
+      120
+      140
+      Heat
+      Alien
+      Up
+      [Heat, Alien, Heat, Up, Alien]
+      ```
+
+      As always, the list itself keeps its order and its copies: only the stream's values are sorted or dropped.
+
+      ### limit and skip
+
+      `limit(n)` lets through the first `n` values and drops the rest. `skip(n)` drops the first `n` values and lets the rest through. The screenings are in the order of the day, so `limit(2)` gives the first two, and `skip(4)` the ones after the fourth:
+
+      ```java main
+      ArrayList<Integer> tickets = new ArrayList<>();
+      tickets.add(85);
+      tickets.add(140);
+      tickets.add(32);
+      tickets.add(120);
+      tickets.add(64);
+      tickets.add(150);
+      tickets.stream()
+              .limit(2)
+              .forEach(System.out::println);
+      System.out.println("--");
+      tickets.stream()
+              .skip(4)
+              .forEach(System.out::println);
+      ```
+
+      ```output
+      85
+      140
+      --
+      64
+      150
+      ```
+
+      A `limit` bigger than the number of values is fine: all of them get through. A `skip` bigger than that leaves nothing.
+
+      ### The order of the steps matters
+
+      Each step works on what the step before it let through. `sorted()` then `limit(3)` gives the three smallest values; `limit(3)` then `sorted()` gives the first three values, sorted:
+
+      ```java main
+      ArrayList<Integer> tickets = new ArrayList<>();
+      tickets.add(85);
+      tickets.add(140);
+      tickets.add(32);
+      tickets.add(120);
+      tickets.add(64);
+      tickets.stream()
+              .sorted()
+              .limit(3)
+              .forEach(System.out::println);
+      System.out.println("--");
+      tickets.stream()
+              .limit(3)
+              .sorted()
+              .forEach(System.out::println);
+      ```
+
+      ```output
+      32
+      64
+      85
+      --
+      32
+      85
+      140
+      ```
+
+      So read a chain from the top, one step at a time, and ask what each step gets from the one before.
+
+      ### Nothing happens without a terminal operation
+
+      The intermediate steps only describe what to do. The work starts when a terminal operation asks for the values. This `filter` has a lambda that prints, but the stream has no terminal operation, so the lambda never runs:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> tickets = new ArrayList<>();
+              tickets.add(85);
+              tickets.add(140);
+              tickets.add(32);
+              tickets.stream().filter(sold -> {
+                  System.out.println("Checking " + sold);
+                  return sold > 100;
+              });
+              System.out.println("Done");
+          }
+      }
+      ```
+
+      ```output
+      Done
+      ```
+
+      Add `.count()` after the `)` that closes `filter(...)`, and the lambda runs once for each value. If a stream seems to do nothing, check that it ends with a terminal operation.
+
+      **Your turn:** the cinema's list has one entry per screening, so a film shown three times is in it three times. Write the method `filmsOfTheDay(List<String> screenings)`, which returns a new list of the films, each once, in alphabetical order. Use a stream with `distinct`, `sorted` and `collect(Collectors.toList())`. The check runs:
+
+      ```java fragment
+      List<String> screenings = new ArrayList<>();
+      screenings.add("Vertigo");
+      screenings.add("Alien");
+      screenings.add("Heat");
+      screenings.add("Alien");
+      screenings.add("Casablanca");
+      screenings.add("Vertigo");
+      System.out.println(filmsOfTheDay(screenings));
+      ```
+
+      and expects:
+
+      ```
+      [Alien, Casablanca, Heat, Vertigo]
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.List;
+      import java.util.stream.Collectors;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> screenings = new ArrayList<>();
+              screenings.add("Vertigo");
+              screenings.add("Alien");
+              screenings.add("Heat");
+              screenings.add("Alien");
+              screenings.add("Casablanca");
+              screenings.add("Vertigo");
+              System.out.println(filmsOfTheDay(screenings));
+          }
+
+          // Write the method filmsOfTheDay here.
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.List;
+      import java.util.stream.Collectors;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> screenings = new ArrayList<>();
+              screenings.add("Vertigo");
+              screenings.add("Alien");
+              screenings.add("Heat");
+              screenings.add("Alien");
+              screenings.add("Casablanca");
+              screenings.add("Vertigo");
+              System.out.println(filmsOfTheDay(screenings));
+          }
+
+          public static List<String> filmsOfTheDay(List<String> screenings) {
+              return screenings.stream()
+                      .distinct()
+                      .sorted()
+                      .collect(Collectors.toList());
+          }
+      }
+    hints:
+      - "The header is `public static List<String> filmsOfTheDay(List<String> screenings)`, and the method returns what the stream collects."
+      - "`return screenings.stream().distinct().sorted().collect(Collectors.toList());` (`sorted()` first and `distinct()` after it works too)."
+    require:
+      - pattern: \bpublic\s+static\s+List<String>\s+filmsOfTheDay\s*\(\s*List<String>\s+\w+\s*\)
+        message: "Write the method as `public static List<String> filmsOfTheDay(List<String> screenings)`."
+      - pattern: \.distinct\s*\(\s*\)
+        message: "Drop the copies with `distinct()`."
+      - pattern: \.sorted\s*\(\s*\)
+        message: "Put the films in order with `sorted()`."
+      - pattern: \.collect\s*\(\s*Collectors\s*\.\s*toList\s*\(\s*\)\s*\)
+        message: "End the stream with `collect(Collectors.toList())`."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Use a stream this time, not a loop."
+    tests:
+      - call: |
+          List<String> screenings = new ArrayList<>();
+          screenings.add("Vertigo");
+          screenings.add("Alien");
+          screenings.add("Heat");
+          screenings.add("Alien");
+          screenings.add("Casablanca");
+          screenings.add("Vertigo");
+          System.out.println(filmsOfTheDay(screenings));
+      - call: |
+          List<String> screenings = new ArrayList<>();
+          screenings.add("Up");
+          screenings.add("Up");
+          screenings.add("Up");
+          System.out.println(filmsOfTheDay(screenings));
+          screenings.add("Jaws");
+          screenings.add("Brazil");
+          System.out.println(filmsOfTheDay(screenings) + " " + screenings.size());
+          System.out.println(filmsOfTheDay(new ArrayList<>()));
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> tickets = new ArrayList<>();
+                  tickets.add(90);
+                  tickets.add(40);
+                  tickets.add(150);
+                  tickets.add(40);
+                  tickets.add(75);
+
+                  tickets.stream()
+                          .distinct()
+                          .sorted()
+                          .skip(1)
+                          .limit(2)
+                          .forEach(System.out::println);
+                  tickets.stream()
+                          .limit(3)
+                          .map(sold -> sold / 10)
+                          .sorted()
+                          .forEach(System.out::println);
+              }
+          }
+        hints:
+          - "Follow each chain a step at a time. `distinct()` keeps the first copy of each value, `skip(1)` drops the first value that reaches it, and `limit` lets only the first ones through. In the second chain, `sorted()` comes after the division, and dividing `int` values drops the remainder."
+          - "`distinct()` leaves 90, 40, 150 and 75, which sort to 40, 75, 90 and 150, so `skip(1)` drops 40 and `limit(2)` keeps 75 and 90. The second chain starts again from the whole list. `limit(3)` keeps 90, 40 and 150, dividing by 10 gives 9, 4 and 15, and only then are they sorted."
+      - task: |
+          The cinema wants to know its quietest screenings. Write the method `quietest(List<Integer> tickets, int n)`, which returns a new list of the `n` smallest ticket counts, from the smallest up. If the list has fewer than `n` values, it returns all of them, sorted. The list it gets must stay as it was. Use a stream. The check runs:
+
+          ```java fragment
+          List<Integer> tickets = new ArrayList<>();
+          tickets.add(85);
+          tickets.add(140);
+          tickets.add(32);
+          tickets.add(120);
+          tickets.add(64);
+          System.out.println(quietest(tickets, 2));
+          System.out.println(tickets);
+          ```
+
+          and expects:
+
+          ```
+          [32, 64]
+          [85, 140, 32, 120, 64]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.stream.Collectors;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Integer> tickets = new ArrayList<>();
+                  tickets.add(85);
+                  tickets.add(140);
+                  tickets.add(32);
+                  tickets.add(120);
+                  tickets.add(64);
+                  System.out.println(quietest(tickets, 2));
+                  System.out.println(tickets);
+              }
+
+              // Write the method quietest here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.stream.Collectors;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Integer> tickets = new ArrayList<>();
+                  tickets.add(85);
+                  tickets.add(140);
+                  tickets.add(32);
+                  tickets.add(120);
+                  tickets.add(64);
+                  System.out.println(quietest(tickets, 2));
+                  System.out.println(tickets);
+              }
+
+              public static List<Integer> quietest(List<Integer> tickets, int n) {
+                  return tickets.stream()
+                          .sorted()
+                          .limit(n)
+                          .collect(Collectors.toList());
+              }
+          }
+        hints:
+          - "The header is `public static List<Integer> quietest(List<Integer> tickets, int n)`. Sort first, and then keep the first `n`: the other order keeps the first `n` of the day."
+          - "`return tickets.stream().sorted().limit(n).collect(Collectors.toList());` A `limit` bigger than the number of values lets them all through."
+        require:
+          - pattern: \bpublic\s+static\s+List<Integer>\s+quietest\s*\(\s*List<Integer>\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static List<Integer> quietest(List<Integer> tickets, int n)`."
+          - pattern: \.stream\s*\(\s*\)
+            message: "Use a stream: `tickets.stream()`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Use a stream this time, not a loop."
+          - pattern: \bCollections\s*\.\s*sort\b|\.sort\s*\(
+            message: "Let the stream sort with `sorted()`, so the list itself stays as it was."
+        tests:
+          - call: |
+              List<Integer> tickets = new ArrayList<>();
+              tickets.add(85);
+              tickets.add(140);
+              tickets.add(32);
+              tickets.add(120);
+              tickets.add(64);
+              System.out.println(quietest(tickets, 2));
+              System.out.println(tickets);
+          - call: |
+              List<Integer> tickets = new ArrayList<>();
+              tickets.add(50);
+              tickets.add(12);
+              tickets.add(50);
+              tickets.add(7);
+              System.out.println(quietest(tickets, 3));
+              System.out.println(quietest(tickets, 10) + " " + quietest(tickets, 0));
+              System.out.println(tickets);
+            hidden: true
+
+  - id: streams-input
+    slug: from-input
+    title: Streams of input
+    text: |
+      The streams so far start from a list, and input comes one line at a time. So a program that works on input with a stream first reads the lines into a list, with the loop you know from module 13, and then makes a stream of the list.
+
+      ### Read first, then stream
+
+      A weather station sends its temperature readings, in whole degrees, one per line. An empty line ends them:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> lines = new ArrayList<>();
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.isEmpty()) {
+                      break;
+                  }
+                  lines.add(line);
+              }
+
+              long belowZero = lines.stream()
+                      .mapToInt(Integer::valueOf)
+                      .filter(degrees -> degrees < 0)
+                      .count();
+              long aboveZero = lines.stream()
+                      .mapToInt(Integer::valueOf)
+                      .filter(degrees -> degrees > 0)
+                      .count();
+              System.out.println("Readings: " + lines.size());
+              System.out.println("Below zero: " + belowZero);
+              System.out.println("Above zero: " + aboveZero);
+          }
+      }
+      ```
+
+      ```input
+      -3
+      2
+      5
+      -1
+      0
+      4
+
+      ```
+
+      ```output
+      Readings: 6
+      Below zero: 2
+      Above zero: 3
+      ```
+
+      - The loop only reads and stores. It doesn't count or add anything: that's the streams' work.
+      - `mapToInt(Integer::valueOf)` turns each line into an `int`: `Integer::valueOf` is step 2's method reference for `line -> Integer.valueOf(line)`.
+      - An IntStream has `filter` too, and `count`, so the filter can come after `mapToInt` and compare plain numbers.
+
+      ### A list of numbers
+
+      When a program asks several questions about the same numbers, it can turn the lines into numbers once, with `map(Integer::valueOf)` and `collect`, and then stream the list of numbers as often as it likes. Before an average, it checks that there's at least one reading, since `getAsDouble()` crashes when there's no value (step 3):
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+      import java.util.Scanner;
+      import java.util.stream.Collectors;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> lines = new ArrayList<>();
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.isEmpty()) {
+                      break;
+                  }
+                  lines.add(line);
+              }
+
+              List<Integer> readings = lines.stream()
+                      .map(Integer::valueOf)
+                      .collect(Collectors.toList());
+              if (readings.isEmpty()) {
+                  System.out.println("No readings");
+              } else {
+                  double average = readings.stream()
+                          .mapToInt(degrees -> degrees)
+                          .average()
+                          .getAsDouble();
+                  System.out.println("Average: " + average);
+                  System.out.println("Frosty: " + readings.stream().filter(degrees -> degrees <= 0).count());
+              }
+          }
+      }
+      ```
+
+      ```input
+      -3
+      2
+      5
+      -1
+      0
+      4
+
+      ```
+
+      ```output
+      Average: 1.1666666666666667
+      Frosty: 3
+      ```
+
+      The average is 7 / 6, printed with every digit a double has, as in module 29.
+
+      ### Lines that aren't numbers
+
+      When the station misses a reading, it sends a `-` in its place. `Integer.valueOf("-")` crashes, so a `filter` must drop those lines, and it must come *before* the step that turns lines into numbers. A filter after `mapToInt` comes too late, whatever it keeps, because the crash comes first:
+
+      ```java run crash
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> lines = new ArrayList<>();
+              lines.add("4");
+              lines.add("-");
+              lines.add("6");
+              int sum = lines.stream()
+                      .mapToInt(Integer::valueOf)
+                      .filter(degrees -> degrees > 0)
+                      .sum();
+              System.out.println(sum);
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NumberFormatException: For input string: "-"
+      	at Main.main(Main.java:12)
+      ```
+
+      Java reports the line where the chain's terminal operation, `sum()`, runs, because that's when the lambdas and method references are called. The dash filter itself can't go after `mapToInt` at all: by then the values are `int`s, which have no `equals`. So filter the dashes out first, `.filter(line -> !line.equals("-"))`, and then turn the rest into numbers: the sum is 10.
+
+      **Your turn:** the station's rain gauge sends the rain of each hour, in whole millimeters, one per line, and an empty line ends them. Read the lines into a list, and then use streams to print how many hours there were, how many of them were dry (0 mm), and the total rain. For the input shown, the program prints:
+
+      ```
+      Hours: 6
+      Dry hours: 2
+      Total rain: 9 mm
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> lines = new ArrayList<>();
+
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> lines = new ArrayList<>();
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.isEmpty()) {
+                      break;
+                  }
+                  lines.add(line);
+              }
+
+              long dry = lines.stream()
+                      .mapToInt(Integer::valueOf)
+                      .filter(mm -> mm == 0)
+                      .count();
+              int total = lines.stream()
+                      .mapToInt(Integer::valueOf)
+                      .sum();
+              System.out.println("Hours: " + lines.size());
+              System.out.println("Dry hours: " + dry);
+              System.out.println("Total rain: " + total + " mm");
+          }
+      }
+    hints:
+      - "Read with a `while (true)` loop: `nextLine()`, `break` on an empty line, and `lines.add(line)` otherwise. The number of hours is the list's size."
+      - "`lines.stream().mapToInt(Integer::valueOf).filter(mm -> mm == 0).count()` counts the dry hours, and `lines.stream().mapToInt(Integer::valueOf).sum()` adds up the rain."
+    require:
+      - pattern: \.stream\s*\(\s*\)
+        message: "Count and add up with streams: `lines.stream()`."
+      - pattern: \.sum\s*\(\s*\)
+        message: "Add up the rain with `sum()`."
+      - pattern: \.count\s*\(\s*\)
+        message: "Count the dry hours with `count()`."
+    forbid:
+      - pattern: \bfor\b
+        message: "The `while` loop reads the lines; count and add up with streams, not with a `for` loop."
+    tests:
+      - stdin: "0\n2\n5\n0\n1\n1\n\n"
+      - stdin: "3\n\n"
+        hidden: true
+      - stdin: "0\n0\n0\n12\n0\n\n"
+        hidden: true
+      - stdin: "\n"
+        hidden: true
+    more:
+      - task: |
+          The station sends `-` for a reading it missed. Fill in the blank, a method reference that turns a line into a number, so that the program prints the average of the real readings. The average is the stream's own `average()`: the sum divided by the count. For the input shown, it prints:
+
+          ```
+          Average: 2.5
+          ```
+        fill: |
+          import java.util.ArrayList;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> lines = new ArrayList<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.isEmpty()) {
+                          break;
+                      }
+                      lines.add(line);
+                  }
+
+                  double average = lines.stream()
+                          .filter(line -> !line.equals("-"))
+                          .mapToInt([[Integer::valueOf‖Integer::parseInt]])
+                          .average()
+                          .getAsDouble();
+                  System.out.println("Average: " + average);
+              }
+          }
+        hints:
+          - "`mapToInt` needs something that turns a String into a number. As a method reference, that's the class's name, `::`, and the method's name, with no parentheses."
+          - "`Integer::valueOf` is short for `line -> Integer.valueOf(line)`."
+        tests:
+          - stdin: "4\n-\n-3\n6\n-\n3\n\n"
+          - stdin: "-\n7\n\n"
+            hidden: true
+      - task: |
+          A humidity sensor sends readings, in whole percent, one per line, until the word `end`. Print the different readings of 90 or more, as a list from the smallest up, each once. Read the lines into a list first, then use one stream with `map`, `filter`, `distinct`, `sorted` and `collect`. For the input shown, the program prints:
+
+          ```
+          Humid readings: [90, 94, 97]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.Scanner;
+          import java.util.stream.Collectors;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> lines = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.List;
+          import java.util.Scanner;
+          import java.util.stream.Collectors;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<String> lines = new ArrayList<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      lines.add(line);
+                  }
+
+                  List<Integer> humid = lines.stream()
+                          .map(Integer::valueOf)
+                          .filter(percent -> percent >= 90)
+                          .distinct()
+                          .sorted()
+                          .collect(Collectors.toList());
+                  System.out.println("Humid readings: " + humid);
+              }
+          }
+        hints:
+          - "Read until the line is `end`, and add every other line to the list. Then turn the lines into numbers with `map(Integer::valueOf)`: sorting Strings would put `100` before `90`."
+          - "After `map`, `filter(percent -> percent >= 90)`, `distinct()` and `sorted()`, and end with `collect(Collectors.toList())`."
+        require:
+          - pattern: \.map\s*\(
+            message: "Turn the lines into numbers with `map(Integer::valueOf)`."
+          - pattern: \.distinct\s*\(\s*\)
+            message: "Keep each reading once with `distinct()`."
+          - pattern: \.sorted\s*\(\s*\)
+            message: "Sort with `sorted()`."
+          - pattern: \.collect\s*\(\s*Collectors\s*\.\s*toList\s*\(\s*\)\s*\)
+            message: "Gather the readings with `collect(Collectors.toList())`."
+        forbid:
+          - pattern: \bfor\b
+            message: "The `while` loop reads the lines; do the rest with a stream, not a `for` loop."
+        tests:
+          - stdin: |
+              88
+              94
+              90
+              97
+              72
+              94
+              end
+          - stdin: |
+              100
+              95
+              89
+              100
+              end
+            hidden: true
+          - stdin: |
+              45
+              end
+            hidden: true
+
+  - id: streams-objects
+    slug: objects
+    title: Streams of objects
+    text: |
+      Streams work on lists of objects too, and that's where they're most useful. The lambdas call the objects' methods: a filter asks about a getter, and `map` turns each object into one of its values.
+
+      The cycling club from step 1 now keeps each ride as an object, with the rider's name and the distance:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Ride> rides = new ArrayList<>();
+              rides.add(new Ride("Noor", 42));
+              rides.add(new Ride("Pablo", 65));
+              rides.add(new Ride("Noor", 18));
+              rides.add(new Ride("Kaia", 80));
+              rides.add(new Ride("Pablo", 51));
+
+              rides.stream()
+                      .filter(ride -> ride.getKm() > 50)
+                      .forEach(System.out::println);
+          }
+      }
+      // ==== Ride.java ====
+      public class Ride {
+          private String rider;
+          private int km;
+
+          public Ride(String rider, int km) {
+              this.rider = rider;
+              this.km = km;
+          }
+
+          public String getRider() {
+              return this.rider;
+          }
+
+          public int getKm() {
+              return this.km;
+          }
+
+          @Override
+          public String toString() {
+              return this.rider + ": " + this.km + " km";
+          }
+      }
+      ```
+
+      ```output
+      Pablo: 65 km
+      Kaia: 80 km
+      Pablo: 51 km
+      ```
+
+      The stream is a stream of Ride objects, so `ride` in the lambda is a Ride, and the lambda can call its methods. `forEach(System.out::println)` prints each ride with its `toString`.
+
+      ### From objects to values
+
+      `map` can turn each ride into one of its values. The names of the club's riders, each once, in alphabetical order:
+
+      ```java fragment
+      List<String> riders = rides.stream()
+              .map(ride -> ride.getRider())
+              .distinct()
+              .sorted()
+              .collect(Collectors.toList());
+      System.out.println(riders);
+      ```
+
+      For the five rides above, this prints `[Kaia, Noor, Pablo]`. After `map`, the stream holds Strings, so `distinct` and `sorted` work on the names.
+
+      A getter works as a method reference too: `Ride::getRider` is short for `ride -> ride.getRider()`, just as `String::toUpperCase` was a method of the value itself, named by its class.
+
+      ### Sums and averages of a value
+
+      `mapToInt` with a getter turns the rides into their distances, as plain `int` values, ready for `sum` and `average`:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Ride> rides = new ArrayList<>();
+              rides.add(new Ride("Noor", 42));
+              rides.add(new Ride("Pablo", 65));
+              rides.add(new Ride("Noor", 18));
+              rides.add(new Ride("Kaia", 80));
+              rides.add(new Ride("Pablo", 51));
+
+              double average = rides.stream()
+                      .mapToInt(Ride::getKm)
+                      .average()
+                      .getAsDouble();
+              int noorsTotal = rides.stream()
+                      .filter(ride -> ride.getRider().equals("Noor"))
+                      .mapToInt(Ride::getKm)
+                      .sum();
+              System.out.println("Average ride: " + average + " km");
+              System.out.println("Noor: " + noorsTotal + " km");
+          }
+      }
+      // ==== Ride.java ====
+      public class Ride {
+          private String rider;
+          private int km;
+
+          public Ride(String rider, int km) {
+              this.rider = rider;
+              this.km = km;
+          }
+
+          public String getRider() {
+              return this.rider;
+          }
+
+          public int getKm() {
+              return this.km;
+          }
+
+          @Override
+          public String toString() {
+              return this.rider + ": " + this.km + " km";
+          }
+      }
+      ```
+
+      ```output
+      Average ride: 51.2 km
+      Noor: 60 km
+      ```
+
+      - The average is 256 / 5 = 51.2.
+      - The filter compares names with `equals`, as always for Strings, and then only Noor's rides reach `mapToInt`: 42 + 18 = 60.
+
+      ### Lists of objects
+
+      `collect` works for objects as it does for numbers. `rides.stream().filter(ride -> ride.getKm() > 50).collect(Collectors.toList())` gives a `List<Ride>` of the long rides. The new list holds the same Ride objects as the old one, not copies (module 22): a change made to a ride through one list shows through the other.
+
+      One thing doesn't work yet: `sorted()` on a stream of Rides. Java knows how to order numbers and Strings, but not rides: by distance, or by name? Module 38 shows how to tell it. Until then, map the objects to values first, and sort those.
+
+      **Your turn:** `Ride.java` is ready. In `Main.java`, write the method `totalKm(List<Ride> rides, String rider)`, which returns the total distance of the given rider's rides, as an `int`, and 0 if the rider has none. Use a stream. The check runs:
+
+      ```java fragment
+      List<Ride> rides = new ArrayList<>();
+      rides.add(new Ride("Noor", 42));
+      rides.add(new Ride("Pablo", 65));
+      rides.add(new Ride("Noor", 18));
+      System.out.println(totalKm(rides, "Noor"));
+      ```
+
+      and expects:
+
+      ```
+      60
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Ride> rides = new ArrayList<>();
+                rides.add(new Ride("Noor", 42));
+                rides.add(new Ride("Pablo", 65));
+                rides.add(new Ride("Noor", 18));
+                System.out.println(totalKm(rides, "Noor"));
+            }
+
+            // Write the method totalKm here.
+        }
+      Ride.java: |
+        public class Ride {
+            private String rider;
+            private int km;
+
+            public Ride(String rider, int km) {
+                this.rider = rider;
+                this.km = km;
+            }
+
+            public String getRider() {
+                return this.rider;
+            }
+
+            public int getKm() {
+                return this.km;
+            }
+
+            @Override
+            public String toString() {
+                return this.rider + ": " + this.km + " km";
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Ride> rides = new ArrayList<>();
+                rides.add(new Ride("Noor", 42));
+                rides.add(new Ride("Pablo", 65));
+                rides.add(new Ride("Noor", 18));
+                System.out.println(totalKm(rides, "Noor"));
+            }
+
+            public static int totalKm(List<Ride> rides, String rider) {
+                return rides.stream()
+                        .filter(ride -> ride.getRider().equals(rider))
+                        .mapToInt(Ride::getKm)
+                        .sum();
+            }
+        }
+      Ride.java: |
+        public class Ride {
+            private String rider;
+            private int km;
+
+            public Ride(String rider, int km) {
+                this.rider = rider;
+                this.km = km;
+            }
+
+            public String getRider() {
+                return this.rider;
+            }
+
+            public int getKm() {
+                return this.km;
+            }
+
+            @Override
+            public String toString() {
+                return this.rider + ": " + this.km + " km";
+            }
+        }
+    hints:
+      - "The header is `public static int totalKm(List<Ride> rides, String rider)`. Keep the given rider's rides with a filter that compares `ride.getRider()` with `rider` using `equals`."
+      - "After the filter, `mapToInt(Ride::getKm)` and `sum()`. The sum of an empty stream is 0."
+    require:
+      - pattern: \bpublic\s+static\s+int\s+totalKm\s*\(\s*List<Ride>\s+\w+\s*,\s*String\s+\w+\s*\)
+        message: "Write the method as `public static int totalKm(List<Ride> rides, String rider)`."
+      - pattern: \.mapToInt\s*\(
+        message: "Turn the rides into their distances with `mapToInt`."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Use a stream this time, not a loop."
+    tests:
+      - call: |
+          List<Ride> rides = new ArrayList<>();
+          rides.add(new Ride("Noor", 42));
+          rides.add(new Ride("Pablo", 65));
+          rides.add(new Ride("Noor", 18));
+          System.out.println(totalKm(rides, "Noor"));
+      - call: |
+          List<Ride> rides = new ArrayList<>();
+          rides.add(new Ride("Kaia", 80));
+          rides.add(new Ride("Kai", 12));
+          rides.add(new Ride("Kaia", 5));
+          System.out.println(totalKm(rides, "Kai") + " " + totalKm(rides, "Kaia"));
+          System.out.println(totalKm(rides, "Noor") + " " + totalKm(new ArrayList<>(), "Kaia"));
+        hidden: true
+      - call: |
+          List<Ride> rides = new ArrayList<>();
+          rides.add(new Ride("Ines", 30));
+          String name = new String("Ines");
+          System.out.println(totalKm(rides, name));
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Ride> rides = new ArrayList<>();
+                  rides.add(new Ride("Kaia", 30));
+                  rides.add(new Ride("Noor", 75));
+                  rides.add(new Ride("Kaia", 90));
+                  rides.add(new Ride("Pablo", 20));
+
+                  rides.stream()
+                          .filter(ride -> ride.getKm() >= 30)
+                          .map(Ride::getRider)
+                          .distinct()
+                          .forEach(System.out::println);
+                  int total = rides.stream()
+                          .filter(ride -> ride.getRider().startsWith("K"))
+                          .mapToInt(ride -> ride.getKm() / 10)
+                          .sum();
+                  System.out.println(total);
+              }
+          }
+          // ==== Ride.java ====
+          public class Ride {
+              private String rider;
+              private int km;
+
+              public Ride(String rider, int km) {
+                  this.rider = rider;
+                  this.km = km;
+              }
+
+              public String getRider() {
+                  return this.rider;
+              }
+
+              public int getKm() {
+                  return this.km;
+              }
+          }
+        hints:
+          - "`>=` lets a ride of exactly 30 km through. `distinct` keeps the first copy of each name, in the list's order, and nothing sorts them. In the second stream, each distance is divided by 10 as an `int` before the sum."
+          - "Kaia's 30, Noor's 75 and Kaia's 90 get through the first filter, `map` turns them into Kaia, Noor and Kaia, and `distinct` drops the second Kaia. Kaia's are the only rides by a name that starts with K, and `mapToInt` gives 3 and 9 for them."
+      - task: |
+          `Screening.java` is ready: a screening has a film, the number of tickets sold and the number of seats, and `isSoldOut()` says whether every seat is sold. In `Main.java`, write the method `soldOutFilms(List<Screening> screenings)`, which returns a new list of the films that had at least one sold-out screening, each once, in alphabetical order. Use a stream, and `Screening::isSoldOut` in the filter. The check runs:
+
+          ```java fragment
+          List<Screening> screenings = new ArrayList<>();
+          screenings.add(new Screening("Vertigo", 120, 120));
+          screenings.add(new Screening("Heat", 64, 90));
+          screenings.add(new Screening("Alien", 90, 90));
+          screenings.add(new Screening("Vertigo", 80, 80));
+          System.out.println(soldOutFilms(screenings));
+          ```
+
+          and expects:
+
+          ```
+          [Alien, Vertigo]
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Screening> screenings = new ArrayList<>();
+                    screenings.add(new Screening("Vertigo", 120, 120));
+                    screenings.add(new Screening("Heat", 64, 90));
+                    screenings.add(new Screening("Alien", 90, 90));
+                    screenings.add(new Screening("Vertigo", 80, 80));
+                    System.out.println(soldOutFilms(screenings));
+                }
+
+                // Write the method soldOutFilms here.
+            }
+          Screening.java: |
+            public class Screening {
+                private String film;
+                private int sold;
+                private int seats;
+
+                public Screening(String film, int sold, int seats) {
+                    this.film = film;
+                    this.sold = sold;
+                    this.seats = seats;
+                }
+
+                public String getFilm() {
+                    return this.film;
+                }
+
+                public int getSold() {
+                    return this.sold;
+                }
+
+                public boolean isSoldOut() {
+                    return this.sold >= this.seats;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Screening> screenings = new ArrayList<>();
+                    screenings.add(new Screening("Vertigo", 120, 120));
+                    screenings.add(new Screening("Heat", 64, 90));
+                    screenings.add(new Screening("Alien", 90, 90));
+                    screenings.add(new Screening("Vertigo", 80, 80));
+                    System.out.println(soldOutFilms(screenings));
+                }
+
+                public static List<String> soldOutFilms(List<Screening> screenings) {
+                    return screenings.stream()
+                            .filter(Screening::isSoldOut)
+                            .map(Screening::getFilm)
+                            .distinct()
+                            .sorted()
+                            .collect(Collectors.toList());
+                }
+            }
+          Screening.java: |
+            public class Screening {
+                private String film;
+                private int sold;
+                private int seats;
+
+                public Screening(String film, int sold, int seats) {
+                    this.film = film;
+                    this.sold = sold;
+                    this.seats = seats;
+                }
+
+                public String getFilm() {
+                    return this.film;
+                }
+
+                public int getSold() {
+                    return this.sold;
+                }
+
+                public boolean isSoldOut() {
+                    return this.sold >= this.seats;
+                }
+            }
+        hints:
+          - "The header is `public static List<String> soldOutFilms(List<Screening> screenings)`. `filter(Screening::isSoldOut)` keeps the sold-out screenings: the method returns the `true` or `false` that the filter needs."
+          - "Then `map(Screening::getFilm)` turns each screening into its film, and `distinct()`, `sorted()` and `collect(Collectors.toList())` finish the job."
+        require:
+          - pattern: \bpublic\s+static\s+List<String>\s+soldOutFilms\s*\(\s*List<Screening>\s+\w+\s*\)
+            message: "Write the method as `public static List<String> soldOutFilms(List<Screening> screenings)`."
+          - pattern: \.filter\s*\(\s*Screening\s*::\s*isSoldOut\s*\)
+            message: "Keep the sold-out screenings with `filter(Screening::isSoldOut)`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Use a stream this time, not a loop."
+        tests:
+          - call: |
+              List<Screening> screenings = new ArrayList<>();
+              screenings.add(new Screening("Vertigo", 120, 120));
+              screenings.add(new Screening("Heat", 64, 90));
+              screenings.add(new Screening("Alien", 90, 90));
+              screenings.add(new Screening("Vertigo", 80, 80));
+              System.out.println(soldOutFilms(screenings));
+          - call: |
+              List<Screening> screenings = new ArrayList<>();
+              screenings.add(new Screening("Up", 10, 90));
+              System.out.println(soldOutFilms(screenings));
+              screenings.add(new Screening("Jaws", 50, 50));
+              screenings.add(new Screening("Brazil", 40, 40));
+              screenings.add(new Screening("Up", 90, 90));
+              System.out.println(soldOutFilms(screenings));
+            hidden: true
+
+  - id: streams-reduce
+    slug: reduce-and-intstream
+    title: reduce, and IntStream
+    text: |
+      Every terminal operation so far has had one fixed job: count, add up, collect. `reduce` is the general one: it combines all the values into one, in whatever way its lambda says.
+
+      ### reduce
+
+      `reduce` takes two things: a starting value, and a lambda with two parameters, the result so far and the next value. The lambda returns the new result so far. The club's total distance, with `reduce`:
+
+      ```java main
+      ArrayList<Integer> rides = new ArrayList<>();
+      rides.add(42);
+      rides.add(65);
+      rides.add(18);
+      int total = rides.stream()
+              .reduce(0, (sum, km) -> sum + km);
+      System.out.println(total);
+      ```
+
+      ```output
+      125
+      ```
+
+      The result starts as 0. Then the lambda runs once for each value: 0 + 42 is 42, 42 + 65 is 107, and 107 + 18 is 125. When the stream is empty, the lambda never runs, and `reduce` returns the starting value.
+
+      `mapToInt(km -> km).sum()` gives the same total, and reads more easily. After `mapToInt`, an IntStream also has `max()`, but like `average()` it returns a box that may be empty (an OptionalInt, whose `getAsInt()` takes the `int` out). `reduce` can find the longest ride as a plain `int`, with 0 for an empty list: start at 0, and keep, at each value, the bigger of the result so far and the value:
+
+      ```java main
+      ArrayList<Integer> rides = new ArrayList<>();
+      rides.add(42);
+      rides.add(65);
+      rides.add(18);
+      int longest = rides.stream()
+              .reduce(0, (longestSoFar, km) -> Math.max(longestSoFar, km));
+      System.out.println(longest);
+      ```
+
+      ```output
+      65
+      ```
+
+      The starting value takes part in the result, so pick one that changes nothing: 0 for a sum, `""` for text. For the longest ride, 0 changes nothing only because no ride is shorter than 0 km. It's the same thought as the "best so far" of module 29: for the lowest temperature, 0 would be a bad start, since every reading could be above it.
+
+      `reduce` works on Strings too. The first letters of the riders' names, joined together:
+
+      ```java main
+      ArrayList<String> riders = new ArrayList<>();
+      riders.add("Noor");
+      riders.add("Pablo");
+      riders.add("Kaia");
+      String initials = riders.stream()
+              .map(name -> name.substring(0, 1))
+              .reduce("", (text, letter) -> text + letter);
+      System.out.println(initials);
+      ```
+
+      ```output
+      NPK
+      ```
+
+      `map` first turns each name into its first letter, and `reduce` only joins the letters. That's how Java's documentation asks for `reduce` to be used: a start that changes nothing, and a lambda that only combines two values, so that the result doesn't depend on how the values are grouped. Any work on each value belongs in a `map` before `reduce`.
+
+      In this form, `reduce` gives a result of the same type as the stream's values: an Integer for a stream of Integers, a String for a stream of Strings. For a stream of objects, `map` them to the value you want to combine first.
+
+      ### IntStream: numbers without a list
+
+      Step 3's IntStream, the stream of `int` values, can also be made from nothing but a range of numbers. `IntStream.range(1, 5)` is the numbers 1, 2, 3 and 4: the end isn't included, just like in `for (int i = 1; i < 5; i++)` and in `substring`'s end index. `IntStream.rangeClosed(1, 5)` includes the end, 5. IntStream lives in `java.util.stream`:
+
+      ```java run
+      import java.util.stream.IntStream;
+
+      public class Main {
+          public static void main(String[] args) {
+              IntStream.range(1, 5)
+                      .forEach(seat -> System.out.println("Seat " + seat));
+              System.out.println(IntStream.rangeClosed(1, 10).sum());
+              long evenSeats = IntStream.rangeClosed(1, 20)
+                      .filter(seat -> seat % 2 == 0)
+                      .count();
+              System.out.println(evenSeats);
+          }
+      }
+      ```
+
+      ```output
+      Seat 1
+      Seat 2
+      Seat 3
+      Seat 4
+      55
+      10
+      ```
+
+      - A cinema's row with seats 1 to 4 comes from `range(1, 5)`.
+      - `rangeClosed(1, 10).sum()` adds up 1 to 10.
+      - An IntStream has the intermediate operations you know, such as `filter`, and its values are plain `int` values.
+
+      A range can go through a list's indexes, `range(0, list.size())`, when the position matters, as in a numbered list:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.stream.IntStream;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> films = new ArrayList<>();
+              films.add("Vertigo");
+              films.add("Alien");
+              films.add("Heat");
+              IntStream.range(0, films.size())
+                      .forEach(i -> System.out.println((i + 1) + ". " + films.get(i)));
+          }
+      }
+      ```
+
+      ```output
+      1. Vertigo
+      2. Alien
+      3. Heat
+      ```
+
+      The lambda uses `films` from outside, which is fine: it only reads the list, and `films` is never given another list.
+
+      **Your turn:** what does this program print?
+    predict: |
+      import java.util.ArrayList;
+      import java.util.stream.IntStream;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> rides = new ArrayList<>();
+              rides.add(30);
+              rides.add(45);
+              rides.add(40);
+
+              int longest = rides.stream()
+                      .reduce(50, (longestSoFar, km) -> Math.max(longestSoFar, km));
+              int doubled = rides.stream()
+                      .map(km -> 2 * km)
+                      .reduce(0, (sum, km) -> sum + km);
+              System.out.println(longest + " " + doubled);
+              System.out.println(IntStream.range(2, 6).sum() + " " + IntStream.rangeClosed(2, 6).count());
+          }
+      }
+    hints:
+      - "The starting value of `reduce` takes part in the result, so with `Math.max` the result is never less than the start. The end of a `range` isn't included; the end of a `rangeClosed` is."
+      - "Every ride is shorter than 50, so the first `reduce` keeps 50. `map` doubles the rides to 60, 90 and 80, and the second `reduce` adds them up from 0. `range(2, 6)` is 2, 3, 4 and 5, and `rangeClosed(2, 6)` has five values, 2 to 6."
+    more:
+      - task: |
+          A cinema row has `seats` seats, numbered from 1. Fill in the blank so that the program prints a label for each seat of row C, the last one included. For the program as it is, it prints:
+
+          ```
+          C1
+          C2
+          C3
+          C4
+          C5
+          C6
+          ```
+        fill: |
+          import java.util.stream.IntStream;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int seats = 6;
+                  IntStream.[[rangeClosed]](1, seats)
+                          .forEach(seat -> System.out.println("C" + seat));
+              }
+          }
+        hints:
+          - "`range(1, seats)` would stop at 5: its end isn't included."
+          - "The kind of range that includes its end is `rangeClosed`."
+      - task: |
+          Write the method `longestRide(List<Integer> rides)`, which returns the longest ride, and 0 for an empty list. Use `reduce` with `Math.max`. The check runs:
+
+          ```java fragment
+          List<Integer> rides = new ArrayList<>();
+          rides.add(42);
+          rides.add(65);
+          rides.add(18);
+          System.out.println(longestRide(rides));
+          ```
+
+          and expects:
+
+          ```
+          65
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Integer> rides = new ArrayList<>();
+                  rides.add(42);
+                  rides.add(65);
+                  rides.add(18);
+                  System.out.println(longestRide(rides));
+              }
+
+              // Write the method longestRide here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Integer> rides = new ArrayList<>();
+                  rides.add(42);
+                  rides.add(65);
+                  rides.add(18);
+                  System.out.println(longestRide(rides));
+              }
+
+              public static int longestRide(List<Integer> rides) {
+                  return rides.stream()
+                          .reduce(0, (longest, km) -> Math.max(longest, km));
+              }
+          }
+        hints:
+          - "The header is `public static int longestRide(List<Integer> rides)`. Start `reduce` at 0: that's also what it returns for an empty list."
+          - "`return rides.stream().reduce(0, (longest, km) -> Math.max(longest, km));`"
+        require:
+          - pattern: \bpublic\s+static\s+int\s+longestRide\s*\(\s*List<Integer>\s+\w+\s*\)
+            message: "Write the method as `public static int longestRide(List<Integer> rides)`."
+          - pattern: \.reduce\s*\(
+            message: "Combine the rides with `reduce`."
+          - pattern: \bMath\s*\.\s*max\b|\bMath\s*::\s*max\b
+            message: "Keep the bigger value with `Math.max`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Use a stream this time, not a loop."
+        tests:
+          - call: |
+              List<Integer> rides = new ArrayList<>();
+              rides.add(42);
+              rides.add(65);
+              rides.add(18);
+              System.out.println(longestRide(rides));
+          - call: |
+              List<Integer> rides = new ArrayList<>();
+              System.out.println(longestRide(rides));
+              rides.add(7);
+              System.out.println(longestRide(rides));
+              rides.add(120);
+              rides.add(120);
+              rides.add(3);
+              System.out.println(longestRide(rides) + " " + rides.size());
+            hidden: true
+
+  - id: streams-files
+    slug: files
+    title: Reading a file as a stream
+    text: |
+      Module 20 read files line by line, with a Scanner and a `while` loop. `Files.lines(Paths.get("expenses.csv"))` gives a file's lines as a stream of Strings instead, ready for `filter`, `map` and the rest. `Files` is in `java.nio.file`, next to `Paths`, so it needs an import of its own.
+
+      ### The lines of a file
+
+      The household budget is now in a file. Each line has a category and an amount in whole dollars, separated by a comma:
+
+      ```file expenses.csv
+      groceries,54
+      rent,850
+      bus pass,40
+      groceries,38
+      phone,25
+      ```
+
+      ```java run
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+
+      public class Main {
+          public static void main(String[] args) {
+              try {
+                  Files.lines(Paths.get("expenses.csv"))
+                          .filter(line -> line.startsWith("groceries"))
+                          .forEach(System.out::println);
+              } catch (Exception e) {
+                  System.out.println("Error: " + e.getMessage());
+              }
+          }
+      }
+      ```
+
+      ```output
+      groceries,54
+      groceries,38
+      ```
+
+      - The stream's values are the file's lines, in the file's order, without their line breaks.
+      - Reading a file can fail, for example when there's no such file. As with the Scanner in module 20, the reading goes in a `try` block, and the `catch` block says what went wrong. For a missing file, the message is the file's name, so the program would print `Error: expenses.csv`.
+
+      Java insists on that `try`. Without it, the program doesn't compile:
+
+      ```java error
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+
+      public class Main {
+          public static void main(String[] args) {
+              Files.lines(Paths.get("expenses.csv")).forEach(System.out::println);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:6: error: unreported exception IOException; must be caught or declared to be thrown
+              Files.lines(Paths.get("expenses.csv")).forEach(System.out::println);
+                         ^
+      1 error
+      ```
+
+      It's module 20's message about the Scanner, for the same reason.
+
+      ### Parts of each line
+
+      Module 20 split each line with `split(",")`. In a stream, that's a `map` from a line to its array of parts, and then the parts can be used:
+
+      ```file expenses.csv
+      groceries,54
+      rent,850
+      bus pass,40
+      groceries,38
+      phone,25
+      ```
+
+      ```java run
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+
+      public class Main {
+          public static void main(String[] args) {
+              try {
+                  int total = Files.lines(Paths.get("expenses.csv"))
+                          .map(line -> line.split(","))
+                          .mapToInt(parts -> Integer.valueOf(parts[1]))
+                          .sum();
+                  System.out.println("Total: " + total);
+              } catch (Exception e) {
+                  System.out.println("Error: " + e.getMessage());
+              }
+          }
+      }
+      ```
+
+      ```output
+      Total: 1007
+      ```
+
+      After `map(line -> line.split(","))`, each value in the stream is an array of two Strings, so the next lambda's `parts` is an array: `parts[0]` is the category and `parts[1]` the amount. `total` is created inside the `try` block, so it's printed there too.
+
+      ### Lines into objects
+
+      A `map` whose lambda calls a constructor turns each line into an object, and `collect` gathers them into a list. A method that reads the file this way can return the list, and the rest of the program works on objects:
+
+      ```file expenses.csv
+      groceries,54
+      rent,850
+      bus pass,40
+      ```
+
+      ```java run
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.List;
+      import java.util.stream.Collectors;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Expense> expenses = readExpenses("expenses.csv");
+              System.out.println(expenses);
+              List<Expense> missing = readExpenses("august.csv");
+              System.out.println(missing.size());
+          }
+
+          public static List<Expense> readExpenses(String file) {
+              List<Expense> expenses = new ArrayList<>();
+              try {
+                  expenses = Files.lines(Paths.get(file))
+                          .map(line -> line.split(","))
+                          .map(parts -> new Expense(parts[0], Integer.valueOf(parts[1])))
+                          .collect(Collectors.toList());
+              } catch (Exception e) {
+                  System.out.println("Error: " + e.getMessage());
+              }
+              return expenses;
+          }
+      }
+      // ==== Expense.java ====
+      public class Expense {
+          private String category;
+          private int amount;
+
+          public Expense(String category, int amount) {
+              this.category = category;
+              this.amount = amount;
+          }
+
+          public String getCategory() {
+              return this.category;
+          }
+
+          public int getAmount() {
+              return this.amount;
+          }
+
+          @Override
+          public String toString() {
+              return this.category + " " + this.amount;
+          }
+      }
+      ```
+
+      ```output
+      [groceries 54, rent 850, bus pass 40]
+      Error: august.csv
+      0
+      ```
+
+      - `new Expense(parts[0], Integer.valueOf(parts[1]))` is the lambda's result, so the stream after that `map` is a stream of Expense objects.
+      - The method starts with an empty list. If the file can be read, the collected list takes its place; if not, the `catch` block prints the error, and the method returns the empty list, so the rest of the program still has a list to work on.
+
+      A stream from `Files.lines` keeps the file open even after its terminal operation: `forEach`, `sum` or `collect` uses the stream up, but doesn't close the file. Module 20's `try` with parentheses closes what it opens at the end of the `try` block, and it works here too, written with the stream's type: `try (Stream<String> lines = Files.lines(Paths.get(file))) { ... }`, with `import java.util.stream.Stream;`. Short programs, like the ones in this module, often leave that out: every file is closed when the program ends.
+
+      **Your turn:** this challenge gives the file `expenses.csv`, shown below, in the same form: the category and the amount, separated by a comma. Print the total of the grocery expenses, the lines whose category is exactly `groceries`. Use `Files.lines` and a stream, in a `try` block. If the file can't be read, print only `Error: ` and the exception's message. For the file shown, the program prints:
+
+      ```
+      Groceries: 92
+      ```
+    seed: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+
+      public class Main {
+          public static void main(String[] args) {
+
+          }
+      }
+    solution: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+
+      public class Main {
+          public static void main(String[] args) {
+              try {
+                  int groceries = Files.lines(Paths.get("expenses.csv"))
+                          .map(line -> line.split(","))
+                          .filter(parts -> parts[0].equals("groceries"))
+                          .mapToInt(parts -> Integer.valueOf(parts[1]))
+                          .sum();
+                  System.out.println("Groceries: " + groceries);
+              } catch (Exception e) {
+                  System.out.println("Error: " + e.getMessage());
+              }
+          }
+      }
+    hints:
+      - "Split each line first, `map(line -> line.split(\",\"))`, and then keep the arrays whose first part equals `groceries`, with `equals`, since a category such as `groceries extra` also starts with `groceries`."
+      - "Then `mapToInt(parts -> Integer.valueOf(parts[1]))` and `sum()`. Print inside the `try` block: then only the error is printed when the file can't be read."
+    require:
+      - pattern: \bFiles\s*\.\s*lines\s*\(
+        message: "Read the file with `Files.lines(Paths.get(\"expenses.csv\"))`."
+      - pattern: \.sum\s*\(\s*\)
+        message: "Add up the amounts with `sum()`."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Use a stream this time, not a loop."
+      - pattern: \bScanner\b
+        message: "Read the file with `Files.lines` this time, not a Scanner."
+    tests:
+      - files:
+          expenses.csv: |
+            groceries,54
+            rent,850
+            bus pass,40
+            groceries,38
+            phone,25
+      - files:
+          expenses.csv: |
+            groceries extra,7
+            groceries,3
+            cinema,24
+        hidden: true
+      - files:
+          expenses.csv: |
+            rent,850
+        hidden: true
+      - files:
+          budget.csv: |
+            groceries,10
+        hidden: true
+    more:
+      - task: |
+          The bank's export starts with a header line, `category,amount`, before the expenses. Fill in the blank, a stream method, so that the program leaves the header out and prints the number of expenses and their total. For the file shown, it prints:
+
+          ```
+          3 expenses, 136 dollars
+          ```
+        fill: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+          import java.util.stream.Collectors;
+
+          public class Main {
+              public static void main(String[] args) {
+                  try {
+                      List<Integer> amounts = Files.lines(Paths.get("export.csv"))
+                              .[[skip]](1)
+                              .map(line -> line.split(","))
+                              .map(parts -> Integer.valueOf(parts[1]))
+                              .collect(Collectors.toList());
+                      int total = amounts.stream()
+                              .mapToInt(amount -> amount)
+                              .sum();
+                      System.out.println(amounts.size() + " expenses, " + total + " dollars");
+                  } catch (Exception e) {
+                      System.out.println("Error: " + e.getMessage());
+                  }
+              }
+          }
+        hints:
+          - "`Integer.valueOf(\"amount\")` would crash on the header, so it must be dropped before that `map`. Which intermediate operation drops the first values?"
+          - "`skip(1)` drops the first line and lets the rest through."
+        tests:
+          - files:
+              export.csv: |
+                category,amount
+                groceries,61
+                phone,25
+                bus pass,50
+          - files:
+              export.csv: |
+                category,amount
+                rent,850
+            hidden: true
+      - task: |
+          `Expense.java` is ready. In `Main.java`, write the method `expensesIn(String file, String category)`, which reads a file of expenses in the form `category,amount` and returns the expenses of the given category as a `List<Expense>`, in the file's order. The category must match exactly: `groceries extra` is a category of its own, not `groceries`. The file may have empty lines: leave them out. If the file can't be read, the method prints `Error: ` and the exception's message, and returns an empty list. Read the file with `Files.lines` and a stream, with no loops. The check runs, with the file `july.csv` shown below:
+
+          ```java fragment
+          List<Expense> groceries = expensesIn("july.csv", "groceries");
+          System.out.println(groceries);
+          ```
+
+          and expects:
+
+          ```
+          [groceries 54, groceries 38]
+          ```
+        seed:
+          Main.java: |
+            import java.nio.file.Files;
+            import java.nio.file.Paths;
+            import java.util.ArrayList;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Expense> groceries = expensesIn("july.csv", "groceries");
+                    System.out.println(groceries);
+                }
+
+                // Write the method expensesIn here.
+            }
+          Expense.java: |
+            public class Expense {
+                private String category;
+                private int amount;
+
+                public Expense(String category, int amount) {
+                    this.category = category;
+                    this.amount = amount;
+                }
+
+                public String getCategory() {
+                    return this.category;
+                }
+
+                public int getAmount() {
+                    return this.amount;
+                }
+
+                @Override
+                public String toString() {
+                    return this.category + " " + this.amount;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.nio.file.Files;
+            import java.nio.file.Paths;
+            import java.util.ArrayList;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<Expense> groceries = expensesIn("july.csv", "groceries");
+                    System.out.println(groceries);
+                }
+
+                public static List<Expense> expensesIn(String file, String category) {
+                    List<Expense> expenses = new ArrayList<>();
+                    try {
+                        expenses = Files.lines(Paths.get(file))
+                                .map(line -> line.split(","))
+                                .filter(parts -> parts[0].equals(category))
+                                .map(parts -> new Expense(parts[0], Integer.valueOf(parts[1])))
+                                .collect(Collectors.toList());
+                    } catch (Exception e) {
+                        System.out.println("Error: " + e.getMessage());
+                    }
+                    return expenses;
+                }
+            }
+          Expense.java: |
+            public class Expense {
+                private String category;
+                private int amount;
+
+                public Expense(String category, int amount) {
+                    this.category = category;
+                    this.amount = amount;
+                }
+
+                public String getCategory() {
+                    return this.category;
+                }
+
+                public int getAmount() {
+                    return this.amount;
+                }
+
+                @Override
+                public String toString() {
+                    return this.category + " " + this.amount;
+                }
+            }
+        hints:
+          - "The header is `public static List<Expense> expensesIn(String file, String category)`. Start with an empty list, replace it with the collected one inside the `try` block, and return it after the `catch` block. A lambda can use the parameter `category`, as step 2 showed."
+          - "Split each line first, and keep the arrays whose first part `equals(category)`: an empty line's only part is `\"\"`, so that drops the empty lines too. Then make an Expense of each array and `collect` them."
+        require:
+          - pattern: \bpublic\s+static\s+List<Expense>\s+expensesIn\s*\(\s*String\s+\w+\s*,\s*String\s+\w+\s*\)
+            message: "Write the method as `public static List<Expense> expensesIn(String file, String category)`."
+          - pattern: \bFiles\s*\.\s*lines\s*\(
+            message: "Read the file with `Files.lines`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Use a stream this time, not a loop."
+          - pattern: \bScanner\b
+            message: "Read the file with `Files.lines` this time, not a Scanner."
+        tests:
+          - files:
+              july.csv: |
+                groceries,54
+                rent,850
+                groceries extra,7
+                groceries,38
+                phone,25
+            call: |
+              List<Expense> groceries = expensesIn("july.csv", "groceries");
+              System.out.println(groceries);
+          - files:
+              june.csv: "bus pass,40\n\ngroceries,12\nbus pass,35\n\n"
+            call: |
+              List<Expense> bus = expensesIn("june.csv", "bus pass");
+              System.out.println(bus.size() + " " + bus);
+              System.out.println(bus.get(1).getCategory() + " " + bus.get(1).getAmount());
+              System.out.println(expensesIn("june.csv", "groceries"));
+            hidden: true
+          - files:
+              july.csv: |
+                rent,850
+                groceries extra,7
+            call: |
+              System.out.println(expensesIn("july.csv", "groceries").size());
+              System.out.println(expensesIn("july.csv", "groceries extra"));
+              List<Expense> missing = expensesIn("may.csv", "rent");
+              System.out.println(missing.size());
+              System.out.println(expensesIn("july.csv", "rent"));
+            hidden: true
+
+  - id: streams-loop-or-stream
+    slug: loop-or-stream
+    title: A loop or a stream?
+    text: |
+      You now have two ways to go through a collection. Neither is the "right" one: both are everyday Java, and one program often uses both. This step compares them, so you can pick the one that reads better for each job.
+
+      ### Where a stream reads well
+
+      A question of the form "from these values, keep some, change them, and count, add up or collect them" is what streams were made for. A bookshop's list has one entry for each copy sold. Which titles sold today, each once, in alphabetical order? With a loop:
+
+      ```java main
+      ArrayList<String> sold = new ArrayList<>();
+      sold.add("Kindred");
+      sold.add("Beloved");
+      sold.add("Kindred");
+      sold.add("Emma");
+      ArrayList<String> titles = new ArrayList<>();
+      for (String title : sold) {
+          if (!titles.contains(title)) {
+              titles.add(title);
+          }
+      }
+      Collections.sort(titles);
+      System.out.println(titles);
+      ```
+
+      ```output
+      [Beloved, Emma, Kindred]
+      ```
+
+      With a stream, the same steps have names:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+      import java.util.stream.Collectors;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> sold = new ArrayList<>();
+              sold.add("Kindred");
+              sold.add("Beloved");
+              sold.add("Kindred");
+              sold.add("Emma");
+              List<String> titles = sold.stream()
+                      .distinct()
+                      .sorted()
+                      .collect(Collectors.toList());
+              System.out.println(titles);
+          }
+      }
+      ```
+
+      ```output
+      [Beloved, Emma, Kindred]
+      ```
+
+      The loop version needs a new list, a loop, an `if` and a sort, and the reader has to put them together to see the idea. The stream says the idea in its step names: distinct, sorted, collect.
+
+      ### Where a loop reads well
+
+      - **Stopping early.** A loop can `return` or `break` as soon as it has its answer, such as the first day the shop sold more than 100 books. A `return` inside a lambda only ends that one call of the lambda, not the stream. (Java has stream operations that stop at the first match, such as `findFirst`, but this course doesn't use them, and a loop that stops says so plainly.)
+      - **Several results in one go.** One loop can update a count, a sum and a largest value at the same time. A lambda can't change the variables of its method (step 2), so with streams, each result is a stream of its own. For the lists in this course, going through a list three times is no problem: choose by what's easier to read.
+      - **Reading input.** A Scanner gives one line at a time, and a `while` loop reads them. Step 5's programs read with a loop and then answer with streams.
+      - **When the position matters.** Comparing each value with the one before it is natural in a loop with an index. `IntStream.range` can do it too, but the loop is often plainer.
+      - **Changing the list while going through it.** The stream steps of this module never change the list they read. To remove values while going through a list, use an index loop that goes backwards (module 14) or module 39's iterator. (Module 39 also shows `removeIf`, which does that loop for you.)
+
+      Here's a question of the "stopping early" kind: was there a day when the shop sold no books at all? As soon as the loop finds one such day, the answer is known, and the method returns it without looking at the rest:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Integer> booksSold = new ArrayList<>();
+              booksSold.add(64);
+              booksSold.add(0);
+              booksSold.add(89);
+              booksSold.add(130);
+              System.out.println(hadEmptyDay(booksSold));
+          }
+
+          public static boolean hadEmptyDay(List<Integer> booksSold) {
+              for (int sold : booksSold) {
+                  if (sold == 0) {
+                      return true;
+                  }
+              }
+              return false;
+          }
+      }
+      ```
+
+      ```output
+      true
+      ```
+
+      `filter(sold -> sold == 0).count() > 0` gives the same answer, but it counts every empty day to answer a yes-or-no question, and the reader has to work out why it compares with 0.
+
+      ### A rule of thumb
+
+      - If you can say the question as "keep these, turn them into that, then count, add up or collect", try a stream.
+      - If you need to stop early, remember something from the round before, or change several variables as you go, a loop is usually plainer.
+      - If a lambda grows to many lines, the code is telling you something: move that work into a method of its own, and call it from the lambda (or with a method reference), or write a loop.
+
+      **Your turn:** the bookshop's app has a method with a loop. `BookSale.java` is ready: each sale has a title, the number of copies and the price of one copy. `bestSellers` returns the titles that had a sale of at least `minCopies` copies, each once, in alphabetical order. Rewrite its body with a stream, with no loop and no `Collections.sort`, and keep its header as it is. The check runs:
+
+      ```java fragment
+      List<BookSale> sales = new ArrayList<>();
+      sales.add(new BookSale("Kindred", 3, 14));
+      sales.add(new BookSale("Emma", 1, 12));
+      sales.add(new BookSale("Beloved", 2, 15));
+      sales.add(new BookSale("Kindred", 4, 14));
+      System.out.println(bestSellers(sales, 2));
+      ```
+
+      and expects:
+
+      ```
+      [Beloved, Kindred]
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.List;
+        import java.util.stream.Collectors;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<BookSale> sales = new ArrayList<>();
+                sales.add(new BookSale("Kindred", 3, 14));
+                sales.add(new BookSale("Emma", 1, 12));
+                sales.add(new BookSale("Beloved", 2, 15));
+                sales.add(new BookSale("Kindred", 4, 14));
+                System.out.println(bestSellers(sales, 2));
+            }
+
+            public static List<String> bestSellers(List<BookSale> sales, int minCopies) {
+                List<String> titles = new ArrayList<>();
+                for (BookSale sale : sales) {
+                    if (sale.getCopies() >= minCopies && !titles.contains(sale.getTitle())) {
+                        titles.add(sale.getTitle());
+                    }
+                }
+                Collections.sort(titles);
+                return titles;
+            }
+        }
+      BookSale.java: |
+        public class BookSale {
+            private String title;
+            private int copies;
+            private int price;
+
+            public BookSale(String title, int copies, int price) {
+                this.title = title;
+                this.copies = copies;
+                this.price = price;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public int getCopies() {
+                return this.copies;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+
+            public int total() {
+                return this.copies * this.price;
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+        import java.util.stream.Collectors;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<BookSale> sales = new ArrayList<>();
+                sales.add(new BookSale("Kindred", 3, 14));
+                sales.add(new BookSale("Emma", 1, 12));
+                sales.add(new BookSale("Beloved", 2, 15));
+                sales.add(new BookSale("Kindred", 4, 14));
+                System.out.println(bestSellers(sales, 2));
+            }
+
+            public static List<String> bestSellers(List<BookSale> sales, int minCopies) {
+                return sales.stream()
+                        .filter(sale -> sale.getCopies() >= minCopies)
+                        .map(BookSale::getTitle)
+                        .distinct()
+                        .sorted()
+                        .collect(Collectors.toList());
+            }
+        }
+      BookSale.java: |
+        public class BookSale {
+            private String title;
+            private int copies;
+            private int price;
+
+            public BookSale(String title, int copies, int price) {
+                this.title = title;
+                this.copies = copies;
+                this.price = price;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public int getCopies() {
+                return this.copies;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+
+            public int total() {
+                return this.copies * this.price;
+            }
+        }
+    hints:
+      - "Name each part of the loop as a stream step: the `if` on the copies is a `filter`, taking the title is a `map`, the `contains` check is `distinct()`, and `Collections.sort` is `sorted()`."
+      - "`return sales.stream().filter(sale -> sale.getCopies() >= minCopies).map(BookSale::getTitle).distinct().sorted().collect(Collectors.toList());`"
+    require:
+      - pattern: \.stream\s*\(\s*\)
+        message: "Use a stream: `sales.stream()`."
+      - pattern: \.collect\s*\(\s*Collectors\s*\.\s*toList\s*\(\s*\)\s*\)
+        message: "Gather the titles with `collect(Collectors.toList())`."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Rewrite the loop as a stream: no `for` or `while`."
+      - pattern: \bCollections\s*\.\s*sort\b
+        message: "Let the stream sort with `sorted()`."
+    tests:
+      - call: |
+          List<BookSale> sales = new ArrayList<>();
+          sales.add(new BookSale("Kindred", 3, 14));
+          sales.add(new BookSale("Emma", 1, 12));
+          sales.add(new BookSale("Beloved", 2, 15));
+          sales.add(new BookSale("Kindred", 4, 14));
+          System.out.println(bestSellers(sales, 2));
+      - call: |
+          List<BookSale> sales = new ArrayList<>();
+          sales.add(new BookSale("Walden", 5, 10));
+          sales.add(new BookSale("Dune", 5, 16));
+          sales.add(new BookSale("Candide", 1, 9));
+          sales.add(new BookSale("Walden", 1, 10));
+          System.out.println(bestSellers(sales, 5));
+          System.out.println(bestSellers(sales, 1));
+          System.out.println(bestSellers(sales, 6) + " " + sales.size());
+        hidden: true
+    more:
+      - task: |
+          Some questions suit a loop better. Write the method `firstDayOver(List<Integer> booksSold, int target)`, which returns the number of the first day whose sales were over `target` (1 for the first day in the list), or 0 if no day was. Use a loop that returns as soon as it finds the day. The check runs:
+
+          ```java fragment
+          List<Integer> booksSold = new ArrayList<>();
+          booksSold.add(64);
+          booksSold.add(112);
+          booksSold.add(89);
+          booksSold.add(130);
+          System.out.println(firstDayOver(booksSold, 100));
+          System.out.println(firstDayOver(booksSold, 120));
+          ```
+
+          and expects:
+
+          ```
+          2
+          4
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Integer> booksSold = new ArrayList<>();
+                  booksSold.add(64);
+                  booksSold.add(112);
+                  booksSold.add(89);
+                  booksSold.add(130);
+                  System.out.println(firstDayOver(booksSold, 100));
+                  System.out.println(firstDayOver(booksSold, 120));
+              }
+
+              // Write the method firstDayOver here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<Integer> booksSold = new ArrayList<>();
+                  booksSold.add(64);
+                  booksSold.add(112);
+                  booksSold.add(89);
+                  booksSold.add(130);
+                  System.out.println(firstDayOver(booksSold, 100));
+                  System.out.println(firstDayOver(booksSold, 120));
+              }
+
+              public static int firstDayOver(List<Integer> booksSold, int target) {
+                  for (int i = 0; i < booksSold.size(); i++) {
+                      if (booksSold.get(i) > target) {
+                          return i + 1;
+                      }
+                  }
+                  return 0;
+              }
+          }
+        hints:
+          - "The header is `public static int firstDayOver(List<Integer> booksSold, int target)`. The day's number is its index plus one, so go through the indexes with a `for` loop."
+          - "Inside the loop, `if (booksSold.get(i) > target) { return i + 1; }`. After the loop, no day was over the target: `return 0;`."
+        require:
+          - pattern: \bpublic\s+static\s+int\s+firstDayOver\s*\(\s*List<Integer>\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static int firstDayOver(List<Integer> booksSold, int target)`."
+          - pattern: \b(for|while)\b
+            message: "Use a loop that returns as soon as it finds the day."
+        tests:
+          - call: |
+              List<Integer> booksSold = new ArrayList<>();
+              booksSold.add(64);
+              booksSold.add(112);
+              booksSold.add(89);
+              booksSold.add(130);
+              System.out.println(firstDayOver(booksSold, 100));
+              System.out.println(firstDayOver(booksSold, 120));
+          - call: |
+              List<Integer> booksSold = new ArrayList<>();
+              booksSold.add(100);
+              booksSold.add(101);
+              System.out.println(firstDayOver(booksSold, 100) + " " + firstDayOver(booksSold, 99) + " " + firstDayOver(booksSold, 101));
+              System.out.println(firstDayOver(new ArrayList<>(), 0));
+            hidden: true
+      - task: |
+          The closing challenge puts the module together. The bookshop's till writes each sale to `sales.csv`: the title, the number of copies and the price of one copy, separated by commas. `BookSale.java` is ready. Write `main` so that it reads the file into a `List<BookSale>` with `Files.lines`, and then uses streams to print:
+
+          - the number of sales
+          - the number of copies sold, all sales together
+          - the takings: each sale's copies times its price (`total()`), added up
+          - the titles sold, each once, in alphabetical order
+
+          If the file can't be read, print only `Error: ` and the exception's message. Use no loops. For the file shown, the program prints:
+
+          ```
+          Sales: 6
+          Copies: 12
+          Takings: 155 dollars
+          Titles: [Beloved, Dune, Emma, Kindred]
+          ```
+        seed:
+          Main.java: |
+            import java.nio.file.Files;
+            import java.nio.file.Paths;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Main {
+                public static void main(String[] args) {
+
+                }
+            }
+          BookSale.java: |
+            public class BookSale {
+                private String title;
+                private int copies;
+                private int price;
+
+                public BookSale(String title, int copies, int price) {
+                    this.title = title;
+                    this.copies = copies;
+                    this.price = price;
+                }
+
+                public String getTitle() {
+                    return this.title;
+                }
+
+                public int getCopies() {
+                    return this.copies;
+                }
+
+                public int getPrice() {
+                    return this.price;
+                }
+
+                public int total() {
+                    return this.copies * this.price;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.nio.file.Files;
+            import java.nio.file.Paths;
+            import java.util.List;
+            import java.util.stream.Collectors;
+
+            public class Main {
+                public static void main(String[] args) {
+                    try {
+                        List<BookSale> sales = Files.lines(Paths.get("sales.csv"))
+                                .map(line -> line.split(","))
+                                .map(parts -> new BookSale(parts[0], Integer.valueOf(parts[1]), Integer.valueOf(parts[2])))
+                                .collect(Collectors.toList());
+                        int copies = sales.stream()
+                                .mapToInt(BookSale::getCopies)
+                                .sum();
+                        int takings = sales.stream()
+                                .mapToInt(BookSale::total)
+                                .sum();
+                        List<String> titles = sales.stream()
+                                .map(BookSale::getTitle)
+                                .distinct()
+                                .sorted()
+                                .collect(Collectors.toList());
+                        System.out.println("Sales: " + sales.size());
+                        System.out.println("Copies: " + copies);
+                        System.out.println("Takings: " + takings + " dollars");
+                        System.out.println("Titles: " + titles);
+                    } catch (Exception e) {
+                        System.out.println("Error: " + e.getMessage());
+                    }
+                }
+            }
+          BookSale.java: |
+            public class BookSale {
+                private String title;
+                private int copies;
+                private int price;
+
+                public BookSale(String title, int copies, int price) {
+                    this.title = title;
+                    this.copies = copies;
+                    this.price = price;
+                }
+
+                public String getTitle() {
+                    return this.title;
+                }
+
+                public int getCopies() {
+                    return this.copies;
+                }
+
+                public int getPrice() {
+                    return this.price;
+                }
+
+                public int total() {
+                    return this.copies * this.price;
+                }
+            }
+        hints:
+          - "Read the file as in step 8: `Files.lines(Paths.get(\"sales.csv\"))`, a `map` that splits each line, a `map` that makes a `new BookSale(...)` with the two numbers turned into ints, and `collect(Collectors.toList())`. Do it all inside the `try` block."
+          - "Then one stream per answer: the list's `size()` for the sales, `mapToInt(BookSale::getCopies).sum()`, `mapToInt(BookSale::total).sum()`, and `map(BookSale::getTitle)` with `distinct()`, `sorted()` and `collect`."
+        require:
+          - pattern: \bFiles\s*\.\s*lines\s*\(
+            message: "Read the file with `Files.lines`."
+          - pattern: \.distinct\s*\(\s*\)
+            message: "Keep each title once with `distinct()`."
+          - pattern: \.sorted\s*\(\s*\)
+            message: "Sort the titles with `sorted()`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Use streams for this one: no `for` or `while`."
+          - pattern: \bScanner\b
+            message: "Read the file with `Files.lines`, not a Scanner."
+        tests:
+          - files:
+              sales.csv: |
+                Dune,2,15
+                Emma,1,12
+                Beloved,3,14
+                Dune,1,15
+                Kindred,4,11
+                Emma,1,12
+          - files:
+              sales.csv: |
+                Walden,1,10
+            hidden: true
+          - files:
+              sales.csv: |
+                Candide,2,9
+                Ulysses,1,20
+                Candide,5,9
+                Beloved,10,14
+            hidden: true
+          - files:
+              till.csv: |
+                Dune,2,15
+            hidden: true

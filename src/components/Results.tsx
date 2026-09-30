@@ -26,11 +26,8 @@ export function DiagnosticList({ diagnostics, raw, multiFile }: { diagnostics: F
             )}
           </div>
           <code className="diag-msg">{d.message}</code>
-          {d.friendly && (
-            <p className="diag-friendly">
-              <InlineMd text={d.friendly} />
-            </p>
-          )}
+          {/* Plain text, not Markdown: notes quote code such as Comparable<Person> and "\\+". */}
+          {d.friendly && <p className="diag-friendly">{d.friendly}</p>}
         </div>
       ))}
       {more > 0 && <p className="muted small">and {more} more. Fixing the first error often makes later ones go away.</p>}

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { ArrowRight, Check, ChevronRight } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
-import { COURSE_NAMES, loadModule, moduleById, stepPath } from "../content";
+import { COURSE_NAMES, moduleById, prefetchModule, stepPath } from "../content";
 import { useStore } from "../state/store";
 import { challengeDone, moduleProgress } from "../state/derived";
 import MoocCredit from "../components/MoocCredit";
@@ -13,13 +13,11 @@ export default function ModulePage() {
   const m = moduleById.get(moduleId);
   const s = useStore((x) => x);
   useTitle(m ? `Module ${m.number}: ${m.title}` : "Module not found");
-  // Fetch the lessons early, so opening a step is instant.
-  useEffect(() => {
-    if (m) loadModule(m.id).catch(() => {});
-  }, [m]);
-  if (!m) return <NotFound />;
+  const next = m && (m.steps.find((st) => !s.steps[st.id]?.done) ?? m.steps[0]);
+  // Fetch the step the main button opens, then the module's other steps, so opening one is instant.
+  useEffect(() => (m && next ? prefetchModule(m.id, [next.slug]) : undefined), [m, next]);
+  if (!m || !next) return <NotFound />;
   const pr = moduleProgress(s, m);
-  const next = m.steps.find((st) => !s.steps[st.id]?.done) ?? m.steps[0];
   const started = m.steps.some((st) => s.steps[st.id]);
   return (
     <div className="module-page narrow">

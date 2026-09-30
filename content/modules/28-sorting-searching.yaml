@@ -1,0 +1,1638 @@
+id: sorting-searching
+summary: Two classic problems and the algorithms that solve them. Finding the smallest value and its index, swapping two elements, selection sort, Java's ready-made Arrays.sort and Collections.sort, linear search and binary search, and counting how much work each one does. MOOC section 7.2.
+steps:
+  - id: sorting-searching-smallest
+    slug: smallest-value
+    title: Algorithms and the smallest value
+    text: |
+      An **algorithm** is a precise, step-by-step way to solve a problem: precise enough that a computer can follow it without guessing, and correct for every input of the right kind, not only for the example you tried first. You've written many algorithms already: adding up the numbers of a list, finding the largest value of an array (module 15), counting the words on a line.
+
+      This module is about two problems that come up in almost every kind of program. **Sorting** puts values in order: a contact list by name, prices from the cheapest up. **Searching** finds where a value is. Both have several algorithms, and some do far less work than others, so the module also counts how much work each one does.
+
+      It starts with a small algorithm that sorting builds on.
+
+      ### The smallest value, and where it is
+
+      Here are a runner's lap times, in seconds. Which lap was the fastest?
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] laps = {74, 71, 69, 73, 70};
+              int best = fastestLap(laps);
+              System.out.println("Fastest lap: " + laps[best] + " seconds, lap " + (best + 1));
+          }
+
+          public static int fastestLap(int[] laps) {
+              int fastest = 0;
+              for (int i = 1; i < laps.length; i++) {
+                  if (laps[i] < laps[fastest]) {
+                      fastest = i;
+                  }
+              }
+              return fastest;
+          }
+      }
+      ```
+
+      ```output
+      Fastest lap: 69 seconds, lap 3
+      ```
+
+      - `fastest` is the index of the smallest value found so far. It starts at 0, the first element, and the loop compares every later element with `laps[fastest]`.
+      - Module 15 kept the value and its index in two variables. One is enough: the index gives the value too, as `laps[fastest]`.
+      - The method returns the index, not the value. With the index, the caller can get the value (`laps[best]`), but with only the value, it couldn't tell where it was.
+      - With `<`, a later lap that's only as fast doesn't take the place of the earlier one, so on a tie the first one wins.
+
+      ### From a given index on
+
+      Sometimes only part of the array counts. Say the first three laps were a warm-up: which lap was the fastest from index 3 on? The method takes the index to start from, and both the fastest so far and the loop start there:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] laps = {74, 71, 69, 73, 70};
+              System.out.println(fastestFrom(laps, 0));
+              System.out.println(fastestFrom(laps, 3));
+              System.out.println(fastestFrom(laps, 4));
+          }
+
+          public static int fastestFrom(int[] laps, int start) {
+              int fastest = start;
+              for (int i = start + 1; i < laps.length; i++) {
+                  if (laps[i] < laps[fastest]) {
+                      fastest = i;
+                  }
+              }
+              return fastest;
+          }
+      }
+      ```
+
+      ```output
+      2
+      4
+      4
+      ```
+
+      - From index 3 on, the laps are 73 and 70. The smaller one is at index 4, and that's what the method returns: the index still counts from the start of the array, not from `start`.
+      - From index 4, the last one, only one lap is left, so it's the fastest. The loop doesn't run at all.
+      - `fastestFrom(laps, 0)` does the same work as `fastestLap(laps)`.
+
+      Keep this method in mind: in step 3, a sorting algorithm calls it once for each index of the array.
+
+      **Your turn:** a greenhouse logs its lowest temperature every night. Fill in the blanks of `coldestFrom(int[] temps, int start)`, which returns the index of the lowest temperature from index `start` on. The check runs:
+
+      ```java fragment
+      int[] temps = {3, -2, 5, -4, 1};
+      System.out.println(coldestFrom(temps, 0));
+      System.out.println(coldestFrom(temps, 4));
+      ```
+
+      and expects:
+
+      ```
+      3
+      4
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              int[] temps = {3, -2, 5, -4, 1};
+              System.out.println(coldestFrom(temps, 0));
+              System.out.println(coldestFrom(temps, 4));
+          }
+
+          public static int coldestFrom(int[] temps, int start) {
+              int coldest = [[start]];
+              for (int i = [[start + 1‖start]]; i < temps.length; i++) {
+                  if (temps[i] < temps[[[coldest]]]) {
+                      coldest = i;
+                  }
+              }
+              return coldest;
+          }
+      }
+    hints:
+      - "It works like `fastestFrom` above. The coldest so far starts at the index where the search starts, not at 0."
+      - "The loop starts right after `start`, at `start + 1`, and each temperature is compared with the coldest one so far, `temps[coldest]`."
+    tests:
+      - call: |
+          int[] temps = {3, -2, 5, -4, 1};
+          System.out.println(coldestFrom(temps, 0));
+          System.out.println(coldestFrom(temps, 4));
+      - call: |
+          int[] temps = {-8, 2, 0, 4, 1};
+          System.out.println(coldestFrom(temps, 1));
+          System.out.println(coldestFrom(temps, 3));
+          System.out.println(coldestFrom(temps, 2));
+        hidden: true
+      - call: |
+          int[] temps = {6, 6, 6};
+          System.out.println(coldestFrom(temps, 0));
+          System.out.println(coldestFrom(temps, 1));
+          int[] one = {12};
+          System.out.println(coldestFrom(one, 0));
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Two of the prices are equal, and the last line prints a price, not an index.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] prices = {8, 3, 9, 3, 5};
+                  System.out.println(cheapestFrom(prices, 0));
+                  System.out.println(cheapestFrom(prices, 2));
+                  System.out.println(prices[cheapestFrom(prices, 4)]);
+              }
+
+              public static int cheapestFrom(int[] prices, int start) {
+                  int cheapest = start;
+                  for (int i = start + 1; i < prices.length; i++) {
+                      if (prices[i] < prices[cheapest]) {
+                          cheapest = i;
+                      }
+                  }
+                  return cheapest;
+              }
+          }
+        hints:
+          - "From index 0, the lowest price is 3. It's at index 1 and again at index 3, and with `<` the second 3 doesn't replace the first."
+          - "From index 2 on, the prices are 9, 3 and 5, and the 3 is at index 3 of the whole array. From index 4, only one price is left, and the last line prints the price at that index."
+      - task: |
+          A board-game club keeps the winning score of each game night in an array. Write the method `highestFrom(int[] scores, int start)`. It returns the index of the highest score from index `start` on. When two scores are equally high, it returns the index of the first one. The check runs:
+
+          ```java fragment
+          int[] scores = {42, 57, 38, 57, 49};
+          System.out.println(highestFrom(scores, 0));
+          System.out.println(highestFrom(scores, 2));
+          ```
+
+          and expects:
+
+          ```
+          1
+          3
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] scores = {42, 57, 38, 57, 49};
+                  System.out.println(highestFrom(scores, 0));
+                  System.out.println(highestFrom(scores, 2));
+              }
+
+              // Write the method highestFrom here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] scores = {42, 57, 38, 57, 49};
+                  System.out.println(highestFrom(scores, 0));
+                  System.out.println(highestFrom(scores, 2));
+              }
+
+              public static int highestFrom(int[] scores, int start) {
+                  int highest = start;
+                  for (int i = start + 1; i < scores.length; i++) {
+                      if (scores[i] > scores[highest]) {
+                          highest = i;
+                      }
+                  }
+                  return highest;
+              }
+          }
+        hints:
+          - "The method starts `public static int highestFrom(int[] scores, int start) {`. Keep the index of the highest score so far, starting from `start`."
+          - "Compare with `>`, not `>=`: then a later score that only ties doesn't take the place of the first one."
+        require:
+          - pattern: \bpublic\s+static\s+int\s+highestFrom\s*\(\s*int\s*\[\s*\]\s*\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static int highestFrom(int[] scores, int start)`."
+        tests:
+          - call: |
+              int[] scores = {42, 57, 38, 57, 49};
+              System.out.println(highestFrom(scores, 0));
+              System.out.println(highestFrom(scores, 2));
+          - call: |
+              int[] scores = {90, 10, 20, 15};
+              System.out.println(highestFrom(scores, 1));
+              System.out.println(highestFrom(scores, 3));
+              System.out.println(highestFrom(scores, 0));
+            hidden: true
+          - call: |
+              int[] scores = {-5, -2, -9, -2};
+              System.out.println(highestFrom(scores, 0));
+              System.out.println(highestFrom(scores, 2));
+              int[] one = {7};
+              System.out.println(highestFrom(one, 0));
+            hidden: true
+
+  - id: sorting-searching-swap
+    slug: swapping
+    title: Swapping, and sorting by hand
+    text: |
+      Sorting moves values around in an array, and its basic move is the **swap**: two elements trade places. It takes a little care. This tries to swap the first two heights the obvious way:
+
+      ```java main
+      int[] heights = {152, 140, 171};
+      heights[0] = heights[1];
+      heights[1] = heights[0];
+      System.out.println(Arrays.toString(heights));
+      ```
+
+      ```output
+      [140, 140, 171]
+      ```
+
+      The first line copies 140 over 152, so 152 is gone before the second line can use it. `heights[1] = heights[0]` then copies 140 back to where it already was. It's like swapping the drinks in two full glasses: you need a third, empty glass to hold one drink while you pour the other.
+
+      In code, the third glass is a variable:
+
+      ```java main
+      int[] heights = {152, 140, 171};
+      int temp = heights[0];
+      heights[0] = heights[1];
+      heights[1] = temp;
+      System.out.println(Arrays.toString(heights));
+      ```
+
+      ```output
+      [140, 152, 171]
+      ```
+
+      `temp` keeps a copy of 152 while 140 moves to index 0, and then 152 goes to index 1. (`Arrays.toString` gives an array's values in square brackets, as in module 15.)
+
+      As a method, a swap takes the array and the two indexes. A method that gets an array can change the caller's array (module 15), so the swap shows in `main`:
+
+      ```java run
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] heights = {152, 140, 171, 131};
+              switchPlaces(heights, 0, 3);
+              System.out.println(Arrays.toString(heights));
+          }
+
+          public static void switchPlaces(int[] values, int a, int b) {
+              int temp = values[a];
+              values[a] = values[b];
+              values[b] = temp;
+          }
+      }
+      ```
+
+      ```output
+      [131, 140, 171, 152]
+      ```
+
+      ### Sorting a line of people by hand
+
+      Picture a class lining up for a photo, shortest first. One simple way to do it: find the shortest person, and have them swap places with whoever stands first. Then find the shortest of the rest, and swap them with whoever stands second. Keep going until you reach the end of the line. This is **selection sort**: each round *selects* the smallest of the values that aren't in place yet.
+
+      Here it is on five heights, in centimeters. Each round finds the smallest value from the round's index on, and swaps it to that index:
+
+      | Round | Smallest from the index on | Swap | The array after the round |
+      | --- | --- | --- | --- |
+      | start | | | `[152, 140, 171, 131, 160]` |
+      | index 0 | 131, at index 3 | 0 and 3 | `[131, 140, 171, 152, 160]` |
+      | index 1 | 140, at index 1 | 1 and 1 | `[131, 140, 171, 152, 160]` |
+      | index 2 | 152, at index 3 | 2 and 3 | `[131, 140, 152, 171, 160]` |
+      | index 3 | 160, at index 4 | 3 and 4 | `[131, 140, 152, 160, 171]` |
+
+      - After each round, one more value is in its final place, and the front part of the array is sorted.
+      - In the round of index 1, 140 is already where it belongs. Swapping an element with itself changes nothing, so this round needs no special case.
+      - Five values take four rounds. Once all the others are in place, the last one, 171, has nowhere else to go.
+
+      Each round is two things you've already seen: step 1's search for the smallest value from an index on, and a swap. The program of this task writes the rounds out by hand. Its `positionOfLowest(values, start)` is step 1's `fastestFrom` with names that fit any numbers: it returns the index of the smallest value from `start` on.
+
+      **Your turn:** what does this program print? Do the rounds on paper, the way the table does.
+    predict: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] heights = {158, 162, 149, 171, 144};
+              switchPlaces(heights, 0, positionOfLowest(heights, 0));
+              System.out.println(Arrays.toString(heights));
+              switchPlaces(heights, 1, positionOfLowest(heights, 1));
+              System.out.println(Arrays.toString(heights));
+              switchPlaces(heights, 2, positionOfLowest(heights, 2));
+              System.out.println(Arrays.toString(heights));
+          }
+
+          public static int positionOfLowest(int[] values, int start) {
+              int lowest = start;
+              for (int i = start + 1; i < values.length; i++) {
+                  if (values[i] < values[lowest]) {
+                      lowest = i;
+                  }
+              }
+              return lowest;
+          }
+
+          public static void switchPlaces(int[] values, int a, int b) {
+              int temp = values[a];
+              values[a] = values[b];
+              values[b] = temp;
+          }
+      }
+    hints:
+      - "The first round finds the smallest of all, 144 at index 4, and swaps indexes 0 and 4. The 158 that stood first moves to the end."
+      - "Each later round looks only from its own index on. From index 1 on, the smallest is 149. From index 2 on, it's the 158 that moved to the end in the first round."
+    more:
+      - task: |
+          A relay team's running order is a list of names. Write the method `tradePlaces(ArrayList<String> order, int a, int b)`, which swaps the runners at indexes `a` and `b`. A list has no `[ ]`: read an element with `get`, and put a new one in its place with `set(index, value)` (module 14). The check runs:
+
+          ```java fragment
+          ArrayList<String> order = new ArrayList<>();
+          order.add("Ada");
+          order.add("Bo");
+          order.add("Cy");
+          order.add("Dee");
+          tradePlaces(order, 1, 2);
+          System.out.println(order);
+          ```
+
+          and expects:
+
+          ```
+          [Ada, Cy, Bo, Dee]
+          ```
+        seed: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> order = new ArrayList<>();
+                  order.add("Ada");
+                  order.add("Bo");
+                  order.add("Cy");
+                  order.add("Dee");
+                  tradePlaces(order, 1, 2);
+                  System.out.println(order);
+              }
+
+              // Write the method tradePlaces here.
+          }
+        solution: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> order = new ArrayList<>();
+                  order.add("Ada");
+                  order.add("Bo");
+                  order.add("Cy");
+                  order.add("Dee");
+                  tradePlaces(order, 1, 2);
+                  System.out.println(order);
+              }
+
+              public static void tradePlaces(ArrayList<String> order, int a, int b) {
+                  String temp = order.get(a);
+                  order.set(a, order.get(b));
+                  order.set(b, temp);
+              }
+          }
+        hints:
+          - "It's the same three moves as `switchPlaces`, with list methods. The third glass is a String: `String temp = order.get(a);`."
+          - "`order.set(a, order.get(b));` puts runner `b` at index `a`, and `order.set(b, temp);` puts the runner you kept in `temp` at index `b`."
+        require:
+          - pattern: \bpublic\s+static\s+void\s+tradePlaces\s*\(\s*ArrayList<String>\s+\w+\s*,\s*int\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static void tradePlaces(ArrayList<String> order, int a, int b)`."
+          - pattern: \.set\s*\(
+            min: 2
+            message: "Put the two runners in their new places with `set`."
+        forbid:
+          - pattern: \bCollections\b
+            message: "Swap the runners yourself, with `get` and `set`."
+        tests:
+          - call: |
+              ArrayList<String> order = new ArrayList<>();
+              order.add("Ada");
+              order.add("Bo");
+              order.add("Cy");
+              order.add("Dee");
+              tradePlaces(order, 1, 2);
+              System.out.println(order);
+          - call: |
+              ArrayList<String> order = new ArrayList<>();
+              order.add("Kim");
+              order.add("Lou");
+              order.add("Max");
+              tradePlaces(order, 0, 2);
+              System.out.println(order);
+              tradePlaces(order, 2, 1);
+              System.out.println(order);
+              tradePlaces(order, 1, 1);
+              System.out.println(order + " " + order.size());
+            hidden: true
+          - call: |
+              ArrayList<String> order = new ArrayList<>();
+              order.add("Nia");
+              order.add("Oz");
+              tradePlaces(order, 1, 0);
+              System.out.println(order);
+            hidden: true
+      - task: |
+          A hiking trail's checkpoints are in an array, in the order of the walk out. Write the method `reverseInPlace(String[] checkpoints)`, which turns the same array around for the walk back: the last checkpoint becomes the first, and so on. Don't make a new array. Swap elements instead: the first with the last, the second with the second to last, and so on, up to the middle. The check runs:
+
+          ```java fragment
+          String[] checkpoints = {"Parking", "Lake", "Bridge", "Summit"};
+          reverseInPlace(checkpoints);
+          System.out.println(Arrays.toString(checkpoints));
+          ```
+
+          and expects:
+
+          ```
+          [Summit, Bridge, Lake, Parking]
+          ```
+        seed: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  String[] checkpoints = {"Parking", "Lake", "Bridge", "Summit"};
+                  reverseInPlace(checkpoints);
+                  System.out.println(Arrays.toString(checkpoints));
+              }
+
+              // Write the method reverseInPlace here.
+          }
+        solution: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  String[] checkpoints = {"Parking", "Lake", "Bridge", "Summit"};
+                  reverseInPlace(checkpoints);
+                  System.out.println(Arrays.toString(checkpoints));
+              }
+
+              public static void reverseInPlace(String[] checkpoints) {
+                  for (int i = 0; i < checkpoints.length / 2; i++) {
+                      int other = checkpoints.length - 1 - i;
+                      String temp = checkpoints[i];
+                      checkpoints[i] = checkpoints[other];
+                      checkpoints[other] = temp;
+                  }
+              }
+          }
+        hints:
+          - "The element at index `i` trades places with the one at `checkpoints.length - 1 - i`. Swap them with a `temp` variable, which here is a String."
+          - "Stop in the middle: `for (int i = 0; i < checkpoints.length / 2; i++)`. A loop over the whole array would swap every pair twice, and put everything back where it was. With an odd count, the middle element stays where it is."
+        require:
+          - pattern: \bpublic\s+static\s+void\s+reverseInPlace\s*\(\s*String\s*\[\s*\]\s*\w+\s*\)
+            message: "Write the method as `public static void reverseInPlace(String[] checkpoints)`."
+        forbid:
+          - pattern: \bnew\s+String\s*\[
+            message: "Turn the array around in place, by swapping its elements, without making a new array."
+          - pattern: \bArrayList\b|\bCollections\b
+            message: "Swap the elements of the array itself, without a list."
+        tests:
+          - call: |
+              String[] checkpoints = {"Parking", "Lake", "Bridge", "Summit"};
+              reverseInPlace(checkpoints);
+              System.out.println(Arrays.toString(checkpoints));
+          - call: |
+              String[] checkpoints = {"Gate", "Mill", "Ridge", "Cave", "Peak"};
+              reverseInPlace(checkpoints);
+              System.out.println(Arrays.toString(checkpoints));
+              reverseInPlace(checkpoints);
+              System.out.println(Arrays.toString(checkpoints));
+            hidden: true
+          - call: |
+              String[] two = {"Start", "End"};
+              reverseInPlace(two);
+              System.out.println(Arrays.toString(two));
+              String[] one = {"Hut"};
+              reverseInPlace(one);
+              System.out.println(Arrays.toString(one));
+              String[] none = new String[0];
+              reverseInPlace(none);
+              System.out.println(Arrays.toString(none));
+            hidden: true
+
+  - id: sorting-searching-selection-sort
+    slug: selection-sort
+    title: Selection sort in code
+    text: |
+      Step 2 wrote the rounds of selection sort out by hand, one line per round. A loop does the same for an array of any length: the round's index goes up from 0, and each round finds the smallest value from that index on, and swaps it there.
+
+      ```java run
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] heights = {152, 140, 171, 131, 160};
+              selectionSort(heights);
+              System.out.println(Arrays.toString(heights));
+          }
+
+          public static void selectionSort(int[] values) {
+              for (int i = 0; i < values.length - 1; i++) {
+                  int lowest = positionOfLowest(values, i);
+                  switchPlaces(values, i, lowest);
+              }
+          }
+
+          public static int positionOfLowest(int[] values, int start) {
+              int lowest = start;
+              for (int i = start + 1; i < values.length; i++) {
+                  if (values[i] < values[lowest]) {
+                      lowest = i;
+                  }
+              }
+              return lowest;
+          }
+
+          public static void switchPlaces(int[] values, int a, int b) {
+              int temp = values[a];
+              values[a] = values[b];
+              values[b] = temp;
+          }
+      }
+      ```
+
+      ```output
+      [131, 140, 152, 160, 171]
+      ```
+
+      - The loop variable `i` is the index that the round fills. Everything before it is already sorted, and holds the smallest values of the array.
+      - The loop stops before `values.length - 1`, so five values take four rounds: the last value is in place once all the others are.
+      - `selectionSort` returns nothing. It sorts the array it's given, in place, and `main` sees the change because both refer to the same array.
+      - Short methods with one job each keep the algorithm easy to read: `selectionSort` reads almost like the description in step 2.
+
+      ### All in one method
+
+      Selection sort is often written as one method, with the search for the smallest value as a loop inside the loop of the rounds. The inner loop needs a variable of its own, usually `j`:
+
+      ```java fragment
+      public static void selectionSort(int[] values) {
+          for (int i = 0; i < values.length - 1; i++) {
+              int lowest = i;
+              for (int j = i + 1; j < values.length; j++) {
+                  if (values[j] < values[lowest]) {
+                      lowest = j;
+                  }
+              }
+              int temp = values[i];
+              values[i] = values[lowest];
+              values[lowest] = temp;
+          }
+      }
+      ```
+
+      It does the same work, line by line: the inner loop is `positionOfLowest` with `i` as its start, and the last three lines are the swap.
+
+      ### How much work is it?
+
+      Count the comparisons `values[j] < values[lowest]`. With 5 values, the first round compares each of the other 4 values with the smallest so far, the next round makes 3 comparisons, then 2, then 1: 10 in all. With `n` values, it's `(n - 1) + (n - 2) + ... + 1` comparisons, which adds up to `n * (n - 1) / 2`:
+
+      | Values | Comparisons |
+      | --- | --- |
+      | 5 | 10 |
+      | 1,000 | 499,500 |
+      | 2,000 | 1,999,000 |
+      | 1,000,000 | 499,999,500,000 |
+
+      Twice as many values take about four times as many comparisons. And the order the values start in doesn't help: even an array that's already sorted gets every comparison. Selection sort is fine for a few thousand values, but slow for millions. Much faster sorting algorithms exist, and Java has them ready for you (next step).
+
+      **Your turn:** a depot weighs its parcels, in kilograms. Fill in the blanks of `sortWeights`, so that it sorts the array from the lightest parcel to the heaviest with selection sort. `positionOfLowest` and `switchPlaces` are the methods from above. The check runs:
+
+      ```java fragment
+      int[] weights = {12, 4, 9, 1, 7};
+      sortWeights(weights);
+      System.out.println(Arrays.toString(weights));
+      ```
+
+      and expects:
+
+      ```
+      [1, 4, 7, 9, 12]
+      ```
+    fill: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] weights = {12, 4, 9, 1, 7};
+              sortWeights(weights);
+              System.out.println(Arrays.toString(weights));
+          }
+
+          public static void sortWeights(int[] weights) {
+              for (int i = 0; i < [[weights.length - 1‖weights.length]]; i++) {
+                  int lightest = positionOfLowest(weights, [[i]]);
+                  switchPlaces(weights, i, [[lightest]]);
+              }
+          }
+
+          public static int positionOfLowest(int[] values, int start) {
+              int lowest = start;
+              for (int i = start + 1; i < values.length; i++) {
+                  if (values[i] < values[lowest]) {
+                      lowest = i;
+                  }
+              }
+              return lowest;
+          }
+
+          public static void switchPlaces(int[] values, int a, int b) {
+              int temp = values[a];
+              values[a] = values[b];
+              values[b] = temp;
+          }
+      }
+    hints:
+      - "There's a round for every index but the last, and each round looks for the lightest parcel from the round's own index on."
+      - "`positionOfLowest(weights, i)` gives the index of the lightest parcel from index `i` on, and the swap moves that parcel to index `i`: `switchPlaces(weights, i, lightest)`."
+    tests:
+      - call: |
+          int[] weights = {12, 4, 9, 1, 7};
+          sortWeights(weights);
+          System.out.println(Arrays.toString(weights));
+      - call: |
+          int[] weights = {5, 5, 3, 8, 3, 1};
+          sortWeights(weights);
+          System.out.println(Arrays.toString(weights));
+          int[] reversed = {9, 7, 5, 3, 1};
+          sortWeights(reversed);
+          System.out.println(Arrays.toString(reversed));
+        hidden: true
+      - call: |
+          int[] two = {20, 2};
+          sortWeights(two);
+          System.out.println(Arrays.toString(two));
+          int[] sorted = {1, 2, 3, 4};
+          sortWeights(sorted);
+          System.out.println(Arrays.toString(sorted));
+        hidden: true
+    more:
+      - task: |
+          Here is the one-method version, with a print at the end of each round. What does it print?
+        predict: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[] numbers = {5, 1, 4, 2};
+                  for (int i = 0; i < numbers.length - 1; i++) {
+                      int lowest = i;
+                      for (int j = i + 1; j < numbers.length; j++) {
+                          if (numbers[j] < numbers[lowest]) {
+                              lowest = j;
+                          }
+                      }
+                      int temp = numbers[i];
+                      numbers[i] = numbers[lowest];
+                      numbers[lowest] = temp;
+                      System.out.println(Arrays.toString(numbers));
+                  }
+              }
+          }
+        hints:
+          - "The first round finds the smallest value, 1, at index 1, and swaps it with the 5 at index 0. The inner loop of the next round starts from index 2, and so on."
+          - "The array can be sorted before the last round, but the loop doesn't check for that. There are always `numbers.length - 1` rounds, and each one prints."
+      - task: |
+          The board-game club from step 1 wants its scores from the highest down. Write the method `sortHighFirst(int[] scores)`, which sorts the array it's given from the highest score to the lowest with selection sort: each round finds the highest score from the round's index on, and swaps it there. Write it as one method or with helper methods, as you like (step 1's `highestFrom` would fit right in). The check runs:
+
+          ```java fragment
+          int[] scores = {42, 57, 38, 57, 49};
+          sortHighFirst(scores);
+          System.out.println(Arrays.toString(scores));
+          ```
+
+          and expects:
+
+          ```
+          [57, 57, 49, 42, 38]
+          ```
+        seed: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[] scores = {42, 57, 38, 57, 49};
+                  sortHighFirst(scores);
+                  System.out.println(Arrays.toString(scores));
+              }
+
+              // Write the method sortHighFirst here.
+          }
+        solution: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[] scores = {42, 57, 38, 57, 49};
+                  sortHighFirst(scores);
+                  System.out.println(Arrays.toString(scores));
+              }
+
+              public static void sortHighFirst(int[] scores) {
+                  for (int i = 0; i < scores.length - 1; i++) {
+                      int highest = i;
+                      for (int j = i + 1; j < scores.length; j++) {
+                          if (scores[j] > scores[highest]) {
+                              highest = j;
+                          }
+                      }
+                      int temp = scores[i];
+                      scores[i] = scores[highest];
+                      scores[highest] = temp;
+                  }
+              }
+          }
+        hints:
+          - "It's the selection sort of this step with one change: each round looks for the *highest* score from index `i` on, so the comparison is `scores[j] > scores[highest]`."
+          - "After the inner loop, swap the scores at `i` and at `highest`, with a `temp` variable. The outer loop runs `for (int i = 0; i < scores.length - 1; i++)`."
+        require:
+          - pattern: \bpublic\s+static\s+void\s+sortHighFirst\s*\(\s*int\s*\[\s*\]\s*\w+\s*\)
+            message: "Write the method as `public static void sortHighFirst(int[] scores)`."
+        forbid:
+          - pattern: \bArrays\s*\.\s*sort\b|\bCollections\b
+            message: "Sort the scores with your own selection sort, not with Java's ready-made sorting."
+        tests:
+          - call: |
+              int[] scores = {42, 57, 38, 57, 49};
+              sortHighFirst(scores);
+              System.out.println(Arrays.toString(scores));
+          - call: |
+              int[] scores = {-3, 0, -7, 5};
+              sortHighFirst(scores);
+              System.out.println(Arrays.toString(scores));
+              int[] rising = {1, 2, 3, 4, 5, 6};
+              sortHighFirst(rising);
+              System.out.println(Arrays.toString(rising));
+            hidden: true
+          - call: |
+              int[] one = {9};
+              sortHighFirst(one);
+              System.out.println(Arrays.toString(one));
+              int[] none = new int[0];
+              sortHighFirst(none);
+              System.out.println(Arrays.toString(none));
+              int[] same = {4, 8, 4, 8, 4};
+              sortHighFirst(same);
+              System.out.println(Arrays.toString(same));
+            hidden: true
+
+  - id: sorting-searching-ready-made
+    slug: ready-made-sorting
+    title: Java's own sorting methods
+    text: |
+      Writing selection sort shows what sorting takes, but in real programs you rarely write your own. Java has sorting methods ready, and they use algorithms that are much faster than selection sort on large arrays.
+
+      `Arrays.sort(array)` sorts an array, and `Collections.sort(list)` sorts a list. Both classes are in `java.util`, so each needs an import line, like `Scanner`:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Arrays;
+      import java.util.Collections;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] prices = {250, 120, 310, 90};
+              Arrays.sort(prices);
+              System.out.println(Arrays.toString(prices));
+
+              ArrayList<String> cities = new ArrayList<>();
+              cities.add("Oslo");
+              cities.add("Lima");
+              cities.add("Cairo");
+              Collections.sort(cities);
+              System.out.println(cities);
+          }
+      }
+      ```
+
+      ```output
+      [90, 120, 250, 310]
+      [Cairo, Lima, Oslo]
+      ```
+
+      - Numbers sort from the smallest to the largest, and Strings in alphabetical order (with a few surprises, below).
+      - Neither method returns anything. They sort the array or the list itself, in place, as `selectionSort` did. The old order is gone, so if the program still needs it, it should keep a copy of the values somewhere else first.
+      - `Arrays.sort` works on arrays of numbers and of Strings, such as `int[]`, `double[]` and `String[]`. `Collections.sort` works on lists of them, such as `ArrayList<Integer>` and `ArrayList<String>`.
+
+      ### The order of Strings
+
+      Strings are compared character by character, by each character's code. In those codes, digits come before capital letters, and capital letters come before small ones. So the "alphabetical" order holds some surprises:
+
+      ```java main
+      ArrayList<String> words = new ArrayList<>();
+      words.add("banana");
+      words.add("Cherry");
+      words.add("apple");
+      words.add("Apple");
+      Collections.sort(words);
+      System.out.println(words);
+
+      ArrayList<String> labels = new ArrayList<>();
+      labels.add("9");
+      labels.add("10");
+      labels.add("100");
+      labels.add("25");
+      Collections.sort(labels);
+      System.out.println(labels);
+      ```
+
+      ```output
+      [Apple, Cherry, apple, banana]
+      [10, 100, 25, 9]
+      ```
+
+      - Every word that starts with a capital letter comes before every word that starts with a small one, so `Cherry` is before `apple`.
+      - The labels are Strings, not numbers. `"10"` comes before `"9"` because its first character, `1`, comes before `9`, just as `"ba"` comes before `"c"`. When one String is the start of another, the shorter one comes first, so `"10"` is before `"100"`.
+      - Numbers kept as `int` or `Integer` sort by their value. To sort numbers, store them as numbers.
+
+      ### Your own classes
+
+      A list of objects of your own class, such as an `ArrayList<Album>`, can't be sorted this way yet. Java doesn't know whether albums go by title, by year or by something else, so `Collections.sort` on such a list doesn't compile. Part 10 of the course shows how a class tells Java its order, with `Comparable`.
+
+      **Your turn:** a museum counts its visitors every day. Fill in the blanks of `printRange`, which sorts the array of daily counts, prints it, and then prints the fewest and the most visitors in a day. After sorting, where in the array are those two? The check runs:
+
+      ```java fragment
+      int[] visitors = {230, 41, 118, 96, 187};
+      printRange(visitors);
+      ```
+
+      and expects:
+
+      ```
+      [41, 96, 118, 187, 230]
+      Fewest: 41, most: 230
+      ```
+    fill: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] visitors = {230, 41, 118, 96, 187};
+              printRange(visitors);
+          }
+
+          public static void printRange(int[] visitors) {
+              Arrays.[[sort]](visitors);
+              System.out.println(Arrays.toString(visitors));
+              System.out.println("Fewest: " + visitors[[[0]]] + ", most: " + visitors[[[visitors.length - 1]]]);
+          }
+      }
+    hints:
+      - "`Arrays.sort(visitors)` sorts the array in place, from the smallest count to the largest."
+      - "After sorting, the fewest visitors are at the first index, 0, and the most at the last one, `visitors.length - 1`."
+    tests:
+      - call: |
+          int[] visitors = {230, 41, 118, 96, 187};
+          printRange(visitors);
+      - call: |
+          int[] visitors = {300, 12, 45, 12, 290, 1000};
+          printRange(visitors);
+          System.out.println(visitors[1]);
+        hidden: true
+      - call: |
+          int[] one = {77};
+          printRange(one);
+          int[] two = {9, 8};
+          printRange(two);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? It sorts the same three numbers twice, once as ints and once as Strings, and then a list of words.
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Arrays;
+          import java.util.Collections;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[] sizes = {10, 9, 100};
+                  Arrays.sort(sizes);
+                  System.out.println(Arrays.toString(sizes));
+
+                  String[] codes = {"10", "9", "100"};
+                  Arrays.sort(codes);
+                  System.out.println(Arrays.toString(codes));
+
+                  ArrayList<String> fruit = new ArrayList<>();
+                  fruit.add("pear");
+                  fruit.add("Plum");
+                  fruit.add("apple");
+                  fruit.add("Fig");
+                  Collections.sort(fruit);
+                  System.out.println(fruit);
+              }
+          }
+        hints:
+          - "The ints sort by their value. The Strings sort character by character, from the first one, and the character `1` comes before `9`. `\"10\"` is the start of `\"100\"`, so it comes first."
+          - "Capital letters come before small ones, so the words that start with a capital come first, in alphabetical order among themselves, and then the others."
+      - task: |
+          A pizza place logs how many minutes each delivery took. Read the times, one per line, until an empty line, into an `ArrayList<Integer>`. Sort the list with `Collections.sort` and print it. Then print the median: the middle time of the sorted list, with as many times below it as above it. The input always has an odd number of times, so the median is at index `size() / 2`. For the input shown, the program prints:
+
+          ```
+          [19, 22, 28, 34, 41]
+          Median: 28 minutes
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> times = new ArrayList<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayList<Integer> times = new ArrayList<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.isEmpty()) {
+                          break;
+                      }
+                      times.add(Integer.valueOf(line));
+                  }
+                  Collections.sort(times);
+                  System.out.println(times);
+                  System.out.println("Median: " + times.get(times.size() / 2) + " minutes");
+              }
+          }
+        hints:
+          - "Read in a `while (true)` loop that stops with `break` at the empty line, and add each time with `times.add(Integer.valueOf(line));`."
+          - "After the loop, `Collections.sort(times);` sorts the list in place. With 5 times, `times.size() / 2` is 2, the index of the middle one: `times.get(times.size() / 2)`."
+        require:
+          - pattern: \bCollections\s*\.\s*sort\s*\(
+            message: "Sort the list with `Collections.sort`."
+        tests:
+          - stdin: |+
+              34
+              22
+              41
+              28
+              19
+
+          - stdin: |+
+              45
+
+            hidden: true
+          - stdin: |+
+              30
+              12
+              30
+              55
+              18
+              12
+              40
+
+            hidden: true
+          - stdin: |+
+              9
+              60
+              25
+
+            hidden: true
+
+  - id: sorting-searching-linear-search
+    slug: linear-search
+    title: Linear search
+    text: |
+      The second problem of this module is searching: where in the array is a given value, if it's there at all? The simplest algorithm looks at the elements one at a time, from the first to the last, and stops at the first match. It's called **linear search**, since it goes through the elements in a line. You've written it before (module 15). Here it is as a method that returns the index of the value, or -1 when the value isn't there. -1 is never an index, so the caller can tell the two answers apart.
+
+      A raffle keeps the numbers of the tickets it has sold in an array:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] tickets = {512, 87, 340, 19, 777, 203};
+              System.out.println(positionOf(tickets, 340));
+              System.out.println(positionOf(tickets, 5));
+          }
+
+          public static int positionOf(int[] tickets, int wanted) {
+              for (int i = 0; i < tickets.length; i++) {
+                  if (tickets[i] == wanted) {
+                      return i;
+                  }
+              }
+              return -1;
+          }
+      }
+      ```
+
+      ```output
+      2
+      -1
+      ```
+
+      - `return i;` ends the method at the first match, loop and all. There's no need to look further.
+      - `return -1;` comes *after* the loop. Only when every element has been looked at, and none matched, is it clear that the value isn't there.
+      - The array doesn't need to be in any order. Linear search works on any array or list.
+
+      ### How much work is it?
+
+      Count the values the search looks at. Each look is one comparison, `tickets[i] == wanted`. Finding 340 at index 2 took 3 looks, at indexes 0, 1 and 2. A value at index `i` takes `i + 1` looks. A value that isn't there takes a look at every element, since the search can't stop early.
+
+      | Array size | Values looked at, at most |
+      | --- | --- |
+      | 6 | 6 |
+      | 1,000 | 1,000 |
+      | 1,000,000 | 1,000,000 |
+
+      The work grows in step with the array: twice the values, twice the looks at worst. A value that is there is found, on average, about halfway through. That's fine for most programs, but one that searches a million values over and over has a lot to do. The next step shows how sorted data makes searching much faster.
+
+      The list methods `indexOf` and `contains` (module 14) do a linear search for you: they go through the list from the start, and compare each element with the value using `equals`.
+
+      ### Searching a list of objects
+
+      Often the values are objects, and the search compares one of their instance variables. Here a music library finds an album by its title:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Album> albums = new ArrayList<>();
+              albums.add(new Album("Kind of Blue", 1959));
+              albums.add(new Album("Abbey Road", 1969));
+              albums.add(new Album("Rumours", 1977));
+
+              int index = indexOfTitle(albums, "Abbey Road");
+              System.out.println(index + ": " + albums.get(index));
+              System.out.println(indexOfTitle(albums, "Thriller"));
+          }
+
+          public static int indexOfTitle(ArrayList<Album> albums, String title) {
+              for (int i = 0; i < albums.size(); i++) {
+                  if (albums.get(i).getTitle().equals(title)) {
+                      return i;
+                  }
+              }
+              return -1;
+          }
+      }
+      // ==== Album.java ====
+      public class Album {
+          private String title;
+          private int year;
+
+          public Album(String title, int year) {
+              this.title = title;
+              this.year = year;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int getYear() {
+              return this.year;
+          }
+
+          public String toString() {
+              return this.title + " (" + this.year + ")";
+          }
+      }
+      ```
+
+      ```output
+      1: Abbey Road (1969)
+      -1
+      ```
+
+      - The loop goes over the indexes, so that it has an index to return. `albums.get(i)` is the album at index `i`, and `getTitle()` gives its title.
+      - Titles are Strings, so they're compared with `equals`, not `==` (module 16).
+      - `albums.indexOf` can't do this search: it would need an Album object equal to the one on the list, and all the program has is a title.
+
+      **Your turn:** in a small harbor, each berth holds one boat, and the array `berths` holds the boats' registration numbers, one per berth. Write the method `berthOf(int[] berths, int boat)`, which returns the index of the berth where the boat is, or -1 if it isn't in the harbor. The check runs:
+
+      ```java fragment
+      int[] berths = {305, 118, 442, 97};
+      System.out.println(berthOf(berths, 442));
+      System.out.println(berthOf(berths, 500));
+      ```
+
+      and expects:
+
+      ```
+      2
+      -1
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              int[] berths = {305, 118, 442, 97};
+              System.out.println(berthOf(berths, 442));
+              System.out.println(berthOf(berths, 500));
+          }
+
+          // Write the method berthOf here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              int[] berths = {305, 118, 442, 97};
+              System.out.println(berthOf(berths, 442));
+              System.out.println(berthOf(berths, 500));
+          }
+
+          public static int berthOf(int[] berths, int boat) {
+              for (int i = 0; i < berths.length; i++) {
+                  if (berths[i] == boat) {
+                      return i;
+                  }
+              }
+              return -1;
+          }
+      }
+    hints:
+      - "It's `positionOf` from above with new names: go through the berths in order, and return as soon as you find the boat."
+      - "Loop over the indexes, `for (int i = 0; i < berths.length; i++)`, and compare `berths[i]` with `boat`. The -1 comes after the loop, once every berth has been checked."
+    require:
+      - pattern: \bpublic\s+static\s+int\s+berthOf\s*\(\s*int\s*\[\s*\]\s*\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the method as `public static int berthOf(int[] berths, int boat)`."
+    tests:
+      - call: |
+          int[] berths = {305, 118, 442, 97};
+          System.out.println(berthOf(berths, 442));
+          System.out.println(berthOf(berths, 500));
+      - call: |
+          int[] berths = {7, 12, 3};
+          System.out.println(berthOf(berths, 12));
+          System.out.println(berthOf(berths, 3));
+          System.out.println(berthOf(berths, 0));
+        hidden: true
+      - call: |
+          int[] empty = new int[0];
+          System.out.println(berthOf(empty, 4));
+          int[] one = {4};
+          System.out.println(berthOf(one, 4));
+          int[] berths = {10, 20, 30};
+          System.out.println(berthOf(berths, 30) + " " + berthOf(berths, 10));
+        hidden: true
+    more:
+      - task: |
+          This search has a common mistake in it. What does the program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] codes = {40, 15, 72, 15};
+                  System.out.println(find(codes, 40));
+                  System.out.println(find(codes, 72));
+                  System.out.println(find(codes, 15));
+              }
+
+              public static int find(int[] codes, int wanted) {
+                  for (int i = 0; i < codes.length; i++) {
+                      if (codes[i] == wanted) {
+                          return i;
+                      } else {
+                          return -1;
+                      }
+                  }
+                  return -1;
+              }
+          }
+        hints:
+          - "In the first round of the loop, `i` is 0. The `if` compares the first code with the wanted one, and both of its branches end the method with `return`."
+          - "So the method only ever looks at `codes[0]`. It returns 0 when the first code matches, and -1 for anything else, even for codes that are in the array."
+      - task: |
+          `Departure.java` is ready: a bus departure has a line, such as `"14"`, and a time, such as `"08:05"`, with the getters `getLine()` and `getTime()`. The departures are in a list, in time order. In `Main.java`, write the method `firstOnLine(ArrayList<Departure> departures, String line)`, which returns the index of the first departure of the given line, or -1 if no bus of that line leaves. The check runs:
+
+          ```java fragment
+          ArrayList<Departure> departures = new ArrayList<>();
+          departures.add(new Departure("14", "08:05"));
+          departures.add(new Departure("3", "08:12"));
+          departures.add(new Departure("22", "08:20"));
+          departures.add(new Departure("3", "08:31"));
+          System.out.println(firstOnLine(departures, "3"));
+          System.out.println(firstOnLine(departures, "7"));
+          ```
+
+          and expects:
+
+          ```
+          1
+          -1
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Departure> departures = new ArrayList<>();
+                    departures.add(new Departure("14", "08:05"));
+                    departures.add(new Departure("3", "08:12"));
+                    departures.add(new Departure("22", "08:20"));
+                    departures.add(new Departure("3", "08:31"));
+                    System.out.println(firstOnLine(departures, "3"));
+                    System.out.println(firstOnLine(departures, "7"));
+                }
+
+                // Write the method firstOnLine here.
+            }
+          Departure.java: |
+            public class Departure {
+                private String line;
+                private String time;
+
+                public Departure(String line, String time) {
+                    this.line = line;
+                    this.time = time;
+                }
+
+                public String getLine() {
+                    return this.line;
+                }
+
+                public String getTime() {
+                    return this.time;
+                }
+
+                public String toString() {
+                    return this.time + " line " + this.line;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Departure> departures = new ArrayList<>();
+                    departures.add(new Departure("14", "08:05"));
+                    departures.add(new Departure("3", "08:12"));
+                    departures.add(new Departure("22", "08:20"));
+                    departures.add(new Departure("3", "08:31"));
+                    System.out.println(firstOnLine(departures, "3"));
+                    System.out.println(firstOnLine(departures, "7"));
+                }
+
+                public static int firstOnLine(ArrayList<Departure> departures, String line) {
+                    for (int i = 0; i < departures.size(); i++) {
+                        if (departures.get(i).getLine().equals(line)) {
+                            return i;
+                        }
+                    }
+                    return -1;
+                }
+            }
+          Departure.java: |
+            public class Departure {
+                private String line;
+                private String time;
+
+                public Departure(String line, String time) {
+                    this.line = line;
+                    this.time = time;
+                }
+
+                public String getLine() {
+                    return this.line;
+                }
+
+                public String getTime() {
+                    return this.time;
+                }
+
+                public String toString() {
+                    return this.time + " line " + this.line;
+                }
+            }
+        hints:
+          - "Loop over the indexes, `for (int i = 0; i < departures.size(); i++)`, so that you have an index to return. `departures.get(i).getLine()` is the line of the departure at index `i`."
+          - "Lines are Strings, so compare them with `equals`. Return `i` at the first match, and -1 after the loop."
+        require:
+          - pattern: \bpublic\s+static\s+int\s+firstOnLine\s*\(\s*ArrayList<Departure>\s+\w+\s*,\s*String\s+\w+\s*\)
+            message: "Write the method as `public static int firstOnLine(ArrayList<Departure> departures, String line)`."
+          - pattern: \.equals\s*\(
+            message: "Compare the lines, which are Strings, with `equals`."
+        tests:
+          - call: |
+              ArrayList<Departure> departures = new ArrayList<>();
+              departures.add(new Departure("14", "08:05"));
+              departures.add(new Departure("3", "08:12"));
+              departures.add(new Departure("22", "08:20"));
+              departures.add(new Departure("3", "08:31"));
+              System.out.println(firstOnLine(departures, "3"));
+              System.out.println(firstOnLine(departures, "7"));
+          - call: |
+              ArrayList<Departure> departures = new ArrayList<>();
+              departures.add(new Departure("22", "10:00"));
+              departures.add(new Departure("5", "10:04"));
+              departures.add(new Departure("22", "10:15"));
+              String two = "2";
+              int index = firstOnLine(departures, two + two);
+              System.out.println(index + " " + departures.get(index));
+              System.out.println(firstOnLine(departures, "5"));
+              System.out.println(firstOnLine(departures, "2"));
+            hidden: true
+          - call: |
+              ArrayList<Departure> none = new ArrayList<>();
+              System.out.println(firstOnLine(none, "1"));
+              none.add(new Departure("1", "23:50"));
+              System.out.println(firstOnLine(none, "1"));
+            hidden: true
+
+  - id: sorting-searching-binary-search
+    slug: binary-search
+    title: Binary search
+    text: |
+      Think of a guessing game: someone picks a number from 1 to 100, and after each guess tells you "higher" or "lower". Guessing 1, 2, 3 and so on is a linear search, and could take 100 guesses. A smarter first guess is 50: whatever the answer, half of the numbers are ruled out. Then guess the middle of the half that's left, and so on. Every guess halves what's left, and 7 guesses are always enough.
+
+      **Binary search** plays this game with a sorted array. It looks at the middle element of the range where the value could still be:
+
+      - If it's the wanted value, the search is done.
+      - If it's smaller than the wanted value, the wanted value can only be to its right, since the array is sorted. The range becomes the right half.
+      - If it's larger, the range becomes the left half.
+
+      It repeats this until it finds the value, or until the range is empty, which means the value isn't there.
+
+      ### In code
+
+      Two variables, `low` and `high`, are the first and the last index of the range. At first, the range is the whole array. Here a race keeps the bib numbers of the runners who finished, sorted:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] finishers = {3, 8, 12, 15, 21, 27, 30, 34, 41};
+              System.out.println(findInSorted(finishers, 27));
+              System.out.println(findInSorted(finishers, 13));
+          }
+
+          public static int findInSorted(int[] sorted, int wanted) {
+              int low = 0;
+              int high = sorted.length - 1;
+              while (low <= high) {
+                  int middle = (low + high) / 2;
+                  if (sorted[middle] == wanted) {
+                      return middle;
+                  }
+                  if (sorted[middle] < wanted) {
+                      low = middle + 1;
+                  } else {
+                      high = middle - 1;
+                  }
+              }
+              return -1;
+          }
+      }
+      ```
+
+      ```output
+      5
+      -1
+      ```
+
+      The search for 27, round by round:
+
+      | `low` | `high` | `middle` | `sorted[middle]` | Then |
+      | --- | --- | --- | --- | --- |
+      | 0 | 8 | 4 | 21 | smaller than 27: `low = 5` |
+      | 5 | 8 | 6 | 30 | larger than 27: `high = 5` |
+      | 5 | 5 | 5 | 27 | found: return 5 |
+
+      And for 13, which isn't there:
+
+      | `low` | `high` | `middle` | `sorted[middle]` | Then |
+      | --- | --- | --- | --- | --- |
+      | 0 | 8 | 4 | 21 | larger than 13: `high = 3` |
+      | 0 | 3 | 1 | 8 | smaller than 13: `low = 2` |
+      | 2 | 3 | 2 | 12 | smaller than 13: `low = 3` |
+      | 3 | 3 | 3 | 15 | larger than 13: `high = 2` |
+
+      Now `low` is 3 and `high` is 2: the range is empty, the loop ends, and the method returns -1.
+
+      - `(low + high) / 2` is integer division, so the middle is always a whole index. When the range has an even number of elements, it's the left one of the two in the middle.
+      - The middle element has been checked, so the new range leaves it out: `middle + 1` and `middle - 1`. With `low = middle`, the range could stop shrinking, and the loop would never end.
+      - The loop runs `while (low <= high)`: when `low` equals `high`, the range still has one element to look at.
+
+      ### It needs sorted data
+
+      Binary search throws away half of the range at every look, trusting that everything to the left of the middle is smaller and everything to the right is larger. In an array that isn't sorted, that isn't true, and the search can miss a value that's there. So sort the data first (with `Arrays.sort` or `Collections.sort`), or keep it sorted as values are added. Sorting takes time too, so binary search pays off best when the same data is searched many times.
+
+      Java has binary search ready as well, in `Arrays.binarySearch` and `Collections.binarySearch`, for sorted arrays and lists. In this module you write your own, to see how it works.
+
+      ### How much work is it?
+
+      Each look at a middle value halves the range, so the range runs out fast:
+
+      | Values | Values looked at, linear search | Values looked at, binary search |
+      | --- | --- | --- |
+      | 100 | 100 | 7 |
+      | 1,000 | 1,000 | 10 |
+      | 1,000,000 | 1,000,000 | 20 |
+      | 1,000,000,000 | 1,000,000,000 | 30 |
+
+      A sorted array of a million values needs at most 20 looks, because 2 to the 20th power is 1,048,576, more than a million: halving the range 20 times always gets it down to nothing. Each look compares the middle value with the wanted one up to twice (`==`, then `<`), so that's at most 40 comparisons, where linear search may need a million. Twice as many values take only one look more.
+
+      **Your turn:** a mail carrier has a sorted array of the house numbers that get mail today. Fill in the blanks of `findHouse`, a binary search that returns the index of a house number, or -1 if the house gets no mail. The check runs:
+
+      ```java fragment
+      int[] houses = {2, 4, 8, 10, 14, 16, 20, 22, 26};
+      System.out.println(findHouse(houses, 20));
+      System.out.println(findHouse(houses, 12));
+      ```
+
+      and expects:
+
+      ```
+      6
+      -1
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              int[] houses = {2, 4, 8, 10, 14, 16, 20, 22, 26};
+              System.out.println(findHouse(houses, 20));
+              System.out.println(findHouse(houses, 12));
+          }
+
+          public static int findHouse(int[] houses, int number) {
+              int low = 0;
+              int high = houses.length - 1;
+              while (low <= high) {
+                  int middle = [[(low + high) / 2]];
+                  if (houses[middle] == number) {
+                      return middle;
+                  }
+                  if (houses[middle] < number) {
+                      low = [[middle + 1]];
+                  } else {
+                      high = [[middle - 1]];
+                  }
+              }
+              return -1;
+          }
+      }
+    hints:
+      - "The middle of the range from `low` to `high` is their sum divided by two: `(low + high) / 2`."
+      - "When the middle house number is smaller than the wanted one, the wanted one can only be to the right of the middle, so the range starts after it: `middle + 1`. Otherwise it ends before it: `middle - 1`."
+    tests:
+      - call: |
+          int[] houses = {2, 4, 8, 10, 14, 16, 20, 22, 26};
+          System.out.println(findHouse(houses, 20));
+          System.out.println(findHouse(houses, 12));
+      - call: |
+          int[] houses = {2, 4, 8, 10, 14, 16, 20, 22, 26};
+          System.out.println(findHouse(houses, 2));
+          System.out.println(findHouse(houses, 26));
+          System.out.println(findHouse(houses, 1));
+          System.out.println(findHouse(houses, 30));
+          System.out.println(findHouse(houses, 14));
+        hidden: true
+      - call: |
+          int[] one = {7};
+          System.out.println(findHouse(one, 7) + " " + findHouse(one, 8));
+          int[] none = new int[0];
+          System.out.println(findHouse(none, 7));
+          int[] pair = {3, 5};
+          System.out.println(findHouse(pair, 3) + " " + findHouse(pair, 5) + " " + findHouse(pair, 4));
+        hidden: true
+    more:
+      - task: |
+          This binary search prints each value it looks at. What does the program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] sorted = {2, 5, 8, 12, 16, 23, 38};
+                  System.out.println(find(sorted, 23));
+                  System.out.println(find(sorted, 3));
+              }
+
+              public static int find(int[] sorted, int wanted) {
+                  int low = 0;
+                  int high = sorted.length - 1;
+                  while (low <= high) {
+                      int middle = (low + high) / 2;
+                      System.out.println("looking at " + sorted[middle]);
+                      if (sorted[middle] == wanted) {
+                          return middle;
+                      }
+                      if (sorted[middle] < wanted) {
+                          low = middle + 1;
+                      } else {
+                          high = middle - 1;
+                      }
+                  }
+                  return -1;
+              }
+          }
+        hints:
+          - "The first middle is `(0 + 6) / 2`, index 3, which holds 12. For 23, the search goes on to the right: `low` becomes 4, and the next middle is `(4 + 6) / 2`, index 5."
+          - "The method prints its lines before `main` prints the index it returns. For 3, the range shrinks toward the start of the array, and is empty after three looks, so `main` prints -1."
+      - task: |
+          How many values does binary search look at? Write the method `looksNeeded(int[] sorted, int wanted)`. It does the binary search of this step, with the middle at `(low + high) / 2`, but instead of an index it returns how many middle values it looked at, whether it found the wanted value or not.
+
+          The check makes a sorted array of the 1,000 even numbers from 0 to 1998, and looks for 998, 1998 and 7. A linear search would look at 500, 1,000 and 1,000 values for them. (998 happens to sit right in the middle of the array.) The check runs:
+
+          ```java fragment
+          int[] evens = new int[1000];
+          for (int i = 0; i < evens.length; i++) {
+              evens[i] = i * 2;
+          }
+          System.out.println(looksNeeded(evens, 998));
+          System.out.println(looksNeeded(evens, 1998));
+          System.out.println(looksNeeded(evens, 7));
+          ```
+
+          and expects:
+
+          ```
+          1
+          10
+          10
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] evens = new int[1000];
+                  for (int i = 0; i < evens.length; i++) {
+                      evens[i] = i * 2;
+                  }
+                  System.out.println(looksNeeded(evens, 998));
+                  System.out.println(looksNeeded(evens, 1998));
+                  System.out.println(looksNeeded(evens, 7));
+              }
+
+              // Write the method looksNeeded here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] evens = new int[1000];
+                  for (int i = 0; i < evens.length; i++) {
+                      evens[i] = i * 2;
+                  }
+                  System.out.println(looksNeeded(evens, 998));
+                  System.out.println(looksNeeded(evens, 1998));
+                  System.out.println(looksNeeded(evens, 7));
+              }
+
+              public static int looksNeeded(int[] sorted, int wanted) {
+                  int low = 0;
+                  int high = sorted.length - 1;
+                  int looks = 0;
+                  while (low <= high) {
+                      int middle = (low + high) / 2;
+                      looks++;
+                      if (sorted[middle] == wanted) {
+                          return looks;
+                      }
+                      if (sorted[middle] < wanted) {
+                          low = middle + 1;
+                      } else {
+                          high = middle - 1;
+                      }
+                  }
+                  return looks;
+              }
+          }
+        hints:
+          - "Start from the binary search of this step, and add a counter, `int looks = 0;`. Each round of the loop looks at one middle value, so it adds one to `looks`."
+          - "Return `looks` where the search would return `middle`, and also after the loop, where it would return -1."
+        require:
+          - pattern: \bpublic\s+static\s+int\s+looksNeeded\s*\(\s*int\s*\[\s*\]\s*\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static int looksNeeded(int[] sorted, int wanted)`."
+          - pattern: \bwhile\s*\(
+            message: "Do the binary search with a `while` loop, as in this step."
+        tests:
+          - call: |
+              int[] evens = new int[1000];
+              for (int i = 0; i < evens.length; i++) {
+                  evens[i] = i * 2;
+              }
+              System.out.println(looksNeeded(evens, 998));
+              System.out.println(looksNeeded(evens, 1998));
+              System.out.println(looksNeeded(evens, 7));
+          - call: |
+              int[] sorted = {3, 8, 12, 15, 21, 27, 30, 34, 41};
+              System.out.println(looksNeeded(sorted, 21));
+              System.out.println(looksNeeded(sorted, 27));
+              System.out.println(looksNeeded(sorted, 13));
+              System.out.println(looksNeeded(sorted, 3));
+              System.out.println(looksNeeded(sorted, 50));
+            hidden: true
+          - call: |
+              int[] none = new int[0];
+              System.out.println(looksNeeded(none, 5));
+              int[] one = {5};
+              System.out.println(looksNeeded(one, 5) + " " + looksNeeded(one, 6));
+              int[] big = new int[100000];
+              for (int i = 0; i < big.length; i++) {
+                  big[i] = i;
+              }
+              System.out.println(looksNeeded(big, 99999) + " " + looksNeeded(big, -1));
+            hidden: true

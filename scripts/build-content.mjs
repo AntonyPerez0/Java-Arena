@@ -29,6 +29,8 @@ import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/su
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const CACHE_FILE = path.join(ROOT, "node_modules", ".cache", "java-arena-content.json");
 const GENERATED = path.join(ROOT, "src", "generated");
+// Each step's lesson as a file of its own, fetched when the step is opened (public/ is served as is).
+const LESSONS = path.join(ROOT, "public", "lessons");
 const CHECKS_JSON = path.join(ROOT, "fidelity", "out", "content-checks.json");
 const TIME_LIMIT_MS = 10_000;
 const CHALLENGES_PER_STEP = 3;
@@ -277,7 +279,7 @@ function codeOf(where, value) {
 }
 
 /** Imports a ```java main example gets automatically, when it uses these classes. */
-const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", HashMap: "java.util.HashMap", Random: "java.util.Random" };
+const AUTO_IMPORTS = { Scanner: "java.util.Scanner", ArrayList: "java.util.ArrayList", Arrays: "java.util.Arrays", Collections: "java.util.Collections", HashMap: "java.util.HashMap", Random: "java.util.Random" };
 function importsFor(code) {
   const lines = Object.entries(AUTO_IMPORTS)
     .filter(([name]) => new RegExp(`\\b${name}\\b`).test(code))
@@ -975,21 +977,41 @@ if (dry) {
   process.exit(0);
 }
 
-// The app loads a small index (every page needs it) and each module's lessons only when needed.
+// The app loads a small index (every page needs it) and each step's lesson only when it's opened:
+// public/lessons/<module>/<slug>-<hash>.json, where the hash of its content makes a saved copy
+// never stale. The whole modules are for the pre-rendered pages and the tests.
+const lessonJson = new Map(modules.flatMap((m) => m.steps.map((s) => [s.id, JSON.stringify(s)])));
+const lessonHash = (s) => crypto.createHash("sha256").update(lessonJson.get(s.id)).digest("hex").slice(0, 10);
 const live = new Set(modules.map((m) => m.id));
 const plan = course.modules.map((m, i) => ({ id: m.id, number: i + 1, title: m.title, course: m.course, part: m.part ?? null, mooc: m.mooc ?? [], steps: m.steps, live: live.has(m.id) }));
 const index = {
   jdk: jdkVersion,
   moocUrl: course.moocUrl,
   plan,
-  modules: modules.map(({ steps, ...m }) => ({ ...m, drills: drills.filter((d) => d.topic === m.id).length, steps: steps.map((s) => ({ id: s.id, slug: s.slug, title: s.title, challenges: 1 + s.more.length, drills: drills.filter((d) => d.after === s.id).length })) })),
+  modules: modules.map(({ steps, ...m }) => ({ ...m, drills: drills.filter((d) => d.topic === m.id).length, steps: steps.map((s) => ({ id: s.id, slug: s.slug, title: s.title, hash: lessonHash(s), challenges: 1 + s.more.length, drills: drills.filter((d) => d.after === s.id).length })) })),
   interviewDrills: drills.filter((d) => d.topic === "interview").length,
   placementQuestions: placement.length,
 };
+// The lesson files first and the index after them, so a running dev server never sees an index
+// that names files not written yet; then the lesson files no longer named are removed.
+const lessonFiles = new Set();
+for (const m of modules) {
+  fs.mkdirSync(path.join(LESSONS, m.id), { recursive: true });
+  for (const s of m.steps) {
+    const file = path.join(LESSONS, m.id, `${s.slug}-${lessonHash(s)}.json`);
+    lessonFiles.add(file);
+    fs.writeFileSync(file, lessonJson.get(s.id));
+  }
+}
 fs.rmSync(GENERATED, { recursive: true, force: true });
 fs.mkdirSync(path.join(GENERATED, "modules"), { recursive: true });
 fs.writeFileSync(path.join(GENERATED, "course.json"), JSON.stringify(index));
 for (const m of modules) fs.writeFileSync(path.join(GENERATED, "modules", `${m.id}.json`), JSON.stringify(m));
+for (const dir of fs.readdirSync(LESSONS)) {
+  const full = path.join(LESSONS, dir);
+  for (const f of fs.readdirSync(full)) if (!lessonFiles.has(path.join(full, f))) fs.rmSync(path.join(full, f));
+  if (!fs.readdirSync(full).length) fs.rmdirSync(full);
+}
 // Drills and placement questions load only on the practice pages.
 fs.writeFileSync(path.join(GENERATED, "drills.json"), JSON.stringify({ drills, placement }));
 fs.mkdirSync(path.dirname(CHECKS_JSON), { recursive: true });

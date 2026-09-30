@@ -152,6 +152,71 @@ await test('an unknown address shows "Page not found"', async () => {
   await ctx.close();
 });
 
+await test('a lesson page downloads its own step first and the rest of the module later; other steps open at once', async () => {
+  const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
+  const steps = course.modules.find((m) => m.id === 'printing').steps;
+  const file = (s) => `/lessons/printing/${s.slug}-${s.hash}.json`;
+  const lessonFiles = () => requests.filter((p) => p.includes('/lessons/'));
+  const allLoaded = (page) => page.waitForFunction((n) => new Set(performance.getEntriesByType('resource').filter((e) => e.name.includes('/lessons/')).map((e) => e.name)).size >= n, steps.length);
+  const { ctx, page, errors } = await newPage();
+  // Records whether the "Loading the lesson" heading ever shows.
+  await page.addInitScript(() => {
+    window.__sawLoading = false;
+    new MutationObserver(() => {
+      if (document.getElementById('loading-h')) window.__sawLoading = true;
+    }).observe(document, { childList: true, subtree: true });
+  });
+  requests.length = 0;
+  await page.goto(BASE + `learn/printing/${steps[2].slug}/`);
+  await page.locator('.challenge-tab').first().waitFor();
+  await allLoaded(page);
+  const lessons = lessonFiles();
+  // The pre-rendered page asks for its lesson file at once, and the app uses that same download.
+  expect(lessons[0]?.endsWith(file(steps[2])), `the step's own file first: ${lessons.join(', ')}`);
+  expect(lessons.length === steps.length && new Set(lessons).size === steps.length && steps.every((s) => lessons.some((p) => p.endsWith(file(s)))), `each step of the module once: ${lessons.join(', ')}`);
+  expect(!(await page.evaluate(() => window.__sawLoading)), 'no loading message on the first step');
+  await page.getByRole('link', { name: 'Skip to the next step' }).click();
+  await page.locator('h1:not(#loading-h)', { hasText: steps[3].title }).waitFor();
+  await page.getByRole('link', { name: `Step 1: ${steps[0].title}` }).click();
+  await page.locator('h1:not(#loading-h)', { hasText: steps[0].title }).waitFor();
+  expect(!(await page.evaluate(() => window.__sawLoading)), 'no loading message when moving between steps');
+  // The module page fetches the step its main button opens first.
+  requests.length = 0;
+  await page.goto(BASE + 'learn/printing/');
+  await page.locator('.steplist').waitFor();
+  await allLoaded(page);
+  expect(lessonFiles()[0]?.endsWith(file(steps[0])), `module page: ${lessonFiles().join(', ')}`);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('a step that loads late gets the focus on its heading; a lesson file gone after an update says so', async () => {
+  const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
+  const steps = course.modules.find((m) => m.id === 'printing').steps;
+  const { ctx, page } = await newPage();
+  // The last step's file comes only when the test lets it; the fourth one is gone, as after a new
+  // version of the site.
+  let release;
+  const held = new Promise((r) => (release = r));
+  await page.route(`**/lessons/printing/${steps[4].slug}-*.json`, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.route(`**/lessons/printing/${steps[3].slug}-*.json`, (route) => route.fulfill({ status: 404, body: 'not found' }));
+  await page.goto(BASE + `learn/printing/${steps[0].slug}/`);
+  await page.locator('.challenge-tab').first().waitFor();
+  await page.getByRole('link', { name: `Step 5: ${steps[4].title}` }).focus();
+  await page.keyboard.press('Enter');
+  await page.locator('#loading-h').waitFor();
+  release();
+  await page.locator('h1:not(#loading-h)', { hasText: steps[4].title }).waitFor();
+  const focused = await page.evaluate(() => [document.activeElement?.tagName, document.activeElement?.textContent]);
+  expect(focused[0] === 'H1' && focused[1] === steps[4].title, `focus on the lesson heading: ${focused.join(' ')}`);
+  await page.getByRole('link', { name: `Step 4: ${steps[3].title}` }).click();
+  await page.getByText('Java Arena has been updated since this page was opened').waitFor();
+  await ctx.close();
+});
+
 console.log('Lessons');
 const lessonSession = await newPage();
 {

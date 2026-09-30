@@ -18,8 +18,9 @@ The site is built in batches, one pull request per batch.
 | 6 | MOOC part 3 (modules 12 to 16) and its drills, lessons that show a crash, plainer crash explanations | done |
 | 7 | MOOC part 4 (modules 17 to 20: objects, classes, reading files), an editor for programs of several files | done |
 | 8 | MOOC part 5 (modules 21 to 23: designing classes and overloading, references and null, objects working together), undo history per file | done |
-| 9 | MOOC part 6 (modules 24 to 26: lists inside objects, a text user interface, troubleshooting and unit testing), JUnit 4 in the browser | this batch |
-| 10 to 20 | Parts 7 to 14 of the course, progress sync, projects, Pro Track, tools, polish | planned |
+| 9 | MOOC part 6 (modules 24 to 26: lists inside objects, a text user interface, troubleshooting and unit testing), JUnit 4 in the browser | done |
+| 10 | MOOC part 7 (modules 27 to 29: procedural and object-oriented programs, sorting and searching, larger programs), the end of Java Programming I; lesson pages load only their own step | this batch |
+| 11 to 20 | Parts 8 to 14 of the course, progress sync, projects, Pro Track, tools, polish | planned |
 
 The plan and the research behind it are in [`docs/research/`](docs/research/README.md), including the full curriculum map.
 
@@ -56,7 +57,7 @@ npm run dev        # checks the lessons, then serves http://localhost:5173/
 
 | Script | What it does |
 |---|---|
-| `npm run content` | Checks every lesson on the reference JDK and writes `src/generated/` |
+| `npm run content` | Checks every lesson on the reference JDK and writes `src/generated/` and the lesson files in `public/lessons/` (one per step, loaded when the step is opened) |
 | `npm run build` | Checks the lessons, type-checks and builds `dist/` (pre-rendered pages, service worker, sitemap) |
 | `npm run content:browser` | Replays every lesson program in the built site's engine in headless Chromium and compares with the JDK |
 | `npm run fidelity:jdk` | Runs the fidelity suite on the local JDK (`fidelity/out/jdk.json`) |

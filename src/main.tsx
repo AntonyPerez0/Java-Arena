@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App, { loadPlayground, loadPractice, loadStepPage } from "./App";
-import { loadModule } from "./content";
+import { loadStep } from "./content";
 import { loadDrills } from "./content/drills";
 import "./styles.css";
 
@@ -9,10 +9,10 @@ import "./styles.css";
 // until the app can show the same page (no flash of a loading message).
 const base = import.meta.env.BASE_URL;
 const path = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : location.pathname;
-const lesson = /^learn\/([^/]+)\/[^/]+/.exec(path);
+const lesson = /^learn\/([^/]+)\/([^/]+)/.exec(path);
 const practice = loadPractice[path.replace(/\/$/, "")];
 const ready = lesson
-  ? Promise.all([loadStepPage(), loadModule(lesson[1])]).catch(() => undefined)
+  ? Promise.all([loadStepPage(), loadStep(lesson[1], lesson[2])]).catch(() => undefined)
   : /^playground\/?$/.test(path)
     ? loadPlayground().catch(() => undefined)
     : practice

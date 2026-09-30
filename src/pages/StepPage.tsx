@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronRight } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { challengesOf, moduleById, modulePath, stepPath, useModule } from "../content";
-import type { Module, Step } from "../content/types";
+import { challengesOf, moduleById, modulePath, prefetchModule, stepPath, useStep } from "../content";
+import type { ModuleSummary, Step } from "../content/types";
 import { getState, patchChallenge, patchStep, useStore } from "../state/store";
 import { challengeDone } from "../state/derived";
 import Markdown from "../components/Markdown";
@@ -17,19 +17,20 @@ export default function StepPage() {
   const { moduleId = "", stepSlug = "" } = useParams();
   const summary = moduleById.get(moduleId);
   const stepSummary = summary?.steps.find((s) => s.slug === stepSlug);
-  const full = useModule(moduleId);
-  // Set while the "loading" heading is showing: if it had focus, the lesson's heading takes it over.
-  const wasLoading = useRef(false);
+  const { step, waited } = useStep(moduleId, stepSlug);
   useTitle(summary && stepSummary ? `${stepSummary.title} · ${summary.title}` : "Step not found");
-  if (!summary || !stepSummary || full === null) return <NotFound />;
-  if (full === undefined || full === "error") {
-    wasLoading.current = true;
+  if (!summary || !stepSummary || step === null) return <NotFound />;
+  if (step === undefined || step === "error" || step === "gone") {
     return (
       <div className="narrow">
         <h1 id="loading-h" tabIndex={-1}>
           {stepSummary.title}
         </h1>
-        {full === "error" ? (
+        {step === "gone" ? (
+          <p role="alert">
+            Java Arena has been updated since this page was opened. <button type="button" className="linkish" onClick={() => location.reload()}>Reload the page</button> to get this lesson.
+          </p>
+        ) : step === "error" ? (
           <p role="alert">
             This lesson couldn't be loaded. Check the connection and <button type="button" className="linkish" onClick={() => location.reload()}>reload the page</button>.
           </p>
@@ -39,14 +40,11 @@ export default function StepPage() {
       </div>
     );
   }
-  const step = full.steps.find((s) => s.slug === stepSlug);
-  if (!step) return <NotFound />;
-  const takeFocus = wasLoading.current;
-  wasLoading.current = false;
-  return <StepView key={step.id} m={full} step={step} takeFocus={takeFocus} />;
+  // After a loading message, the lesson's heading takes over the focus it may have had.
+  return <StepView key={step.id} m={summary} step={step} takeFocus={waited} />;
 }
 
-function StepView({ m, step, takeFocus }: { m: Module; step: Step; takeFocus: boolean }) {
+function StepView({ m, step, takeFocus }: { m: ModuleSummary; step: Step; takeFocus: boolean }) {
   const nav = useNavigate();
   const h1Ref = useRef<HTMLHeadingElement>(null);
   // The loading heading had focus after a navigation and is gone now: give it to this page's heading.
@@ -54,7 +52,9 @@ function StepView({ m, step, takeFocus }: { m: Module; step: Step; takeFocus: bo
     if (takeFocus && (document.activeElement === document.body || !document.activeElement)) h1Ref.current?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const idx = m.steps.indexOf(step);
+  const idx = m.steps.findIndex((st) => st.id === step.id);
+  // Fetch the steps next to this one, then the rest of the module, so moving to them is instant.
+  useEffect(() => prefetchModule(m.id, [m.steps[idx + 1], m.steps[idx - 1]].filter(Boolean).map((st) => st.slug)), [m, idx]);
   const progress = useStore((s) => s.steps[step.id]);
   const doneSteps = useStore((s) => m.steps.map((st) => !!s.steps[st.id]?.done).join());
   const challenges = useMemo(() => challengesOf(step), [step]);
@@ -100,10 +100,10 @@ function StepView({ m, step, takeFocus }: { m: Module; step: Step; takeFocus: bo
       const moduleDone = m.steps.every((st) => getState().steps[st.id]?.done);
       // Finishing the step opens the Deathmatch drills that practise it (unless they were open already).
       const openAlready = getState().settings.unlockAll || getState().placed.includes(m.id);
-      const drills = openAlready ? 0 : (moduleById.get(m.id)?.steps.find((st) => st.id === step.id)?.drills ?? 0);
+      const drills = openAlready ? 0 : (m.steps[idx]?.drills ?? 0);
       if (shown) setBanner({ text: moduleDone ? `Module complete: ${m.title}` : "Step complete", next: null, drills });
     },
-    [step, m, challenges],
+    [step, m, idx, challenges],
   );
 
   const prev = idx > 0 ? stepPath(m, m.steps[idx - 1]) : null;

@@ -1,4 +1,5 @@
-// The shape of src/generated/course.json and src/generated/modules/<id>.json (made by scripts/build-content.mjs).
+// The shape of src/generated/course.json, src/generated/modules/<id>.json and the lesson files in
+// public/lessons (made by scripts/build-content.mjs).
 
 /**
  * One test: the program's input, or `call`, code the check runs to call the learner's methods, or
@@ -73,7 +74,16 @@ export type PlannedModule = {
 };
 
 /** A module as the course index lists it: its steps' titles and addresses, without the lessons. */
-export type StepSummary = { id: string; slug: string; title: string; challenges: number; /** Drills this step unlocks. */ drills: number };
+export type StepSummary = {
+  id: string;
+  slug: string;
+  title: string;
+  /** Names the step's lesson file: public/lessons/<module>/<slug>-<hash>.json. */
+  hash: string;
+  challenges: number;
+  /** Drills this step unlocks. */
+  drills: number;
+};
 export type ModuleSummary = Omit<Module, "steps"> & { steps: StepSummary[]; drills: number };
 
 export type CourseIndex = {

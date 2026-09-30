@@ -5,6 +5,7 @@ import { course, modules, plan, prefetchStep, stepPath, totalChallenges, totalSt
 import { localDay, useStore } from "../state/store";
 import { nextStep, stepsDone } from "../state/derived";
 import { useTitle } from "../lib/title";
+import { loadStepPage } from "./editorPages";
 import { MOOC_URL } from "../lib/site";
 import { highlight } from "../components/highlight";
 
@@ -28,7 +29,7 @@ export default function Home() {
   const dailyDone = localDay() in s.daily;
   // Fetch the lesson the Continue button opens, so it shows at once.
   const nextKey = done && next ? [next.module.id, next.step.slug] : null;
-  useEffect(() => (nextKey ? prefetchStep(nextKey[0], nextKey[1]) : undefined), [nextKey?.[0], nextKey?.[1]]);
+  useEffect(() => (nextKey ? prefetchStep(nextKey[0], nextKey[1], loadStepPage) : undefined), [nextKey?.[0], nextKey?.[1]]);
   return (
     <div className="landing">
       <section className="hero">

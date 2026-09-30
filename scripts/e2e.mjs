@@ -229,18 +229,27 @@ await test('a link focused before the app starts keeps the focus; a step that lo
   await ctx.close();
 });
 
-await test('the home and course pages fetch the lesson their Continue button opens', async () => {
+await test('the home and course pages fetch the lesson (and the lesson page) their Continue button opens', async () => {
   const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
   const steps = course.modules.find((m) => m.id === 'printing').steps;
   const { ctx, page, errors } = await newPage();
-  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), { version: 1, steps: { [steps[0].id]: { done: true, challenges: {} } }, settings: { mobileData: true } });
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), { version: 1, steps: { [steps[0].id]: { done: true, challenges: {} } }, settings: {} });
   await page.addInitScript(() => {
     window.__sawLoading = false;
+    // The lesson's own loading message, or the one shown while the lesson page's code loads.
     new MutationObserver(() => {
-      if (document.getElementById('loading-h')) window.__sawLoading = true;
+      if (document.getElementById('loading-h') || [...document.querySelectorAll('main p.muted')].some((p) => p.textContent === 'Loading…')) window.__sawLoading = true;
     }).observe(document, { childList: true, subtree: true });
   });
-  const fetched = (page, s) => page.waitForFunction((f) => performance.getEntriesByType('resource').some((e) => e.name.endsWith(f)), `/lessons/printing/${s.slug}-${s.hash}.json`);
+  // The step's lesson file and the lesson page's code have arrived, and the page has had time to use
+  // them (two idle periods after both).
+  const fetched = async (page, s) => {
+    await page.waitForFunction((f) => {
+      const done = performance.getEntriesByType('resource').filter((e) => e.responseEnd > 0).map((e) => e.name);
+      return done.some((n) => n.endsWith(f)) && done.some((n) => /\/assets\/StepPage-[^/]*\.js$/.test(n));
+    }, `/lessons/printing/${s.slug}-${s.hash}.json`);
+    for (let i = 0; i < 2; i++) await page.evaluate(() => new Promise((r) => requestIdleCallback(() => r(), { timeout: 2000 })));
+  };
   for (const [address, button] of [['', `Continue: ${steps[1].title}`], ['learn/', `Continue: ${steps[1].title}`]]) {
     await page.goto(BASE + address);
     await fetched(page, steps[1]);

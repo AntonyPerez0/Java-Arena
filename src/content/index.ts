@@ -82,10 +82,14 @@ export function prefetchModule(moduleId: string, first: string[] = []) {
   });
 }
 
-/** Fetches one step in the background, when the browser has nothing else to do (a "Continue" link's). */
-export function prefetchStep(moduleId: string, slug: string) {
+/**
+ * Fetches one step in the background, when the browser has nothing else to do (a "Continue" link's),
+ * and `code`, the lesson page's own code, so the step shows at once when it's opened.
+ */
+export function prefetchStep(moduleId: string, slug: string, code?: () => Promise<unknown>) {
   return whenIdle(() => {
     loadStep(moduleId, slug).catch(() => {});
+    code?.().catch(() => {});
   });
 }
 

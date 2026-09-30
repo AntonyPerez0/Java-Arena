@@ -1,5 +1,5 @@
 import { BrowserRouter, NavLink, Route, Routes, Link, useLocation } from "react-router-dom";
-import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import { BrandMark } from "./components/Brand";
 import { EngineBadge } from "./components/Engine";
@@ -9,62 +9,22 @@ import ModulePage from "./pages/ModulePage";
 import Settings from "./pages/Settings";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
+import { dailyPage, deathmatchPage, placementPage, playgroundPage, stepPage } from "./pages/editorPages";
+export { loadPlayground, loadPractice, loadStepPage } from "./pages/editorPages";
 import { patchSettings } from "./state/store";
 import { useAppearance, useResolvedTheme } from "./lib/appearance";
 import { MOOC_LICENSE_URL, MOOC_URL, REPO_URL } from "./lib/site";
 
-// Pages with the code editor (CodeMirror) load separately. main.tsx loads the page's code before the
-// app starts when one of them is the first page opened; then it renders at once (React.lazy would
-// show a loading message for a moment, and the pre-rendered page would jump).
-function editorPage(load: () => Promise<{ default: ComponentType }>) {
-  let component: ComponentType | null = null;
-  const preload = () =>
-    load().then((m) => {
-      component = m.default;
-    });
-  function Route() {
-    const [, setLoaded] = useState(false);
-    const [failed, setFailed] = useState(false);
-    useEffect(() => {
-      if (!component) preload().then(() => setLoaded(true), () => setFailed(true));
-    }, []);
-    const Page = component;
-    if (Page) return <Page />;
-    return failed ? (
-      <p role="alert">
-        This page couldn't be loaded. Check the connection and{" "}
-        <button type="button" className="linkish" onClick={() => location.reload()}>
-          reload the page
-        </button>
-        .
-      </p>
-    ) : (
-      <p className="muted">Loading…</p>
-    );
-  }
-  return { Route, preload };
-}
-
-const stepPage = editorPage(() => import("./pages/StepPage"));
-const playgroundPage = editorPage(() => import("./pages/Playground"));
-const deathmatchPage = editorPage(() => import("./pages/Deathmatch"));
-const dailyPage = editorPage(() => import("./pages/Daily"));
-const placementPage = editorPage(() => import("./pages/Placement"));
-export const loadStepPage = stepPage.preload;
-export const loadPlayground = playgroundPage.preload;
-/** Practice pages, by their first address segment. */
-export const loadPractice: Record<string, () => Promise<void>> = { deathmatch: deathmatchPage.preload, daily: dailyPage.preload, placement: placementPage.preload };
-
 /** On navigation: scroll to the top and move keyboard and screen-reader focus to the new page. */
 function RouteChange() {
   const { pathname } = useLocation();
-  const first = useRef(true);
+  // The address focus was last moved for: the first page keeps the focus it has (StrictMode runs
+  // this effect twice on the first page in development, so a "first run" flag isn't enough).
+  const shown = useRef(pathname);
   useEffect(() => {
     window.scrollTo(0, 0);
-    if (first.current) {
-      first.current = false;
-      return;
-    }
+    if (shown.current === pathname) return;
+    shown.current = pathname;
     const main = document.getElementById("main");
     const heading = main?.querySelector("h1");
     const target = heading instanceof HTMLElement ? heading : main;

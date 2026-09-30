@@ -1,0 +1,613 @@
+topic: interfaces
+drills:
+  - type: predict
+    after: promise
+    classes: |
+      interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+
+      class Humidifier implements Switchable {
+          private int water;
+          private boolean on;
+
+          public void fill(int liters) {
+              this.water += liters;
+          }
+
+          @Override
+          public void turnOn() {
+              if (this.water > 0) {
+                  this.on = true;
+              }
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+      }
+    body: |
+      Humidifier humidifier = new Humidifier();
+      humidifier.turnOn();
+      boolean first = humidifier.isOn();
+      humidifier.fill(2);
+      humidifier.turnOn();
+      System.out.println(first + " " + humidifier.isOn());
+    why: "The interface only lists the headers: what `turnOn` does is up to Humidifier. Its `turnOn` does nothing while there's no water, so `first` is `false`. After `fill(2)`, the second `turnOn` switches it on."
+
+  - type: predict
+    after: variable-type
+    classes: |
+      interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+
+      interface Chargeable {
+          int batteryPercent();
+          void charge(int minutes);
+      }
+
+      class Drone implements Switchable, Chargeable {
+          private boolean on;
+          private int battery;
+
+          public Drone(int battery) {
+              this.battery = battery;
+          }
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+
+          @Override
+          public int batteryPercent() {
+              return this.battery;
+          }
+
+          @Override
+          public void charge(int minutes) {
+              this.battery += minutes;
+          }
+      }
+    body: |
+      Drone drone = new Drone(40);
+      Switchable power = drone;
+      Chargeable battery = drone;
+      power.turnOn();
+      battery.charge(15);
+      System.out.println(drone.isOn() + " " + drone.batteryPercent() + " " + battery.batteryPercent());
+    why: "`power` and `battery` aren't copies: all three variables refer to the one Drone object. Through `power` only Switchable's methods can be called, and through `battery` only Chargeable's, but both change the same drone. It's on, with 40 + 15 = 55 percent, whichever variable you ask."
+
+  - type: predict
+    after: return-and-lists
+    classes: |
+      interface Priced {
+          int price();
+      }
+
+      class Magnet implements Priced {
+          @Override
+          public int price() {
+              return 4;
+          }
+      }
+
+      class Mug implements Priced {
+          private boolean large;
+
+          public Mug(boolean large) {
+              this.large = large;
+          }
+
+          @Override
+          public int price() {
+              if (this.large) {
+                  return 12;
+              }
+              return 9;
+          }
+      }
+    pre: |
+      public static Priced dearest(ArrayList<Priced> items) {
+          Priced best = items.get(0);
+          for (Priced item : items) {
+              if (item.price() > best.price()) {
+                  best = item;
+              }
+          }
+          return best;
+      }
+    body: |
+      ArrayList<Priced> basket = new ArrayList<>();
+      basket.add(new Magnet());
+      basket.add(new Mug(false));
+      basket.add(new Magnet());
+      basket.add(new Mug(true));
+      int total = 0;
+      for (Priced item : basket) {
+          total += item.price();
+      }
+      System.out.println(total + " " + dearest(basket).price());
+    why: "Each item in the list runs its own class's `price`: 4 for a magnet, 9 for a small mug and 12 for a large one, so the total is 4 + 9 + 4 + 12 = 29. `dearest` returns a Priced, the large mug, and its price is 12."
+
+  - type: predict
+    after: list-interface
+    pre: |
+      public static void addStop(List<String> route, String stop) {
+          route.add(stop);
+      }
+    body: |
+      ArrayList<String> stops = new ArrayList<>();
+      stops.add("Harbor");
+      List<String> same = stops;
+      addStop(same, "Mill");
+      List<String> copy = new ArrayList<>(stops);
+      addStop(copy, "Depot");
+      System.out.println(stops.size() + " " + copy.size() + " " + stops);
+    why: "`same` is a second name for the list in `stops`, and `addStop` gets that same list, so Mill goes into `stops`. `new ArrayList<>(stops)` makes a separate list, so Depot goes only into `copy`. A List variable or parameter doesn't copy anything: it's just another way to refer to the ArrayList."
+
+  - type: predict
+    after: set-interface
+    body: |
+      Set<String> tags = new HashSet<>();
+      String[] words = {"garden", "light", "Garden", "light", "garden"};
+      for (String word : words) {
+          tags.add(word);
+      }
+      System.out.println(tags.size() + " " + tags.contains("GARDEN") + " " + tags.add("light"));
+    why: "A set keeps each value once, but `garden` and `Garden` are different Strings, so the set holds three: garden, light and Garden. `GARDEN` isn't one of them. `add` returns `false` when the value is there already, and light is."
+
+  - type: fill
+    after: promise
+    prompt: "Fill in the blank, a word, so that the dehumidifier keeps Switchable's promise."
+    classes: |
+      interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+
+      class Dehumidifier [[implements]] Switchable {
+          private boolean on;
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+      }
+    body: |
+      Switchable device = new Dehumidifier();
+      device.turnOn();
+      System.out.println(device.isOn());
+    why: "A class *implements* an interface: `class Dehumidifier implements Switchable`. `extends` is for a superclass. With an interface after `extends`, javac says `no interface expected here`."
+
+  - type: fill
+    after: collection-interface
+    prompt: "Fill in the blank, a type, so that `average` accepts both the list and the set."
+    pre: |
+      public static int average([[Collection]]<Integer> numbers) {
+          int sum = 0;
+          for (int number : numbers) {
+              sum += number;
+          }
+          return sum / numbers.size();
+      }
+    body: |
+      List<Integer> list = new ArrayList<>();
+      list.add(10);
+      list.add(20);
+      list.add(20);
+      Set<Integer> set = new HashSet<>(list);
+      System.out.println(average(list) + " " + average(set));
+    why: "List and Set both extend Collection, so a `Collection<Integer>` parameter takes either. With `List<Integer>`, the call with the set wouldn't compile, and with `Set<Integer>`, the call with the list. The list averages 50 / 3, which is 16 in int division, and the set, which keeps 20 once, averages 30 / 2 = 15."
+
+  - type: bug
+    after: promise
+    prompt: "The program should print `true`. Which line is wrong?"
+    classes: |
+      interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+
+      class Fountain implements Switchable {
+          private boolean on;
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          void turnOff() { // BUG
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+      }
+    body: |
+      Fountain fountain = new Fountain();
+      fountain.turnOn();
+      System.out.println(fountain.isOn());
+    fix: "public void turnOff() {"
+    why: "The methods an interface lists are public, and a class may not make them less visible, so this doesn't compile: javac says `attempting to assign weaker access privileges; was public`. Every method that implements an interface's method is written with `public`."
+
+  - type: bug
+    after: parameter-type
+    prompt: "`printLine` should print any priced thing, and `main` should stay as it is. Which line is wrong?"
+    classes: |
+      interface Priced {
+          String label();
+          int price();
+      }
+
+      class Product implements Priced {
+          private String name;
+          private int dollars;
+
+          public Product(String name, int dollars) {
+              this.name = name;
+              this.dollars = dollars;
+          }
+
+          @Override
+          public String label() {
+              return this.name;
+          }
+
+          @Override
+          public int price() {
+              return this.dollars;
+          }
+      }
+
+      class Repair implements Priced {
+          private int minutes;
+
+          public Repair(int minutes) {
+              this.minutes = minutes;
+          }
+
+          @Override
+          public String label() {
+              return "Repair, " + this.minutes + " minutes";
+          }
+
+          @Override
+          public int price() {
+              return 2 * this.minutes;
+          }
+      }
+    pre: |
+      public static void printLine(Product item) { // BUG
+          System.out.println(item.label() + ": " + item.price() + " dollars");
+      }
+    body: |
+      printLine(new Product("Watch strap", 12));
+      printLine(new Repair(25));
+    fix: "public static void printLine(Priced item) {"
+    why: "A Repair isn't a Product, so `printLine(new Repair(25))` doesn't compile. The method uses only `label()` and `price()`, which every Priced has, so its parameter can be a Priced, and then it accepts products, repairs, and any class that implements Priced later."
+
+  - type: bug
+    after: set-interface
+    prompt: "The program should print how many different devices reported in: `3 devices`. The loop and the last line should stay as they are. Which line is wrong?"
+    body: |
+      String[] reports = {"heater", "fan", "heater", "lamp", "fan"};
+      List<String> devices = new ArrayList<>(); // BUG
+      for (String device : reports) {
+          devices.add(device);
+      }
+      System.out.println(devices.size() + " devices");
+    fix: "Set<String> devices = new HashSet<>();"
+    why: "A list keeps every report, repeats too, so its size is 5. A set keeps each value once: with `Set<String> devices = new HashSet<>();`, the second heater and the second fan change nothing, and the size is 3."
+
+  - type: compiles
+    after: variable-type
+    classes: |
+      interface Chargeable {
+          int batteryPercent();
+          void charge(int minutes);
+      }
+    body: |
+      Chargeable gadget = new Chargeable();
+      gadget.charge(10);
+      System.out.println(gadget.batteryPercent());
+    why: "No. An interface has no code to run, so there are no objects of it: javac says `Chargeable is abstract; cannot be instantiated`. A Chargeable variable refers to an object of some class that implements Chargeable."
+
+  - type: compiles
+    after: collection-interface
+    body: |
+      Set<String> tags = new HashSet<>();
+      tags.add("garden");
+      Collection<String> all = tags;
+      List<String> sorted = new ArrayList<>(all);
+      System.out.println(sorted.size());
+    why: "Yes. A HashSet is a Set, and every Set is a Collection, so `all` can refer to it. `new ArrayList<>(...)` takes any Collection, and makes a list of its values."
+
+  - type: choice
+    after: several
+    prompt: "A robot mower is an Appliance, and it can also be switched on and charged. Appliance is a class; Switchable and Chargeable are interfaces. Which header compiles?"
+    choices:
+      - "`public class RobotMower implements Switchable, Chargeable extends Appliance`"
+      - "`public class RobotMower extends Appliance implements Switchable, Chargeable`"
+      - "`public class RobotMower extends Appliance, Switchable, Chargeable`"
+      - "`public class RobotMower implements Appliance, Switchable, Chargeable`"
+    answer: 2
+    why: "`extends` comes first, with the one superclass, and then `implements`, with the interfaces separated by commas. A class can't extend an interface, and it can't implement a class."
+
+  - type: choice
+    after: collection-interface
+    prompt: "A method should accept an `ArrayList<String>`, a `HashSet<String>` and a map's `keySet()`. Which parameter type fits all three?"
+    choices:
+      - "`List<String>`"
+      - "`Set<String>`"
+      - "`Collection<String>`"
+      - "`ArrayList<String>`"
+    answer: 3
+    why: "An ArrayList is a List, and a HashSet and a `keySet()` are Sets. List and Set both extend Collection, so only `Collection<String>` accepts all three. Inside the method, a for-each loop goes through any of them."
+
+  - type: boss
+    after: list-interface
+    prompt: |
+      The app warns about devices that need charging. `Chargeable.java`, `Laptop.java` and `Headphones.java` are ready. In `Main.java`, write two methods:
+
+      - `needCharging(List<Chargeable> devices, int limit)`, which returns a new list of the devices whose battery is below `limit`, in the same order
+      - `chargeAll(List<Chargeable> devices, int minutes)`, which charges every device in the list for that many minutes
+
+      The check runs:
+
+      ```java fragment
+      List<Chargeable> devices = new ArrayList<>();
+      devices.add(new Laptop(20));
+      devices.add(new Headphones(80));
+      devices.add(new Headphones(10));
+      List<Chargeable> low = needCharging(devices, 50);
+      System.out.println(low);
+      chargeAll(low, 5);
+      System.out.println(devices);
+      ```
+
+      and expects:
+
+      ```
+      [Laptop 20%, Headphones 10%]
+      [Laptop 25%, Headphones 80%, Headphones 35%]
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Chargeable> devices = new ArrayList<>();
+                devices.add(new Laptop(20));
+                devices.add(new Headphones(80));
+                devices.add(new Headphones(10));
+                List<Chargeable> low = needCharging(devices, 50);
+                System.out.println(low);
+                chargeAll(low, 5);
+                System.out.println(devices);
+            }
+
+            // Write the methods needCharging and chargeAll here.
+        }
+      Chargeable.java: |
+        public interface Chargeable {
+            int batteryPercent();
+            void charge(int minutes);
+        }
+      Laptop.java: |
+        public class Laptop implements Chargeable {
+            private int battery;
+
+            public Laptop(int battery) {
+                this.battery = battery;
+            }
+
+            @Override
+            public int batteryPercent() {
+                return this.battery;
+            }
+
+            @Override
+            public void charge(int minutes) {
+                this.battery += minutes;
+                if (this.battery > 100) {
+                    this.battery = 100;
+                }
+            }
+
+            @Override
+            public String toString() {
+                return "Laptop " + this.battery + "%";
+            }
+        }
+      Headphones.java: |
+        public class Headphones implements Chargeable {
+            private int battery;
+
+            public Headphones(int battery) {
+                this.battery = battery;
+            }
+
+            @Override
+            public int batteryPercent() {
+                return this.battery;
+            }
+
+            @Override
+            public void charge(int minutes) {
+                this.battery += 5 * minutes;
+                if (this.battery > 100) {
+                    this.battery = 100;
+                }
+            }
+
+            @Override
+            public String toString() {
+                return "Headphones " + this.battery + "%";
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Chargeable> devices = new ArrayList<>();
+                devices.add(new Laptop(20));
+                devices.add(new Headphones(80));
+                devices.add(new Headphones(10));
+                List<Chargeable> low = needCharging(devices, 50);
+                System.out.println(low);
+                chargeAll(low, 5);
+                System.out.println(devices);
+            }
+
+            public static List<Chargeable> needCharging(List<Chargeable> devices, int limit) {
+                List<Chargeable> low = new ArrayList<>();
+                for (Chargeable device : devices) {
+                    if (device.batteryPercent() < limit) {
+                        low.add(device);
+                    }
+                }
+                return low;
+            }
+
+            public static void chargeAll(List<Chargeable> devices, int minutes) {
+                for (Chargeable device : devices) {
+                    device.charge(minutes);
+                }
+            }
+        }
+      Chargeable.java: |
+        public interface Chargeable {
+            int batteryPercent();
+            void charge(int minutes);
+        }
+      Laptop.java: |
+        public class Laptop implements Chargeable {
+            private int battery;
+
+            public Laptop(int battery) {
+                this.battery = battery;
+            }
+
+            @Override
+            public int batteryPercent() {
+                return this.battery;
+            }
+
+            @Override
+            public void charge(int minutes) {
+                this.battery += minutes;
+                if (this.battery > 100) {
+                    this.battery = 100;
+                }
+            }
+
+            @Override
+            public String toString() {
+                return "Laptop " + this.battery + "%";
+            }
+        }
+      Headphones.java: |
+        public class Headphones implements Chargeable {
+            private int battery;
+
+            public Headphones(int battery) {
+                this.battery = battery;
+            }
+
+            @Override
+            public int batteryPercent() {
+                return this.battery;
+            }
+
+            @Override
+            public void charge(int minutes) {
+                this.battery += 5 * minutes;
+                if (this.battery > 100) {
+                    this.battery = 100;
+                }
+            }
+
+            @Override
+            public String toString() {
+                return "Headphones " + this.battery + "%";
+            }
+        }
+    hints:
+      - "`needCharging` makes a new `List<Chargeable>`, goes through `devices` with a for-each loop, adds each device whose `batteryPercent()` is below `limit`, and returns the new list."
+      - "`chargeAll` calls `charge(minutes)` on every device; each object runs its own `charge`. The new list holds the same objects as `devices`, not copies, so charging the low ones shows up in `devices` too."
+    require:
+      - pattern: \bpublic\s+static\s+List<Chargeable>\s+needCharging\s*\(\s*List<Chargeable>\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the method as `public static List<Chargeable> needCharging(List<Chargeable> devices, int limit)`."
+      - pattern: \bpublic\s+static\s+void\s+chargeAll\s*\(\s*List<Chargeable>\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the method as `public static void chargeAll(List<Chargeable> devices, int minutes)`."
+    tests:
+      - call: |
+          List<Chargeable> devices = new ArrayList<>();
+          devices.add(new Laptop(20));
+          devices.add(new Headphones(80));
+          devices.add(new Headphones(10));
+          List<Chargeable> low = needCharging(devices, 50);
+          System.out.println(low);
+          chargeAll(low, 5);
+          System.out.println(devices);
+      - call: |
+          List<Chargeable> none = new ArrayList<>();
+          System.out.println(needCharging(none, 100));
+          chargeAll(none, 10);
+          List<Chargeable> devices = new ArrayList<>();
+          devices.add(new Headphones(49));
+          devices.add(new Laptop(50));
+          devices.add(new Laptop(51));
+          System.out.println(needCharging(devices, 50) + " " + needCharging(devices, 0).size() + " " + devices.size());
+        hidden: true
+      - call: |
+          List<Chargeable> devices = new ArrayList<>();
+          devices.add(new Laptop(95));
+          devices.add(new Headphones(0));
+          chargeAll(devices, 3);
+          System.out.println(devices);
+          chargeAll(devices, 30);
+          System.out.println(devices + " " + needCharging(devices, 101).size());
+        hidden: true

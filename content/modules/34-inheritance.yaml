@@ -1,0 +1,3823 @@
+id: inheritance
+summary: Classes built on other classes. The class Object that every class inherits from, extends and what a subclass gets, constructors that call super(...), overriding a method with @Override and reusing the parent's version with super, private, protected and public as a subclass sees them, why the object's own class decides which method runs, when inheritance fits ("is a") and when an instance variable does ("has a"), and abstract classes with abstract methods. MOOC section 9.1.
+steps:
+  - id: inheritance-object
+    slug: object
+    title: Every class inherits from Object
+    text: |
+      Since module 17 you've written classes of your own, and some things worked without your writing them. Module 18 noted that `println` can print an object whose class has no `toString`, module 23 called `equals` on objects whose class had no `equals` yet, and module 32 said that every object has a `hashCode`. Where do those methods come from?
+
+      Java has a class called `Object`. It's in `java.lang`, like `String`, so it needs no import. Every class **inherits** from Object: it gets Object's methods, as if they were written in the class itself. This module is about inheritance, and a class of yours can inherit from another class of yours too, not only from Object.
+
+      ### What Object gives every class
+
+      A museum keeps a record of each exhibit: its name and the year it was made. This `Exhibit` class has a constructor and nothing else, yet the program calls four methods on it:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Exhibit vase = new Exhibit("Blue vase", 1720);
+              Exhibit copy = new Exhibit("Blue vase", 1720);
+              System.out.println(vase.getClass().getName());
+              System.out.println(vase.equals(copy));
+              System.out.println(vase.equals(vase));
+              System.out.println(vase.hashCode() == vase.hashCode());
+              String text = vase.toString();
+              System.out.println(text.startsWith("Exhibit@"));
+          }
+      }
+      // ==== Exhibit.java ====
+      public class Exhibit {
+          private String name;
+          private int year;
+
+          public Exhibit(String name, int year) {
+              this.name = name;
+              this.year = year;
+          }
+      }
+      ```
+
+      ```output
+      Exhibit
+      false
+      true
+      true
+      true
+      ```
+
+      All four methods come from Object:
+
+      - `getClass().getName()` gives the name of the object's class. It's the same on every run.
+      - Object's `equals` does the same as `==`: it's `true` only for the very same object (module 23). `vase` and `copy` have the same values, but they're two objects.
+      - Object's `hashCode` gives a number for the object. It stays the same while the program runs, but it can change from one run to the next (module 32).
+      - Object's `toString` gives the class name, an `@` and the hash code written in hexadecimal (base 16, with the digits 0 to 9 and the letters a to f), something like `Exhibit@1b6d3586`. The hash code changes from run to run, so this course never prints that text: the program above only checks how it starts.
+
+      ### Your own methods replace Object's
+
+      When a class writes a method with the same header as one of Object's, the class's own method is used instead of Object's. That's what your `toString` (module 18), `equals` (module 23) and `hashCode` (module 32) have done all along: each one replaced Object's version. Step 4 gives this a name, **overriding**.
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              Exhibit vase = new Exhibit("Blue vase", 1720);
+              Exhibit copy = new Exhibit("Blue vase", 1720);
+              System.out.println(vase);
+              System.out.println(vase.equals(copy));
+
+              ArrayList<Exhibit> hall = new ArrayList<>();
+              hall.add(vase);
+              hall.add(new Exhibit("Iron helmet", 1450));
+              System.out.println(hall);
+              System.out.println("Next up: " + hall.get(1));
+              System.out.println(hall.contains(new Exhibit("Iron helmet", 1450)));
+          }
+      }
+      // ==== Exhibit.java ====
+      import java.util.Objects;
+
+      public class Exhibit {
+          private String name;
+          private int year;
+
+          public Exhibit(String name, int year) {
+              this.name = name;
+              this.year = year;
+          }
+
+          public boolean equals(Object compared) {
+              if (this == compared) {
+                  return true;
+              }
+              if (!(compared instanceof Exhibit)) {
+                  return false;
+              }
+              Exhibit other = (Exhibit) compared;
+              return this.name.equals(other.name) && this.year == other.year;
+          }
+
+          public int hashCode() {
+              return Objects.hash(this.name, this.year);
+          }
+
+          public String toString() {
+              return this.name + " (" + this.year + ")";
+          }
+      }
+      ```
+
+      ```output
+      Blue vase (1720)
+      true
+      [Blue vase (1720), Iron helmet (1450)]
+      Next up: Iron helmet (1450)
+      true
+      ```
+
+      - `println(vase)`, the way a list prints itself, and `+` with a String all call the object's `toString`, and now that's Exhibit's own.
+      - The list's `contains` calls `equals`, and now that's Exhibit's own too.
+      - The name, the parameter types and the return type must be Object's, and the method must stay public: `public String toString()`, `public boolean equals(Object compared)` and `public int hashCode()`. (The parameter's name can be anything, as module 23 said; Object's own is `obj`.) That's why `equals` takes an `Object`: Object's `equals` takes one, since any object may be compared with any other. A method `equals(Exhibit compared)` would be a second method next to Object's (overloading, module 21), and lists and maps would go on calling Object's.
+      - Object's other methods, such as `getClass`, stay as they are.
+
+      ### Inheriting, in one word
+
+      A class that doesn't say which class it inherits from inherits from Object. So these two headers mean the same:
+
+      ```java fragment
+      public class Exhibit {
+      ```
+
+      ```java fragment
+      public class Exhibit extends Object {
+      ```
+
+      You'll hardly ever see the second one written out, but it shows the word that the next step is about: `extends`.
+
+      **Your turn:** a museum stores fossils in drawers. `Fossil` has its own `toString`, but no `equals`. What does this program print?
+    predict: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              Fossil tooth = new Fossil("Shark tooth", 15);
+              Fossil other = new Fossil("Shark tooth", 15);
+              ArrayList<Fossil> drawer = new ArrayList<>();
+              drawer.add(tooth);
+              System.out.println(tooth);
+              System.out.println(tooth.equals(other));
+              System.out.println(drawer.contains(other));
+              System.out.println(drawer.contains(tooth));
+              System.out.println(other.getClass().getName());
+          }
+      }
+      // ==== Fossil.java ====
+      public class Fossil {
+          private String name;
+          private int millionYears;
+
+          public Fossil(String name, int millionYears) {
+              this.name = name;
+              this.millionYears = millionYears;
+          }
+
+          public String toString() {
+              return this.name + ", " + this.millionYears + " million years old";
+          }
+      }
+    hints:
+      - "`println(tooth)` calls Fossil's own `toString`. `getClass().getName()` gives the class's name."
+      - "Fossil has no `equals` of its own, so it has Object's, which is the same as `==`. `tooth` and `other` are two different objects, and `contains` compares with `equals`."
+    more:
+      - task: |
+          A museum's `Painting` has a title, an artist and a year. Printing one now shows Object's `toString`: `Painting@` and a hash code. In `Painting.java`, write Painting's own `toString`, so that a painting shows as `Harbor at Dawn by Mina Park (1911)`. The check prints a painting, a list of paintings, and a painting after other text:
+
+          ```java fragment
+          Painting dawn = new Painting("Harbor at Dawn", "Mina Park", 1911);
+          System.out.println(dawn);
+          ArrayList<Painting> wall = new ArrayList<>();
+          wall.add(dawn);
+          wall.add(new Painting("Red Kite", "Tomas Ek", 1958));
+          System.out.println(wall);
+          System.out.println("On loan: " + wall.get(1));
+          ```
+
+          and expects:
+
+          ```
+          Harbor at Dawn by Mina Park (1911)
+          [Harbor at Dawn by Mina Park (1911), Red Kite by Tomas Ek (1958)]
+          On loan: Red Kite by Tomas Ek (1958)
+          ```
+        seed:
+          Painting.java: |
+            public class Painting {
+                private String title;
+                private String artist;
+                private int year;
+
+                public Painting(String title, String artist, int year) {
+                    this.title = title;
+                    this.artist = artist;
+                    this.year = year;
+                }
+
+                // Write the toString method here.
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Painting dawn = new Painting("Harbor at Dawn", "Mina Park", 1911);
+                    System.out.println(dawn);
+                    ArrayList<Painting> wall = new ArrayList<>();
+                    wall.add(dawn);
+                    wall.add(new Painting("Red Kite", "Tomas Ek", 1958));
+                    System.out.println(wall);
+                    System.out.println("On loan: " + wall.get(1));
+                }
+            }
+        solution:
+          Painting.java: |
+            public class Painting {
+                private String title;
+                private String artist;
+                private int year;
+
+                public Painting(String title, String artist, int year) {
+                    this.title = title;
+                    this.artist = artist;
+                    this.year = year;
+                }
+
+                public String toString() {
+                    return this.title + " by " + this.artist + " (" + this.year + ")";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Painting dawn = new Painting("Harbor at Dawn", "Mina Park", 1911);
+                    System.out.println(dawn);
+                    ArrayList<Painting> wall = new ArrayList<>();
+                    wall.add(dawn);
+                    wall.add(new Painting("Red Kite", "Tomas Ek", 1958));
+                    System.out.println(wall);
+                    System.out.println("On loan: " + wall.get(1));
+                }
+            }
+        hints:
+          - "The header must be exactly Object's: `public String toString() {`. The method returns the text instead of printing it."
+          - "`return this.title + \" by \" + this.artist + \" (\" + this.year + \")\";`. The list and the `+` both call the same method."
+        require:
+          - pattern: \bpublic\s+String\s+toString\s*\(\s*\)
+            message: "Write the header exactly as `public String toString()`, so that it replaces Object's."
+        tests:
+          - call: |
+              Painting dawn = new Painting("Harbor at Dawn", "Mina Park", 1911);
+              System.out.println(dawn);
+              ArrayList<Painting> wall = new ArrayList<>();
+              wall.add(dawn);
+              wall.add(new Painting("Red Kite", "Tomas Ek", 1958));
+              System.out.println(wall);
+              System.out.println("On loan: " + wall.get(1));
+          - call: |
+              Painting study = new Painting("Study in Gray", "Ada Brandt", 1874);
+              String caption = "Room 3: " + study;
+              System.out.println(caption);
+              System.out.println(study.toString().length());
+            hidden: true
+          - call: |
+              ArrayList<Painting> empty = new ArrayList<>();
+              System.out.println(empty);
+              empty.add(new Painting("Snow", "Kai Lund", 2001));
+              System.out.println(empty);
+            hidden: true
+      - task: |
+          A display case holds minerals, and `contains` and `indexOf` should find a mineral with the same name and hardness. Fill in the blank, a type, so that `equals` replaces Object's.
+        fill: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Mineral> display = new ArrayList<>();
+                  display.add(new Mineral("Quartz", 7));
+                  display.add(new Mineral("Talc", 1));
+                  System.out.println(display.contains(new Mineral("Talc", 1)));
+                  System.out.println(display.indexOf(new Mineral("Quartz", 7)));
+              }
+          }
+          // ==== Mineral.java ====
+          import java.util.Objects;
+
+          public class Mineral {
+              private String name;
+              private int hardness;
+
+              public Mineral(String name, int hardness) {
+                  this.name = name;
+                  this.hardness = hardness;
+              }
+
+              public boolean equals([[Object]] compared) {
+                  if (this == compared) {
+                      return true;
+                  }
+                  if (!(compared instanceof Mineral)) {
+                      return false;
+                  }
+                  Mineral other = (Mineral) compared;
+                  return this.name.equals(other.name) && this.hardness == other.hardness;
+              }
+
+              public int hashCode() {
+                  return Objects.hash(this.name, this.hardness);
+              }
+          }
+        hints:
+          - "The method must have the same header as Object's `equals`, and Object's `equals` can be given any object at all."
+          - "The parameter's type is `Object`. With `Mineral` there, the program still compiles, but it's a second method next to Object's, and `contains` goes on calling Object's."
+
+  - id: inheritance-extends
+    slug: extends
+    title: "extends: a class built on another"
+    text: |
+      A music school lends instruments to its students and keeps track of how long each one has been played. Every instrument needs that, whatever kind it is. Violins need something more: now and then a string breaks and gets changed, and the school counts those too.
+
+      You could copy the code for the minutes into a Violin class, a Drum class and every other kind. With inheritance you write it once, in a class `Instrument`, and `Violin` **extends** it:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Violin violin = new Violin();
+              violin.practice(30);
+              violin.practice(45);
+              violin.changeString();
+              violin.changeString();
+              System.out.println(violin.getMinutesPlayed());
+              System.out.println(violin.getStringsChanged());
+              System.out.println(violin.report());
+
+              Instrument shaker = new Instrument();
+              shaker.practice(10);
+              System.out.println(shaker.getMinutesPlayed());
+          }
+      }
+      // ==== Instrument.java ====
+      public class Instrument {
+          private int minutesPlayed;
+
+          public void practice(int minutes) {
+              this.minutesPlayed += minutes;
+          }
+
+          public int getMinutesPlayed() {
+              return this.minutesPlayed;
+          }
+      }
+      // ==== Violin.java ====
+      public class Violin extends Instrument {
+          private int stringsChanged;
+
+          public void changeString() {
+              this.stringsChanged++;
+          }
+
+          public int getStringsChanged() {
+              return this.stringsChanged;
+          }
+
+          public String report() {
+              return this.getMinutesPlayed() + " minutes, " + this.stringsChanged + " strings changed";
+          }
+      }
+      ```
+
+      ```output
+      75
+      2
+      75 minutes, 2 strings changed
+      10
+      ```
+
+      - `public class Violin extends Instrument` makes Violin a **subclass** of Instrument, and Instrument the **superclass** of Violin. You'll also hear child class and parent class.
+      - A Violin object has everything an Instrument has: the variable `minutesPlayed` and the methods `practice` and `getMinutesPlayed`. On top of that it has what Violin adds: `stringsChanged`, `changeString`, `getStringsChanged` and `report`. So `violin.practice(30)` works, although Violin's code never mentions `practice`.
+      - Violin's own methods can call the methods it inherits, just like its own: `report` calls `this.getMinutesPlayed()`.
+      - `report` can't write `this.minutesPlayed`, though. That variable is `private` to Instrument, so only Instrument's code can use it by name. Every Violin object has it, and `practice` changes it, but Violin's code reaches it only through Instrument's public methods. Step 5 is about this.
+      - Neither class has a constructor, so each gets the default constructor from module 17, and the numbers start at 0. The next step adds constructors that take values.
+
+      ### A plain Instrument has only Instrument's methods
+
+      `shaker` is an Instrument, not a Violin. Inheritance goes one way: the subclass gets the superclass's methods, never the other way around.
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Instrument shaker = new Instrument();
+              shaker.changeString();
+          }
+      }
+      // ==== Instrument.java ====
+      public class Instrument {
+          private int minutesPlayed;
+
+          public void practice(int minutes) {
+              this.minutesPlayed += minutes;
+          }
+
+          public int getMinutesPlayed() {
+              return this.minutesPlayed;
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: cannot find symbol
+              shaker.changeString();
+                    ^
+        symbol:   method changeString()
+        location: variable shaker of type Instrument
+      1 error
+      ```
+
+      ### One superclass, many subclasses
+
+      A class can extend only one class. But one class can have many subclasses: the school's `Drum` can extend Instrument too, and count its broken drumsticks:
+
+      ```java fragment
+      public class Drum extends Instrument {
+          private int sticksBroken;
+
+          public void breakStick() {
+              this.sticksBroken++;
+          }
+      }
+      ```
+
+      A Drum and a Violin share Instrument's part, and each adds its own. A Drum has no `changeString`, and a Violin has no `breakStick`.
+
+      Inheritance also goes up more than one level. Instrument doesn't say what it extends, so it extends Object (step 1). So a Violin has Object's methods as well: `violin.getClass().getName()` gives `Violin`.
+
+      **Your turn:** the school also lends pianos, and a piano needs tuning after every 60 minutes of playing. `Instrument.java` is ready. In `Piano.java`, write the class `Piano`, which extends Instrument and adds two methods:
+
+      - `tune()`, which remembers how many minutes the piano had been played when it was tuned
+      - `needsTuning()`, which returns `true` when the piano has been played for at least 60 minutes since it was last tuned. A new piano counts as just tuned.
+
+      Use the inherited `getMinutesPlayed()`. The check runs:
+
+      ```java fragment
+      Piano piano = new Piano();
+      piano.practice(45);
+      System.out.println(piano.needsTuning());
+      piano.practice(30);
+      System.out.println(piano.needsTuning());
+      piano.tune();
+      System.out.println(piano.needsTuning());
+      System.out.println(piano.getMinutesPlayed());
+      ```
+
+      and expects:
+
+      ```
+      false
+      true
+      false
+      75
+      ```
+    seed:
+      Piano.java: |
+        public class Piano {
+
+        }
+      Instrument.java: |
+        public class Instrument {
+            private int minutesPlayed;
+
+            public void practice(int minutes) {
+                this.minutesPlayed += minutes;
+            }
+
+            public int getMinutesPlayed() {
+                return this.minutesPlayed;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Piano piano = new Piano();
+                piano.practice(45);
+                System.out.println(piano.needsTuning());
+                piano.practice(30);
+                System.out.println(piano.needsTuning());
+                piano.tune();
+                System.out.println(piano.needsTuning());
+                System.out.println(piano.getMinutesPlayed());
+            }
+        }
+    solution:
+      Piano.java: |
+        public class Piano extends Instrument {
+            private int minutesAtTuning;
+
+            public void tune() {
+                this.minutesAtTuning = this.getMinutesPlayed();
+            }
+
+            public boolean needsTuning() {
+                return this.getMinutesPlayed() - this.minutesAtTuning >= 60;
+            }
+        }
+      Instrument.java: |
+        public class Instrument {
+            private int minutesPlayed;
+
+            public void practice(int minutes) {
+                this.minutesPlayed += minutes;
+            }
+
+            public int getMinutesPlayed() {
+                return this.minutesPlayed;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Piano piano = new Piano();
+                piano.practice(45);
+                System.out.println(piano.needsTuning());
+                piano.practice(30);
+                System.out.println(piano.needsTuning());
+                piano.tune();
+                System.out.println(piano.needsTuning());
+                System.out.println(piano.getMinutesPlayed());
+            }
+        }
+    hints:
+      - "Start with `public class Piano extends Instrument {`. Piano needs one variable of its own: the minutes played at the last tuning, which starts at 0 like any int instance variable."
+      - "`tune()` stores `this.getMinutesPlayed()` in that variable. `needsTuning()` returns `this.getMinutesPlayed() - this.minutesAtTuning >= 60`."
+    require:
+      - pattern: \bclass\s+Piano\s+extends\s+Instrument\b
+        message: "Write the header as `public class Piano extends Instrument`, so that a piano gets Instrument's methods."
+    tests:
+      - call: |
+          Piano piano = new Piano();
+          piano.practice(45);
+          System.out.println(piano.needsTuning());
+          piano.practice(30);
+          System.out.println(piano.needsTuning());
+          piano.tune();
+          System.out.println(piano.needsTuning());
+          System.out.println(piano.getMinutesPlayed());
+      - call: |
+          Piano piano = new Piano();
+          System.out.println(piano.needsTuning());
+          piano.practice(60);
+          System.out.println(piano.needsTuning());
+          piano.tune();
+          piano.practice(59);
+          System.out.println(piano.needsTuning() + " " + piano.getMinutesPlayed());
+          piano.practice(1);
+          System.out.println(piano.needsTuning());
+        hidden: true
+      - call: |
+          Piano first = new Piano();
+          Piano second = new Piano();
+          first.practice(100);
+          second.practice(20);
+          first.tune();
+          System.out.println(first.needsTuning() + " " + second.needsTuning());
+          second.practice(50);
+          System.out.println(second.needsTuning() + " " + first.getMinutesPlayed());
+        hidden: true
+    more:
+      - task: |
+          `Drum` and `Violin` both extend `Instrument`, which has a `toString` of its own. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Drum drum = new Drum();
+                  Drum spare = new Drum();
+                  drum.practice(20);
+                  drum.practice(25);
+                  spare.practice(5);
+                  drum.breakStick();
+                  System.out.println(drum);
+                  System.out.println(spare.getMinutesPlayed() + " " + spare.getSticksBroken());
+                  System.out.println(drum.getClass().getName());
+              }
+          }
+          // ==== Instrument.java ====
+          public class Instrument {
+              private int minutesPlayed;
+
+              public void practice(int minutes) {
+                  this.minutesPlayed += minutes;
+              }
+
+              public int getMinutesPlayed() {
+                  return this.minutesPlayed;
+              }
+
+              public String toString() {
+                  return "played for " + this.minutesPlayed + " minutes";
+              }
+          }
+          // ==== Drum.java ====
+          public class Drum extends Instrument {
+              private int sticksBroken;
+
+              public void breakStick() {
+                  this.sticksBroken++;
+              }
+
+              public int getSticksBroken() {
+                  return this.sticksBroken;
+              }
+          }
+        hints:
+          - "Drum has no `toString` of its own, so it inherits Instrument's, and `println(drum)` uses that one, not Object's."
+          - "Each Drum object has its own minutes and its own broken sticks: `spare` was played only once, and it broke nothing. `getClass().getName()` gives the class the object was made from."
+      - task: |
+          The school's trumpets and flutes were written before anyone thought of inheritance, so `Trumpet` and `Flute` both have the same code for the minutes played. Move that code into `Instrument`: its variable `minutesPlayed` and its methods `practice` and `getMinutesPlayed`. Then make Trumpet and Flute extend Instrument, and keep only their own things in them: the valve oilings in Trumpet, the cleanings in Flute. `practice` and `getMinutesPlayed` should be written only once, in Instrument. The program prints:
+
+          ```
+          Trumpet: 25 minutes, oiled 2 times
+          Flute: 55 minutes, cleaned 2 times
+          ```
+        seed:
+          Instrument.java: |
+            public class Instrument {
+
+            }
+          Trumpet.java: |
+            public class Trumpet {
+                private int minutesPlayed;
+                private int valveOilings;
+
+                public void practice(int minutes) {
+                    this.minutesPlayed += minutes;
+                }
+
+                public int getMinutesPlayed() {
+                    return this.minutesPlayed;
+                }
+
+                public void oilValves() {
+                    this.valveOilings++;
+                }
+
+                public int getValveOilings() {
+                    return this.valveOilings;
+                }
+            }
+          Flute.java: |
+            public class Flute {
+                private int minutesPlayed;
+                private int cleanings;
+
+                public void practice(int minutes) {
+                    this.minutesPlayed += minutes;
+                }
+
+                public int getMinutesPlayed() {
+                    return this.minutesPlayed;
+                }
+
+                public void clean() {
+                    this.cleanings++;
+                }
+
+                public int getCleanings() {
+                    return this.cleanings;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Trumpet trumpet = new Trumpet();
+                    trumpet.practice(25);
+                    trumpet.oilValves();
+                    trumpet.oilValves();
+                    Flute flute = new Flute();
+                    flute.practice(40);
+                    flute.practice(15);
+                    flute.clean();
+                    flute.clean();
+                    System.out.println("Trumpet: " + trumpet.getMinutesPlayed() + " minutes, oiled " + trumpet.getValveOilings() + " times");
+                    System.out.println("Flute: " + flute.getMinutesPlayed() + " minutes, cleaned " + flute.getCleanings() + " times");
+                }
+            }
+        solution:
+          Instrument.java: |
+            public class Instrument {
+                private int minutesPlayed;
+
+                public void practice(int minutes) {
+                    this.minutesPlayed += minutes;
+                }
+
+                public int getMinutesPlayed() {
+                    return this.minutesPlayed;
+                }
+            }
+          Trumpet.java: |
+            public class Trumpet extends Instrument {
+                private int valveOilings;
+
+                public void oilValves() {
+                    this.valveOilings++;
+                }
+
+                public int getValveOilings() {
+                    return this.valveOilings;
+                }
+            }
+          Flute.java: |
+            public class Flute extends Instrument {
+                private int cleanings;
+
+                public void clean() {
+                    this.cleanings++;
+                }
+
+                public int getCleanings() {
+                    return this.cleanings;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Trumpet trumpet = new Trumpet();
+                    trumpet.practice(25);
+                    trumpet.oilValves();
+                    trumpet.oilValves();
+                    Flute flute = new Flute();
+                    flute.practice(40);
+                    flute.practice(15);
+                    flute.clean();
+                    flute.clean();
+                    System.out.println("Trumpet: " + trumpet.getMinutesPlayed() + " minutes, oiled " + trumpet.getValveOilings() + " times");
+                    System.out.println("Flute: " + flute.getMinutesPlayed() + " minutes, cleaned " + flute.getCleanings() + " times");
+                }
+            }
+        hints:
+          - "Cut `minutesPlayed`, `practice` and `getMinutesPlayed` out of Trumpet, paste them into Instrument, and delete them from Flute too."
+          - "Then change the headers to `public class Trumpet extends Instrument` and `public class Flute extends Instrument`. Main doesn't change: trumpets and flutes still have `practice`, now inherited."
+        require:
+          - pattern: \bclass\s+Trumpet\s+extends\s+Instrument\b
+            message: "Make Trumpet extend Instrument: `public class Trumpet extends Instrument`."
+          - pattern: \bclass\s+Flute\s+extends\s+Instrument\b
+            message: "Make Flute extend Instrument: `public class Flute extends Instrument`."
+          - pattern: \bvoid\s+practice\s*\(
+            max: 1
+            message: "Write `practice` only once, in Instrument. Trumpet and Flute inherit it."
+          - pattern: \bint\s+getMinutesPlayed\s*\(
+            max: 1
+            message: "Write `getMinutesPlayed` only once, in Instrument. Trumpet and Flute inherit it."
+        tests:
+          - name: The program's output
+          - call: |
+              Instrument bell = new Instrument();
+              bell.practice(5);
+              bell.practice(7);
+              System.out.println(bell.getMinutesPlayed());
+              Trumpet trumpet = new Trumpet();
+              System.out.println(trumpet.getMinutesPlayed() + " " + trumpet.getValveOilings());
+            hidden: true
+          - call: |
+              Flute first = new Flute();
+              Flute second = new Flute();
+              first.practice(10);
+              second.practice(30);
+              second.clean();
+              System.out.println(first.getMinutesPlayed() + " " + first.getCleanings());
+              System.out.println(second.getMinutesPlayed() + " " + second.getCleanings());
+            hidden: true
+
+  - id: inheritance-super-constructor
+    slug: super-constructor
+    title: "Constructors and super(...)"
+    text: |
+      Step 2's classes had no constructors, so they got the default ones. Most classes have constructors that take values: a bank account needs an owner and a starting balance. How does a subclass hand values to its superclass's constructor?
+
+      ### super(...)
+
+      A bank has plain accounts, and savings accounts that also earn interest at some rate. (Amounts are in whole dollars here, to keep the numbers short.)
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              SavingsAccount savings = new SavingsAccount("Mia", 500, 3);
+              savings.deposit(100);
+              System.out.println(savings.getOwner());
+              System.out.println(savings.getBalance());
+              System.out.println(savings.getInterestPercent());
+          }
+      }
+      // ==== BankAccount.java ====
+      public class BankAccount {
+          private String owner;
+          private int balance;
+
+          public BankAccount(String owner, int balance) {
+              this.owner = owner;
+              this.balance = balance;
+          }
+
+          public String getOwner() {
+              return this.owner;
+          }
+
+          public int getBalance() {
+              return this.balance;
+          }
+
+          public void deposit(int amount) {
+              if (amount > 0) {
+                  this.balance += amount;
+              }
+          }
+      }
+      // ==== SavingsAccount.java ====
+      public class SavingsAccount extends BankAccount {
+          private int interestPercent;
+
+          public SavingsAccount(String owner, int balance, int interestPercent) {
+              super(owner, balance);
+              this.interestPercent = interestPercent;
+          }
+
+          public int getInterestPercent() {
+              return this.interestPercent;
+          }
+      }
+      ```
+
+      ```output
+      Mia
+      600
+      3
+      ```
+
+      - A subclass doesn't inherit constructors. `SavingsAccount` writes its own, which takes all three values.
+      - `super(owner, balance);` calls BankAccount's constructor with the owner and the balance. It sets up the BankAccount part of the object. It has to be BankAccount's constructor that does this: `owner` and `balance` are private to BankAccount, so SavingsAccount's code can't set them itself.
+      - After it, the constructor sets up what SavingsAccount adds, the interest rate.
+      - `super(...)` works like module 21's `this(...)`, which called another constructor of the same class. And the same rule holds: it must be the first statement of the constructor. In Java 21, the version this course runs, nothing may come before it.
+
+      ### The parent's part comes first
+
+      A line printed in each constructor shows the order:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              SavingsAccount savings = new SavingsAccount("Mia", 500, 3);
+              BankAccount plain = new BankAccount("Leo", 80);
+          }
+      }
+      // ==== BankAccount.java ====
+      public class BankAccount {
+          private String owner;
+          private int balance;
+
+          public BankAccount(String owner, int balance) {
+              this.owner = owner;
+              this.balance = balance;
+              System.out.println("Opening an account for " + owner);
+          }
+      }
+      // ==== SavingsAccount.java ====
+      public class SavingsAccount extends BankAccount {
+          private int interestPercent;
+
+          public SavingsAccount(String owner, int balance, int interestPercent) {
+              super(owner, balance);
+              this.interestPercent = interestPercent;
+              System.out.println("Adding interest of " + interestPercent + "%");
+          }
+      }
+      ```
+
+      ```output
+      Opening an account for Mia
+      Adding interest of 3%
+      Opening an account for Leo
+      ```
+
+      `new SavingsAccount(...)` runs SavingsAccount's constructor. Its first line runs BankAccount's constructor all the way through, and only then does the rest of SavingsAccount's constructor run. An object is built from the top down: first the parent's part, then the child's. (BankAccount's constructor, in turn, first runs Object's, which does nothing you can see.)
+
+      ### When super(...) is missing
+
+      If a constructor doesn't start with `super(...)` or `this(...)`, Java puts `super();` there for you: a call to the superclass's constructor without parameters. That's what happened in step 2. Violin had no constructor at all, so it got the default one, which does nothing but call `super()`, and Instrument had the default constructor too.
+
+      BankAccount has no constructor without parameters. So a SavingsAccount constructor that forgets `super(...)` doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              SavingsAccount savings = new SavingsAccount("Mia", 500, 3);
+          }
+      }
+      // ==== BankAccount.java ====
+      public class BankAccount {
+          private String owner;
+          private int balance;
+
+          public BankAccount(String owner, int balance) {
+              this.owner = owner;
+              this.balance = balance;
+          }
+      }
+      // ==== SavingsAccount.java ====
+      public class SavingsAccount extends BankAccount {
+          private int interestPercent;
+
+          public SavingsAccount(String owner, int balance, int interestPercent) {
+              this.interestPercent = interestPercent;
+          }
+      }
+      ```
+
+      ```javac
+      SavingsAccount.java:4: error: constructor BankAccount in class BankAccount cannot be applied to given types;
+          public SavingsAccount(String owner, int balance, int interestPercent) {
+                                                                                ^
+        required: String,int
+        found:    no arguments
+        reason: actual and formal argument lists differ in length
+      1 error
+      ```
+
+      javac points at the `{` that opens the constructor's body, where the hidden `super();` would be: BankAccount's constructor needs a String and an int, and it was given nothing. The fix is the line `super(owner, balance);`.
+
+      **Your turn:** the bank also has checking accounts, which may go below zero, down to an overdraft limit. `BankAccount.java` is ready. In `CheckingAccount.java`, write the class `CheckingAccount`, which extends BankAccount, with:
+
+      - a constructor `CheckingAccount(String owner, int balance, int overdraftLimit)`, which hands the owner and the balance to BankAccount's constructor, and keeps the limit itself
+      - `getOverdraftLimit()`, which returns the limit
+      - `availableToSpend()`, which returns the balance plus the limit
+
+      The check runs:
+
+      ```java fragment
+      CheckingAccount account = new CheckingAccount("Ada", 120, 200);
+      System.out.println(account.getOwner() + " " + account.getBalance());
+      System.out.println(account.availableToSpend());
+      account.deposit(30);
+      System.out.println(account.availableToSpend());
+      ```
+
+      and expects:
+
+      ```
+      Ada 120
+      320
+      350
+      ```
+    seed:
+      CheckingAccount.java: |
+        public class CheckingAccount {
+
+        }
+      BankAccount.java: |
+        public class BankAccount {
+            private String owner;
+            private int balance;
+
+            public BankAccount(String owner, int balance) {
+                this.owner = owner;
+                this.balance = balance;
+            }
+
+            public String getOwner() {
+                return this.owner;
+            }
+
+            public int getBalance() {
+                return this.balance;
+            }
+
+            public void deposit(int amount) {
+                if (amount > 0) {
+                    this.balance += amount;
+                }
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                CheckingAccount account = new CheckingAccount("Ada", 120, 200);
+                System.out.println(account.getOwner() + " " + account.getBalance());
+                System.out.println(account.availableToSpend());
+                account.deposit(30);
+                System.out.println(account.availableToSpend());
+            }
+        }
+    solution:
+      CheckingAccount.java: |
+        public class CheckingAccount extends BankAccount {
+            private int overdraftLimit;
+
+            public CheckingAccount(String owner, int balance, int overdraftLimit) {
+                super(owner, balance);
+                this.overdraftLimit = overdraftLimit;
+            }
+
+            public int getOverdraftLimit() {
+                return this.overdraftLimit;
+            }
+
+            public int availableToSpend() {
+                return this.getBalance() + this.overdraftLimit;
+            }
+        }
+      BankAccount.java: |
+        public class BankAccount {
+            private String owner;
+            private int balance;
+
+            public BankAccount(String owner, int balance) {
+                this.owner = owner;
+                this.balance = balance;
+            }
+
+            public String getOwner() {
+                return this.owner;
+            }
+
+            public int getBalance() {
+                return this.balance;
+            }
+
+            public void deposit(int amount) {
+                if (amount > 0) {
+                    this.balance += amount;
+                }
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                CheckingAccount account = new CheckingAccount("Ada", 120, 200);
+                System.out.println(account.getOwner() + " " + account.getBalance());
+                System.out.println(account.availableToSpend());
+                account.deposit(30);
+                System.out.println(account.availableToSpend());
+            }
+        }
+    hints:
+      - "The class starts `public class CheckingAccount extends BankAccount {` and has one variable of its own, the overdraft limit. The constructor's first line is `super(owner, balance);`."
+      - "The balance is private to BankAccount, so `availableToSpend()` gets it with the inherited `this.getBalance()`, and returns that plus `this.overdraftLimit`."
+    require:
+      - pattern: \bclass\s+CheckingAccount\s+extends\s+BankAccount\b
+        message: "Write the header as `public class CheckingAccount extends BankAccount`."
+      - pattern: \bsuper\s*\(
+        message: "Hand the owner and the balance to BankAccount's constructor with `super(owner, balance);`."
+    tests:
+      - call: |
+          CheckingAccount account = new CheckingAccount("Ada", 120, 200);
+          System.out.println(account.getOwner() + " " + account.getBalance());
+          System.out.println(account.availableToSpend());
+          account.deposit(30);
+          System.out.println(account.availableToSpend());
+      - call: |
+          CheckingAccount account = new CheckingAccount("Ben", 0, 50);
+          System.out.println(account.getOwner() + " " + account.getBalance() + " " + account.getOverdraftLimit());
+          System.out.println(account.availableToSpend());
+          account.deposit(-10);
+          account.deposit(5);
+          System.out.println(account.availableToSpend() + " " + account.getBalance());
+        hidden: true
+      - call: |
+          CheckingAccount first = new CheckingAccount("Cy", 300, 0);
+          CheckingAccount second = new CheckingAccount("Dee", 10, 1000);
+          System.out.println(first.availableToSpend() + " " + second.availableToSpend());
+        hidden: true
+    more:
+      - task: |
+          A courier registers every shipment, and a letter is a shipment. Both constructors print a line. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Letter letter = new Letter(17, true);
+                  System.out.println(letter.getCode());
+                  Shipment box = new Shipment("S-2");
+              }
+          }
+          // ==== Shipment.java ====
+          public class Shipment {
+              private String code;
+
+              public Shipment(String code) {
+                  this.code = code;
+                  System.out.println("Shipment " + code + " registered");
+              }
+
+              public String getCode() {
+                  return this.code;
+              }
+          }
+          // ==== Letter.java ====
+          public class Letter extends Shipment {
+              private boolean express;
+
+              public Letter(int number, boolean express) {
+                  super("L-" + number);
+                  this.express = express;
+                  System.out.println("Letter, express: " + express);
+              }
+          }
+        hints:
+          - "`new Letter(...)` runs Letter's constructor, whose first line runs Shipment's constructor to the end. Shipment's line is printed first."
+          - "Letter hands Shipment the code `\"L-\" + number`, which is `L-17`, and that's the code `getCode()` returns. The plain Shipment runs only Shipment's constructor."
+      - task: |
+          A museum's sculptures are exhibits too, with a material of their own. Fill in the blank, so that Sculpture's constructor hands the name and the year to Exhibit's constructor.
+        fill: |
+          public class Main {
+              public static void main(String[] args) {
+                  Sculpture lion = new Sculpture("Sleeping lion", 1860, "marble");
+                  System.out.println(lion.getName() + ", " + lion.getYear() + ", " + lion.getMaterial());
+              }
+          }
+          // ==== Exhibit.java ====
+          public class Exhibit {
+              private String name;
+              private int year;
+
+              public Exhibit(String name, int year) {
+                  this.name = name;
+                  this.year = year;
+              }
+
+              public String getName() {
+                  return this.name;
+              }
+
+              public int getYear() {
+                  return this.year;
+              }
+          }
+          // ==== Sculpture.java ====
+          public class Sculpture extends Exhibit {
+              private String material;
+
+              public Sculpture(String name, int year, String material) {
+                  [[super]](name, year);
+                  this.material = material;
+              }
+
+              public String getMaterial() {
+                  return this.material;
+              }
+          }
+        hints:
+          - "Sculpture's constructor must first call its superclass's constructor, with the name and the year."
+          - "The word for the superclass's constructor is `super`: `super(name, year);`."
+
+  - id: inheritance-overriding
+    slug: overriding
+    title: "Overriding methods: @Override and super"
+    text: |
+      A subclass gets its superclass's methods, but sometimes one of them doesn't fit. A library lends most items for 21 days, but films for only 7. A film is one of the library's items, so `Film` extends `LibraryItem`, and it **overrides** the method that gives the loan period: it writes its own version, with the same header.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              LibraryItem novel = new LibraryItem("The Quiet Harbor", 2019);
+              Film film = new Film("Night Train", 2021, 104);
+              System.out.println(novel);
+              System.out.println(novel.loanDays());
+              System.out.println(film);
+              System.out.println(film.loanDays());
+              System.out.println(film.getTitle());
+          }
+      }
+      // ==== LibraryItem.java ====
+      public class LibraryItem {
+          private String title;
+          private int year;
+
+          public LibraryItem(String title, int year) {
+              this.title = title;
+              this.year = year;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int loanDays() {
+              return 21;
+          }
+
+          @Override
+          public String toString() {
+              return this.title + " (" + this.year + ")";
+          }
+      }
+      // ==== Film.java ====
+      public class Film extends LibraryItem {
+          private int minutes;
+
+          public Film(String title, int year, int minutes) {
+              super(title, year);
+              this.minutes = minutes;
+          }
+
+          @Override
+          public int loanDays() {
+              return 7;
+          }
+
+          @Override
+          public String toString() {
+              return super.toString() + ", film, " + this.minutes + " min";
+          }
+      }
+      ```
+
+      ```output
+      The Quiet Harbor (2019)
+      21
+      Night Train (2021), film, 104 min
+      7
+      Night Train
+      ```
+
+      - Film's `loanDays` has the same name, the same parameters (none) and the same return type as LibraryItem's. For a Film object, Film's version runs. For a plain LibraryItem, LibraryItem's version runs.
+      - Film doesn't override `getTitle`, so a film uses the one it inherits.
+      - LibraryItem's `toString` overrides Object's, as in step 1, and Film's `toString` overrides LibraryItem's. Java runs the version nearest to the object's own class: a Film looks in Film first, then in LibraryItem, then in Object.
+
+      ### @Override
+
+      The line `@Override` above a method is an **annotation**, a note for the compiler: "this method overrides a method of a superclass". It doesn't change what the program does. It adds a check: if no superclass has a method with that header, javac stops with an error. Here `toString` is misspelled with a small `s`:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Poster poster = new Poster("Night Train");
+              System.out.println(poster);
+          }
+      }
+      // ==== Poster.java ====
+      public class Poster {
+          private String title;
+
+          public Poster(String title) {
+              this.title = title;
+          }
+
+          @Override
+          public String tostring() {
+              return "Poster: " + this.title;
+          }
+      }
+      ```
+
+      ```javac
+      Poster.java:8: error: method does not override or implement a method from a supertype
+          @Override
+          ^
+      1 error
+      ```
+
+      Without `@Override`, this compiles. `tostring` is then just a new method that nobody calls, and `println` uses Object's `toString`, with its class name and hash code. With `@Override`, the mistake shows up right away. From here on, this course writes `@Override` above every method that overrides another, `toString`, `equals` and `hashCode` included. The editors that generate those methods (module 32) add it too.
+
+      ### super.method()
+
+      Film's `toString` starts with `super.toString()`. That calls LibraryItem's version of `toString`, on this same film, and Film adds its own part to the text. `super.` reaches the superclass's version of a method, even though Film overrides it.
+
+      - It saves repeating LibraryItem's code in Film. And Film couldn't repeat it anyway: `title` and `year` are private to LibraryItem, and there's no getter for the year.
+      - Without `super.`, the `toString()` inside Film's `toString` would be Film's own method again, which would call itself again, and so on, until the program crashes with a `StackOverflowError`.
+      - A subclass can call `super.someMethod()` in any of its methods, and at any point in the method, not only on the first line. (That rule is for `super(...)` in a constructor.)
+
+      ### Overriding or overloading?
+
+      Module 21's overloading was two methods with the same name but different parameters, side by side in one class. Overriding is a method with the same name *and* the same parameters, in a subclass: for the subclass's objects, it takes the place of the superclass's version.
+
+      That's the trap step 1 warned about. `equals(Object compared)` overrides Object's `equals`. `equals(Exhibit compared)` has different parameters, so it overloads it: lists and maps never call it. `@Override` catches this mistake too, since the second one doesn't override anything.
+
+      **Your turn:** the library also lends audiobooks, for 14 days. `LibraryItem.java` is ready. In `Audiobook.java`, override two methods, each with `@Override` above it:
+
+      - `loanDays()`, which returns 14
+      - `toString()`, which returns LibraryItem's text, followed by `, read by ` and the narrator's name. LibraryItem has no getter for the year, so use `super.toString()`.
+
+      The check runs:
+
+      ```java fragment
+      Audiobook audio = new Audiobook("Salt and Stars", 2016, "Ruth Obi");
+      System.out.println(audio);
+      System.out.println(audio.loanDays());
+      LibraryItem novel = new LibraryItem("The Quiet Harbor", 2019);
+      System.out.println(novel + ", " + novel.loanDays() + " days");
+      ```
+
+      and expects:
+
+      ```
+      Salt and Stars (2016), read by Ruth Obi
+      14
+      The Quiet Harbor (2019), 21 days
+      ```
+    seed:
+      Audiobook.java: |
+        public class Audiobook extends LibraryItem {
+            private String narrator;
+
+            public Audiobook(String title, int year, String narrator) {
+                super(title, year);
+                this.narrator = narrator;
+            }
+
+            // Override loanDays and toString here.
+        }
+      LibraryItem.java: |
+        public class LibraryItem {
+            private String title;
+            private int year;
+
+            public LibraryItem(String title, int year) {
+                this.title = title;
+                this.year = year;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public int loanDays() {
+                return 21;
+            }
+
+            @Override
+            public String toString() {
+                return this.title + " (" + this.year + ")";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Audiobook audio = new Audiobook("Salt and Stars", 2016, "Ruth Obi");
+                System.out.println(audio);
+                System.out.println(audio.loanDays());
+                LibraryItem novel = new LibraryItem("The Quiet Harbor", 2019);
+                System.out.println(novel + ", " + novel.loanDays() + " days");
+            }
+        }
+    solution:
+      Audiobook.java: |
+        public class Audiobook extends LibraryItem {
+            private String narrator;
+
+            public Audiobook(String title, int year, String narrator) {
+                super(title, year);
+                this.narrator = narrator;
+            }
+
+            @Override
+            public int loanDays() {
+                return 14;
+            }
+
+            @Override
+            public String toString() {
+                return super.toString() + ", read by " + this.narrator;
+            }
+        }
+      LibraryItem.java: |
+        public class LibraryItem {
+            private String title;
+            private int year;
+
+            public LibraryItem(String title, int year) {
+                this.title = title;
+                this.year = year;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public int loanDays() {
+                return 21;
+            }
+
+            @Override
+            public String toString() {
+                return this.title + " (" + this.year + ")";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Audiobook audio = new Audiobook("Salt and Stars", 2016, "Ruth Obi");
+                System.out.println(audio);
+                System.out.println(audio.loanDays());
+                LibraryItem novel = new LibraryItem("The Quiet Harbor", 2019);
+                System.out.println(novel + ", " + novel.loanDays() + " days");
+            }
+        }
+    hints:
+      - "Each method has `@Override` on the line above it, and the same header as LibraryItem's: `public int loanDays()` and `public String toString()`."
+      - "`toString` returns `super.toString() + \", read by \" + this.narrator`. `super.toString()` gives LibraryItem's text, title and year."
+    require:
+      - pattern: "@Override"
+        min: 3
+        message: "Put `@Override` above both of Audiobook's methods, so that javac checks that they really override LibraryItem's."
+      - pattern: \bsuper\s*\.\s*toString\s*\(
+        message: "Start Audiobook's text with LibraryItem's, from `super.toString()`."
+    tests:
+      - call: |
+          Audiobook audio = new Audiobook("Salt and Stars", 2016, "Ruth Obi");
+          System.out.println(audio);
+          System.out.println(audio.loanDays());
+          LibraryItem novel = new LibraryItem("The Quiet Harbor", 2019);
+          System.out.println(novel + ", " + novel.loanDays() + " days");
+      - call: |
+          Audiobook audio = new Audiobook("Winter Roads", 1998, "Sam Cole");
+          System.out.println("Due in " + audio.loanDays() + " days: " + audio);
+          System.out.println(audio.getTitle());
+        hidden: true
+      - call: |
+          ArrayList<Audiobook> shelf = new ArrayList<>();
+          shelf.add(new Audiobook("A", 2000, "B"));
+          shelf.add(new Audiobook("Tides", 2023, "Nia Hale"));
+          System.out.println(shelf);
+        hidden: true
+    more:
+      - task: |
+          A museum runs day tours and night tours. `NightTour` overrides both of Tour's methods, and calls Tour's version in each. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  NightTour night = new NightTour();
+                  night.start();
+                  night.end();
+                  Tour day = new Tour();
+                  day.start();
+              }
+          }
+          // ==== Tour.java ====
+          public class Tour {
+              public void start() {
+                  System.out.println("Meet at the entrance");
+              }
+
+              public void end() {
+                  System.out.println("Return the headsets");
+              }
+          }
+          // ==== NightTour.java ====
+          public class NightTour extends Tour {
+              @Override
+              public void start() {
+                  System.out.println("Hand out flashlights");
+                  super.start();
+              }
+
+              @Override
+              public void end() {
+                  super.end();
+                  System.out.println("Lock the side door");
+              }
+          }
+        hints:
+          - "A NightTour runs NightTour's versions. Each one prints its own line and calls Tour's version with `super.`, in the order the lines are written."
+          - "In `start`, NightTour's own line comes before `super.start()`. In `end`, it comes after `super.end()`. The plain Tour runs only Tour's `start`."
+      - task: |
+          The library keeps a list of returned magazines. `Magazine` has an `equals`, and it gives the right answer when you call it yourself, but the list's `contains` and `indexOf` never use it: the program prints `false` and `-1`. Put `@Override` above `equals` and see what javac says. Then fix the header, and the rest of the method, so that `equals` overrides Object's: the classic way, with `instanceof` and a cast. The program should print:
+
+          ```
+          true
+          0
+          true
+          ```
+        seed:
+          Magazine.java: |
+            import java.util.Objects;
+
+            public class Magazine {
+                private String title;
+                private int issue;
+
+                public Magazine(String title, int issue) {
+                    this.title = title;
+                    this.issue = issue;
+                }
+
+                public boolean equals(Magazine other) {
+                    return this.title.equals(other.title) && this.issue == other.issue;
+                }
+
+                @Override
+                public int hashCode() {
+                    return Objects.hash(this.title, this.issue);
+                }
+
+                @Override
+                public String toString() {
+                    return this.title + " #" + this.issue;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Magazine> returned = new ArrayList<>();
+                    returned.add(new Magazine("Sky Watch", 12));
+                    returned.add(new Magazine("Garden Days", 3));
+                    System.out.println(returned.contains(new Magazine("Garden Days", 3)));
+                    System.out.println(returned.indexOf(new Magazine("Sky Watch", 12)));
+                    Magazine mine = new Magazine("Sky Watch", 12);
+                    System.out.println(mine.equals(new Magazine("Sky Watch", 12)));
+                }
+            }
+        solution:
+          Magazine.java: |
+            import java.util.Objects;
+
+            public class Magazine {
+                private String title;
+                private int issue;
+
+                public Magazine(String title, int issue) {
+                    this.title = title;
+                    this.issue = issue;
+                }
+
+                @Override
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Magazine)) {
+                        return false;
+                    }
+                    Magazine other = (Magazine) compared;
+                    return this.title.equals(other.title) && this.issue == other.issue;
+                }
+
+                @Override
+                public int hashCode() {
+                    return Objects.hash(this.title, this.issue);
+                }
+
+                @Override
+                public String toString() {
+                    return this.title + " #" + this.issue;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Magazine> returned = new ArrayList<>();
+                    returned.add(new Magazine("Sky Watch", 12));
+                    returned.add(new Magazine("Garden Days", 3));
+                    System.out.println(returned.contains(new Magazine("Garden Days", 3)));
+                    System.out.println(returned.indexOf(new Magazine("Sky Watch", 12)));
+                    Magazine mine = new Magazine("Sky Watch", 12);
+                    System.out.println(mine.equals(new Magazine("Sky Watch", 12)));
+                }
+            }
+        hints:
+          - "With `@Override`, javac says the method doesn't override anything: `equals(Magazine other)` has a different parameter from Object's `equals(Object)`, so it's an overload, and the list calls Object's version."
+          - "Write it as `public boolean equals(Object compared)`: `true` for `this == compared`, `false` when `!(compared instanceof Magazine)`, and otherwise `Magazine other = (Magazine) compared;` and the comparison that's there now."
+        require:
+          - pattern: "@Override\\s+public\\s+boolean\\s+equals\\s*\\(\\s*Object\\s+\\w+\\s*\\)"
+            message: "Write `@Override` and then the header `public boolean equals(Object compared)`, so that it overrides Object's `equals`."
+          - pattern: \binstanceof\s+Magazine\b
+            message: "Check with `instanceof Magazine` that the compared object is a magazine, before the cast."
+        tests:
+          - name: The program's output
+          - call: |
+              Magazine one = new Magazine("Sky Watch", 12);
+              System.out.println(one.equals(new Magazine("Sky Watch", 13)) + " " + one.equals(new Magazine("Sea Watch", 12)));
+              System.out.println(one.equals("Sky Watch #12") + " " + one.equals(null) + " " + one.equals(one));
+            hidden: true
+          - call: |
+              ArrayList<Magazine> pile = new ArrayList<>();
+              pile.add(new Magazine("Garden Days", 3));
+              pile.add(new Magazine("Garden Days", 4));
+              pile.remove(new Magazine("Garden Days", 3));
+              System.out.println(pile);
+              HashMap<Magazine, Integer> copies = new HashMap<>();
+              copies.put(new Magazine("Sky Watch", 1), 5);
+              System.out.println(copies.get(new Magazine("Sky Watch", 1)));
+            hidden: true
+
+  - id: inheritance-access
+    slug: protected
+    title: "private, protected and public in a subclass"
+    text: |
+      A subclass object holds everything its superclass has, private variables too. But the subclass's own code may use only what the superclass lets it use. This step is about those rules.
+
+      ### private stays private
+
+      The bank from step 3 wants its savings accounts to earn interest. A first try at `addInterest` changes the balance directly:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              SavingsAccount savings = new SavingsAccount("Mia", 500, 3);
+              savings.addInterest();
+          }
+      }
+      // ==== BankAccount.java ====
+      public class BankAccount {
+          private String owner;
+          private int balance;
+
+          public BankAccount(String owner, int balance) {
+              this.owner = owner;
+              this.balance = balance;
+          }
+
+          public int getBalance() {
+              return this.balance;
+          }
+
+          public void deposit(int amount) {
+              if (amount > 0) {
+                  this.balance += amount;
+              }
+          }
+      }
+      // ==== SavingsAccount.java ====
+      public class SavingsAccount extends BankAccount {
+          private int interestPercent;
+
+          public SavingsAccount(String owner, int balance, int interestPercent) {
+              super(owner, balance);
+              this.interestPercent = interestPercent;
+          }
+
+          public void addInterest() {
+              int interest = this.getBalance() * this.interestPercent / 100;
+              this.balance += interest;
+          }
+      }
+      ```
+
+      ```javac
+      SavingsAccount.java:11: error: balance has private access in BankAccount
+              this.balance += interest;
+                  ^
+      1 error
+      ```
+
+      Every SavingsAccount object has a balance: it's in the BankAccount part of the object. But `private` means that only BankAccount's own code may use the variable, and SavingsAccount's code isn't BankAccount's code. The same goes for private methods: a subclass can't call them.
+
+      ### Use the superclass's public methods
+
+      Usually the best fix is to use what BankAccount offers everyone. `getBalance()` gives the balance, and `deposit(...)` adds to it:
+
+      ```java fragment
+      public void addInterest() {
+          int interest = this.getBalance() * this.interestPercent / 100;
+          this.deposit(interest);
+      }
+      ```
+
+      This way BankAccount stays the only class that changes the balance directly, and its rules still hold: `deposit` ignores an amount of 0 or less, so interest can't sneak in a negative amount.
+
+      ### protected
+
+      Sometimes the public methods aren't enough. A checking account may go below zero, down to its overdraft limit. In the program below, BankAccount has a `withdraw` that refuses to take more than the balance, and none of its public methods can make a balance negative. So BankAccount marks the balance **protected**: its subclasses may use it directly.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              BankAccount plain = new BankAccount("Leo", 100);
+              plain.withdraw(150);
+              System.out.println(plain.getBalance());
+
+              CheckingAccount checking = new CheckingAccount("Ada", 100, 200);
+              checking.withdraw(150);
+              System.out.println(checking.getBalance());
+
+              SavingsAccount savings = new SavingsAccount("Mia", 500, 3);
+              savings.addInterest();
+              System.out.println(savings.getBalance());
+          }
+      }
+      // ==== BankAccount.java ====
+      public class BankAccount {
+          private String owner;
+          protected int balance;
+
+          public BankAccount(String owner, int balance) {
+              this.owner = owner;
+              this.balance = balance;
+          }
+
+          public int getBalance() {
+              return this.balance;
+          }
+
+          public void deposit(int amount) {
+              if (amount > 0) {
+                  this.balance += amount;
+              }
+          }
+
+          public void withdraw(int amount) {
+              if (amount > 0 && amount <= this.balance) {
+                  this.balance -= amount;
+              }
+          }
+      }
+      // ==== CheckingAccount.java ====
+      public class CheckingAccount extends BankAccount {
+          private int overdraftLimit;
+
+          public CheckingAccount(String owner, int balance, int overdraftLimit) {
+              super(owner, balance);
+              this.overdraftLimit = overdraftLimit;
+          }
+
+          @Override
+          public void withdraw(int amount) {
+              if (amount > 0 && amount <= this.balance + this.overdraftLimit) {
+                  this.balance -= amount;
+              }
+          }
+      }
+      // ==== SavingsAccount.java ====
+      public class SavingsAccount extends BankAccount {
+          private int interestPercent;
+
+          public SavingsAccount(String owner, int balance, int interestPercent) {
+              super(owner, balance);
+              this.interestPercent = interestPercent;
+          }
+
+          public void addInterest() {
+              int interest = this.getBalance() * this.interestPercent / 100;
+              this.deposit(interest);
+          }
+      }
+      ```
+
+      ```output
+      100
+      -50
+      515
+      ```
+
+      - The plain account refuses to pay out 150 from 100. CheckingAccount overrides `withdraw` with its own rule, and changes `this.balance` directly, which `protected` allows.
+      - SavingsAccount still uses the public methods. `protected` allows direct use; it doesn't require it.
+      - `protected` also lets in every class in the same **package**. A package is a group of classes that belong together, such as Java's own `java.util`. The programs in this course have no `package` line, so all their classes are in one package, the default one, and there even `Main` could use `balance` directly. So in these programs, `protected` is more a note to other programmers ("subclasses may use this") than a lock.
+
+      ### The four levels
+
+      | Written before a variable or method | Who can use it |
+      | --- | --- |
+      | `private` | only the class itself |
+      | nothing | classes in the same package |
+      | `protected` | classes in the same package, and subclasses |
+      | `public` | every class |
+
+      A good habit: keep instance variables `private`, and let subclasses work through methods. Make a variable `protected` only when the subclasses really need it, as CheckingAccount did.
+
+      One more rule: an overriding method can't be less visible than the method it overrides. Object's `toString` is `public`, so a `toString` that is `private`, `protected` or has nothing written before it doesn't compile: javac says `attempting to assign weaker access privileges; was public`.
+
+      **Your turn:** the bank's bonus account adds 5 dollars to every deposit of 100 or more. `BonusAccount`'s `deposit` doesn't compile, since the balance is private in BankAccount. Rewrite it with BankAccount's public methods, and don't change `BankAccount.java`: call BankAccount's own `deposit` with `super.deposit(...)`, once for the amount and once more for a bonus. A deposit of 0 or less adds nothing, and gets no bonus. The check runs:
+
+      ```java fragment
+      BonusAccount account = new BonusAccount("Ada", 50);
+      account.deposit(120);
+      System.out.println(account.getBalance());
+      account.deposit(40);
+      System.out.println(account.getBalance());
+      account.deposit(-100);
+      System.out.println(account.getBalance());
+      ```
+
+      and expects:
+
+      ```
+      175
+      215
+      215
+      ```
+    seed:
+      BonusAccount.java: |
+        public class BonusAccount extends BankAccount {
+
+            public BonusAccount(String owner, int balance) {
+                super(owner, balance);
+            }
+
+            @Override
+            public void deposit(int amount) {
+                if (amount > 0) {
+                    this.balance += amount;
+                }
+                if (amount >= 100) {
+                    this.balance += 5;
+                }
+            }
+        }
+      BankAccount.java: |
+        public class BankAccount {
+            private String owner;
+            private int balance;
+
+            public BankAccount(String owner, int balance) {
+                this.owner = owner;
+                this.balance = balance;
+            }
+
+            public String getOwner() {
+                return this.owner;
+            }
+
+            public int getBalance() {
+                return this.balance;
+            }
+
+            public void deposit(int amount) {
+                if (amount > 0) {
+                    this.balance += amount;
+                }
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                BonusAccount account = new BonusAccount("Ada", 50);
+                account.deposit(120);
+                System.out.println(account.getBalance());
+                account.deposit(40);
+                System.out.println(account.getBalance());
+                account.deposit(-100);
+                System.out.println(account.getBalance());
+            }
+        }
+    solution:
+      BonusAccount.java: |
+        public class BonusAccount extends BankAccount {
+
+            public BonusAccount(String owner, int balance) {
+                super(owner, balance);
+            }
+
+            @Override
+            public void deposit(int amount) {
+                super.deposit(amount);
+                if (amount >= 100) {
+                    super.deposit(5);
+                }
+            }
+        }
+      BankAccount.java: |
+        public class BankAccount {
+            private String owner;
+            private int balance;
+
+            public BankAccount(String owner, int balance) {
+                this.owner = owner;
+                this.balance = balance;
+            }
+
+            public String getOwner() {
+                return this.owner;
+            }
+
+            public int getBalance() {
+                return this.balance;
+            }
+
+            public void deposit(int amount) {
+                if (amount > 0) {
+                    this.balance += amount;
+                }
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                BonusAccount account = new BonusAccount("Ada", 50);
+                account.deposit(120);
+                System.out.println(account.getBalance());
+                account.deposit(40);
+                System.out.println(account.getBalance());
+                account.deposit(-100);
+                System.out.println(account.getBalance());
+            }
+        }
+    hints:
+      - "BonusAccount overrides `deposit`, so a plain `deposit(...)` inside it would call BonusAccount's own method again. `super.deposit(amount)` calls BankAccount's version, which already ignores amounts of 0 or less."
+      - "After `super.deposit(amount);`, add the bonus with `if (amount >= 100) { super.deposit(5); }`."
+    require:
+      - pattern: \bprivate\s+int\s+balance\b
+        message: "Keep `balance` private in BankAccount, and use its public methods from BonusAccount."
+      - pattern: \bsuper\s*\.\s*deposit\s*\(
+        message: "Call BankAccount's own `deposit` with `super.deposit(...)`."
+    forbid:
+      - pattern: \bprotected\b
+        message: "Don't make anything protected here: BankAccount's public `deposit` is enough."
+    tests:
+      - call: |
+          BonusAccount account = new BonusAccount("Ada", 50);
+          account.deposit(120);
+          System.out.println(account.getBalance());
+          account.deposit(40);
+          System.out.println(account.getBalance());
+          account.deposit(-100);
+          System.out.println(account.getBalance());
+      - call: |
+          BonusAccount account = new BonusAccount("Ben", 0);
+          account.deposit(99);
+          System.out.println(account.getBalance());
+          account.deposit(100);
+          System.out.println(account.getBalance());
+          account.deposit(0);
+          account.deposit(1000);
+          System.out.println(account.getBalance() + " " + account.getOwner());
+        hidden: true
+      - call: |
+          BonusAccount first = new BonusAccount("Cy", 10);
+          BonusAccount second = new BonusAccount("Dee", 10);
+          first.deposit(300);
+          System.out.println(first.getBalance() + " " + second.getBalance());
+        hidden: true
+    more:
+      - task: |
+          A museum's exhibits have a condition from 0 to 100, which drops as they age. Only a restorer may raise it again, so `Exhibit` has no public method for that. Paintings can be restored. In `Exhibit.java`, make `condition` protected (not public). Then, in `Painting.java`, write the method `restore()`, which raises the condition by 30, but never above 100. The check runs:
+
+          ```java fragment
+          Painting dawn = new Painting("Harbor at Dawn", 50);
+          dawn.restore();
+          System.out.println(dawn);
+          dawn.restore();
+          System.out.println(dawn);
+          dawn.age(15);
+          System.out.println(dawn.getCondition());
+          ```
+
+          and expects:
+
+          ```
+          Harbor at Dawn, condition 80
+          Harbor at Dawn, condition 100
+          85
+          ```
+        seed:
+          Painting.java: |
+            public class Painting extends Exhibit {
+
+                public Painting(String name, int condition) {
+                    super(name, condition);
+                }
+
+                // Write the method restore here.
+            }
+          Exhibit.java: |
+            public class Exhibit {
+                private String name;
+                private int condition;
+
+                public Exhibit(String name, int condition) {
+                    this.name = name;
+                    this.condition = condition;
+                }
+
+                public int getCondition() {
+                    return this.condition;
+                }
+
+                public void age(int years) {
+                    this.condition -= years;
+                    if (this.condition < 0) {
+                        this.condition = 0;
+                    }
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + ", condition " + this.condition;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Painting dawn = new Painting("Harbor at Dawn", 50);
+                    dawn.restore();
+                    System.out.println(dawn);
+                    dawn.restore();
+                    System.out.println(dawn);
+                    dawn.age(15);
+                    System.out.println(dawn.getCondition());
+                }
+            }
+        solution:
+          Painting.java: |
+            public class Painting extends Exhibit {
+
+                public Painting(String name, int condition) {
+                    super(name, condition);
+                }
+
+                public void restore() {
+                    this.condition += 30;
+                    if (this.condition > 100) {
+                        this.condition = 100;
+                    }
+                }
+            }
+          Exhibit.java: |
+            public class Exhibit {
+                private String name;
+                protected int condition;
+
+                public Exhibit(String name, int condition) {
+                    this.name = name;
+                    this.condition = condition;
+                }
+
+                public int getCondition() {
+                    return this.condition;
+                }
+
+                public void age(int years) {
+                    this.condition -= years;
+                    if (this.condition < 0) {
+                        this.condition = 0;
+                    }
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + ", condition " + this.condition;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Painting dawn = new Painting("Harbor at Dawn", 50);
+                    dawn.restore();
+                    System.out.println(dawn);
+                    dawn.restore();
+                    System.out.println(dawn);
+                    dawn.age(15);
+                    System.out.println(dawn.getCondition());
+                }
+            }
+        hints:
+          - "In Exhibit.java, the line becomes `protected int condition;`. Then Painting's code can use `this.condition` as if it were its own."
+          - "`restore()` adds 30 with `this.condition += 30;`, and then, if the condition is over 100, sets it to 100, just as `age` keeps it from going below 0."
+        require:
+          - pattern: \bprotected\s+int\s+condition\b
+            message: "Make the variable protected in Exhibit.java: `protected int condition;`."
+          - pattern: \bvoid\s+restore\s*\(\s*\)
+            message: "Write the method `public void restore()` in Painting."
+        forbid:
+          - pattern: \bpublic\s+int\s+condition\b
+            message: "Don't make `condition` public: then every class could change it. `protected` is for subclasses."
+        tests:
+          - call: |
+              Painting dawn = new Painting("Harbor at Dawn", 50);
+              dawn.restore();
+              System.out.println(dawn);
+              dawn.restore();
+              System.out.println(dawn);
+              dawn.age(15);
+              System.out.println(dawn.getCondition());
+          - call: |
+              Painting kite = new Painting("Red Kite", 0);
+              kite.restore();
+              System.out.println(kite.getCondition());
+              kite.restore();
+              kite.restore();
+              System.out.println(kite.getCondition());
+              kite.age(200);
+              kite.restore();
+              System.out.println(kite);
+            hidden: true
+          - call: |
+              Painting full = new Painting("Snow", 100);
+              full.restore();
+              System.out.println(full.getCondition());
+              Painting worn = new Painting("Mill", 70);
+              worn.restore();
+              System.out.println(worn.getCondition());
+            hidden: true
+      - task: |
+          Here are the bank's classes from the lesson: BankAccount with its balance `protected`, and CheckingAccount, which overrides `withdraw`. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  BankAccount plain = new BankAccount("Leo", 100);
+                  CheckingAccount checking = new CheckingAccount("Ada", 100, 50);
+                  plain.withdraw(120);
+                  checking.withdraw(120);
+                  checking.withdraw(40);
+                  checking.deposit(10);
+                  System.out.println(plain.getBalance());
+                  System.out.println(checking.getBalance());
+              }
+          }
+          // ==== BankAccount.java ====
+          public class BankAccount {
+              private String owner;
+              protected int balance;
+
+              public BankAccount(String owner, int balance) {
+                  this.owner = owner;
+                  this.balance = balance;
+              }
+
+              public int getBalance() {
+                  return this.balance;
+              }
+
+              public void deposit(int amount) {
+                  if (amount > 0) {
+                      this.balance += amount;
+                  }
+              }
+
+              public void withdraw(int amount) {
+                  if (amount > 0 && amount <= this.balance) {
+                      this.balance -= amount;
+                  }
+              }
+          }
+          // ==== CheckingAccount.java ====
+          public class CheckingAccount extends BankAccount {
+              private int overdraftLimit;
+
+              public CheckingAccount(String owner, int balance, int overdraftLimit) {
+                  super(owner, balance);
+                  this.overdraftLimit = overdraftLimit;
+              }
+
+              @Override
+              public void withdraw(int amount) {
+                  if (amount > 0 && amount <= this.balance + this.overdraftLimit) {
+                      this.balance -= amount;
+                  }
+              }
+          }
+        hints:
+          - "The plain account runs BankAccount's `withdraw`, which refuses 120 from 100. The checking account runs CheckingAccount's, which allows up to the balance plus 50."
+          - "After the first withdrawal, the checking balance is -20, so it can pay out at most -20 + 50 = 30, and 40 is refused. `deposit` is inherited from BankAccount."
+
+  - id: inheritance-actual-type
+    slug: actual-type
+    title: The object's class decides which method runs
+    text: |
+      A Film is a LibraryItem, and a SavingsAccount is a BankAccount. Java takes that literally: a variable whose type is the superclass can refer to an object of a subclass. Then which version of an overridden method runs, the one of the variable's type or the one of the object's class?
+
+      ### A variable of the superclass's type
+
+      In a small game, every adventurer attacks, but knights hit harder than archers:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              Adventurer hero = new Knight("Oren");
+              System.out.println(hero.attack());
+              System.out.println(hero.describe());
+
+              ArrayList<Adventurer> party = new ArrayList<>();
+              party.add(hero);
+              party.add(new Archer("Lyra"));
+              party.add(new Adventurer("Pip"));
+              int total = 0;
+              for (Adventurer member : party) {
+                  System.out.println(member.describe());
+                  total += member.attack();
+              }
+              System.out.println("Party total: " + total);
+          }
+      }
+      // ==== Adventurer.java ====
+      public class Adventurer {
+          private String name;
+
+          public Adventurer(String name) {
+              this.name = name;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public int attack() {
+              return 2;
+          }
+
+          public String describe() {
+              return this.name + " attacks for " + this.attack();
+          }
+      }
+      // ==== Knight.java ====
+      public class Knight extends Adventurer {
+          public Knight(String name) {
+              super(name);
+          }
+
+          @Override
+          public int attack() {
+              return 9;
+          }
+
+          public void raiseShield() {
+              System.out.println(this.getName() + " raises a shield");
+          }
+      }
+      // ==== Archer.java ====
+      public class Archer extends Adventurer {
+          public Archer(String name) {
+              super(name);
+          }
+
+          @Override
+          public int attack() {
+              return 6;
+          }
+      }
+      ```
+
+      ```output
+      9
+      Oren attacks for 9
+      Oren attacks for 9
+      Lyra attacks for 6
+      Pip attacks for 2
+      Party total: 17
+      ```
+
+      - `Adventurer hero = new Knight("Oren");` compiles, because every Knight is an Adventurer: it has every method an Adventurer has.
+      - `hero.attack()` gives 9, Knight's number. Java doesn't look at the variable's type to pick the version. It looks at the object the variable refers to, and that object is a Knight.
+      - That holds even inside Adventurer's own code. `describe` is written in Adventurer, and calls `this.attack()`. For Oren, `this` is a Knight object, so Knight's `attack` runs. For Pip, a plain Adventurer, Adventurer's runs.
+      - So one list can hold every kind of adventurer, and one loop handles them all. The loop doesn't know or care which kind each member is: each object brings its own `attack`.
+
+      ### The variable's type decides what you may call
+
+      `hero` refers to a Knight, and a Knight can raise a shield. Still, this doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Adventurer hero = new Knight("Oren");
+              hero.raiseShield();
+          }
+      }
+      // ==== Adventurer.java ====
+      public class Adventurer {
+          private String name;
+
+          public Adventurer(String name) {
+              this.name = name;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+      }
+      // ==== Knight.java ====
+      public class Knight extends Adventurer {
+          public Knight(String name) {
+              super(name);
+          }
+
+          public void raiseShield() {
+              System.out.println(this.getName() + " raises a shield");
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: cannot find symbol
+              hero.raiseShield();
+                  ^
+        symbol:   method raiseShield()
+        location: variable hero of type Adventurer
+      1 error
+      ```
+
+      javac checks each call against the variable's type. It doesn't run the program, so it doesn't know which object will be in `hero` when the call happens: some other line could put an Archer there. It only knows that `hero` holds some Adventurer, and not every Adventurer has `raiseShield`. With `Knight hero = new Knight("Oren");` the call compiles. (Module 36 shows how to get back to the Knight when a program needs to.)
+
+      The two rules, side by side:
+
+      - The **variable's type** decides which methods you may call. javac checks it before the program runs.
+      - The **object's class** decides which version of a method runs. That's settled while the program runs.
+
+      The other way around doesn't work at all: `Knight knight = new Adventurer("Pip");` doesn't compile (`incompatible types: Adventurer cannot be converted to Knight`), since an adventurer isn't necessarily a knight.
+
+      ### Every object is an Object
+
+      Every class inherits from Object, so a variable of type Object can refer to any object at all. Its methods are Object's, but the versions that run are the object's own:
+
+      ```java main
+      Object first = "a String";
+      Object second = new ArrayList<String>();
+      String start = "Oak";
+      Object third = start + "dale";
+      System.out.println(first);
+      System.out.println(second);
+      System.out.println(third.equals("Oakdale"));
+      ```
+
+      ```output
+      a String
+      []
+      true
+      ```
+
+      - `println` can print any object because it takes an Object and calls its `toString`, and each object runs its own: String's gives the text, ArrayList's gives the brackets.
+      - `third.equals(...)` runs String's `equals`, which compares the characters. Object's `equals` would compare with `==`, and `third` is a String built while the program runs, a different object from `"Oakdale"`.
+      - `first.length()` wouldn't compile: `first` is an Object variable, and Object has no `length()`.
+
+      **Your turn:** the party again, with one change: Knight now overrides `describe` too. What does this program print?
+    predict: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Adventurer> party = new ArrayList<>();
+              party.add(new Adventurer("Pip"));
+              party.add(new Archer("Lyra"));
+              party.add(new Knight("Oren"));
+              for (Adventurer member : party) {
+                  System.out.println(member.describe());
+              }
+              Adventurer last = party.get(2);
+              System.out.println(last.attack() + party.get(0).attack());
+          }
+      }
+      // ==== Adventurer.java ====
+      public class Adventurer {
+          private String name;
+
+          public Adventurer(String name) {
+              this.name = name;
+          }
+
+          public int attack() {
+              return 2;
+          }
+
+          public String describe() {
+              return this.name + " attacks for " + this.attack();
+          }
+      }
+      // ==== Archer.java ====
+      public class Archer extends Adventurer {
+          public Archer(String name) {
+              super(name);
+          }
+
+          @Override
+          public int attack() {
+              return 6;
+          }
+      }
+      // ==== Knight.java ====
+      public class Knight extends Adventurer {
+          public Knight(String name) {
+              super(name);
+          }
+
+          @Override
+          public int attack() {
+              return 9;
+          }
+
+          @Override
+          public String describe() {
+              return super.describe() + " and raises a shield";
+          }
+      }
+    hints:
+      - "Each member runs its own class's methods. Lyra has Adventurer's `describe`, but it calls `this.attack()`, and Lyra is an Archer."
+      - "Oren's `describe` is Knight's: it starts with Adventurer's text, with Knight's attack of 9 in it, and adds its own ending. The last line adds Oren's attack and Pip's."
+    more:
+      - task: |
+          The game wants to know who hits hardest. `Adventurer.java`, `Knight.java` and `Archer.java` are the lesson's. In `Main.java`, write the method `strongest(ArrayList<Adventurer> party)`, which returns the name of the member whose `attack()` is the highest. When several are equally strong, return the first of them. For an empty party, return `nobody`. The check runs:
+
+          ```java fragment
+          ArrayList<Adventurer> party = new ArrayList<>();
+          party.add(new Archer("Lyra"));
+          party.add(new Adventurer("Pip"));
+          party.add(new Knight("Oren"));
+          System.out.println(strongest(party));
+          ```
+
+          and expects:
+
+          ```
+          Oren
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Adventurer> party = new ArrayList<>();
+                    party.add(new Archer("Lyra"));
+                    party.add(new Adventurer("Pip"));
+                    party.add(new Knight("Oren"));
+                    System.out.println(strongest(party));
+                }
+
+                // Write the method strongest here.
+            }
+          Adventurer.java: |
+            public class Adventurer {
+                private String name;
+
+                public Adventurer(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int attack() {
+                    return 2;
+                }
+
+                public String describe() {
+                    return this.name + " attacks for " + this.attack();
+                }
+            }
+          Knight.java: |
+            public class Knight extends Adventurer {
+                public Knight(String name) {
+                    super(name);
+                }
+
+                @Override
+                public int attack() {
+                    return 9;
+                }
+
+                public void raiseShield() {
+                    System.out.println(this.getName() + " raises a shield");
+                }
+            }
+          Archer.java: |
+            public class Archer extends Adventurer {
+                public Archer(String name) {
+                    super(name);
+                }
+
+                @Override
+                public int attack() {
+                    return 6;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Adventurer> party = new ArrayList<>();
+                    party.add(new Archer("Lyra"));
+                    party.add(new Adventurer("Pip"));
+                    party.add(new Knight("Oren"));
+                    System.out.println(strongest(party));
+                }
+
+                public static String strongest(ArrayList<Adventurer> party) {
+                    if (party.isEmpty()) {
+                        return "nobody";
+                    }
+                    Adventurer best = party.get(0);
+                    for (Adventurer member : party) {
+                        if (member.attack() > best.attack()) {
+                            best = member;
+                        }
+                    }
+                    return best.getName();
+                }
+            }
+          Adventurer.java: |
+            public class Adventurer {
+                private String name;
+
+                public Adventurer(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int attack() {
+                    return 2;
+                }
+
+                public String describe() {
+                    return this.name + " attacks for " + this.attack();
+                }
+            }
+          Knight.java: |
+            public class Knight extends Adventurer {
+                public Knight(String name) {
+                    super(name);
+                }
+
+                @Override
+                public int attack() {
+                    return 9;
+                }
+
+                public void raiseShield() {
+                    System.out.println(this.getName() + " raises a shield");
+                }
+            }
+          Archer.java: |
+            public class Archer extends Adventurer {
+                public Archer(String name) {
+                    super(name);
+                }
+
+                @Override
+                public int attack() {
+                    return 6;
+                }
+            }
+        hints:
+          - "Return `nobody` first if `party.isEmpty()`. Otherwise keep the best member so far, starting with `party.get(0)`, and go through the party with a for-each loop."
+          - "Replace the best member only when `member.attack() > best.attack()`, with `>`, so the first of equally strong members stays. Each call runs the object's own `attack`, so the method works for knights, archers and every other kind."
+        require:
+          - pattern: \bpublic\s+static\s+String\s+strongest\s*\(\s*ArrayList<Adventurer>\s+\w+\s*\)
+            message: "Write the method as `public static String strongest(ArrayList<Adventurer> party)`."
+          - pattern: \.attack\s*\(\s*\)
+            message: "Compare the members by what their `attack()` returns."
+        tests:
+          - call: |
+              ArrayList<Adventurer> party = new ArrayList<>();
+              party.add(new Archer("Lyra"));
+              party.add(new Adventurer("Pip"));
+              party.add(new Knight("Oren"));
+              System.out.println(strongest(party));
+          - call: |
+              ArrayList<Adventurer> party = new ArrayList<>();
+              System.out.println(strongest(party));
+              party.add(new Adventurer("Pip"));
+              System.out.println(strongest(party));
+              party.add(new Archer("Lyra"));
+              party.add(new Archer("Tam"));
+              System.out.println(strongest(party));
+              party.add(0, new Knight("Oren"));
+              party.add(new Knight("Brand"));
+              System.out.println(strongest(party));
+            hidden: true
+          - call: |
+              ArrayList<Adventurer> party = new ArrayList<>();
+              party.add(new Adventurer("Ivo"));
+              party.add(new Adventurer("Jin"));
+              System.out.println(strongest(party));
+            hidden: true
+      - task: |
+          Here the game's Adventurer has a role, and `describe` uses both `role()` and `attack()`. In `Healer.java`, write the class `Healer`, which extends Adventurer:
+
+          - a constructor `Healer(String name)`
+          - `role()` overridden to return `healer`, with `@Override` above it
+          - `attack()` overridden to return 1, with `@Override` above it
+          - a method of its own, `heal()`, which returns 8
+
+          Don't write a `describe` in Healer: Adventurer's already works for it, since it calls the object's own `role()` and `attack()`. The check runs:
+
+          ```java fragment
+          Adventurer mo = new Healer("Mo");
+          System.out.println(mo.describe());
+          Healer ash = new Healer("Ash");
+          System.out.println(ash.heal() + " " + ash.attack());
+          ```
+
+          and expects:
+
+          ```
+          Mo the healer attacks for 1
+          8 1
+          ```
+        seed:
+          Healer.java: |
+            public class Healer {
+
+            }
+          Adventurer.java: |
+            public class Adventurer {
+                private String name;
+
+                public Adventurer(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public String role() {
+                    return "adventurer";
+                }
+
+                public int attack() {
+                    return 2;
+                }
+
+                public String describe() {
+                    return this.name + " the " + this.role() + " attacks for " + this.attack();
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Adventurer mo = new Healer("Mo");
+                    System.out.println(mo.describe());
+                    Healer ash = new Healer("Ash");
+                    System.out.println(ash.heal() + " " + ash.attack());
+                }
+            }
+        solution:
+          Healer.java: |
+            public class Healer extends Adventurer {
+                public Healer(String name) {
+                    super(name);
+                }
+
+                @Override
+                public String role() {
+                    return "healer";
+                }
+
+                @Override
+                public int attack() {
+                    return 1;
+                }
+
+                public int heal() {
+                    return 8;
+                }
+            }
+          Adventurer.java: |
+            public class Adventurer {
+                private String name;
+
+                public Adventurer(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public String role() {
+                    return "adventurer";
+                }
+
+                public int attack() {
+                    return 2;
+                }
+
+                public String describe() {
+                    return this.name + " the " + this.role() + " attacks for " + this.attack();
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Adventurer mo = new Healer("Mo");
+                    System.out.println(mo.describe());
+                    Healer ash = new Healer("Ash");
+                    System.out.println(ash.heal() + " " + ash.attack());
+                }
+            }
+        hints:
+          - "Start with `public class Healer extends Adventurer {` and a constructor whose first line is `super(name);`."
+          - "Override `public String role()` and `public int attack()`, each with `@Override` above it, and add `public int heal()`. Adventurer's `describe` calls `this.role()` and `this.attack()`, and for a Healer object those are Healer's."
+        require:
+          - pattern: \bclass\s+Healer\s+extends\s+Adventurer\b
+            message: "Write the header as `public class Healer extends Adventurer`."
+          - pattern: "@Override"
+            min: 2
+            message: "Put `@Override` above `role()` and `attack()`, the two methods Healer overrides."
+          - pattern: \bString\s+describe\s*\(
+            max: 1
+            message: "Don't write a `describe` in Healer: the one in Adventurer already uses Healer's `role()` and `attack()`."
+        tests:
+          - call: |
+              Adventurer mo = new Healer("Mo");
+              System.out.println(mo.describe());
+              Healer ash = new Healer("Ash");
+              System.out.println(ash.heal() + " " + ash.attack());
+          - call: |
+              Healer ivy = new Healer("Ivy");
+              System.out.println(ivy.getName() + " " + ivy.role() + " " + ivy.heal());
+              Adventurer pip = new Adventurer("Pip");
+              System.out.println(pip.describe());
+            hidden: true
+          - call: |
+              ArrayList<Adventurer> party = new ArrayList<>();
+              party.add(new Adventurer("Pip"));
+              party.add(new Healer("Rue"));
+              int total = 0;
+              for (Adventurer member : party) {
+                  total += member.attack();
+                  System.out.println(member.describe());
+              }
+              System.out.println(total);
+            hidden: true
+
+  - id: inheritance-is-a
+    slug: is-a-has-a
+    title: "When to inherit: is a, or has a?"
+    text: |
+      `extends` is easy to write, and it saves code, so it's tempting to use it whenever one class could use another's methods. But it says something strong: every object of the subclass *is* an object of the superclass, and can be used wherever one is expected (step 6). When that isn't true, inheritance causes trouble.
+
+      ### A misuse
+
+      A courier's parcels need the street and city they go to. `Address` already has a street, a city, a getter and a `toString`, so someone writes `Parcel extends Address` to get them all for free:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              Parcel parcel = new Parcel("9 Dock Road", "Hull", 1800);
+              System.out.println(parcel.getCity() + ", " + parcel.getGrams() + " g");
+              System.out.println(parcel);
+
+              ArrayList<Address> friends = new ArrayList<>();
+              friends.add(new Address("12 Oak Road", "York"));
+              friends.add(parcel);
+              System.out.println(friends.size() + " addresses");
+          }
+      }
+      // ==== Address.java ====
+      public class Address {
+          private String street;
+          private String city;
+
+          public Address(String street, String city) {
+              this.street = street;
+              this.city = city;
+          }
+
+          public String getCity() {
+              return this.city;
+          }
+
+          @Override
+          public String toString() {
+              return this.street + ", " + this.city;
+          }
+      }
+      // ==== Parcel.java ====
+      public class Parcel extends Address {
+          private int grams;
+
+          public Parcel(String street, String city, int grams) {
+              super(street, city);
+              this.grams = grams;
+          }
+
+          public int getGrams() {
+              return this.grams;
+          }
+      }
+      ```
+
+      ```output
+      Hull, 1800 g
+      9 Dock Road, Hull
+      2 addresses
+      ```
+
+      It compiles and runs, and that's the trouble. The class says "a parcel is an address", which isn't true, and Java believes it:
+
+      - A parcel went into a list of friends' addresses, and nothing stopped it. Any method that takes an Address takes a parcel too.
+      - A parcel prints as a bare address. Whatever Address gets later, such as a postcode or a method that formats an envelope, every Parcel gets too, whether it fits or not.
+      - A parcel has two addresses: where it goes, and where it comes from, for returns. `extends` gives it one Address part, and a class can extend only one class.
+
+      ### The fix: has a
+
+      A parcel **has** an address, two in fact. "Has a" means an instance variable, as in modules 23 and 24. Module 23's Parcel already did this: it kept its Address in one. Here it keeps two:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Address shop = new Address("3 Market Street", "Leeds");
+              Parcel parcel = new Parcel(shop, new Address("9 Dock Road", "Hull"), 1800);
+              System.out.println(parcel);
+              System.out.println(parcel.getTo());
+          }
+      }
+      // ==== Address.java ====
+      public class Address {
+          private String street;
+          private String city;
+
+          public Address(String street, String city) {
+              this.street = street;
+              this.city = city;
+          }
+
+          public String getCity() {
+              return this.city;
+          }
+
+          @Override
+          public String toString() {
+              return this.street + ", " + this.city;
+          }
+      }
+      // ==== Parcel.java ====
+      public class Parcel {
+          private Address from;
+          private Address to;
+          private int grams;
+
+          public Parcel(Address from, Address to, int grams) {
+              this.from = from;
+              this.to = to;
+              this.grams = grams;
+          }
+
+          public Address getTo() {
+              return this.to;
+          }
+
+          @Override
+          public String toString() {
+              return this.grams + " g from " + this.from.getCity() + " to " + this.to.getCity();
+          }
+      }
+      ```
+
+      ```output
+      1800 g from Leeds to Hull
+      9 Dock Road, Hull
+      ```
+
+      Now a parcel has room for both addresses, it prints as a parcel, and `friends.add(parcel)` no longer compiles: `incompatible types: Parcel cannot be converted to Address`. Parcel uses Address's methods through its variables (`this.to.getCity()`), and offers only the methods that make sense for a parcel. Building a class from objects it holds is called **composition**.
+
+      ### Is a, and has a
+
+      Say the sentence out loud, with "every":
+
+      - "Every parcel is a shipment." True: `Parcel extends Shipment` fits, if the courier has a class for everything it ships. So do "every film is a library item" and "every knight is an adventurer".
+      - "Every parcel is an address." False. "A parcel has an address" is true, so it's an instance variable.
+      - "An account has an owner", "an archer has a bow", "a playlist has songs": instance variables, and a list for the songs.
+
+      A class can do both. A parcel is a shipment, and it has addresses:
+
+      ```java fragment
+      public class Parcel extends Shipment {
+          private Address from;
+          private Address to;
+          private int grams;
+          ...
+      }
+      ```
+
+      Some rules of thumb:
+
+      - Use `extends` only when "every X is a Y" is true, and every public method of Y makes sense for an X: an X must work wherever a Y is expected.
+      - Wanting another class's methods is not enough of a reason. If you only want to use them, hold an object of that class and call its methods.
+      - When in doubt, choose "has a". A class can extend only one class, and an object can never change its class. But it can swap an object it holds: an archer can switch to a new bow.
+
+      **Your turn:** someone wrote `Archer extends Bow`, to give archers a bow's `shoot()` and arrows. But an archer isn't a bow: an archer is an adventurer who has a bow, and can switch to a new one. In `Archer.java`, rewrite Archer so that it extends `Adventurer` and has a `Bow` in a private instance variable:
+
+      - a constructor `Archer(String name, Bow bow)`
+      - `attack()` overridden: the archer shoots the bow, and it returns 6 if an arrow was shot, or 1 if the bow was out of arrows
+      - `switchBow(Bow bow)`, which gives the archer another bow
+
+      `Bow.java` and `Adventurer.java` are ready, and `Main.java` already uses the new Archer, so the program won't compile until Archer is rewritten. The check runs:
+
+      ```java fragment
+      Archer lyra = new Archer("Lyra", new Bow(1));
+      System.out.println(lyra.describe());
+      System.out.println(lyra.describe());
+      lyra.switchBow(new Bow(5));
+      System.out.println(lyra.describe());
+      ```
+
+      and expects:
+
+      ```
+      Lyra attacks for 6
+      Lyra attacks for 1
+      Lyra attacks for 6
+      ```
+    seed:
+      Archer.java: |
+        public class Archer extends Bow {
+            private String name;
+
+            public Archer(String name, int arrows) {
+                super(arrows);
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int attack() {
+                if (this.shoot()) {
+                    return 6;
+                }
+                return 1;
+            }
+        }
+      Bow.java: |
+        public class Bow {
+            private int arrows;
+
+            public Bow(int arrows) {
+                this.arrows = arrows;
+            }
+
+            public int getArrows() {
+                return this.arrows;
+            }
+
+            public boolean shoot() {
+                if (this.arrows == 0) {
+                    return false;
+                }
+                this.arrows--;
+                return true;
+            }
+        }
+      Adventurer.java: |
+        public class Adventurer {
+            private String name;
+
+            public Adventurer(String name) {
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int attack() {
+                return 2;
+            }
+
+            public String describe() {
+                return this.name + " attacks for " + this.attack();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Archer lyra = new Archer("Lyra", new Bow(1));
+                System.out.println(lyra.describe());
+                System.out.println(lyra.describe());
+                lyra.switchBow(new Bow(5));
+                System.out.println(lyra.describe());
+            }
+        }
+    solution:
+      Archer.java: |
+        public class Archer extends Adventurer {
+            private Bow bow;
+
+            public Archer(String name, Bow bow) {
+                super(name);
+                this.bow = bow;
+            }
+
+            @Override
+            public int attack() {
+                if (this.bow.shoot()) {
+                    return 6;
+                }
+                return 1;
+            }
+
+            public void switchBow(Bow bow) {
+                this.bow = bow;
+            }
+        }
+      Bow.java: |
+        public class Bow {
+            private int arrows;
+
+            public Bow(int arrows) {
+                this.arrows = arrows;
+            }
+
+            public int getArrows() {
+                return this.arrows;
+            }
+
+            public boolean shoot() {
+                if (this.arrows == 0) {
+                    return false;
+                }
+                this.arrows--;
+                return true;
+            }
+        }
+      Adventurer.java: |
+        public class Adventurer {
+            private String name;
+
+            public Adventurer(String name) {
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int attack() {
+                return 2;
+            }
+
+            public String describe() {
+                return this.name + " attacks for " + this.attack();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Archer lyra = new Archer("Lyra", new Bow(1));
+                System.out.println(lyra.describe());
+                System.out.println(lyra.describe());
+                lyra.switchBow(new Bow(5));
+                System.out.println(lyra.describe());
+            }
+        }
+    hints:
+      - "The header becomes `public class Archer extends Adventurer`, with one instance variable, `private Bow bow;`. The name belongs to Adventurer now, so the constructor starts with `super(name);` and then keeps the bow."
+      - "`attack()` asks the bow: `if (this.bow.shoot()) { return 6; }`, and otherwise returns 1. `switchBow` sets `this.bow` to the new bow. `getName` and `describe` come from Adventurer."
+    require:
+      - pattern: \bclass\s+Archer\s+extends\s+Adventurer\b
+        message: "An archer is an adventurer: `public class Archer extends Adventurer`."
+      - pattern: \bprivate\s+Bow\s+\w+\s*;
+        message: "An archer has a bow: keep it in a private instance variable, `private Bow bow;`."
+    forbid:
+      - pattern: \bextends\s+Bow\b
+        message: "An archer isn't a bow, so Archer shouldn't extend Bow."
+    tests:
+      - call: |
+          Archer lyra = new Archer("Lyra", new Bow(1));
+          System.out.println(lyra.describe());
+          System.out.println(lyra.describe());
+          lyra.switchBow(new Bow(5));
+          System.out.println(lyra.describe());
+      - call: |
+          Bow bow = new Bow(3);
+          Adventurer tam = new Archer("Tam", bow);
+          System.out.println(tam.attack() + " " + tam.attack() + " " + bow.getArrows());
+          System.out.println(tam.getName() + " " + tam.attack() + " " + tam.attack() + " " + bow.getArrows());
+        hidden: true
+      - call: |
+          Archer ivo = new Archer("Ivo", new Bow(0));
+          System.out.println(ivo.attack());
+          Bow spare = new Bow(2);
+          ivo.switchBow(spare);
+          ivo.attack();
+          System.out.println(spare.getArrows());
+          ivo.switchBow(new Bow(0));
+          System.out.println(ivo.describe() + ", spare left: " + spare.getArrows());
+        hidden: true
+    more:
+      - task: |
+          Two archers of the Archer class you just wrote share one bow. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Bow longbow = new Bow(3);
+                  Adventurer lyra = new Archer("Lyra", longbow);
+                  Adventurer tam = new Archer("Tam", longbow);
+                  System.out.println(lyra.describe());
+                  System.out.println(tam.describe());
+                  System.out.println(tam.describe());
+                  System.out.println(lyra.describe() + ", " + longbow.getArrows() + " arrows left");
+              }
+          }
+          // ==== Archer.java ====
+          public class Archer extends Adventurer {
+              private Bow bow;
+
+              public Archer(String name, Bow bow) {
+                  super(name);
+                  this.bow = bow;
+              }
+
+              @Override
+              public int attack() {
+                  if (this.bow.shoot()) {
+                      return 6;
+                  }
+                  return 1;
+              }
+
+              public void switchBow(Bow bow) {
+                  this.bow = bow;
+              }
+          }
+          // ==== Bow.java ====
+          public class Bow {
+              private int arrows;
+
+              public Bow(int arrows) {
+                  this.arrows = arrows;
+              }
+
+              public int getArrows() {
+                  return this.arrows;
+              }
+
+              public boolean shoot() {
+                  if (this.arrows == 0) {
+                      return false;
+                  }
+                  this.arrows--;
+                  return true;
+              }
+          }
+          // ==== Adventurer.java ====
+          public class Adventurer {
+              private String name;
+
+              public Adventurer(String name) {
+                  this.name = name;
+              }
+
+              public int attack() {
+                  return 2;
+              }
+
+              public String describe() {
+                  return this.name + " attacks for " + this.attack();
+              }
+          }
+        hints:
+          - "`lyra` and `tam` are Archers, so `describe` calls Archer's `attack`, which shoots the bow. Both archers hold a reference to the same Bow object (module 22), not copies of it."
+          - "The bow has 3 arrows in all: every shot by either archer takes one. Once they're gone, an attack gives 1."
+      - task: |
+          Now the courier's classes, done right. `Shipment` has a tracking code and a base `price()` of 2 dollars, and `Address` is the lesson's. In `Parcel.java`, write the class `Parcel`: a parcel is a shipment, and it has an address to go to. It needs:
+
+          - a constructor `Parcel(String code, Address to, int grams)`
+          - `price()` overridden: Shipment's price plus 1 dollar for every full 500 grams. Use `super.price()`.
+          - `getTo()`, which returns the address
+          - `toString()` overridden to return the code, ` to ` and the city of the address
+
+          The check runs:
+
+          ```java fragment
+          Parcel parcel = new Parcel("P-310", new Address("9 Dock Road", "Hull"), 1800);
+          System.out.println(parcel);
+          System.out.println(parcel.price());
+          System.out.println(parcel.getTo());
+          Shipment shipment = parcel;
+          System.out.println(shipment.price());
+          ```
+
+          and expects:
+
+          ```
+          P-310 to Hull
+          5
+          9 Dock Road, Hull
+          5
+          ```
+        seed:
+          Parcel.java: |
+            public class Parcel {
+
+            }
+          Shipment.java: |
+            public class Shipment {
+                private String code;
+
+                public Shipment(String code) {
+                    this.code = code;
+                }
+
+                public String getCode() {
+                    return this.code;
+                }
+
+                public int price() {
+                    return 2;
+                }
+            }
+          Address.java: |
+            public class Address {
+                private String street;
+                private String city;
+
+                public Address(String street, String city) {
+                    this.street = street;
+                    this.city = city;
+                }
+
+                public String getCity() {
+                    return this.city;
+                }
+
+                @Override
+                public String toString() {
+                    return this.street + ", " + this.city;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Parcel parcel = new Parcel("P-310", new Address("9 Dock Road", "Hull"), 1800);
+                    System.out.println(parcel);
+                    System.out.println(parcel.price());
+                    System.out.println(parcel.getTo());
+                    Shipment shipment = parcel;
+                    System.out.println(shipment.price());
+                }
+            }
+        solution:
+          Parcel.java: |
+            public class Parcel extends Shipment {
+                private Address to;
+                private int grams;
+
+                public Parcel(String code, Address to, int grams) {
+                    super(code);
+                    this.to = to;
+                    this.grams = grams;
+                }
+
+                @Override
+                public int price() {
+                    return super.price() + this.grams / 500;
+                }
+
+                public Address getTo() {
+                    return this.to;
+                }
+
+                @Override
+                public String toString() {
+                    return this.getCode() + " to " + this.to.getCity();
+                }
+            }
+          Shipment.java: |
+            public class Shipment {
+                private String code;
+
+                public Shipment(String code) {
+                    this.code = code;
+                }
+
+                public String getCode() {
+                    return this.code;
+                }
+
+                public int price() {
+                    return 2;
+                }
+            }
+          Address.java: |
+            public class Address {
+                private String street;
+                private String city;
+
+                public Address(String street, String city) {
+                    this.street = street;
+                    this.city = city;
+                }
+
+                public String getCity() {
+                    return this.city;
+                }
+
+                @Override
+                public String toString() {
+                    return this.street + ", " + this.city;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Parcel parcel = new Parcel("P-310", new Address("9 Dock Road", "Hull"), 1800);
+                    System.out.println(parcel);
+                    System.out.println(parcel.price());
+                    System.out.println(parcel.getTo());
+                    Shipment shipment = parcel;
+                    System.out.println(shipment.price());
+                }
+            }
+        hints:
+          - "`public class Parcel extends Shipment`, with `private Address to;` and `private int grams;`. The constructor hands the code to Shipment with `super(code);`."
+          - "`price()` returns `super.price() + this.grams / 500`: int division counts the full 500 grams. `toString()` returns `this.getCode() + \" to \" + this.to.getCity()`, since the code is private to Shipment."
+        require:
+          - pattern: \bclass\s+Parcel\s+extends\s+Shipment\b
+            message: "A parcel is a shipment: `public class Parcel extends Shipment`."
+          - pattern: \bprivate\s+Address\s+\w+\s*;
+            message: "A parcel has an address: keep it in a private instance variable, `private Address to;`."
+          - pattern: \bsuper\s*\.\s*price\s*\(
+            message: "Start from Shipment's price, with `super.price()`."
+        forbid:
+          - pattern: \bextends\s+Address\b
+            message: "A parcel isn't an address, so Parcel shouldn't extend Address."
+        tests:
+          - call: |
+              Parcel parcel = new Parcel("P-310", new Address("9 Dock Road", "Hull"), 1800);
+              System.out.println(parcel);
+              System.out.println(parcel.price());
+              System.out.println(parcel.getTo());
+              Shipment shipment = parcel;
+              System.out.println(shipment.price());
+          - call: |
+              Parcel light = new Parcel("P-1", new Address("1 High Street", "Bath"), 499);
+              Parcel even = new Parcel("P-2", new Address("2 Low Street", "Ely"), 500);
+              System.out.println(light.price() + " " + even.price() + " " + light.getCode());
+              System.out.println(even + " / " + even.getTo().getCity());
+            hidden: true
+          - call: |
+              ArrayList<Shipment> van = new ArrayList<>();
+              van.add(new Shipment("S-9"));
+              van.add(new Parcel("P-7", new Address("4 Pier Road", "Deal"), 2600));
+              int total = 0;
+              for (Shipment item : van) {
+                  total += item.price();
+              }
+              System.out.println(total);
+            hidden: true
+
+  - id: inheritance-abstract
+    slug: abstract-classes
+    title: Abstract classes and abstract methods
+    text: |
+      Step 2's program made `new Instrument()`, a "shaker". But a music school has no instruments that are just instruments: each one is a flute, a drum, a violin. And some methods can't be written for "an instrument" at all. What sound does an instrument make?
+
+      Java has a way to say this: an **abstract class**. It's a class made only to be extended. You can't create an object of it with `new`, and it can leave methods for its subclasses to write.
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Instrument> band = new ArrayList<>();
+              band.add(new Flute("Silver flute"));
+              band.add(new Drum("Snare drum"));
+              for (Instrument instrument : band) {
+                  instrument.play();
+              }
+          }
+      }
+      // ==== Instrument.java ====
+      public abstract class Instrument {
+          private String name;
+
+          public Instrument(String name) {
+              this.name = name;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public abstract String sound();
+
+          public void play() {
+              System.out.println(this.name + ": " + this.sound());
+          }
+      }
+      // ==== Flute.java ====
+      public class Flute extends Instrument {
+          public Flute(String name) {
+              super(name);
+          }
+
+          @Override
+          public String sound() {
+              return "fweee";
+          }
+      }
+      // ==== Drum.java ====
+      public class Drum extends Instrument {
+          public Drum(String name) {
+              super(name);
+          }
+
+          @Override
+          public String sound() {
+              return "boom boom";
+          }
+      }
+      ```
+
+      ```output
+      Silver flute: fweee
+      Snare drum: boom boom
+      ```
+
+      - `public abstract class Instrument` makes Instrument abstract.
+      - `public abstract String sound();` is an **abstract method**: a header followed by a semicolon, with no body. It says that every instrument has a `sound()` that returns a String, and leaves the code to the subclasses.
+      - Everything else is as in any class: an instance variable, a constructor, which the subclasses call with `super(name)`, and ordinary methods such as `getName` and `play`.
+      - `play` is written once, in Instrument, and calls `sound()`. As in step 6, the version that runs is the object's own: the flute's, then the drum's.
+      - Variables and lists of the abstract type are fine: `ArrayList<Instrument>` holds flutes and drums. It just can never hold an object that is only an Instrument.
+
+      ### No new
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Instrument mystery = new Instrument("Mystery");
+              mystery.play();
+          }
+      }
+      // ==== Instrument.java ====
+      public abstract class Instrument {
+          private String name;
+
+          public Instrument(String name) {
+              this.name = name;
+          }
+
+          public abstract String sound();
+
+          public void play() {
+              System.out.println(this.name + ": " + this.sound());
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:3: error: Instrument is abstract; cannot be instantiated
+              Instrument mystery = new Instrument("Mystery");
+                                   ^
+      1 error
+      ```
+
+      Think about what `mystery.play()` would have to do: call `sound()`, which has no code to run. So Java doesn't let an abstract class's object exist on its own. Instrument's constructor still runs, but only as the first part of building a Flute or a Drum.
+
+      ### A subclass must write the missing methods
+
+      A class that extends Instrument must write every abstract method, or it doesn't compile. Here a harp forgot its sound:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Harp harp = new Harp("Concert harp");
+              harp.play();
+          }
+      }
+      // ==== Instrument.java ====
+      public abstract class Instrument {
+          private String name;
+
+          public Instrument(String name) {
+              this.name = name;
+          }
+
+          public abstract String sound();
+
+          public void play() {
+              System.out.println(this.name + ": " + this.sound());
+          }
+      }
+      // ==== Harp.java ====
+      public class Harp extends Instrument {
+          public Harp(String name) {
+              super(name);
+          }
+      }
+      ```
+
+      ```javac
+      Harp.java:1: error: Harp is not abstract and does not override abstract method sound() in Instrument
+      public class Harp extends Instrument {
+             ^
+      1 error
+      ```
+
+      - The fix is to write Harp's `sound()`. javac's other way out, making Harp abstract too, means no harps could be made either. That fits only for a group of instruments, such as a `StringInstrument` between Instrument and Harp that leaves `sound()` to each of its own subclasses.
+      - Only an abstract class may have abstract methods. A plain class with an abstract method doesn't compile.
+      - A class can be abstract without any abstract methods. Then `abstract` just forbids `new`.
+
+      ### Why not an ordinary class?
+
+      Instrument could be a plain class, with `sound()` returning `""` as a placeholder. Then `new Instrument(...)` would make an instrument without a sound, and a subclass that forgot to override `sound()` would quietly play nothing. The abstract method turns both mistakes into errors that javac catches, and it tells anyone reading the class what a subclass must provide.
+
+      Module 35's interfaces take this idea further: they list methods that a class promises to have, without being its superclass.
+
+      **Your turn:** the courier makes `Shipment` abstract: every shipment has a price, but there's no price for "a shipment" in general. `Shipment.java` and `Letter.java` are ready. In `Pallet.java`, write the class `Pallet`, which extends Shipment:
+
+      - a constructor `Pallet(String code, int boxes)`
+      - `price()`, with `@Override` above it, which returns 20 dollars plus 5 for every box
+
+      The check runs:
+
+      ```java fragment
+      Shipment pallet = new Pallet("T-40", 6);
+      System.out.println(pallet.label());
+      System.out.println(new Letter("L-3").label());
+      System.out.println(new Pallet("T-41", 0).price());
+      ```
+
+      and expects:
+
+      ```
+      T-40: 50 dollars
+      L-3: 2 dollars
+      20
+      ```
+    seed:
+      Pallet.java: |
+        public class Pallet {
+
+        }
+      Shipment.java: |
+        public abstract class Shipment {
+            private String code;
+
+            public Shipment(String code) {
+                this.code = code;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public abstract int price();
+
+            public String label() {
+                return this.code + ": " + this.price() + " dollars";
+            }
+        }
+      Letter.java: |
+        public class Letter extends Shipment {
+            public Letter(String code) {
+                super(code);
+            }
+
+            @Override
+            public int price() {
+                return 2;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Shipment pallet = new Pallet("T-40", 6);
+                System.out.println(pallet.label());
+                System.out.println(new Letter("L-3").label());
+                System.out.println(new Pallet("T-41", 0).price());
+            }
+        }
+    solution:
+      Pallet.java: |
+        public class Pallet extends Shipment {
+            private int boxes;
+
+            public Pallet(String code, int boxes) {
+                super(code);
+                this.boxes = boxes;
+            }
+
+            @Override
+            public int price() {
+                return 20 + 5 * this.boxes;
+            }
+        }
+      Shipment.java: |
+        public abstract class Shipment {
+            private String code;
+
+            public Shipment(String code) {
+                this.code = code;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public abstract int price();
+
+            public String label() {
+                return this.code + ": " + this.price() + " dollars";
+            }
+        }
+      Letter.java: |
+        public class Letter extends Shipment {
+            public Letter(String code) {
+                super(code);
+            }
+
+            @Override
+            public int price() {
+                return 2;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Shipment pallet = new Pallet("T-40", 6);
+                System.out.println(pallet.label());
+                System.out.println(new Letter("L-3").label());
+                System.out.println(new Pallet("T-41", 0).price());
+            }
+        }
+    hints:
+      - "Letter shows the pattern: `extends Shipment`, a constructor that starts with `super(code);`, and `price()` with `@Override`. Pallet also keeps its number of boxes."
+      - "`price()` returns `20 + 5 * this.boxes`. `label()` is Shipment's, and it calls the pallet's own `price()`."
+    require:
+      - pattern: \bclass\s+Pallet\s+extends\s+Shipment\b
+        message: "Write the header as `public class Pallet extends Shipment`."
+      - pattern: "@Override\\s+public\\s+int\\s+price\\s*\\(\\s*\\)"
+        min: 2
+        message: "Write Pallet's `public int price()`, with `@Override` above it."
+    tests:
+      - call: |
+          Shipment pallet = new Pallet("T-40", 6);
+          System.out.println(pallet.label());
+          System.out.println(new Letter("L-3").label());
+          System.out.println(new Pallet("T-41", 0).price());
+      - call: |
+          Pallet big = new Pallet("T-99", 40);
+          System.out.println(big.getCode() + " " + big.price());
+          System.out.println(new Pallet("T-2", 1).label());
+        hidden: true
+      - call: |
+          ArrayList<Shipment> van = new ArrayList<>();
+          van.add(new Letter("L-1"));
+          van.add(new Pallet("T-5", 3));
+          van.add(new Pallet("T-6", 2));
+          int total = 0;
+          for (Shipment item : van) {
+              total += item.price();
+          }
+          System.out.println(total);
+        hidden: true
+    more:
+      - task: |
+          In a museum, every exhibit is kept in some room, but which room depends on the kind of exhibit. Fill in the two blanks, the same word in both, so that `Exhibit` can't be created with `new`, and its subclasses must write `room()`.
+        fill: |
+          public class Main {
+              public static void main(String[] args) {
+                  Exhibit lion = new Statue("Marble lion", 900);
+                  Exhibit bust = new Statue("Bronze bust", 40);
+                  System.out.println(lion.label());
+                  System.out.println(bust.label());
+              }
+          }
+          // ==== Exhibit.java ====
+          public [[abstract]] class Exhibit {
+              private String name;
+
+              public Exhibit(String name) {
+                  this.name = name;
+              }
+
+              public [[abstract]] String room();
+
+              public String label() {
+                  return this.name + ", in the " + this.room();
+              }
+          }
+          // ==== Statue.java ====
+          public class Statue extends Exhibit {
+              private int kilograms;
+
+              public Statue(String name, int kilograms) {
+                  super(name);
+                  this.kilograms = kilograms;
+              }
+
+              @Override
+              public String room() {
+                  if (this.kilograms > 500) {
+                      return "ground floor hall";
+                  }
+                  return "sculpture gallery";
+              }
+          }
+        hints:
+          - "The same word goes before `class` in the class's header, and before the return type of a method that has no body."
+          - "`public abstract class Exhibit` and `public abstract String room();`. A method without a body is allowed only when it's abstract, and only an abstract class may have one."
+      - task: |
+          Now write an abstract class yourself. The library's films and audiobooks are ready in `Film.java` and `Audiobook.java`: each extends `LibraryItem`, hands its title to `super(title)`, and overrides `loanDays()`. In `LibraryItem.java`, write the abstract class `LibraryItem`, with:
+
+          - a private title, and a constructor `LibraryItem(String title)`
+          - `getTitle()`
+          - an abstract method `int loanDays()`
+          - `dueDay(int today)`, which returns the number of the day the item is due back: today's number plus the item's loan days
+
+          The check runs:
+
+          ```java fragment
+          LibraryItem film = new Film("Night Train");
+          LibraryItem audio = new Audiobook("Salt and Stars");
+          System.out.println(film.getTitle() + ": day " + film.dueDay(10));
+          System.out.println(audio.getTitle() + ": day " + audio.dueDay(10));
+          ```
+
+          and expects:
+
+          ```
+          Night Train: day 17
+          Salt and Stars: day 24
+          ```
+        seed:
+          LibraryItem.java: |
+            public class LibraryItem {
+
+            }
+          Film.java: |
+            public class Film extends LibraryItem {
+                public Film(String title) {
+                    super(title);
+                }
+
+                @Override
+                public int loanDays() {
+                    return 7;
+                }
+            }
+          Audiobook.java: |
+            public class Audiobook extends LibraryItem {
+                public Audiobook(String title) {
+                    super(title);
+                }
+
+                @Override
+                public int loanDays() {
+                    return 14;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    LibraryItem film = new Film("Night Train");
+                    LibraryItem audio = new Audiobook("Salt and Stars");
+                    System.out.println(film.getTitle() + ": day " + film.dueDay(10));
+                    System.out.println(audio.getTitle() + ": day " + audio.dueDay(10));
+                }
+            }
+        solution:
+          LibraryItem.java: |
+            public abstract class LibraryItem {
+                private String title;
+
+                public LibraryItem(String title) {
+                    this.title = title;
+                }
+
+                public String getTitle() {
+                    return this.title;
+                }
+
+                public abstract int loanDays();
+
+                public int dueDay(int today) {
+                    return today + this.loanDays();
+                }
+            }
+          Film.java: |
+            public class Film extends LibraryItem {
+                public Film(String title) {
+                    super(title);
+                }
+
+                @Override
+                public int loanDays() {
+                    return 7;
+                }
+            }
+          Audiobook.java: |
+            public class Audiobook extends LibraryItem {
+                public Audiobook(String title) {
+                    super(title);
+                }
+
+                @Override
+                public int loanDays() {
+                    return 14;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    LibraryItem film = new Film("Night Train");
+                    LibraryItem audio = new Audiobook("Salt and Stars");
+                    System.out.println(film.getTitle() + ": day " + film.dueDay(10));
+                    System.out.println(audio.getTitle() + ": day " + audio.dueDay(10));
+                }
+            }
+        hints:
+          - "The header is `public abstract class LibraryItem {`. The title, the constructor and `getTitle()` are as in any class."
+          - "The abstract method is `public abstract int loanDays();`, with no body. `dueDay` returns `today + this.loanDays()`, and each object's own `loanDays` runs."
+        require:
+          - pattern: \babstract\s+class\s+LibraryItem\b
+            message: "Make the class abstract: `public abstract class LibraryItem`."
+          - pattern: \babstract\s+int\s+loanDays\s*\(\s*\)\s*;
+            message: "Declare `loanDays` as an abstract method, with no body: `public abstract int loanDays();`."
+        tests:
+          - call: |
+              LibraryItem film = new Film("Night Train");
+              LibraryItem audio = new Audiobook("Salt and Stars");
+              System.out.println(film.getTitle() + ": day " + film.dueDay(10));
+              System.out.println(audio.getTitle() + ": day " + audio.dueDay(10));
+          - call: |
+              ArrayList<LibraryItem> bag = new ArrayList<>();
+              bag.add(new Audiobook("Winter Roads"));
+              bag.add(new Film("Blue Hour"));
+              for (LibraryItem item : bag) {
+                  System.out.println(item.getTitle() + " " + item.loanDays() + " " + item.dueDay(0) + " " + item.dueDay(300));
+              }
+            hidden: true

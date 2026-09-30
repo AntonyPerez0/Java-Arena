@@ -1,0 +1,3971 @@
+id: interfaces
+summary: Interfaces, lists of methods that a class promises to have. implements and @Override, several classes behind one interface and one class with several interfaces, interfaces as the types of variables, parameters, return values and list elements, and Java's own List, Map, Set and Collection interfaces, with HashSet for values kept once. Last, when to choose an interface and when an abstract class. MOOC section 9.2.
+steps:
+  - id: interfaces-promise
+    slug: promise
+    title: "An interface: a promise of methods"
+    text: |
+      Module 34's abstract classes listed methods that every subclass must write, such as the instruments' `sound()`. An **interface** is that idea on its own: a list of methods, with no code, that a class can promise to have. A class doesn't extend an interface. It **implements** it.
+
+      ### Switchable
+
+      A smart home app controls all kinds of devices: heaters, fans, garden lights, sprinklers. For the app's on and off buttons, what a device does doesn't matter. What matters is that it can be turned on and off, and that it can say whether it's on. Here's that as an interface:
+
+      ```java fragment
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      ```
+
+      - It's written like a class, with the word `interface` in place of `class`, and it goes in a file of its own, `Switchable.java`.
+      - Each method is a header followed by a semicolon, with no body, just like an abstract method. The interface says *what* a Switchable can do, and leaves *how* to each class.
+      - A method an interface lists (a header with no body) is always public, so there's no need to write `public` in front of it.
+      - An interface has no instance variables and no constructor. It isn't a recipe for objects, only a list of promises.
+
+      ### implements
+
+      Here's a heater that keeps the promise:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Heater heater = new Heater("hall", 21);
+              System.out.println(heater);
+              heater.turnOn();
+              System.out.println(heater.isOn());
+              System.out.println(heater);
+              heater.turnOff();
+              System.out.println(heater.getDegrees());
+          }
+      }
+      // ==== Switchable.java ====
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      // ==== Heater.java ====
+      public class Heater implements Switchable {
+          private String room;
+          private int degrees;
+          private boolean on;
+
+          public Heater(String room, int degrees) {
+              this.room = room;
+              this.degrees = degrees;
+              this.on = false;
+          }
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+
+          public int getDegrees() {
+              return this.degrees;
+          }
+
+          @Override
+          public String toString() {
+              if (this.on) {
+                  return "Heater in the " + this.room + ": on, " + this.degrees + " degrees";
+              }
+              return "Heater in the " + this.room + ": off";
+          }
+      }
+      ```
+
+      ```output
+      Heater in the hall: off
+      true
+      Heater in the hall: on, 21 degrees
+      21
+      ```
+
+      - `public class Heater implements Switchable` promises that Heater has every method that Switchable lists.
+      - Heater writes each of them with the same header, and with `public` in front.
+      - `@Override` works here too. Above a method that implements an interface's method, it checks that the interface really has a method with that header, so a misspelled `turnon` is caught. This course writes it above every such method, as it does above `toString`.
+      - A class may have more than the interface asks for: Heater has instance variables, a constructor, `getDegrees` and a `toString`. The interface only sets the minimum.
+
+      ### javac holds the class to its promise
+
+      A garden light that forgot `isOn` doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              GardenLight light = new GardenLight();
+              light.turnOn();
+          }
+      }
+      // ==== Switchable.java ====
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      // ==== GardenLight.java ====
+      public class GardenLight implements Switchable {
+          private boolean on;
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+      }
+      ```
+
+      ```javac
+      GardenLight.java:1: error: GardenLight is not abstract and does not override abstract method isOn() in Switchable
+      public class GardenLight implements Switchable {
+             ^
+      1 error
+      ```
+
+      It's the same message as for module 34's harp without a `sound()`. To javac, the methods an interface lists are abstract methods, and a class that implements the interface must write every one of them.
+
+      They must also be `public`. Without a word in front, a method can be used only by the classes of its own package (module 34), which is less than the interface promised:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              GardenLight light = new GardenLight();
+              light.turnOn();
+          }
+      }
+      // ==== Switchable.java ====
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      // ==== GardenLight.java ====
+      public class GardenLight implements Switchable {
+          private boolean on;
+
+          @Override
+          void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+      }
+      ```
+
+      ```javac
+      GardenLight.java:5: error: turnOn() in GardenLight cannot implement turnOn() in Switchable
+          void turnOn() {
+               ^
+        attempting to assign weaker access privileges; was public
+      1 error
+      ```
+
+      It's the rule module 34 gave for a `toString` that isn't public: a method can't be less visible than the method it overrides or implements. Switchable's `turnOn` is public, so GardenLight's must be public too.
+
+      **Your turn:** the garden sprinkler joins the app. `Switchable.java` is ready. In `Sprinkler.java`, write the class `Sprinkler`, which implements Switchable, with:
+
+      - a constructor `Sprinkler(String zone)`; a new sprinkler is off
+      - `turnOn()`, `turnOff()` and `isOn()`, each with `@Override` above it
+      - `toString()`, which returns `Sprinkler (front lawn): on` or `Sprinkler (front lawn): off`, with the sprinkler's own zone
+
+      The check runs:
+
+      ```java fragment
+      Sprinkler sprinkler = new Sprinkler("front lawn");
+      System.out.println(sprinkler);
+      sprinkler.turnOn();
+      System.out.println(sprinkler.isOn());
+      System.out.println(sprinkler);
+      ```
+
+      and expects:
+
+      ```
+      Sprinkler (front lawn): off
+      true
+      Sprinkler (front lawn): on
+      ```
+    seed:
+      Sprinkler.java: |
+        public class Sprinkler {
+
+        }
+      Switchable.java: |
+        public interface Switchable {
+            void turnOn();
+            void turnOff();
+            boolean isOn();
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Sprinkler sprinkler = new Sprinkler("front lawn");
+                System.out.println(sprinkler);
+                sprinkler.turnOn();
+                System.out.println(sprinkler.isOn());
+                System.out.println(sprinkler);
+            }
+        }
+    solution:
+      Sprinkler.java: |
+        public class Sprinkler implements Switchable {
+            private String zone;
+            private boolean on;
+
+            public Sprinkler(String zone) {
+                this.zone = zone;
+                this.on = false;
+            }
+
+            @Override
+            public void turnOn() {
+                this.on = true;
+            }
+
+            @Override
+            public void turnOff() {
+                this.on = false;
+            }
+
+            @Override
+            public boolean isOn() {
+                return this.on;
+            }
+
+            @Override
+            public String toString() {
+                if (this.on) {
+                    return "Sprinkler (" + this.zone + "): on";
+                }
+                return "Sprinkler (" + this.zone + "): off";
+            }
+        }
+      Switchable.java: |
+        public interface Switchable {
+            void turnOn();
+            void turnOff();
+            boolean isOn();
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Sprinkler sprinkler = new Sprinkler("front lawn");
+                System.out.println(sprinkler);
+                sprinkler.turnOn();
+                System.out.println(sprinkler.isOn());
+                System.out.println(sprinkler);
+            }
+        }
+    hints:
+      - "Start with `public class Sprinkler implements Switchable {`, and give the class two instance variables: the zone, and a boolean that says whether the sprinkler is on."
+      - "Each of the three methods is `public`, with `@Override` above it: `turnOn` sets the boolean to `true`, `turnOff` sets it to `false`, and `isOn` returns it. `toString` returns one text or the other, depending on the boolean."
+    require:
+      - pattern: \bclass\s+Sprinkler\s+implements\s+Switchable\b
+        message: "Write the header as `public class Sprinkler implements Switchable`, so that a sprinkler keeps Switchable's promise."
+      - pattern: "@Override"
+        min: 3
+        message: "Put `@Override` above each of the methods that Switchable asks for, so that javac checks their headers."
+    tests:
+      - call: |
+          Sprinkler sprinkler = new Sprinkler("front lawn");
+          System.out.println(sprinkler);
+          sprinkler.turnOn();
+          System.out.println(sprinkler.isOn());
+          System.out.println(sprinkler);
+      - call: |
+          Sprinkler back = new Sprinkler("back yard");
+          Sprinkler roses = new Sprinkler("roses");
+          back.turnOn();
+          back.turnOn();
+          System.out.println(back.isOn() + " " + roses.isOn());
+          back.turnOff();
+          roses.turnOn();
+          System.out.println(back + " / " + roses);
+        hidden: true
+      - call: |
+          Switchable device = new Sprinkler("hedge");
+          System.out.println(device.isOn());
+          device.turnOn();
+          device.turnOff();
+          System.out.println(device.isOn() + " " + device);
+        hidden: true
+    more:
+      - task: |
+          A ceiling fan has three speeds, and speed 0 means that it's off. The fan keeps no boolean: `isOn` works the answer out from the speed. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  CeilingFan fan = new CeilingFan();
+                  fan.faster();
+                  System.out.println(fan.isOn() + " " + fan.getSpeed());
+                  fan.turnOn();
+                  fan.faster();
+                  fan.faster();
+                  fan.faster();
+                  fan.turnOn();
+                  System.out.println(fan.isOn() + " " + fan.getSpeed());
+                  fan.turnOff();
+                  System.out.println(fan.isOn() + " " + fan.getSpeed());
+              }
+          }
+          // ==== Switchable.java ====
+          public interface Switchable {
+              void turnOn();
+              void turnOff();
+              boolean isOn();
+          }
+          // ==== CeilingFan.java ====
+          public class CeilingFan implements Switchable {
+              private int speed;
+
+              @Override
+              public void turnOn() {
+                  if (this.speed == 0) {
+                      this.speed = 1;
+                  }
+              }
+
+              @Override
+              public void turnOff() {
+                  this.speed = 0;
+              }
+
+              @Override
+              public boolean isOn() {
+                  return this.speed > 0;
+              }
+
+              public void faster() {
+                  if (this.speed > 0 && this.speed < 3) {
+                      this.speed++;
+                  }
+              }
+
+              public int getSpeed() {
+                  return this.speed;
+              }
+          }
+        hints:
+          - "A new fan's speed is 0, and `faster` changes nothing while the fan is off. `turnOn` starts the fan at speed 1, but only if it's off."
+          - "After `turnOn`, three calls to `faster` stop at speed 3. The second `turnOn` finds the fan already running, so it keeps speed 3. `turnOff` sets the speed back to 0, and `isOn` is worked out from the speed."
+      - task: |
+          The garage door opener implements Switchable too, but `GarageDoor.java` doesn't compile. Read javac's messages and fix the class: `turnOn` opens the door, `turnOff` closes it, and `isOn` should say whether the door is open. Keep `isOpen` as it is, since other code uses it. Put `@Override` above each of the three methods that Switchable asks for. The program should print:
+
+          ```
+          true true
+          false false
+          ```
+        seed:
+          GarageDoor.java: |
+            public class GarageDoor implements Switchable {
+                private boolean open;
+
+                void turnOn() {
+                    this.open = true;
+                }
+
+                public void turnOff() {
+                    this.open = false;
+                }
+
+                public boolean isOpen() {
+                    return this.open;
+                }
+            }
+          Switchable.java: |
+            public interface Switchable {
+                void turnOn();
+                void turnOff();
+                boolean isOn();
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    GarageDoor door = new GarageDoor();
+                    door.turnOn();
+                    System.out.println(door.isOn() + " " + door.isOpen());
+                    door.turnOff();
+                    System.out.println(door.isOn() + " " + door.isOpen());
+                }
+            }
+        solution:
+          GarageDoor.java: |
+            public class GarageDoor implements Switchable {
+                private boolean open;
+
+                @Override
+                public void turnOn() {
+                    this.open = true;
+                }
+
+                @Override
+                public void turnOff() {
+                    this.open = false;
+                }
+
+                @Override
+                public boolean isOn() {
+                    return this.open;
+                }
+
+                public boolean isOpen() {
+                    return this.open;
+                }
+            }
+          Switchable.java: |
+            public interface Switchable {
+                void turnOn();
+                void turnOff();
+                boolean isOn();
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    GarageDoor door = new GarageDoor();
+                    door.turnOn();
+                    System.out.println(door.isOn() + " " + door.isOpen());
+                    door.turnOff();
+                    System.out.println(door.isOn() + " " + door.isOpen());
+                }
+            }
+        hints:
+          - "javac finds two problems: `turnOn` isn't public, and the class has no `isOn()` at all. `isOpen` has another name, so it doesn't count as Switchable's `isOn`."
+          - "Write `public void turnOn()`, and add a method `public boolean isOn()` that returns `this.open`. Then put `@Override` above `turnOn`, `turnOff` and `isOn`, but not above `isOpen`, which Switchable doesn't have."
+        require:
+          - pattern: "@Override"
+            min: 3
+            message: "Put `@Override` above `turnOn`, `turnOff` and `isOn`, the three methods that Switchable asks for."
+          - pattern: \bpublic\s+boolean\s+isOn\s*\(\s*\)
+            message: "GarageDoor needs the method `public boolean isOn()`, which Switchable asks for."
+        tests:
+          - name: The program's output
+          - call: |
+              GarageDoor door = new GarageDoor();
+              System.out.println(door.isOn());
+              Switchable button = door;
+              button.turnOn();
+              System.out.println(door.isOpen() + " " + button.isOn());
+            hidden: true
+
+  - id: interfaces-several
+    slug: several
+    title: Many classes, many interfaces
+    text: |
+      ### One interface, many classes
+
+      Step 1's heater isn't the only switchable device in the app. Every kind of device can implement Switchable, and each one keeps the promise in its own way. A garden light counts how many times it has been switched on, since its bulb wears out:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Heater heater = new Heater("hall", 21);
+              GardenLight light = new GardenLight("patio");
+              heater.turnOn();
+              light.turnOn();
+              light.turnOn();
+              light.turnOff();
+              light.turnOn();
+              System.out.println(heater);
+              System.out.println(light);
+              System.out.println(heater.isOn() + " " + light.isOn());
+          }
+      }
+      // ==== Switchable.java ====
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      // ==== Heater.java ====
+      public class Heater implements Switchable {
+          private String room;
+          private int degrees;
+          private boolean on;
+
+          public Heater(String room, int degrees) {
+              this.room = room;
+              this.degrees = degrees;
+              this.on = false;
+          }
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+
+          @Override
+          public String toString() {
+              if (this.on) {
+                  return "Heater in the " + this.room + ": on, " + this.degrees + " degrees";
+              }
+              return "Heater in the " + this.room + ": off";
+          }
+      }
+      // ==== GardenLight.java ====
+      public class GardenLight implements Switchable {
+          private String place;
+          private boolean on;
+          private int switchOns;
+
+          public GardenLight(String place) {
+              this.place = place;
+              this.on = false;
+              this.switchOns = 0;
+          }
+
+          @Override
+          public void turnOn() {
+              if (!this.on) {
+                  this.on = true;
+                  this.switchOns++;
+              }
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+
+          @Override
+          public String toString() {
+              return "Garden light (" + this.place + "): " + this.switchOns + " switch-ons";
+          }
+      }
+      ```
+
+      ```output
+      Heater in the hall: on, 21 degrees
+      Garden light (patio): 2 switch-ons
+      true true
+      ```
+
+      - Both classes have the three methods that Switchable lists, with the same headers. What the methods do is up to each class: the light's `turnOn` counts, but only when the light was off.
+      - Heater and GardenLight share no code and no superclass (other than Object). The interface is all they have in common, and that's all the app's buttons need, as the next steps show.
+
+      ### One class, many interfaces
+
+      Some devices run on a battery. What the app needs from them is another interface:
+
+      ```java fragment
+      public interface Chargeable {
+          int batteryPercent();
+          void charge(int minutes);
+      }
+      ```
+
+      A robot vacuum can be switched on, and it has a battery. A class can implement several interfaces: list them after `implements`, separated by commas.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              RobotVacuum vacuum = new RobotVacuum();
+              vacuum.clean(10);
+              System.out.println(vacuum.batteryPercent());
+              vacuum.turnOn();
+              vacuum.clean(10);
+              System.out.println(vacuum.batteryPercent());
+              vacuum.turnOff();
+              vacuum.charge(45);
+              System.out.println(vacuum.batteryPercent() + "%, on: " + vacuum.isOn());
+          }
+      }
+      // ==== Switchable.java ====
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      // ==== Chargeable.java ====
+      public interface Chargeable {
+          int batteryPercent();
+          void charge(int minutes);
+      }
+      // ==== RobotVacuum.java ====
+      public class RobotVacuum implements Switchable, Chargeable {
+          private boolean on;
+          private int battery;
+
+          public RobotVacuum() {
+              this.on = false;
+              this.battery = 50;
+          }
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+
+          @Override
+          public int batteryPercent() {
+              return this.battery;
+          }
+
+          @Override
+          public void charge(int minutes) {
+              this.battery += minutes;
+              if (this.battery > 100) {
+                  this.battery = 100;
+              }
+          }
+
+          public void clean(int minutes) {
+              if (this.on) {
+                  this.battery -= 2 * minutes;
+                  if (this.battery < 0) {
+                      this.battery = 0;
+                  }
+              }
+          }
+      }
+      ```
+
+      ```output
+      50
+      30
+      75%, on: false
+      ```
+
+      - `implements Switchable, Chargeable` makes two promises, and RobotVacuum keeps both: it has all five methods. Leave one out, and javac says which one is missing, and from which interface.
+      - `clean` is RobotVacuum's own. Neither interface knows about it.
+      - The vacuum's battery isn't in either interface. The interfaces only say that there's a `batteryPercent()` to ask, and the class decides how to keep the number.
+
+      ### extends and implements together
+
+      A class can extend only one class, but it can implement any number of interfaces, and it can do both at once. `extends` comes first. If the app had an abstract class `Appliance` for the name and the power of every device (module 34), the vacuum's header could be:
+
+      ```java fragment
+      public class RobotVacuum extends Appliance implements Switchable, Chargeable {
+      ```
+
+      Then a RobotVacuum would get Appliance's code, and still promise the methods of both interfaces. Step 9 comes back to when to use which.
+
+      **Your turn:** the family's electric scooter shows up in the app too. `Switchable.java` and `Chargeable.java` are ready. In `ElectricScooter.java`, write the class `ElectricScooter`, which implements both interfaces, with:
+
+      - a constructor `ElectricScooter(int battery)`, which takes the battery's percentage; a new scooter is off
+      - `turnOn()`, `turnOff()` and `isOn()`, as for any Switchable
+      - `batteryPercent()`, which returns the battery's percentage
+      - `charge(int minutes)`, which adds 2 percent for every minute, but never goes above 100
+      - `ride(int km)`, which uses 5 percent for every kilometer, but only when the scooter is on, and never goes below 0
+
+      Put `@Override` above each method that an interface asks for. The check runs:
+
+      ```java fragment
+      ElectricScooter scooter = new ElectricScooter(40);
+      scooter.ride(3);
+      System.out.println(scooter.batteryPercent());
+      scooter.turnOn();
+      scooter.ride(3);
+      System.out.println(scooter.isOn() + " " + scooter.batteryPercent());
+      scooter.charge(50);
+      System.out.println(scooter.batteryPercent());
+      ```
+
+      and expects:
+
+      ```
+      40
+      true 25
+      100
+      ```
+    seed:
+      ElectricScooter.java: |
+        public class ElectricScooter {
+
+        }
+      Switchable.java: |
+        public interface Switchable {
+            void turnOn();
+            void turnOff();
+            boolean isOn();
+        }
+      Chargeable.java: |
+        public interface Chargeable {
+            int batteryPercent();
+            void charge(int minutes);
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ElectricScooter scooter = new ElectricScooter(40);
+                scooter.ride(3);
+                System.out.println(scooter.batteryPercent());
+                scooter.turnOn();
+                scooter.ride(3);
+                System.out.println(scooter.isOn() + " " + scooter.batteryPercent());
+                scooter.charge(50);
+                System.out.println(scooter.batteryPercent());
+            }
+        }
+    solution:
+      ElectricScooter.java: |
+        public class ElectricScooter implements Switchable, Chargeable {
+            private int battery;
+            private boolean on;
+
+            public ElectricScooter(int battery) {
+                this.battery = battery;
+                this.on = false;
+            }
+
+            @Override
+            public void turnOn() {
+                this.on = true;
+            }
+
+            @Override
+            public void turnOff() {
+                this.on = false;
+            }
+
+            @Override
+            public boolean isOn() {
+                return this.on;
+            }
+
+            @Override
+            public int batteryPercent() {
+                return this.battery;
+            }
+
+            @Override
+            public void charge(int minutes) {
+                this.battery += 2 * minutes;
+                if (this.battery > 100) {
+                    this.battery = 100;
+                }
+            }
+
+            public void ride(int km) {
+                if (this.on) {
+                    this.battery -= 5 * km;
+                    if (this.battery < 0) {
+                        this.battery = 0;
+                    }
+                }
+            }
+        }
+      Switchable.java: |
+        public interface Switchable {
+            void turnOn();
+            void turnOff();
+            boolean isOn();
+        }
+      Chargeable.java: |
+        public interface Chargeable {
+            int batteryPercent();
+            void charge(int minutes);
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ElectricScooter scooter = new ElectricScooter(40);
+                scooter.ride(3);
+                System.out.println(scooter.batteryPercent());
+                scooter.turnOn();
+                scooter.ride(3);
+                System.out.println(scooter.isOn() + " " + scooter.batteryPercent());
+                scooter.charge(50);
+                System.out.println(scooter.batteryPercent());
+            }
+        }
+    hints:
+      - "The header is `public class ElectricScooter implements Switchable, Chargeable {`. The class needs two instance variables: the battery's percentage and whether the scooter is on."
+      - "`charge` adds `2 * minutes`, and then sets the battery back to 100 if it went above. `ride` does nothing unless the scooter is on; otherwise it takes away `5 * km`, and sets the battery back to 0 if it went below. `ride` is the scooter's own, so it has no `@Override`."
+    require:
+      - pattern: \bclass\s+ElectricScooter\s+implements\s+(Switchable\s*,\s*Chargeable|Chargeable\s*,\s*Switchable)\b
+        message: "Write the header as `public class ElectricScooter implements Switchable, Chargeable`, so that the scooter makes both promises."
+      - pattern: "@Override"
+        min: 5
+        message: "Put `@Override` above each of the five methods that the two interfaces ask for."
+    tests:
+      - call: |
+          ElectricScooter scooter = new ElectricScooter(40);
+          scooter.ride(3);
+          System.out.println(scooter.batteryPercent());
+          scooter.turnOn();
+          scooter.ride(3);
+          System.out.println(scooter.isOn() + " " + scooter.batteryPercent());
+          scooter.charge(50);
+          System.out.println(scooter.batteryPercent());
+      - call: |
+          ElectricScooter scooter = new ElectricScooter(10);
+          scooter.turnOn();
+          scooter.ride(5);
+          System.out.println(scooter.batteryPercent());
+          scooter.charge(7);
+          scooter.turnOff();
+          scooter.ride(1);
+          System.out.println(scooter.isOn() + " " + scooter.batteryPercent());
+          scooter.charge(0);
+          System.out.println(scooter.batteryPercent());
+        hidden: true
+      - call: |
+          Chargeable battery = new ElectricScooter(95);
+          battery.charge(1);
+          System.out.println(battery.batteryPercent());
+          Switchable power = new ElectricScooter(0);
+          power.turnOn();
+          System.out.println(power.isOn());
+        hidden: true
+    more:
+      - task: |
+          A laptop and a pair of headphones both implement Chargeable, but they charge at different speeds. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Laptop laptop = new Laptop(20);
+                  Headphones headphones = new Headphones(10);
+                  laptop.charge(30);
+                  headphones.charge(12);
+                  System.out.println(laptop.batteryPercent() + " " + headphones.batteryPercent());
+                  laptop.charge(60);
+                  headphones.charge(60);
+                  System.out.println(laptop.batteryPercent() + " " + headphones.batteryPercent());
+              }
+          }
+          // ==== Chargeable.java ====
+          public interface Chargeable {
+              int batteryPercent();
+              void charge(int minutes);
+          }
+          // ==== Laptop.java ====
+          public class Laptop implements Chargeable {
+              private int battery;
+
+              public Laptop(int battery) {
+                  this.battery = battery;
+              }
+
+              @Override
+              public int batteryPercent() {
+                  return this.battery;
+              }
+
+              @Override
+              public void charge(int minutes) {
+                  this.battery += minutes;
+                  if (this.battery > 100) {
+                      this.battery = 100;
+                  }
+              }
+          }
+          // ==== Headphones.java ====
+          public class Headphones implements Chargeable {
+              private int battery;
+
+              public Headphones(int battery) {
+                  this.battery = battery;
+              }
+
+              @Override
+              public int batteryPercent() {
+                  return this.battery;
+              }
+
+              @Override
+              public void charge(int minutes) {
+                  this.battery += 5 * minutes;
+                  if (this.battery > 100) {
+                      this.battery = 100;
+                  }
+              }
+          }
+        hints:
+          - "Each object runs its own class's `charge`: the laptop gains 1 percent a minute, the headphones 5 percent a minute."
+          - "The laptop goes from 20 to 50, and the headphones from 10 to 70. After that, both would go past 100, so each stops at 100."
+      - task: |
+          The app can dim some lights. `CeilingLight` and `DeskLamp` both say `implements Dimmable`, and both have `@Override` above their methods `setBrightness` and `getBrightness`. But `Dimmable.java` is still empty, so nothing compiles. Write the interface `Dimmable`, with the two methods: `setBrightness`, which takes a percentage as an `int` and returns nothing, and `getBrightness`, which returns the percentage as an `int`. Don't change the classes. The program should print:
+
+          ```
+          70 50
+          100 0
+          ```
+        seed:
+          Dimmable.java: |
+            public interface Dimmable {
+
+            }
+          CeilingLight.java: |
+            public class CeilingLight implements Dimmable {
+                private int brightness;
+
+                @Override
+                public void setBrightness(int percent) {
+                    if (percent < 0) {
+                        this.brightness = 0;
+                    } else if (percent > 100) {
+                        this.brightness = 100;
+                    } else {
+                        this.brightness = percent;
+                    }
+                }
+
+                @Override
+                public int getBrightness() {
+                    return this.brightness;
+                }
+            }
+          DeskLamp.java: |
+            public class DeskLamp implements Dimmable {
+                private int brightness;
+
+                @Override
+                public void setBrightness(int percent) {
+                    if (percent >= 75) {
+                        this.brightness = 100;
+                    } else if (percent >= 25) {
+                        this.brightness = 50;
+                    } else {
+                        this.brightness = 0;
+                    }
+                }
+
+                @Override
+                public int getBrightness() {
+                    return this.brightness;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    CeilingLight ceiling = new CeilingLight();
+                    DeskLamp lamp = new DeskLamp();
+                    ceiling.setBrightness(70);
+                    lamp.setBrightness(70);
+                    System.out.println(ceiling.getBrightness() + " " + lamp.getBrightness());
+                    ceiling.setBrightness(120);
+                    lamp.setBrightness(10);
+                    System.out.println(ceiling.getBrightness() + " " + lamp.getBrightness());
+                }
+            }
+        solution:
+          Dimmable.java: |
+            public interface Dimmable {
+                void setBrightness(int percent);
+                int getBrightness();
+            }
+          CeilingLight.java: |
+            public class CeilingLight implements Dimmable {
+                private int brightness;
+
+                @Override
+                public void setBrightness(int percent) {
+                    if (percent < 0) {
+                        this.brightness = 0;
+                    } else if (percent > 100) {
+                        this.brightness = 100;
+                    } else {
+                        this.brightness = percent;
+                    }
+                }
+
+                @Override
+                public int getBrightness() {
+                    return this.brightness;
+                }
+            }
+          DeskLamp.java: |
+            public class DeskLamp implements Dimmable {
+                private int brightness;
+
+                @Override
+                public void setBrightness(int percent) {
+                    if (percent >= 75) {
+                        this.brightness = 100;
+                    } else if (percent >= 25) {
+                        this.brightness = 50;
+                    } else {
+                        this.brightness = 0;
+                    }
+                }
+
+                @Override
+                public int getBrightness() {
+                    return this.brightness;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    CeilingLight ceiling = new CeilingLight();
+                    DeskLamp lamp = new DeskLamp();
+                    ceiling.setBrightness(70);
+                    lamp.setBrightness(70);
+                    System.out.println(ceiling.getBrightness() + " " + lamp.getBrightness());
+                    ceiling.setBrightness(120);
+                    lamp.setBrightness(10);
+                    System.out.println(ceiling.getBrightness() + " " + lamp.getBrightness());
+                }
+            }
+        hints:
+          - "An interface lists only headers, each followed by a semicolon. Copy each header from one of the classes, leave out `public` and the body, and end it with `;`."
+          - "The interface has two lines inside its braces: `void setBrightness(int percent);` and `int getBrightness();`."
+        require:
+          - pattern: \binterface\s+Dimmable\b
+            message: "Write `Dimmable` as an interface: `public interface Dimmable`."
+        tests:
+          - name: The program's output
+          - call: |
+              Dimmable light = new DeskLamp();
+              light.setBrightness(30);
+              System.out.println(light.getBrightness());
+              light = new CeilingLight();
+              light.setBrightness(30);
+              System.out.println(light.getBrightness());
+            hidden: true
+
+  - id: interfaces-variable-type
+    slug: variable-type
+    title: An interface as a variable's type
+    text: |
+      An interface is a type, just like a class. It can be the type of a variable, and such a variable can refer to an object of any class that implements the interface:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Switchable device = new Heater("hall", 21);
+              device.turnOn();
+              System.out.println(device);
+
+              device = new GardenLight("patio");
+              System.out.println(device.isOn());
+              device.turnOn();
+              System.out.println(device);
+          }
+      }
+      // ==== Switchable.java ====
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      // ==== Heater.java ====
+      public class Heater implements Switchable {
+          private String room;
+          private int degrees;
+          private boolean on;
+
+          public Heater(String room, int degrees) {
+              this.room = room;
+              this.degrees = degrees;
+              this.on = false;
+          }
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+
+          public int getDegrees() {
+              return this.degrees;
+          }
+
+          @Override
+          public String toString() {
+              if (this.on) {
+                  return "Heater in the " + this.room + ": on, " + this.degrees + " degrees";
+              }
+              return "Heater in the " + this.room + ": off";
+          }
+      }
+      // ==== GardenLight.java ====
+      public class GardenLight implements Switchable {
+          private String place;
+          private boolean on;
+          private int switchOns;
+
+          public GardenLight(String place) {
+              this.place = place;
+              this.on = false;
+              this.switchOns = 0;
+          }
+
+          @Override
+          public void turnOn() {
+              if (!this.on) {
+                  this.on = true;
+                  this.switchOns++;
+              }
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+
+          @Override
+          public String toString() {
+              return "Garden light (" + this.place + "): " + this.switchOns + " switch-ons";
+          }
+      }
+      ```
+
+      ```output
+      Heater in the hall: on, 21 degrees
+      false
+      Garden light (patio): 1 switch-ons
+      ```
+
+      - `Switchable device = new Heater("hall", 21);` compiles because Heater implements Switchable: a Heater is a Switchable. It's the same idea as module 34's `Adventurer hero = new Knight("Oren");`, with an interface in place of the superclass.
+      - Calls on `device` run the object's own methods: Heater's while `device` refers to the heater, and GardenLight's after the assignment.
+      - `println(device)` calls the object's own `toString`. Every object has Object's methods, so a variable of an interface type can use them too, even though Switchable doesn't list them.
+
+      ### The variable's type decides what you may call
+
+      While `device` refers to the heater, the heater has a `getDegrees()`. Still, this doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Switchable device = new Heater("hall", 21);
+              System.out.println(device.getDegrees());
+          }
+      }
+      // ==== Switchable.java ====
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      // ==== Heater.java ====
+      public class Heater implements Switchable {
+          private String room;
+          private int degrees;
+          private boolean on;
+
+          public Heater(String room, int degrees) {
+              this.room = room;
+              this.degrees = degrees;
+              this.on = false;
+          }
+
+          @Override
+          public void turnOn() {
+              this.on = true;
+          }
+
+          @Override
+          public void turnOff() {
+              this.on = false;
+          }
+
+          @Override
+          public boolean isOn() {
+              return this.on;
+          }
+
+          public int getDegrees() {
+              return this.degrees;
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: cannot find symbol
+              System.out.println(device.getDegrees());
+                                       ^
+        symbol:   method getDegrees()
+        location: variable device of type Switchable
+      1 error
+      ```
+
+      javac knows only that `device` holds some Switchable, and a garden light or a sprinkler has no degrees. These are module 34's two rules again:
+
+      - The **variable's type** decides which methods you may call. Through a Switchable variable, that's Switchable's three methods (and Object's).
+      - The **object's class** decides which version of a method runs.
+
+      So pick the type that fits what the code needs. Code that only switches devices on and off can use Switchable, and then it works with every device. Code that sets the heater's temperature needs a Heater variable.
+
+      ### No objects of an interface
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Switchable device = new Switchable();
+          }
+      }
+      // ==== Switchable.java ====
+      public interface Switchable {
+          void turnOn();
+          void turnOff();
+          boolean isOn();
+      }
+      ```
+
+      ```javac
+      Main.java:3: error: Switchable is abstract; cannot be instantiated
+              Switchable device = new Switchable();
+                                  ^
+      1 error
+      ```
+
+      An interface has no code to run, so there are no Switchable objects as such. Every object comes from a class, and a Switchable variable refers to an object of some class that implements Switchable, or to nothing (`null`).
+
+      An object whose class implements several interfaces fits in a variable of each of them: step 2's robot vacuum can be a Switchable and a Chargeable. Module 36 looks more closely at one object seen through each of its types.
+
+      **Your turn:** step 2's laptop and headphones again: the laptop gains 1 percent a minute, the headphones 5, and neither goes above 100. What does this program print?
+    predict: |
+      public class Main {
+          public static void main(String[] args) {
+              Chargeable gadget = new Laptop(20);
+              gadget.charge(30);
+              System.out.println(gadget.batteryPercent());
+
+              Headphones headphones = new Headphones(10);
+              gadget = headphones;
+              gadget.charge(4);
+              System.out.println(gadget.batteryPercent() + " " + headphones.batteryPercent());
+          }
+      }
+      // ==== Chargeable.java ====
+      public interface Chargeable {
+          int batteryPercent();
+          void charge(int minutes);
+      }
+      // ==== Laptop.java ====
+      public class Laptop implements Chargeable {
+          private int battery;
+
+          public Laptop(int battery) {
+              this.battery = battery;
+          }
+
+          @Override
+          public int batteryPercent() {
+              return this.battery;
+          }
+
+          @Override
+          public void charge(int minutes) {
+              this.battery += minutes;
+              if (this.battery > 100) {
+                  this.battery = 100;
+              }
+          }
+      }
+      // ==== Headphones.java ====
+      public class Headphones implements Chargeable {
+          private int battery;
+
+          public Headphones(int battery) {
+              this.battery = battery;
+          }
+
+          @Override
+          public int batteryPercent() {
+              return this.battery;
+          }
+
+          @Override
+          public void charge(int minutes) {
+              this.battery += 5 * minutes;
+              if (this.battery > 100) {
+                  this.battery = 100;
+              }
+          }
+      }
+    hints:
+      - "`gadget` first refers to a Laptop, so the Laptop's `charge` runs. Later, `gadget = headphones;` doesn't copy anything."
+      - "The Laptop gains 1 percent a minute: 20 plus 30 is 50. After `gadget = headphones;`, both variables refer to the same Headphones object, and the Headphones' `charge` runs. 10 plus 5 times 4 is 30, whichever variable you ask."
+    more:
+      - task: |
+          Fill in the blank, a type, so that the program compiles. The one variable refers to a laptop first and to headphones later.
+        fill: |
+          public class Main {
+              public static void main(String[] args) {
+                  [[Chargeable]] gadget = new Laptop(30);
+                  gadget.charge(20);
+                  System.out.println(gadget.batteryPercent());
+                  gadget = new Headphones(30);
+                  gadget.charge(4);
+                  System.out.println(gadget.batteryPercent());
+              }
+          }
+          // ==== Chargeable.java ====
+          public interface Chargeable {
+              int batteryPercent();
+              void charge(int minutes);
+          }
+          // ==== Laptop.java ====
+          public class Laptop implements Chargeable {
+              private int battery;
+
+              public Laptop(int battery) {
+                  this.battery = battery;
+              }
+
+              @Override
+              public int batteryPercent() {
+                  return this.battery;
+              }
+
+              @Override
+              public void charge(int minutes) {
+                  this.battery += minutes;
+                  if (this.battery > 100) {
+                      this.battery = 100;
+                  }
+              }
+          }
+          // ==== Headphones.java ====
+          public class Headphones implements Chargeable {
+              private int battery;
+
+              public Headphones(int battery) {
+                  this.battery = battery;
+              }
+
+              @Override
+              public int batteryPercent() {
+                  return this.battery;
+              }
+
+              @Override
+              public void charge(int minutes) {
+                  this.battery += 5 * minutes;
+                  if (this.battery > 100) {
+                      this.battery = 100;
+                  }
+              }
+          }
+        hints:
+          - "A `Laptop` variable can't refer to headphones, and a `Headphones` variable can't refer to a laptop. What type do both classes share?"
+          - "Both classes implement `Chargeable`, and the program calls only Chargeable's methods on `gadget`."
+      - task: |
+          The app has one button that controls one device, chosen when the app starts. The program reads one word, `fan` or `heater`. Declare one variable of type `Switchable`. If the word is `fan`, give it `new CeilingFan()`; otherwise give it `new Heater("bedroom", 19)`. Then, after the `if`, turn the device on and print it, each just once, whichever device it is. The classes are ready. With the input `fan`, the program prints:
+
+          ```
+          Ceiling fan: speed 1
+          ```
+        seed:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    String word = scanner.nextLine();
+
+                }
+            }
+          Switchable.java: |
+            public interface Switchable {
+                void turnOn();
+                void turnOff();
+                boolean isOn();
+            }
+          CeilingFan.java: |
+            public class CeilingFan implements Switchable {
+                private int speed;
+
+                @Override
+                public void turnOn() {
+                    if (this.speed == 0) {
+                        this.speed = 1;
+                    }
+                }
+
+                @Override
+                public void turnOff() {
+                    this.speed = 0;
+                }
+
+                @Override
+                public boolean isOn() {
+                    return this.speed > 0;
+                }
+
+                @Override
+                public String toString() {
+                    return "Ceiling fan: speed " + this.speed;
+                }
+            }
+          Heater.java: |
+            public class Heater implements Switchable {
+                private String room;
+                private int degrees;
+                private boolean on;
+
+                public Heater(String room, int degrees) {
+                    this.room = room;
+                    this.degrees = degrees;
+                    this.on = false;
+                }
+
+                @Override
+                public void turnOn() {
+                    this.on = true;
+                }
+
+                @Override
+                public void turnOff() {
+                    this.on = false;
+                }
+
+                @Override
+                public boolean isOn() {
+                    return this.on;
+                }
+
+                @Override
+                public String toString() {
+                    if (this.on) {
+                        return "Heater in the " + this.room + ": on, " + this.degrees + " degrees";
+                    }
+                    return "Heater in the " + this.room + ": off";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    String word = scanner.nextLine();
+                    Switchable device = new Heater("bedroom", 19);
+                    if (word.equals("fan")) {
+                        device = new CeilingFan();
+                    }
+                    device.turnOn();
+                    System.out.println(device);
+                }
+            }
+          Switchable.java: |
+            public interface Switchable {
+                void turnOn();
+                void turnOff();
+                boolean isOn();
+            }
+          CeilingFan.java: |
+            public class CeilingFan implements Switchable {
+                private int speed;
+
+                @Override
+                public void turnOn() {
+                    if (this.speed == 0) {
+                        this.speed = 1;
+                    }
+                }
+
+                @Override
+                public void turnOff() {
+                    this.speed = 0;
+                }
+
+                @Override
+                public boolean isOn() {
+                    return this.speed > 0;
+                }
+
+                @Override
+                public String toString() {
+                    return "Ceiling fan: speed " + this.speed;
+                }
+            }
+          Heater.java: |
+            public class Heater implements Switchable {
+                private String room;
+                private int degrees;
+                private boolean on;
+
+                public Heater(String room, int degrees) {
+                    this.room = room;
+                    this.degrees = degrees;
+                    this.on = false;
+                }
+
+                @Override
+                public void turnOn() {
+                    this.on = true;
+                }
+
+                @Override
+                public void turnOff() {
+                    this.on = false;
+                }
+
+                @Override
+                public boolean isOn() {
+                    return this.on;
+                }
+
+                @Override
+                public String toString() {
+                    if (this.on) {
+                        return "Heater in the " + this.room + ": on, " + this.degrees + " degrees";
+                    }
+                    return "Heater in the " + this.room + ": off";
+                }
+            }
+        hints:
+          - "`Switchable device = new Heater(\"bedroom\", 19);` works as a start. Then an `if` gives `device` a new CeilingFan when the word is `fan`. Compare Strings with `equals`."
+          - "After the `if`, `device.turnOn();` and `System.out.println(device);` work for either device: each object runs its own `turnOn` and its own `toString`."
+        require:
+          - pattern: \bSwitchable\s+\w+\s*[=;]
+            message: "Declare one variable of type `Switchable`, such as `Switchable device`."
+          - pattern: \.turnOn\s*\(
+            max: 1
+            message: "Call `turnOn()` just once, after the `if`, on the Switchable variable."
+          - pattern: System\.out\.println\s*\(
+            max: 1
+            message: "Print just once, after the `if`: `System.out.println(device);` prints either device."
+        tests:
+          - stdin: fan
+          - stdin: heater
+            hidden: true
+
+  - id: interfaces-parameter-type
+    slug: parameter-type
+    title: An interface as a parameter's type
+    text: |
+      A watch shop sells products, such as straps and alarm clocks, and it does repairs, which cost 2 dollars a minute. A product and a repair have little in common: a product has a name and a fixed price, and a repair has minutes of work. But at the checkout, both need a line on the receipt and a price. That's an interface:
+
+      ```java fragment
+      public interface Priced {
+          String label();
+          int price();
+      }
+      ```
+
+      A method whose parameter has the type Priced accepts both:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Product strap = new Product("Watch strap", 12);
+              Repair repair = new Repair(25);
+              printLine(strap);
+              printLine(repair);
+              printLine(new Product("Alarm clock", 45));
+          }
+
+          public static void printLine(Priced item) {
+              System.out.println(item.label() + ": " + item.price() + " dollars");
+          }
+      }
+      // ==== Priced.java ====
+      public interface Priced {
+          String label();
+          int price();
+      }
+      // ==== Product.java ====
+      public class Product implements Priced {
+          private String name;
+          private int dollars;
+
+          public Product(String name, int dollars) {
+              this.name = name;
+              this.dollars = dollars;
+          }
+
+          @Override
+          public String label() {
+              return this.name;
+          }
+
+          @Override
+          public int price() {
+              return this.dollars;
+          }
+      }
+      // ==== Repair.java ====
+      public class Repair implements Priced {
+          private int minutes;
+
+          public Repair(int minutes) {
+              this.minutes = minutes;
+          }
+
+          @Override
+          public String label() {
+              return "Repair, " + this.minutes + " minutes";
+          }
+
+          @Override
+          public int price() {
+              return 2 * this.minutes;
+          }
+      }
+      ```
+
+      ```output
+      Watch strap: 12 dollars
+      Repair, 25 minutes: 50 dollars
+      Alarm clock: 45 dollars
+      ```
+
+      - `printLine`'s parameter has the type Priced, so the method accepts an object of any class that implements Priced. The call `printLine(strap)` works as if it said `Priced item = strap;`, which compiles because a Product is a Priced.
+      - Inside the method, `item` is a Priced variable, like step 3's `device`. The method may call `label()` and `price()`, and each object runs its own: the product gives its fixed price, the repair works its price out from the minutes.
+
+      ### One method for every kind of item
+
+      Without the interface, `printLine` would need two versions, `printLine(Product item)` and `printLine(Repair item)`, with the same code in each (overloading, module 21). Every new thing the shop sells would need one more.
+
+      With the interface, `printLine` is written once, and it depends only on what it uses: a label and a price. When the shop starts engraving watches, a new class `Engraving` that implements Priced works with `printLine` at once, without any change to it. The last challenge of this step shows that.
+
+      Java's own classes work this way too. `System.out.println` can print any object because it has a version whose parameter's type is Object, and step 6 shows that `Collections.sort` takes an interface.
+
+      **Your turn:** in `Checkout.java`, write the class `Checkout` for the watch shop's till. `Priced.java`, `Product.java` and `Repair.java` are ready. A checkout has:
+
+      - a constructor without parameters; a new checkout has a total of 0 and no items
+      - `scan(Priced item)`, which prints the item's line, such as `Watch strap: 12 dollars`, adds its price to the total, and counts it
+      - `total()`, which returns the total in dollars
+      - `itemCount()`, which returns how many items have been scanned
+
+      The check runs:
+
+      ```java fragment
+      Checkout checkout = new Checkout();
+      checkout.scan(new Product("Watch strap", 12));
+      checkout.scan(new Repair(25));
+      System.out.println("Total: " + checkout.total() + " dollars for " + checkout.itemCount() + " items");
+      ```
+
+      and expects:
+
+      ```
+      Watch strap: 12 dollars
+      Repair, 25 minutes: 50 dollars
+      Total: 62 dollars for 2 items
+      ```
+    seed:
+      Checkout.java: |
+        public class Checkout {
+
+        }
+      Priced.java: |
+        public interface Priced {
+            String label();
+            int price();
+        }
+      Product.java: |
+        public class Product implements Priced {
+            private String name;
+            private int dollars;
+
+            public Product(String name, int dollars) {
+                this.name = name;
+                this.dollars = dollars;
+            }
+
+            @Override
+            public String label() {
+                return this.name;
+            }
+
+            @Override
+            public int price() {
+                return this.dollars;
+            }
+        }
+      Repair.java: |
+        public class Repair implements Priced {
+            private int minutes;
+
+            public Repair(int minutes) {
+                this.minutes = minutes;
+            }
+
+            @Override
+            public String label() {
+                return "Repair, " + this.minutes + " minutes";
+            }
+
+            @Override
+            public int price() {
+                return 2 * this.minutes;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Checkout checkout = new Checkout();
+                checkout.scan(new Product("Watch strap", 12));
+                checkout.scan(new Repair(25));
+                System.out.println("Total: " + checkout.total() + " dollars for " + checkout.itemCount() + " items");
+            }
+        }
+    solution:
+      Checkout.java: |
+        public class Checkout {
+            private int total;
+            private int items;
+
+            public Checkout() {
+                this.total = 0;
+                this.items = 0;
+            }
+
+            public void scan(Priced item) {
+                System.out.println(item.label() + ": " + item.price() + " dollars");
+                this.total += item.price();
+                this.items++;
+            }
+
+            public int total() {
+                return this.total;
+            }
+
+            public int itemCount() {
+                return this.items;
+            }
+        }
+      Priced.java: |
+        public interface Priced {
+            String label();
+            int price();
+        }
+      Product.java: |
+        public class Product implements Priced {
+            private String name;
+            private int dollars;
+
+            public Product(String name, int dollars) {
+                this.name = name;
+                this.dollars = dollars;
+            }
+
+            @Override
+            public String label() {
+                return this.name;
+            }
+
+            @Override
+            public int price() {
+                return this.dollars;
+            }
+        }
+      Repair.java: |
+        public class Repair implements Priced {
+            private int minutes;
+
+            public Repair(int minutes) {
+                this.minutes = minutes;
+            }
+
+            @Override
+            public String label() {
+                return "Repair, " + this.minutes + " minutes";
+            }
+
+            @Override
+            public int price() {
+                return 2 * this.minutes;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Checkout checkout = new Checkout();
+                checkout.scan(new Product("Watch strap", 12));
+                checkout.scan(new Repair(25));
+                System.out.println("Total: " + checkout.total() + " dollars for " + checkout.itemCount() + " items");
+            }
+        }
+    hints:
+      - "Checkout needs two instance variables: the total and the number of items. Neither of them cares whether an item is a product or a repair."
+      - "The method is `public void scan(Priced item)`. It prints `item.label() + \": \" + item.price() + \" dollars\"`, adds `item.price()` to the total, and adds one to the count."
+    require:
+      - pattern: \bvoid\s+scan\s*\(\s*Priced\s+\w+\s*\)
+        message: "Write the method as `public void scan(Priced item)`, so that it takes products and repairs alike."
+    tests:
+      - call: |
+          Checkout checkout = new Checkout();
+          checkout.scan(new Product("Watch strap", 12));
+          checkout.scan(new Repair(25));
+          System.out.println("Total: " + checkout.total() + " dollars for " + checkout.itemCount() + " items");
+      - call: |
+          Checkout till = new Checkout();
+          System.out.println(till.total() + " " + till.itemCount());
+          Priced clock = new Product("Alarm clock", 45);
+          till.scan(clock);
+          till.scan(clock);
+          till.scan(new Repair(5));
+          System.out.println(till.total() + " " + till.itemCount());
+        hidden: true
+      - call: |
+          Checkout first = new Checkout();
+          Checkout second = new Checkout();
+          first.scan(new Repair(60));
+          second.scan(new Product("Travel case", 30));
+          second.scan(new Product("Battery", 8));
+          System.out.println(first.total() + " " + first.itemCount() + " " + second.total() + " " + second.itemCount());
+        hidden: true
+    more:
+      - task: |
+          The method `cheaper` takes two priced things, and returns the label of the cheaper one. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(cheaper(new Product("Stopwatch", 30), new Repair(12)));
+                  System.out.println(cheaper(new Repair(20), new Product("Wall clock", 40)));
+                  Priced chain = new Product("Chain", 18);
+                  System.out.println(cheaper(chain, chain) + " " + cheaper(new Repair(9), chain));
+              }
+
+              public static String cheaper(Priced first, Priced second) {
+                  if (first.price() <= second.price()) {
+                      return first.label();
+                  }
+                  return second.label();
+              }
+          }
+          // ==== Priced.java ====
+          public interface Priced {
+              String label();
+              int price();
+          }
+          // ==== Product.java ====
+          public class Product implements Priced {
+              private String name;
+              private int dollars;
+
+              public Product(String name, int dollars) {
+                  this.name = name;
+                  this.dollars = dollars;
+              }
+
+              @Override
+              public String label() {
+                  return this.name;
+              }
+
+              @Override
+              public int price() {
+                  return this.dollars;
+              }
+          }
+          // ==== Repair.java ====
+          public class Repair implements Priced {
+              private int minutes;
+
+              public Repair(int minutes) {
+                  this.minutes = minutes;
+              }
+
+              @Override
+              public String label() {
+                  return "Repair, " + this.minutes + " minutes";
+              }
+
+              @Override
+              public int price() {
+                  return 2 * this.minutes;
+              }
+          }
+        hints:
+          - "A repair costs 2 dollars a minute: 12 minutes is 24 dollars, 20 minutes is 40, and 9 minutes is 18. Each object's own `price` runs."
+          - "With `<=`, a tie goes to `first`. Repair(20) and the wall clock both cost 40, and Repair(9) and the chain both cost 18."
+      - task: |
+          The shop starts engraving watches: 3 dollars a letter, but never more than 30 dollars for one engraving. In `Engraving.java`, write the class `Engraving`, which implements Priced, with:
+
+          - a constructor `Engraving(String text)`, where the text is one word, such as a name, so its `length()` is its number of letters
+          - `label()`, which returns `Engraving, Anna`, with the engraving's own text
+          - `price()`, which returns the price in dollars
+
+          `Main.java` has this step's `printLine`, and it doesn't change: it takes engravings as soon as Engraving implements Priced. The check runs:
+
+          ```java fragment
+          printLine(new Engraving("Anna"));
+          printLine(new Engraving("Christopher"));
+          printLine(new Product("Alarm clock", 45));
+          ```
+
+          and expects:
+
+          ```
+          Engraving, Anna: 12 dollars
+          Engraving, Christopher: 30 dollars
+          Alarm clock: 45 dollars
+          ```
+        seed:
+          Engraving.java: |
+            public class Engraving {
+
+            }
+          Priced.java: |
+            public interface Priced {
+                String label();
+                int price();
+            }
+          Product.java: |
+            public class Product implements Priced {
+                private String name;
+                private int dollars;
+
+                public Product(String name, int dollars) {
+                    this.name = name;
+                    this.dollars = dollars;
+                }
+
+                @Override
+                public String label() {
+                    return this.name;
+                }
+
+                @Override
+                public int price() {
+                    return this.dollars;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    printLine(new Engraving("Anna"));
+                    printLine(new Engraving("Christopher"));
+                    printLine(new Product("Alarm clock", 45));
+                }
+
+                public static void printLine(Priced item) {
+                    System.out.println(item.label() + ": " + item.price() + " dollars");
+                }
+            }
+        solution:
+          Engraving.java: |
+            public class Engraving implements Priced {
+                private String text;
+
+                public Engraving(String text) {
+                    this.text = text;
+                }
+
+                @Override
+                public String label() {
+                    return "Engraving, " + this.text;
+                }
+
+                @Override
+                public int price() {
+                    int price = 3 * this.text.length();
+                    if (price > 30) {
+                        return 30;
+                    }
+                    return price;
+                }
+            }
+          Priced.java: |
+            public interface Priced {
+                String label();
+                int price();
+            }
+          Product.java: |
+            public class Product implements Priced {
+                private String name;
+                private int dollars;
+
+                public Product(String name, int dollars) {
+                    this.name = name;
+                    this.dollars = dollars;
+                }
+
+                @Override
+                public String label() {
+                    return this.name;
+                }
+
+                @Override
+                public int price() {
+                    return this.dollars;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    printLine(new Engraving("Anna"));
+                    printLine(new Engraving("Christopher"));
+                    printLine(new Product("Alarm clock", 45));
+                }
+
+                public static void printLine(Priced item) {
+                    System.out.println(item.label() + ": " + item.price() + " dollars");
+                }
+            }
+        hints:
+          - "Start with `public class Engraving implements Priced {`, with one instance variable, the text. Both methods have `@Override` above them."
+          - "`price()` works out `3 * this.text.length()`, and returns 30 instead when that's more than 30."
+        require:
+          - pattern: \bclass\s+Engraving\s+implements\s+Priced\b
+            message: "Write the header as `public class Engraving implements Priced`, so that `printLine` accepts engravings."
+        tests:
+          - call: |
+              printLine(new Engraving("Anna"));
+              printLine(new Engraving("Christopher"));
+              printLine(new Product("Alarm clock", 45));
+          - call: |
+              printLine(new Engraving("Jo"));
+              printLine(new Engraving("Leonardo"));
+              printLine(new Engraving("Maximilian"));
+            hidden: true
+          - call: |
+              Priced gift = new Engraving("Bartholomew");
+              System.out.println(gift.price() + " " + gift.label());
+            hidden: true
+
+  - id: interfaces-return-and-lists
+    slug: return-and-lists
+    title: Lists of an interface, and interfaces as return types
+    text: |
+      A phone's media player plays voice memos and radio shows. From every item in its queue, it needs a title, a length in seconds, and a way to play it:
+
+      ```java fragment
+      public interface Playable {
+          String title();
+          int seconds();
+          void play();
+      }
+      ```
+
+      ### A list of Playables
+
+      A list's element type can be an interface too. Then the list holds objects of any class that implements it:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Playable> queue = new ArrayList<>();
+              queue.add(new VoiceMemo("Groceries", 45));
+              queue.add(new RadioShow("Morning News", 5));
+              queue.add(new VoiceMemo("Door code", 12));
+
+              int total = 0;
+              for (Playable item : queue) {
+                  item.play();
+                  total += item.seconds();
+              }
+              System.out.println("In the queue: " + total + " seconds");
+
+              Playable longest = longest(queue);
+              System.out.println("Longest: " + longest.title());
+          }
+
+          public static Playable longest(ArrayList<Playable> queue) {
+              Playable longest = queue.get(0);
+              for (Playable item : queue) {
+                  if (item.seconds() > longest.seconds()) {
+                      longest = item;
+                  }
+              }
+              return longest;
+          }
+      }
+      // ==== Playable.java ====
+      public interface Playable {
+          String title();
+          int seconds();
+          void play();
+      }
+      // ==== VoiceMemo.java ====
+      public class VoiceMemo implements Playable {
+          private String title;
+          private int seconds;
+
+          public VoiceMemo(String title, int seconds) {
+              this.title = title;
+              this.seconds = seconds;
+          }
+
+          @Override
+          public String title() {
+              return this.title;
+          }
+
+          @Override
+          public int seconds() {
+              return this.seconds;
+          }
+
+          @Override
+          public void play() {
+              System.out.println("Memo: " + this.title);
+          }
+      }
+      // ==== RadioShow.java ====
+      public class RadioShow implements Playable {
+          private String name;
+          private int minutes;
+
+          public RadioShow(String name, int minutes) {
+              this.name = name;
+              this.minutes = minutes;
+          }
+
+          @Override
+          public String title() {
+              return this.name;
+          }
+
+          @Override
+          public int seconds() {
+              return 60 * this.minutes;
+          }
+
+          @Override
+          public void play() {
+              System.out.println("On air: " + this.name);
+          }
+      }
+      ```
+
+      ```output
+      Memo: Groceries
+      On air: Morning News
+      Memo: Door code
+      In the queue: 357 seconds
+      Longest: Morning News
+      ```
+
+      - `ArrayList<Playable>` holds memos and shows side by side. `add` accepts a VoiceMemo because a VoiceMemo is a Playable.
+      - The loop variable `item` has the type Playable. Each time round, it refers to one object, and that object's `play` runs: a memo's prints `Memo:`, a show's prints `On air:`. The loop doesn't know or care which kind each item is.
+      - A new kind of item, such as a chapter of an audiobook, would be one more class that implements Playable. The loop wouldn't change.
+      - The class names VoiceMemo and RadioShow appear only where the objects are made. Everything after that works with Playable.
+
+      ### Returning a Playable
+
+      `longest` has the return type Playable. It returns whichever object in the queue has the most seconds, and the caller keeps it in a Playable variable, so the caller may use Playable's methods on it.
+
+      - The object that comes back is still what it was: the radio show. `longest(queue).play()` would print `On air: Morning News`.
+      - A method can also create an object and return it as a Playable. The caller then doesn't even need to know which class it got. The last challenge of this step does that.
+
+      **Your turn:** write the method `find(ArrayList<Playable> queue, String title)`, which returns the item in the queue with that title, or `null` if there's none. If several items have the title, return the first of them. `Playable.java`, `VoiceMemo.java` and `RadioShow.java` are ready. The check runs:
+
+      ```java fragment
+      ArrayList<Playable> queue = new ArrayList<>();
+      queue.add(new VoiceMemo("Groceries", 45));
+      queue.add(new RadioShow("Morning News", 5));
+      Playable found = find(queue, "Morning News");
+      found.play();
+      System.out.println(found.seconds());
+      System.out.println(find(queue, "Weather") == null);
+      ```
+
+      and expects:
+
+      ```
+      On air: Morning News
+      300
+      true
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Playable> queue = new ArrayList<>();
+                queue.add(new VoiceMemo("Groceries", 45));
+                queue.add(new RadioShow("Morning News", 5));
+                Playable found = find(queue, "Morning News");
+                found.play();
+                System.out.println(found.seconds());
+                System.out.println(find(queue, "Weather") == null);
+            }
+
+            // Write the method find here.
+        }
+      Playable.java: |
+        public interface Playable {
+            String title();
+            int seconds();
+            void play();
+        }
+      VoiceMemo.java: |
+        public class VoiceMemo implements Playable {
+            private String title;
+            private int seconds;
+
+            public VoiceMemo(String title, int seconds) {
+                this.title = title;
+                this.seconds = seconds;
+            }
+
+            @Override
+            public String title() {
+                return this.title;
+            }
+
+            @Override
+            public int seconds() {
+                return this.seconds;
+            }
+
+            @Override
+            public void play() {
+                System.out.println("Memo: " + this.title);
+            }
+        }
+      RadioShow.java: |
+        public class RadioShow implements Playable {
+            private String name;
+            private int minutes;
+
+            public RadioShow(String name, int minutes) {
+                this.name = name;
+                this.minutes = minutes;
+            }
+
+            @Override
+            public String title() {
+                return this.name;
+            }
+
+            @Override
+            public int seconds() {
+                return 60 * this.minutes;
+            }
+
+            @Override
+            public void play() {
+                System.out.println("On air: " + this.name);
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Playable> queue = new ArrayList<>();
+                queue.add(new VoiceMemo("Groceries", 45));
+                queue.add(new RadioShow("Morning News", 5));
+                Playable found = find(queue, "Morning News");
+                found.play();
+                System.out.println(found.seconds());
+                System.out.println(find(queue, "Weather") == null);
+            }
+
+            public static Playable find(ArrayList<Playable> queue, String title) {
+                for (Playable item : queue) {
+                    if (item.title().equals(title)) {
+                        return item;
+                    }
+                }
+                return null;
+            }
+        }
+      Playable.java: |
+        public interface Playable {
+            String title();
+            int seconds();
+            void play();
+        }
+      VoiceMemo.java: |
+        public class VoiceMemo implements Playable {
+            private String title;
+            private int seconds;
+
+            public VoiceMemo(String title, int seconds) {
+                this.title = title;
+                this.seconds = seconds;
+            }
+
+            @Override
+            public String title() {
+                return this.title;
+            }
+
+            @Override
+            public int seconds() {
+                return this.seconds;
+            }
+
+            @Override
+            public void play() {
+                System.out.println("Memo: " + this.title);
+            }
+        }
+      RadioShow.java: |
+        public class RadioShow implements Playable {
+            private String name;
+            private int minutes;
+
+            public RadioShow(String name, int minutes) {
+                this.name = name;
+                this.minutes = minutes;
+            }
+
+            @Override
+            public String title() {
+                return this.name;
+            }
+
+            @Override
+            public int seconds() {
+                return 60 * this.minutes;
+            }
+
+            @Override
+            public void play() {
+                System.out.println("On air: " + this.name);
+            }
+        }
+    hints:
+      - "The header is `public static Playable find(ArrayList<Playable> queue, String title)`. Go through the queue with a for-each loop, and compare each item's `title()` with `equals`."
+      - "Return the item as soon as its title matches: that makes the first match win. After the loop, nothing matched, so `return null;`."
+    require:
+      - pattern: \bpublic\s+static\s+Playable\s+find\s*\(\s*ArrayList<Playable>\s+\w+\s*,\s*String\s+\w+\s*\)
+        message: "Write the method as `public static Playable find(ArrayList<Playable> queue, String title)`."
+    tests:
+      - call: |
+          ArrayList<Playable> queue = new ArrayList<>();
+          queue.add(new VoiceMemo("Groceries", 45));
+          queue.add(new RadioShow("Morning News", 5));
+          Playable found = find(queue, "Morning News");
+          found.play();
+          System.out.println(found.seconds());
+          System.out.println(find(queue, "Weather") == null);
+      - call: |
+          ArrayList<Playable> queue = new ArrayList<>();
+          System.out.println(find(queue, "News") == null);
+          queue.add(new RadioShow("Jazz Hour", 1));
+          queue.add(new VoiceMemo("News", 10));
+          queue.add(new RadioShow("News", 2));
+          System.out.println(find(queue, "News").seconds());
+          String start = "Jazz";
+          find(queue, start + " Hour").play();
+        hidden: true
+      - call: |
+          ArrayList<Playable> queue = new ArrayList<>();
+          queue.add(new VoiceMemo("Door code", 12));
+          System.out.println(find(queue, "door code") == null);
+          System.out.println(find(queue, "Door code") == queue.get(0));
+        hidden: true
+    more:
+      - task: |
+          The player plays only the long items in the queue: those of at least two minutes. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Playable> queue = new ArrayList<>();
+                  queue.add(new RadioShow("Jazz Hour", 2));
+                  queue.add(new VoiceMemo("Parking spot", 30));
+                  queue.add(new VoiceMemo("Birthday song", 150));
+                  int count = 0;
+                  for (Playable item : queue) {
+                      if (item.seconds() >= 120) {
+                          item.play();
+                          count++;
+                      }
+                  }
+                  Playable last = queue.get(queue.size() - 1);
+                  System.out.println(count + " " + last.title());
+              }
+          }
+          // ==== Playable.java ====
+          public interface Playable {
+              String title();
+              int seconds();
+              void play();
+          }
+          // ==== VoiceMemo.java ====
+          public class VoiceMemo implements Playable {
+              private String title;
+              private int seconds;
+
+              public VoiceMemo(String title, int seconds) {
+                  this.title = title;
+                  this.seconds = seconds;
+              }
+
+              @Override
+              public String title() {
+                  return this.title;
+              }
+
+              @Override
+              public int seconds() {
+                  return this.seconds;
+              }
+
+              @Override
+              public void play() {
+                  System.out.println("Memo: " + this.title);
+              }
+          }
+          // ==== RadioShow.java ====
+          public class RadioShow implements Playable {
+              private String name;
+              private int minutes;
+
+              public RadioShow(String name, int minutes) {
+                  this.name = name;
+                  this.minutes = minutes;
+              }
+
+              @Override
+              public String title() {
+                  return this.name;
+              }
+
+              @Override
+              public int seconds() {
+                  return 60 * this.minutes;
+              }
+
+              @Override
+              public void play() {
+                  System.out.println("On air: " + this.name);
+              }
+          }
+        hints:
+          - "A radio show's length is given in minutes, but `seconds()` returns seconds: the Jazz Hour of 2 minutes is 120 seconds, just enough."
+          - "Each item that's long enough runs its own `play`: a show prints `On air:`, a memo prints `Memo:`. The last item in the list is the birthday song."
+      - task: |
+          The player reads its queue from lines of text such as `memo,Groceries,45` or `show,Morning News,5`: the kind, the title, and the length, in seconds for a memo and in minutes for a show. Write the method `fromLine(String line)`, which makes a new VoiceMemo or a new RadioShow from the line and returns it. Its return type is Playable, so the caller doesn't need to know which class it gets. The kind is always `memo` or `show`. The check runs:
+
+          ```java fragment
+          Playable first = fromLine("memo,Groceries,45");
+          Playable second = fromLine("show,Morning News,5");
+          first.play();
+          second.play();
+          System.out.println(first.seconds() + second.seconds());
+          ```
+
+          and expects:
+
+          ```
+          Memo: Groceries
+          On air: Morning News
+          345
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Playable first = fromLine("memo,Groceries,45");
+                    Playable second = fromLine("show,Morning News,5");
+                    first.play();
+                    second.play();
+                    System.out.println(first.seconds() + second.seconds());
+                }
+
+                // Write the method fromLine here.
+            }
+          Playable.java: |
+            public interface Playable {
+                String title();
+                int seconds();
+                void play();
+            }
+          VoiceMemo.java: |
+            public class VoiceMemo implements Playable {
+                private String title;
+                private int seconds;
+
+                public VoiceMemo(String title, int seconds) {
+                    this.title = title;
+                    this.seconds = seconds;
+                }
+
+                @Override
+                public String title() {
+                    return this.title;
+                }
+
+                @Override
+                public int seconds() {
+                    return this.seconds;
+                }
+
+                @Override
+                public void play() {
+                    System.out.println("Memo: " + this.title);
+                }
+            }
+          RadioShow.java: |
+            public class RadioShow implements Playable {
+                private String name;
+                private int minutes;
+
+                public RadioShow(String name, int minutes) {
+                    this.name = name;
+                    this.minutes = minutes;
+                }
+
+                @Override
+                public String title() {
+                    return this.name;
+                }
+
+                @Override
+                public int seconds() {
+                    return 60 * this.minutes;
+                }
+
+                @Override
+                public void play() {
+                    System.out.println("On air: " + this.name);
+                }
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Playable first = fromLine("memo,Groceries,45");
+                    Playable second = fromLine("show,Morning News,5");
+                    first.play();
+                    second.play();
+                    System.out.println(first.seconds() + second.seconds());
+                }
+
+                public static Playable fromLine(String line) {
+                    String[] parts = line.split(",");
+                    int length = Integer.valueOf(parts[2]);
+                    if (parts[0].equals("memo")) {
+                        return new VoiceMemo(parts[1], length);
+                    }
+                    return new RadioShow(parts[1], length);
+                }
+            }
+          Playable.java: |
+            public interface Playable {
+                String title();
+                int seconds();
+                void play();
+            }
+          VoiceMemo.java: |
+            public class VoiceMemo implements Playable {
+                private String title;
+                private int seconds;
+
+                public VoiceMemo(String title, int seconds) {
+                    this.title = title;
+                    this.seconds = seconds;
+                }
+
+                @Override
+                public String title() {
+                    return this.title;
+                }
+
+                @Override
+                public int seconds() {
+                    return this.seconds;
+                }
+
+                @Override
+                public void play() {
+                    System.out.println("Memo: " + this.title);
+                }
+            }
+          RadioShow.java: |
+            public class RadioShow implements Playable {
+                private String name;
+                private int minutes;
+
+                public RadioShow(String name, int minutes) {
+                    this.name = name;
+                    this.minutes = minutes;
+                }
+
+                @Override
+                public String title() {
+                    return this.name;
+                }
+
+                @Override
+                public int seconds() {
+                    return 60 * this.minutes;
+                }
+
+                @Override
+                public void play() {
+                    System.out.println("On air: " + this.name);
+                }
+            }
+        hints:
+          - "The header is `public static Playable fromLine(String line)`. `line.split(\",\")` gives the three parts, and `Integer.valueOf(parts[2])` turns the length into an int."
+          - "If `parts[0]` equals `memo`, return `new VoiceMemo(parts[1], length)`; otherwise return `new RadioShow(parts[1], length)`. Both fit the return type Playable."
+        require:
+          - pattern: \bpublic\s+static\s+Playable\s+fromLine\s*\(\s*String\s+\w+\s*\)
+            message: "Write the method as `public static Playable fromLine(String line)`."
+        tests:
+          - call: |
+              Playable first = fromLine("memo,Groceries,45");
+              Playable second = fromLine("show,Morning News,5");
+              first.play();
+              second.play();
+              System.out.println(first.seconds() + second.seconds());
+          - call: |
+              String[] lines = {"show,Jazz Hour,60", "memo,Door code,12", "memo,Parking spot,30"};
+              ArrayList<Playable> queue = new ArrayList<>();
+              for (String line : lines) {
+                  queue.add(fromLine(line));
+              }
+              int total = 0;
+              for (Playable item : queue) {
+                  total += item.seconds();
+              }
+              System.out.println(queue.size() + " " + total + " " + queue.get(2).title());
+            hidden: true
+          - call: |
+              System.out.println(fromLine("show,Memo Hour,2").getClass().getName());
+              System.out.println(fromLine("memo,Show times,2").getClass().getName());
+              System.out.println(fromLine("memo,Show times,2").seconds());
+            hidden: true
+
+  - id: interfaces-list
+    slug: list-interface
+    title: "Java's List interface"
+    text: |
+      Since module 13, every list in this course has been an `ArrayList`. ArrayList is a class, and it implements an interface from `java.util` called **List**. List promises the methods that every list has: `add`, `get`, `set`, `remove`, `size`, `contains`, `indexOf`, `isEmpty`, `clear` and the rest of module 14's toolbox. ArrayList is one class that keeps that promise.
+
+      So a list variable can have the interface as its type:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> stops = new ArrayList<>();
+              stops.add("Harbor");
+              stops.add("Market Square");
+              stops.add("Museum");
+              stops.add(1, "Old Mill");
+              System.out.println(stops);
+              System.out.println(stops.size() + " stops, the last is " + stops.get(stops.size() - 1));
+              printTimetable(stops, 4);
+          }
+
+          public static void printTimetable(List<String> stops, int minutesBetween) {
+              int minute = 0;
+              for (String stop : stops) {
+                  System.out.println(minute + " min: " + stop);
+                  minute += minutesBetween;
+              }
+          }
+      }
+      ```
+
+      ```output
+      [Harbor, Old Mill, Market Square, Museum]
+      4 stops, the last is Museum
+      0 min: Harbor
+      4 min: Old Mill
+      8 min: Market Square
+      12 min: Museum
+      ```
+
+      - `List<String> stops = new ArrayList<>();`: the variable's type is the interface, and the object is an ArrayList. List needs its own import, `import java.util.List;`.
+      - Every call works as before, since every one of those methods is in List. The list prints as before too: `println` runs the object's `toString`, and the object is an ArrayList.
+      - `printTimetable` takes a `List<String>`, so it accepts any list of Strings: an ArrayList, or an object of any other class that implements List. Java has others, such as `LinkedList`, which keeps its values in a different way. This course keeps to ArrayList, but code written for List works with any of them.
+      - `new List<>()` doesn't compile, as with any interface.
+
+      ### Why many programs write List
+
+      Many Java programs declare their lists as `List<String> names = new ArrayList<>();`. It's step 3's advice: the rest of the code uses only what List promises, so it doesn't depend on which kind of list it has. A method with a List parameter accepts more kinds of lists, and a program could change `new ArrayList<>()` to another kind of list in one place.
+
+      The same idea is behind `Collections.sort`, which you've used since module 28: its parameter is a List, and that's why it can sort an ArrayList.
+
+      ### An ArrayList fits a List, not the other way round
+
+      An ArrayList can go wherever a List is asked for. But a List variable can't be given to a method that asks for an ArrayList: javac knows only that the variable holds some list, not which kind.
+
+      ```java error
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> stops = new ArrayList<>();
+              stops.add("Harbor");
+              System.out.println(count(stops));
+          }
+
+          public static int count(ArrayList<String> stops) {
+              return stops.size();
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:8: error: incompatible types: List<String> cannot be converted to ArrayList<String>
+              System.out.println(count(stops));
+                                       ^
+      Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+      1 error
+      ```
+
+      So `List<String>` is usually the better parameter type: it accepts a List variable and an ArrayList variable alike. The rest of this module writes List for its parameters.
+
+      **Your turn:** the tram's display shows the route on one line, with ` > ` between the stops. Write the method `routeText(List<String> stops)`, which returns that text. There's no ` > ` before the first stop or after the last one, and an empty list gives an empty String. The check runs:
+
+      ```java fragment
+      List<String> stops = new ArrayList<>();
+      stops.add("Harbor");
+      stops.add("Old Mill");
+      stops.add("Museum");
+      System.out.println(routeText(stops));
+      ```
+
+      and expects:
+
+      ```
+      Harbor > Old Mill > Museum
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> stops = new ArrayList<>();
+              stops.add("Harbor");
+              stops.add("Old Mill");
+              stops.add("Museum");
+              System.out.println(routeText(stops));
+          }
+
+          // Write the method routeText here.
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> stops = new ArrayList<>();
+              stops.add("Harbor");
+              stops.add("Old Mill");
+              stops.add("Museum");
+              System.out.println(routeText(stops));
+          }
+
+          public static String routeText(List<String> stops) {
+              String text = "";
+              for (int i = 0; i < stops.size(); i++) {
+                  if (i > 0) {
+                      text += " > ";
+                  }
+                  text += stops.get(i);
+              }
+              return text;
+          }
+      }
+    hints:
+      - "The header is `public static String routeText(List<String> stops)`. Inside, `stops` has every list method you know: `size()`, `get(i)`, and a for-each loop works too."
+      - "Build the text in a String variable. Before every stop except the first (index 0), add ` > `, then add the stop."
+    require:
+      - pattern: \bpublic\s+static\s+String\s+routeText\s*\(\s*List<String>\s+\w+\s*\)
+        message: "Write the method as `public static String routeText(List<String> stops)`."
+    tests:
+      - call: |
+          List<String> stops = new ArrayList<>();
+          stops.add("Harbor");
+          stops.add("Old Mill");
+          stops.add("Museum");
+          System.out.println(routeText(stops));
+      - call: |
+          ArrayList<String> one = new ArrayList<>();
+          one.add("Depot");
+          System.out.println("[" + routeText(one) + "]");
+          List<String> none = new ArrayList<>();
+          System.out.println("[" + routeText(none) + "]");
+        hidden: true
+      - call: |
+          List<String> stops = new ArrayList<>();
+          stops.add("A");
+          stops.add("B");
+          System.out.println(routeText(stops));
+          stops.add("A");
+          System.out.println(routeText(stops) + " " + stops.size());
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> line = new ArrayList<>();
+                  line.add("Harbor");
+                  line.add("Mill");
+                  line.add("Museum");
+                  line.add("Mill");
+                  line.remove("Mill");
+                  System.out.println(line);
+                  System.out.println(line.indexOf("Mill") + " " + line.size());
+                  addDepot(line);
+                  System.out.println(line.get(0) + " " + line.contains("Depot"));
+              }
+
+              public static void addDepot(List<String> stops) {
+                  stops.add(0, "Depot");
+              }
+          }
+        hints:
+          - "`remove(value)` takes out only the first copy of the value, so the second Mill stays, at the end."
+          - "`addDepot` gets the same list object, not a copy (module 14), so the Depot it puts at index 0 is in `line` too."
+      - task: |
+          For the return trip, write the method `reversed(List<String> stops)`, which returns a new list with the same stops in the opposite order. Its return type is `List<String>`. The list it gets must stay as it was. The check runs:
+
+          ```java fragment
+          List<String> there = new ArrayList<>();
+          there.add("Harbor");
+          there.add("Old Mill");
+          there.add("Museum");
+          List<String> back = reversed(there);
+          System.out.println(back);
+          System.out.println(there);
+          ```
+
+          and expects:
+
+          ```
+          [Museum, Old Mill, Harbor]
+          [Harbor, Old Mill, Museum]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> there = new ArrayList<>();
+                  there.add("Harbor");
+                  there.add("Old Mill");
+                  there.add("Museum");
+                  List<String> back = reversed(there);
+                  System.out.println(back);
+                  System.out.println(there);
+              }
+
+              // Write the method reversed here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> there = new ArrayList<>();
+                  there.add("Harbor");
+                  there.add("Old Mill");
+                  there.add("Museum");
+                  List<String> back = reversed(there);
+                  System.out.println(back);
+                  System.out.println(there);
+              }
+
+              public static List<String> reversed(List<String> stops) {
+                  List<String> result = new ArrayList<>();
+                  for (int i = stops.size() - 1; i >= 0; i--) {
+                      result.add(stops.get(i));
+                  }
+                  return result;
+              }
+          }
+        hints:
+          - "The header is `public static List<String> reversed(List<String> stops)`. Make a new list inside, `List<String> result = new ArrayList<>();`, and return it at the end."
+          - "Go through `stops` from the last index, `stops.size() - 1`, down to 0, and add each stop to `result`. Don't change `stops` itself."
+        require:
+          - pattern: \bpublic\s+static\s+List<String>\s+reversed\s*\(\s*List<String>\s+\w+\s*\)
+            message: "Write the method as `public static List<String> reversed(List<String> stops)`."
+        tests:
+          - call: |
+              List<String> there = new ArrayList<>();
+              there.add("Harbor");
+              there.add("Old Mill");
+              there.add("Museum");
+              List<String> back = reversed(there);
+              System.out.println(back);
+              System.out.println(there);
+          - call: |
+              List<String> none = new ArrayList<>();
+              System.out.println(reversed(none));
+              ArrayList<String> one = new ArrayList<>();
+              one.add("Depot");
+              System.out.println(reversed(one));
+            hidden: true
+          - call: |
+              List<String> there = new ArrayList<>();
+              there.add("A");
+              there.add("B");
+              there.add("A");
+              there.add("C");
+              List<String> back = reversed(there);
+              back.add("Z");
+              System.out.println(back + " " + there);
+            hidden: true
+
+  - id: interfaces-map
+    slug: map-interface
+    title: "Java's Map interface"
+    text: |
+      Maps work the same way. HashMap is a class, and it implements an interface called **Map**, also in `java.util`. Map promises what modules 31 to 33 used: `put`, `get`, `getOrDefault`, `containsKey`, `remove`, `size`, `keySet` and `values`. A bakery keeps the day's orders, from each kind of bread to a number of loaves:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+
+      public class Main {
+          public static void main(String[] args) {
+              Map<String, Integer> orders = new HashMap<>();
+              orders.put("rye", 4);
+              orders.put("sourdough", 10);
+              orders.put("rye", orders.get("rye") + 2);
+              orders.put("baguette", 7);
+              System.out.println(orders.get("rye"));
+              System.out.println(orders.getOrDefault("spelt", 0));
+              System.out.println(totalLoaves(orders));
+              printOrders(orders);
+          }
+
+          public static int totalLoaves(Map<String, Integer> orders) {
+              int total = 0;
+              for (int loaves : orders.values()) {
+                  total += loaves;
+              }
+              return total;
+          }
+
+          public static void printOrders(Map<String, Integer> orders) {
+              List<String> breads = new ArrayList<>(orders.keySet());
+              Collections.sort(breads);
+              for (String bread : breads) {
+                  System.out.println(bread + ": " + orders.get(bread));
+              }
+          }
+      }
+      ```
+
+      ```output
+      6
+      0
+      23
+      baguette: 7
+      rye: 6
+      sourdough: 10
+      ```
+
+      - `Map<String, Integer> orders = new HashMap<>();`: the variable's type is the interface, and the object is a HashMap. Map needs its own import, `import java.util.Map;`.
+      - Every call you know from HashMap works, since every one of them is in Map.
+      - `totalLoaves` and `printOrders` take a Map, so they'd work with any class that implements Map. Java has others, such as `TreeMap`, which keeps its keys in sorted order. This course keeps to HashMap.
+      - The object is still a HashMap, so module 31's rule about order still holds: it goes through its keys in an order set by their hash codes. That's why `printOrders` sorts a list of the keys first. The list is a `List<String>` now, like step 6's lists.
+
+      ### What keySet and values give
+
+      `keySet()` and `values()` return interface types too:
+
+      - `keySet()` returns a `Set<String>`, a set of the keys. Sets are the next step.
+      - `values()` returns a `Collection<Integer>`. Collection is the interface of step 9.
+
+      So far you've used them only in a for-each loop or in `new ArrayList<>(...)`, and both of those accept any Set or Collection.
+
+      Module 33's maps of lists can use the interfaces too: `Map<String, List<String>> byClub = new HashMap<>();` holds a List for each key, and each new value can still be made with `new ArrayList<>()`, since an ArrayList is a List.
+
+      **Your turn:** the baker starts with the bread that has the most loaves ordered. Write the method `biggestOrder(Map<String, Integer> orders)`, which returns the kind of bread with the most loaves. The map always has at least one order, and no two kinds have the same number of loaves. The check runs:
+
+      ```java fragment
+      Map<String, Integer> orders = new HashMap<>();
+      orders.put("rye", 6);
+      orders.put("sourdough", 10);
+      orders.put("baguette", 7);
+      System.out.println(biggestOrder(orders));
+      ```
+
+      and expects:
+
+      ```
+      sourdough
+      ```
+    seed: |
+      import java.util.HashMap;
+      import java.util.Map;
+
+      public class Main {
+          public static void main(String[] args) {
+              Map<String, Integer> orders = new HashMap<>();
+              orders.put("rye", 6);
+              orders.put("sourdough", 10);
+              orders.put("baguette", 7);
+              System.out.println(biggestOrder(orders));
+          }
+
+          // Write the method biggestOrder here.
+      }
+    solution: |
+      import java.util.HashMap;
+      import java.util.Map;
+
+      public class Main {
+          public static void main(String[] args) {
+              Map<String, Integer> orders = new HashMap<>();
+              orders.put("rye", 6);
+              orders.put("sourdough", 10);
+              orders.put("baguette", 7);
+              System.out.println(biggestOrder(orders));
+          }
+
+          public static String biggestOrder(Map<String, Integer> orders) {
+              String biggest = null;
+              for (String bread : orders.keySet()) {
+                  if (biggest == null || orders.get(bread) > orders.get(biggest)) {
+                      biggest = bread;
+                  }
+              }
+              return biggest;
+          }
+      }
+    hints:
+      - "The header is `public static String biggestOrder(Map<String, Integer> orders)`. Go through `orders.keySet()`, and keep the bread with the most loaves so far."
+      - "Start with `String biggest = null;`. A bread becomes the new biggest when `biggest == null`, or when `orders.get(bread) > orders.get(biggest)`."
+    require:
+      - pattern: \bpublic\s+static\s+String\s+biggestOrder\s*\(\s*Map<String,\s*Integer>\s+\w+\s*\)
+        message: "Write the method as `public static String biggestOrder(Map<String, Integer> orders)`."
+    tests:
+      - call: |
+          Map<String, Integer> orders = new HashMap<>();
+          orders.put("rye", 6);
+          orders.put("sourdough", 10);
+          orders.put("baguette", 7);
+          System.out.println(biggestOrder(orders));
+      - call: |
+          Map<String, Integer> one = new HashMap<>();
+          one.put("spelt", 1);
+          System.out.println(biggestOrder(one));
+          HashMap<String, Integer> many = new HashMap<>();
+          String[] breads = {"rye", "bagel", "brioche", "focaccia", "pretzel", "ciabatta"};
+          for (int i = 0; i < breads.length; i++) {
+              many.put(breads[i], (i * 7) % 11);
+          }
+          System.out.println(biggestOrder(many));
+        hidden: true
+      - call: |
+          Map<String, Integer> orders = new HashMap<>();
+          orders.put("rye", 30);
+          orders.put("spelt", 2);
+          orders.put("brioche", 29);
+          System.out.println(biggestOrder(orders));
+          orders.put("spelt", 31);
+          System.out.println(biggestOrder(orders));
+        hidden: true
+    more:
+      - task: |
+          What does this program print?
+        predict: |
+          import java.util.HashMap;
+          import java.util.Map;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Map<String, Integer> orders = new HashMap<>();
+                  orders.put("rye", 3);
+                  orders.put("spelt", 2);
+                  orders.put("rye", 5);
+                  addLoaves(orders, "spelt", 4);
+                  addLoaves(orders, "bagel", 12);
+                  orders.remove("rye");
+                  System.out.println(orders.size() + " " + orders.get("spelt"));
+                  System.out.println(orders.getOrDefault("rye", 0) + " " + orders.containsKey("bagel"));
+              }
+
+              public static void addLoaves(Map<String, Integer> orders, String bread, int loaves) {
+                  orders.put(bread, orders.getOrDefault(bread, 0) + loaves);
+              }
+          }
+        hints:
+          - "A second `put` with the key `rye` replaces its value. `addLoaves` gets the same map object, so what it puts is in `orders`."
+          - "Spelt goes from 2 to 6, and bagel starts from 0. After `remove`, rye isn't in the map, so `getOrDefault` gives the default, 0."
+      - task: |
+          The bakery lets its customers vote for next month's special bread. Write the method `countVotes(List<String> votes)`, which returns a `Map<String, Integer>` from each kind of bread to the number of votes it got. The check runs:
+
+          ```java fragment
+          List<String> votes = new ArrayList<>();
+          votes.add("walnut");
+          votes.add("olive");
+          votes.add("walnut");
+          Map<String, Integer> counts = countVotes(votes);
+          System.out.println(counts.get("walnut") + " " + counts.get("olive"));
+          System.out.println(counts.size());
+          ```
+
+          and expects:
+
+          ```
+          2 1
+          2
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+          import java.util.List;
+          import java.util.Map;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> votes = new ArrayList<>();
+                  votes.add("walnut");
+                  votes.add("olive");
+                  votes.add("walnut");
+                  Map<String, Integer> counts = countVotes(votes);
+                  System.out.println(counts.get("walnut") + " " + counts.get("olive"));
+                  System.out.println(counts.size());
+              }
+
+              // Write the method countVotes here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+          import java.util.List;
+          import java.util.Map;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> votes = new ArrayList<>();
+                  votes.add("walnut");
+                  votes.add("olive");
+                  votes.add("walnut");
+                  Map<String, Integer> counts = countVotes(votes);
+                  System.out.println(counts.get("walnut") + " " + counts.get("olive"));
+                  System.out.println(counts.size());
+              }
+
+              public static Map<String, Integer> countVotes(List<String> votes) {
+                  Map<String, Integer> counts = new HashMap<>();
+                  for (String vote : votes) {
+                      counts.put(vote, counts.getOrDefault(vote, 0) + 1);
+                  }
+                  return counts;
+              }
+          }
+        hints:
+          - "The header is `public static Map<String, Integer> countVotes(List<String> votes)`. Inside, make `Map<String, Integer> counts = new HashMap<>();` and return it at the end."
+          - "For each vote, count as module 31 did: `counts.put(vote, counts.getOrDefault(vote, 0) + 1);`."
+        require:
+          - pattern: \bpublic\s+static\s+Map<String,\s*Integer>\s+countVotes\s*\(\s*List<String>\s+\w+\s*\)
+            message: "Write the method as `public static Map<String, Integer> countVotes(List<String> votes)`."
+        tests:
+          - call: |
+              List<String> votes = new ArrayList<>();
+              votes.add("walnut");
+              votes.add("olive");
+              votes.add("walnut");
+              Map<String, Integer> counts = countVotes(votes);
+              System.out.println(counts.get("walnut") + " " + counts.get("olive"));
+              System.out.println(counts.size());
+          - call: |
+              List<String> none = new ArrayList<>();
+              System.out.println(countVotes(none).size());
+              ArrayList<String> votes = new ArrayList<>();
+              for (int i = 0; i < 9; i++) {
+                  votes.add("fig");
+                  if (i % 3 == 0) {
+                      votes.add("rye");
+                  }
+              }
+              Map<String, Integer> counts = countVotes(votes);
+              System.out.println(counts.get("fig") + " " + counts.get("rye") + " " + counts.get("olive"));
+            hidden: true
+          - call: |
+              List<String> votes = new ArrayList<>();
+              votes.add("Olive");
+              votes.add("olive");
+              System.out.println(countVotes(votes).size() + " " + votes.size());
+            hidden: true
+
+  - id: interfaces-set
+    slug: set-interface
+    title: "Java's Set interface and HashSet"
+    text: |
+      ### Values kept once
+
+      The smart home app keeps a log: every time a device reports in, the log gets the device's name. The heater reports again and again, but at the end of the day the app wants to know which devices reported in, each just once. A list keeps every report, repeats too. A **set** keeps each value only once. `Set` is an interface in `java.util`, and `HashSet` is a class that implements it:
+
+      ```java run
+      import java.util.HashSet;
+      import java.util.Set;
+
+      public class Main {
+          public static void main(String[] args) {
+              Set<String> devices = new HashSet<>();
+              devices.add("heater");
+              devices.add("fan");
+              devices.add("heater");
+              System.out.println(devices.size());
+              System.out.println(devices.contains("fan"));
+              System.out.println(devices.contains("sprinkler"));
+              System.out.println(devices.add("sprinkler"));
+              System.out.println(devices.add("heater"));
+              devices.remove("fan");
+              System.out.println(devices.size());
+          }
+      }
+      ```
+
+      ```output
+      2
+      true
+      false
+      true
+      false
+      2
+      ```
+
+      - `Set<String> devices = new HashSet<>();` follows the pattern of the lists and maps before it: the interface as the variable's type, the class after `new`. Both need an import.
+      - `add` adds a value that isn't in the set yet. A value that's already there isn't added again: the second heater changes nothing, so the size is 2.
+      - `add` also returns a boolean: `true` when it added the value, and `false` when the value was there already. Programs often ignore it, but it's handy for spotting repeats.
+      - `contains`, `remove(value)`, `size`, `isEmpty` and `clear` work as they do for a list.
+      - A set has no `get(index)`, no `indexOf` and no `remove(index)`: its values have no positions. So in a `Set<Integer>`, `remove(7)` removes the value 7. Module 14's trap with number lists doesn't apply to sets.
+
+      ### How a HashSet finds its values
+
+      A HashSet keeps its values the way a HashMap keeps its keys: in buckets chosen by their hash codes (module 32). So its `contains` is fast even in a big set, where a list's `contains` looks at every value in turn. For the same reason, a HashSet needs values whose `hashCode` and `equals` agree. Strings and Integers have both. Objects of your own classes need both, just as the keys of a hash map do. In fact, a map's `keySet()` is a Set: a map keeps each key once, too.
+
+      ### The order of a set
+
+      A for-each loop goes through a HashSet as a HashMap goes through its keys: in an order set by the hash codes. That order may happen to match the order the values were added, or alphabetical order, but Java makes no promise about it, so never rely on it. That's why this course never prints a whole set of several values. To show them in a fixed order, copy them into a list and sort it, as module 31 did with keys:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashSet;
+      import java.util.List;
+      import java.util.Set;
+
+      public class Main {
+          public static void main(String[] args) {
+              String[] reports = {"fan", "heater", "lamp", "heater", "fan", "heater"};
+              Set<String> devices = new HashSet<>();
+              for (String device : reports) {
+                  devices.add(device);
+              }
+              List<String> sorted = new ArrayList<>(devices);
+              Collections.sort(sorted);
+              System.out.println(reports.length + " reports from " + devices.size() + " devices");
+              System.out.println(sorted);
+          }
+      }
+      ```
+
+      ```output
+      6 reports from 3 devices
+      [fan, heater, lamp]
+      ```
+
+      - `new ArrayList<>(devices)` makes a list of the set's values, just as `new ArrayList<>(map.keySet())` does for a map's keys. `Collections.sort` then puts them in order.
+      - It works the other way round too: `new HashSet<>(list)` makes a set of a list's values, each once.
+
+      **Your turn:** write the method `countDevices(List<String> reports)`, which returns how many different devices are in a log of reports. Use a HashSet. The check runs:
+
+      ```java fragment
+      List<String> reports = new ArrayList<>();
+      reports.add("heater");
+      reports.add("doorbell");
+      reports.add("heater");
+      reports.add("fan");
+      reports.add("heater");
+      System.out.println(countDevices(reports));
+      ```
+
+      and expects:
+
+      ```
+      3
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.HashSet;
+      import java.util.List;
+      import java.util.Set;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> reports = new ArrayList<>();
+              reports.add("heater");
+              reports.add("doorbell");
+              reports.add("heater");
+              reports.add("fan");
+              reports.add("heater");
+              System.out.println(countDevices(reports));
+          }
+
+          // Write the method countDevices here.
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.HashSet;
+      import java.util.List;
+      import java.util.Set;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<String> reports = new ArrayList<>();
+              reports.add("heater");
+              reports.add("doorbell");
+              reports.add("heater");
+              reports.add("fan");
+              reports.add("heater");
+              System.out.println(countDevices(reports));
+          }
+
+          public static int countDevices(List<String> reports) {
+              Set<String> devices = new HashSet<>();
+              for (String device : reports) {
+                  devices.add(device);
+              }
+              return devices.size();
+          }
+      }
+    hints:
+      - "The header is `public static int countDevices(List<String> reports)`. Make a `Set<String> devices = new HashSet<>();`, and add every report to it."
+      - "The set keeps each device once, whatever you add, so the answer is `devices.size()`."
+    require:
+      - pattern: \bpublic\s+static\s+int\s+countDevices\s*\(\s*List<String>\s+\w+\s*\)
+        message: "Write the method as `public static int countDevices(List<String> reports)`."
+      - pattern: \bnew\s+HashSet\b
+        message: "Use a HashSet: it keeps each device once."
+    tests:
+      - call: |
+          List<String> reports = new ArrayList<>();
+          reports.add("heater");
+          reports.add("doorbell");
+          reports.add("heater");
+          reports.add("fan");
+          reports.add("heater");
+          System.out.println(countDevices(reports));
+      - call: |
+          List<String> none = new ArrayList<>();
+          System.out.println(countDevices(none));
+          ArrayList<String> same = new ArrayList<>();
+          for (int i = 0; i < 5; i++) {
+              same.add("camera");
+          }
+          System.out.println(countDevices(same));
+        hidden: true
+      - call: |
+          List<String> reports = new ArrayList<>();
+          String[] names = {"lamp", "Lamp", "lamp ", "kettle", "lamp", "radio", "kettle"};
+          for (String name : names) {
+              reports.add(name);
+          }
+          System.out.println(countDevices(reports) + " " + reports.size());
+        hidden: true
+    more:
+      - task: |
+          The door of a conference hall scans each visitor's badge number, every time the visitor comes in. What does this program print?
+        predict: |
+          import java.util.HashSet;
+          import java.util.Set;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Set<Integer> badges = new HashSet<>();
+                  int[] scans = {105, 212, 105, 330, 212, 105};
+                  int repeats = 0;
+                  for (int scan : scans) {
+                      if (!badges.add(scan)) {
+                          repeats++;
+                      }
+                  }
+                  System.out.println(badges.size() + " " + repeats);
+                  badges.remove(212);
+                  System.out.println(badges.contains(212) + " " + badges.contains(330));
+              }
+          }
+        hints:
+          - "`add` returns `false` when the number is in the set already, and then `repeats` goes up."
+          - "The first 105, 212 and 330 are new; the other three scans are repeats, and the set holds three numbers. A set has no indexes, so `remove(212)` removes the value 212, not index 212. Then `contains(212)` is false, while 330 is still there."
+      - task: |
+          Write the method `reportedTwice(List<String> reports)`, which returns a list of the devices that reported in more than once, each device once, in alphabetical order. Use two HashSets: one for the devices seen so far, and one for those seen again. The check runs:
+
+          ```java fragment
+          List<String> reports = new ArrayList<>();
+          reports.add("sprinkler");
+          reports.add("heater");
+          reports.add("camera");
+          reports.add("heater");
+          reports.add("sprinkler");
+          reports.add("heater");
+          System.out.println(reportedTwice(reports));
+          ```
+
+          and expects:
+
+          ```
+          [heater, sprinkler]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.HashSet;
+          import java.util.List;
+          import java.util.Set;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> reports = new ArrayList<>();
+                  reports.add("sprinkler");
+                  reports.add("heater");
+                  reports.add("camera");
+                  reports.add("heater");
+                  reports.add("sprinkler");
+                  reports.add("heater");
+                  System.out.println(reportedTwice(reports));
+              }
+
+              // Write the method reportedTwice here.
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.HashSet;
+          import java.util.List;
+          import java.util.Set;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> reports = new ArrayList<>();
+                  reports.add("sprinkler");
+                  reports.add("heater");
+                  reports.add("camera");
+                  reports.add("heater");
+                  reports.add("sprinkler");
+                  reports.add("heater");
+                  System.out.println(reportedTwice(reports));
+              }
+
+              public static List<String> reportedTwice(List<String> reports) {
+                  Set<String> seen = new HashSet<>();
+                  Set<String> again = new HashSet<>();
+                  for (String device : reports) {
+                      if (!seen.add(device)) {
+                          again.add(device);
+                      }
+                  }
+                  List<String> result = new ArrayList<>(again);
+                  Collections.sort(result);
+                  return result;
+              }
+          }
+        hints:
+          - "Go through the reports. When a device is in `seen` already (or when `seen.add(device)` returns `false`), add it to the second set, `again`. The heater gets added to `again` twice, but a set keeps it once."
+          - "At the end, copy `again` into a list with `new ArrayList<>(again)`, sort it with `Collections.sort`, and return the list."
+        require:
+          - pattern: \bpublic\s+static\s+List<String>\s+reportedTwice\s*\(\s*List<String>\s+\w+\s*\)
+            message: "Write the method as `public static List<String> reportedTwice(List<String> reports)`."
+          - pattern: \bnew\s+HashSet\b
+            min: 2
+            message: "Use two HashSets: one for the devices seen so far, and one for those seen again."
+        tests:
+          - call: |
+              List<String> reports = new ArrayList<>();
+              reports.add("sprinkler");
+              reports.add("heater");
+              reports.add("camera");
+              reports.add("heater");
+              reports.add("sprinkler");
+              reports.add("heater");
+              System.out.println(reportedTwice(reports));
+          - call: |
+              List<String> once = new ArrayList<>();
+              once.add("kettle");
+              once.add("fan");
+              System.out.println(reportedTwice(once));
+              once.add("fan");
+              once.add("fan");
+              System.out.println(reportedTwice(once));
+            hidden: true
+          - call: |
+              List<String> reports = new ArrayList<>();
+              String[] names = {"oven", "fridge", "blinds", "oven", "radio", "fridge", "blinds", "router", "radio"};
+              for (String name : names) {
+                  reports.add(name);
+              }
+              System.out.println(reportedTwice(reports) + " " + reports.size());
+            hidden: true
+
+  - id: interfaces-collection
+    slug: collection-interface
+    title: Collection, and choosing between an interface and an abstract class
+    text: |
+      ### Collection: what lists and sets share
+
+      Lists and sets have a lot in common: both hold values, and both have `add`, `remove`, `contains`, `size`, `isEmpty` and `clear`. Java puts what they share in one more interface, **Collection**. An interface can extend another interface, and List and Set both extend Collection. So an ArrayList is a List and a Collection, and a HashSet is a Set and a Collection.
+
+      Collection has no `get(index)`, since a set's values have no positions. But a for-each loop can go through any Collection. So a method whose parameter is a Collection works with lists and sets alike. A smart home's energy meter shows it:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collection;
+      import java.util.HashMap;
+      import java.util.HashSet;
+      import java.util.List;
+      import java.util.Map;
+      import java.util.Set;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Integer> hourly = new ArrayList<>();
+              hourly.add(300);
+              hourly.add(450);
+              hourly.add(300);
+              System.out.println(total(hourly));
+
+              Set<Integer> different = new HashSet<>(hourly);
+              System.out.println(different.size() + " different amounts, adding up to " + total(different));
+
+              Map<String, Integer> watts = new HashMap<>();
+              watts.put("heater", 1500);
+              watts.put("fan", 60);
+              watts.put("garden light", 12);
+              System.out.println(total(watts.values()) + " watts with everything on");
+          }
+
+          public static int total(Collection<Integer> numbers) {
+              int sum = 0;
+              for (int number : numbers) {
+                  sum += number;
+              }
+              return sum;
+          }
+      }
+      ```
+
+      ```output
+      1050
+      2 different amounts, adding up to 750
+      1572 watts with everything on
+      ```
+
+      - `total` takes a `Collection<Integer>`, so it accepts the list, the set, and `watts.values()`, which is a Collection too. With a `List<Integer>` parameter, it couldn't take the set, and with a `Set<Integer>` parameter, not the list.
+      - The set keeps 300 only once, so its total is smaller. A sum doesn't depend on the order of the values, so going through a set is fine here.
+      - A map's `keySet()` is a Set and its `values()` a Collection, so both fit a Collection parameter. A map itself isn't a Collection: it holds pairs, not single values.
+      - Collection needs `import java.util.Collection;`. Mind the names: `Collection` is the interface, and `Collections`, with an s, is the class with `sort` and other helpers.
+
+      ### Interface or abstract class?
+
+      Module 34's abstract classes and this module's interfaces both list methods that other classes must write, and neither can be made with `new`. Which should you use? The differences decide:
+
+      | | Interface | Abstract class |
+      | --- | --- | --- |
+      | How many a class can have | any number: `implements A, B` | one: `extends A` |
+      | Instance variables and constructors | none | yes |
+      | Methods with code | none, in this course | yes, shared by every subclass |
+      | Says of an object | what it can do | what it is |
+
+      - Choose an **interface** when classes that are otherwise unrelated share an ability. A heater and a scooter can both be switched on; a product and a repair both have a price. Code that needs only that ability, such as `printLine` or the app's buttons, takes the interface, and works with every class that has it, including classes written later.
+      - Choose an **abstract class** when the classes are kinds of one thing, and share data and code: every instrument in module 34 had a name, and `play` was written once, in Instrument.
+      - The two combine: a class can extend an abstract class and implement interfaces. Java's own ArrayList does both: it extends an abstract class, `AbstractList`, which holds code that lists share, and it implements List.
+
+      When in doubt, start from what the code that *uses* the objects needs. If it needs only a few methods, an interface says exactly that, and leaves each class free to extend whatever else it needs. Module 36 comes back to this choice.
+
+      **Your turn:** write the method `countAtLeast(Collection<Integer> numbers, int limit)`, which returns how many of the numbers are at least `limit`. The check calls it with a list, a set and a map's values:
+
+      ```java fragment
+      List<Integer> hourly = new ArrayList<>();
+      hourly.add(300);
+      hourly.add(450);
+      hourly.add(300);
+      hourly.add(120);
+      System.out.println(countAtLeast(hourly, 300));
+      System.out.println(countAtLeast(new HashSet<>(hourly), 300));
+      Map<String, Integer> watts = new HashMap<>();
+      watts.put("heater", 1500);
+      watts.put("fan", 60);
+      watts.put("kettle", 2000);
+      System.out.println(countAtLeast(watts.values(), 1000));
+      ```
+
+      and expects:
+
+      ```
+      3
+      2
+      2
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.Collection;
+      import java.util.HashMap;
+      import java.util.HashSet;
+      import java.util.List;
+      import java.util.Map;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Integer> hourly = new ArrayList<>();
+              hourly.add(300);
+              hourly.add(450);
+              hourly.add(300);
+              hourly.add(120);
+              System.out.println(countAtLeast(hourly, 300));
+              System.out.println(countAtLeast(new HashSet<>(hourly), 300));
+              Map<String, Integer> watts = new HashMap<>();
+              watts.put("heater", 1500);
+              watts.put("fan", 60);
+              watts.put("kettle", 2000);
+              System.out.println(countAtLeast(watts.values(), 1000));
+          }
+
+          // Write the method countAtLeast here.
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.Collection;
+      import java.util.HashMap;
+      import java.util.HashSet;
+      import java.util.List;
+      import java.util.Map;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Integer> hourly = new ArrayList<>();
+              hourly.add(300);
+              hourly.add(450);
+              hourly.add(300);
+              hourly.add(120);
+              System.out.println(countAtLeast(hourly, 300));
+              System.out.println(countAtLeast(new HashSet<>(hourly), 300));
+              Map<String, Integer> watts = new HashMap<>();
+              watts.put("heater", 1500);
+              watts.put("fan", 60);
+              watts.put("kettle", 2000);
+              System.out.println(countAtLeast(watts.values(), 1000));
+          }
+
+          public static int countAtLeast(Collection<Integer> numbers, int limit) {
+              int count = 0;
+              for (int number : numbers) {
+                  if (number >= limit) {
+                      count++;
+                  }
+              }
+              return count;
+          }
+      }
+    hints:
+      - "The header is `public static int countAtLeast(Collection<Integer> numbers, int limit)`. A Collection has no `get(index)`, so go through it with a for-each loop."
+      - "Count the numbers for which `number >= limit`, and return the count. The set holds 300 only once, so it gives one less than the list."
+    require:
+      - pattern: \bpublic\s+static\s+int\s+countAtLeast\s*\(\s*Collection<Integer>\s+\w+\s*,\s*int\s+\w+\s*\)
+        message: "Write the method as `public static int countAtLeast(Collection<Integer> numbers, int limit)`, so that it takes lists and sets alike."
+    tests:
+      - call: |
+          List<Integer> hourly = new ArrayList<>();
+          hourly.add(300);
+          hourly.add(450);
+          hourly.add(300);
+          hourly.add(120);
+          System.out.println(countAtLeast(hourly, 300));
+          System.out.println(countAtLeast(new HashSet<>(hourly), 300));
+          Map<String, Integer> watts = new HashMap<>();
+          watts.put("heater", 1500);
+          watts.put("fan", 60);
+          watts.put("kettle", 2000);
+          System.out.println(countAtLeast(watts.values(), 1000));
+      - call: |
+          Set<Integer> none = new HashSet<>();
+          System.out.println(countAtLeast(none, 0));
+          List<Integer> numbers = new ArrayList<>();
+          for (int i = 1; i <= 10; i++) {
+              numbers.add(i * i);
+          }
+          System.out.println(countAtLeast(numbers, 50) + " " + countAtLeast(numbers, 1) + " " + countAtLeast(numbers, 101));
+        hidden: true
+      - call: |
+          Map<Integer, Integer> squares = new HashMap<>();
+          for (int i = -3; i <= 3; i++) {
+              squares.put(i, i * i);
+          }
+          System.out.println(countAtLeast(squares.keySet(), 0) + " " + countAtLeast(squares.values(), 4) + " " + countAtLeast(new HashSet<>(squares.values()), 4));
+        hidden: true
+    more:
+      - task: |
+          A party's guest list has a name twice. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Collection;
+          import java.util.HashSet;
+          import java.util.List;
+          import java.util.Set;
+
+          public class Main {
+              public static void main(String[] args) {
+                  List<String> guests = new ArrayList<>();
+                  guests.add("Ada");
+                  guests.add("Ben");
+                  guests.add("Ada");
+                  Set<String> names = new HashSet<>(guests);
+                  System.out.println(describe(guests) + " / " + describe(names));
+                  names.add("Cy");
+                  System.out.println(guests.size() + " " + names.size());
+              }
+
+              public static String describe(Collection<String> people) {
+                  int letters = 0;
+                  for (String person : people) {
+                      letters += person.length();
+                  }
+                  return people.size() + " people, " + letters + " letters";
+              }
+          }
+        hints:
+          - "A HashSet made from the list keeps each name once, and `describe` counts whatever collection it's given."
+          - "The list keeps Ada twice: 3 names, 9 letters. The set has Ada and Ben, 6 letters. The set is a new object, made from the list's values, so adding Cy to the set doesn't change the list."
+      - task: |
+          The app's devices now share an abstract class, `Appliance`: every appliance has a name, and an abstract method `watts()` for the power it uses. Some appliances also run on a battery, and that's what the interface Chargeable is for. `Appliance.java`, `Chargeable.java` and `Toaster.java` are ready. In `CordlessVacuum.java`, write the class `CordlessVacuum`, which extends Appliance and implements Chargeable, with:
+
+          - a constructor `CordlessVacuum(int battery)`; the appliance's name is always `Cordless vacuum`
+          - `watts()`, which returns 150
+          - `batteryPercent()`, which returns the battery's percentage
+          - `charge(int minutes)`, which adds 3 percent for every minute, but never goes above 100
+
+          The check runs:
+
+          ```java fragment
+          CordlessVacuum vacuum = new CordlessVacuum(40);
+          System.out.println(vacuum);
+          vacuum.charge(10);
+          Appliance appliance = vacuum;
+          Chargeable chargeable = vacuum;
+          System.out.println(appliance.getName() + ": " + chargeable.batteryPercent() + "%");
+          System.out.println(new Toaster());
+          ```
+
+          and expects:
+
+          ```
+          Cordless vacuum, 150 W
+          Cordless vacuum: 70%
+          Toaster, 800 W
+          ```
+        seed:
+          CordlessVacuum.java: |
+            public class CordlessVacuum {
+
+            }
+          Appliance.java: |
+            public abstract class Appliance {
+                private String name;
+
+                public Appliance(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public abstract int watts();
+
+                @Override
+                public String toString() {
+                    return this.name + ", " + this.watts() + " W";
+                }
+            }
+          Chargeable.java: |
+            public interface Chargeable {
+                int batteryPercent();
+                void charge(int minutes);
+            }
+          Toaster.java: |
+            public class Toaster extends Appliance {
+                public Toaster() {
+                    super("Toaster");
+                }
+
+                @Override
+                public int watts() {
+                    return 800;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    CordlessVacuum vacuum = new CordlessVacuum(40);
+                    System.out.println(vacuum);
+                    vacuum.charge(10);
+                    Appliance appliance = vacuum;
+                    Chargeable chargeable = vacuum;
+                    System.out.println(appliance.getName() + ": " + chargeable.batteryPercent() + "%");
+                    System.out.println(new Toaster());
+                }
+            }
+        solution:
+          CordlessVacuum.java: |
+            public class CordlessVacuum extends Appliance implements Chargeable {
+                private int battery;
+
+                public CordlessVacuum(int battery) {
+                    super("Cordless vacuum");
+                    this.battery = battery;
+                }
+
+                @Override
+                public int watts() {
+                    return 150;
+                }
+
+                @Override
+                public int batteryPercent() {
+                    return this.battery;
+                }
+
+                @Override
+                public void charge(int minutes) {
+                    this.battery += 3 * minutes;
+                    if (this.battery > 100) {
+                        this.battery = 100;
+                    }
+                }
+            }
+          Appliance.java: |
+            public abstract class Appliance {
+                private String name;
+
+                public Appliance(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public abstract int watts();
+
+                @Override
+                public String toString() {
+                    return this.name + ", " + this.watts() + " W";
+                }
+            }
+          Chargeable.java: |
+            public interface Chargeable {
+                int batteryPercent();
+                void charge(int minutes);
+            }
+          Toaster.java: |
+            public class Toaster extends Appliance {
+                public Toaster() {
+                    super("Toaster");
+                }
+
+                @Override
+                public int watts() {
+                    return 800;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    CordlessVacuum vacuum = new CordlessVacuum(40);
+                    System.out.println(vacuum);
+                    vacuum.charge(10);
+                    Appliance appliance = vacuum;
+                    Chargeable chargeable = vacuum;
+                    System.out.println(appliance.getName() + ": " + chargeable.batteryPercent() + "%");
+                    System.out.println(new Toaster());
+                }
+            }
+        hints:
+          - "The header is `public class CordlessVacuum extends Appliance implements Chargeable {`: `extends` first. The constructor's first line hands the name to Appliance: `super(\"Cordless vacuum\");`."
+          - "The class keeps the battery in an instance variable of its own. It writes `watts()` for Appliance, and `batteryPercent()` and `charge(int minutes)` for Chargeable, each with `@Override`. Appliance's `toString` already prints the name and the watts."
+        require:
+          - pattern: \bclass\s+CordlessVacuum\s+extends\s+Appliance\s+implements\s+Chargeable\b
+            message: "Write the header as `public class CordlessVacuum extends Appliance implements Chargeable`."
+          - pattern: \bsuper\s*\(
+            message: "Hand the name to Appliance's constructor with `super(\"Cordless vacuum\");`."
+        tests:
+          - call: |
+              CordlessVacuum vacuum = new CordlessVacuum(40);
+              System.out.println(vacuum);
+              vacuum.charge(10);
+              Appliance appliance = vacuum;
+              Chargeable chargeable = vacuum;
+              System.out.println(appliance.getName() + ": " + chargeable.batteryPercent() + "%");
+              System.out.println(new Toaster());
+          - call: |
+              List<Appliance> kitchen = new ArrayList<>();
+              kitchen.add(new Toaster());
+              kitchen.add(new CordlessVacuum(0));
+              int watts = 0;
+              for (Appliance appliance : kitchen) {
+                  watts += appliance.watts();
+              }
+              System.out.println(watts + " " + kitchen.get(1).getName());
+            hidden: true
+          - call: |
+              List<Chargeable> batteries = new ArrayList<>();
+              batteries.add(new CordlessVacuum(95));
+              batteries.add(new CordlessVacuum(10));
+              for (Chargeable battery : batteries) {
+                  battery.charge(2);
+                  System.out.println(battery.batteryPercent());
+              }
+            hidden: true

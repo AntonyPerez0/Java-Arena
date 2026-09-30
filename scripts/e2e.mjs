@@ -667,6 +667,36 @@ await test('part 5 mistakes are explained: a missing cast in equals, and an inst
   await ctx.close();
 });
 
+await test('part 9 mistakes are explained: a missing abstract method, a cast to the wrong subclass, and sorting objects that are not Comparable', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, MAIN('        Animal animal = new Cat();\n        Dog dog = (Dog) animal;\n        System.out.println(dog.sound());'));
+  const addClass = async (name, text) => {
+    await page.click('text=Add a class');
+    await page.fill('#new-class', name);
+    await page.click('.file-add-form button[type=submit]');
+    await setCode(page, text);
+  };
+  await addClass('Animal', 'public abstract class Animal {\n    public abstract String sound();\n}\n');
+  await addClass('Dog', 'public class Dog extends Animal {\n    public String sound() {\n        return "woof";\n    }\n}\n');
+  await addClass('Cat', 'public class Cat extends Animal {\n    public String sund() {\n        return "meow";\n    }\n}\n');
+  // The note names the classes and the method, and knows Animal is a class (it read the program's files).
+  let out = await check(page);
+  expect(/Cat\.java, line 1/i.test(out) && out.includes('Cat is not abstract') && out.includes('sound() is abstract in Animal') && out.includes('each class that extends Animal must write its own') && out.includes('Add sound to Cat'), out);
+  await setCode(page, 'public class Cat extends Animal {\n    public String sound() {\n        return "meow";\n    }\n}\n');
+  out = await check(page);
+  expect(/ClassCastException \(Main\.java, line 4\)/.test(out) && out.includes('but it is a Cat, not a Dog') && out.includes('if (value instanceof Dog)'), out);
+  // A TreeSet of Dogs, which aren't Comparable: the cast is in Java's own code, so the note is about compareTo, not about a cast.
+  await page.click('#file-tab-0');
+  await page.locator('.file-tab-on', { hasText: 'Main.java' }).waitFor();
+  await setCode(page, 'import java.util.TreeSet;\n\n' + MAIN('        TreeSet<Dog> dogs = new TreeSet<>();\n        dogs.add(new Dog());'));
+  out = await check(page);
+  expect(/ClassCastException \(Main\.java, line 6\)/.test(out) && out.includes("Dog doesn't implement Comparable") && out.includes('Make Dog implement Comparable<Dog>') && !out.includes('instanceof'), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('playground: run a program with input, share it, open the link elsewhere', async () => {
   const { ctx, page, errors } = await newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);

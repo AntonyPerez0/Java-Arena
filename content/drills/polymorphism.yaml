@@ -1,0 +1,645 @@
+topic: polymorphism
+drills:
+  - type: predict
+    after: many-types
+    classes: |
+      interface Commercial {
+          String company();
+      }
+
+      class Vehicle {
+          public int toll() {
+              return 3;
+          }
+      }
+
+      class Truck extends Vehicle implements Commercial {
+          @Override
+          public int toll() {
+              return 12;
+          }
+
+          @Override
+          public String company() {
+              return "Nordic Freight";
+          }
+      }
+    body: |
+      Truck truck = new Truck();
+      Vehicle vehicle = truck;
+      Commercial customer = truck;
+      Object thing = customer;
+      System.out.println(vehicle.toll() + " " + customer.company() + " " + (thing == vehicle));
+    why: "There's one `new`, so there's one object, a Truck, in four variables of four types. The object's class decides which `toll()` runs, so it's Truck's 12 even through a Vehicle variable. `thing` and `vehicle` refer to the same truck, so `==` is `true`."
+
+  - type: predict
+    after: instanceof-and-casts
+    classes: |
+      interface Commercial {
+          String company();
+      }
+
+      class Vehicle {
+          public int toll() {
+              return 3;
+          }
+      }
+
+      class Truck extends Vehicle implements Commercial {
+          @Override
+          public int toll() {
+              return 12;
+          }
+
+          @Override
+          public String company() {
+              return "Coastal Fuels";
+          }
+      }
+
+      class TankerTruck extends Truck {
+          @Override
+          public int toll() {
+              return super.toll() + 10;
+          }
+      }
+    body: |
+      Vehicle first = new TankerTruck();
+      Vehicle second = new Vehicle();
+      System.out.println((first instanceof Commercial) + " " + (second instanceof Commercial) + " " + first.toll());
+    why: "TankerTruck doesn't write `implements Commercial`, but it extends Truck, which does, and interfaces are inherited like methods. A plain Vehicle isn't Commercial. The tanker's `toll()` is Truck's 12 plus 10."
+
+  - type: predict
+    after: instanceof-and-casts
+    classes: |
+      interface Flying {
+          int altitude();
+      }
+
+      abstract class Enemy {
+      }
+
+      class Goblin extends Enemy {
+      }
+
+      class Bat extends Enemy implements Flying {
+          @Override
+          public int altitude() {
+              return 3;
+          }
+      }
+    body: |
+      Enemy squeak = new Bat();
+      Enemy nobody = null;
+      System.out.println((squeak instanceof Flying) + " " + (squeak instanceof Goblin) + " " + (nobody instanceof Enemy));
+    why: "`instanceof` looks at the object, not the variable: the bat in an Enemy variable is still Flying. A bat isn't a goblin. And `null` is no object at all, so `instanceof` is `false` for it, whatever the type."
+
+  - type: predict
+    after: instanceof-and-casts
+    classes: |
+      abstract class Enemy {
+          private int health;
+
+          public Enemy(int health) {
+              this.health = health;
+          }
+
+          public int getHealth() {
+              return this.health;
+          }
+
+          public void heal(int amount) {
+              this.health += amount;
+          }
+      }
+
+      class Troll extends Enemy {
+          public Troll() {
+              super(30);
+          }
+
+          public void regenerate() {
+              this.heal(5);
+          }
+      }
+    body: |
+      Enemy grak = new Troll();
+      Troll troll = (Troll) grak;
+      troll.regenerate();
+      troll.regenerate();
+      System.out.println(grak.getHealth() + " " + (grak == troll));
+    why: "A cast doesn't copy the object. `troll` refers to the same troll as `grak`, only with the type Troll, so `regenerate()` can be called. Both calls heal that one object, from 30 to 40."
+
+  - type: predict
+    after: one-list-many-kinds
+    classes: |
+      abstract class Employee {
+          public abstract int monthlyPay();
+      }
+
+      class Salaried extends Employee {
+          private int yearly;
+
+          public Salaried(int yearly) {
+              this.yearly = yearly;
+          }
+
+          @Override
+          public int monthlyPay() {
+              return this.yearly / 12;
+          }
+      }
+
+      class Manager extends Salaried {
+          public Manager(int yearly) {
+              super(yearly);
+          }
+
+          @Override
+          public int monthlyPay() {
+              return super.monthlyPay() + 400;
+          }
+      }
+
+      class Intern extends Employee {
+          @Override
+          public int monthlyPay() {
+              return 900;
+          }
+      }
+    body: |
+      ArrayList<Employee> staff = new ArrayList<>();
+      staff.add(new Salaried(36000));
+      staff.add(new Manager(36000));
+      staff.add(new Intern());
+      int total = 0;
+      for (Employee employee : staff) {
+          total += employee.monthlyPay();
+      }
+      System.out.println(total);
+    why: "The loop calls `monthlyPay()` on each Employee, and each object runs its own version: 36000 / 12 is 3000, the manager adds 400 to Salaried's 3000, and the intern gets 900. 3000 + 3400 + 900 is 7300."
+
+  - type: fill
+    after: many-types
+    prompt: "Fill in the blank, a type, so that the list can hold both vehicles and the loop can add up their tolls."
+    classes: |
+      interface Commercial {
+          String company();
+      }
+
+      class Vehicle {
+          public int toll() {
+              return 3;
+          }
+      }
+
+      class Car extends Vehicle {
+          @Override
+          public int toll() {
+              return 6;
+          }
+      }
+
+      class Truck extends Vehicle implements Commercial {
+          @Override
+          public int toll() {
+              return 12;
+          }
+
+          @Override
+          public String company() {
+              return "Nordic Freight";
+          }
+      }
+    body: |
+      ArrayList<[[Vehicle]]> passed = new ArrayList<>();
+      passed.add(new Car());
+      passed.add(new Truck());
+      int total = 0;
+      for (int i = 0; i < passed.size(); i++) {
+          total += passed.get(i).toll();
+      }
+      System.out.println(total);
+    why: "A car and a truck share two types: Vehicle and Object. Object has no `toll()`, so the list needs Vehicle. A Truck isn't a Car, and a Car isn't Commercial, so neither of those works."
+
+  - type: fill
+    after: instanceof-and-casts
+    prompt: "Fill in the blank, a keyword, so that the loop counts the flying enemies."
+    classes: |
+      interface Flying {
+          int altitude();
+      }
+
+      abstract class Enemy {
+      }
+
+      class Goblin extends Enemy {
+      }
+
+      class Bat extends Enemy implements Flying {
+          @Override
+          public int altitude() {
+              return 3;
+          }
+      }
+    body: |
+      ArrayList<Enemy> enemies = new ArrayList<>();
+      enemies.add(new Goblin());
+      enemies.add(new Bat());
+      enemies.add(new Bat());
+      int flying = 0;
+      for (Enemy enemy : enemies) {
+          if (enemy [[instanceof]] Flying) {
+              flying++;
+          }
+      }
+      System.out.println(flying + " of " + enemies.size() + " fly");
+    why: "`enemy instanceof Flying` is `true` when the object has the type Flying, whatever the variable's type. Both bats implement Flying; the goblin doesn't."
+
+  - type: bug
+    after: instanceof-and-casts
+    prompt: "Every flying enemy's altitude should be added up. Which line is wrong?"
+    classes: |
+      interface Flying {
+          int altitude();
+      }
+
+      abstract class Enemy {
+      }
+
+      class Bat extends Enemy implements Flying {
+          @Override
+          public int altitude() {
+              return 3;
+          }
+      }
+
+      class Hawk extends Enemy implements Flying {
+          @Override
+          public int altitude() {
+              return 40;
+          }
+      }
+    body: |
+      ArrayList<Enemy> enemies = new ArrayList<>();
+      enemies.add(new Bat());
+      enemies.add(new Hawk());
+      int height = 0;
+      for (Enemy enemy : enemies) {
+          if (enemy instanceof Flying) {
+              Bat flyer = (Bat) enemy; // BUG
+              height += flyer.altitude();
+          }
+      }
+      System.out.println(height);
+    fix: Flying flyer = (Flying) enemy;
+    why: "The `if` lets every Flying enemy through, but the cast wants a Bat. The hawk flies and isn't a bat, so the cast crashes with a ClassCastException. Cast to the type that was checked: `(Flying) enemy`. Checking `instanceof Bat` instead would skip the hawk."
+
+  - type: bug
+    after: many-types
+    prompt: "Both vehicles should be counted. Which line is wrong?"
+    classes: |
+      class Vehicle {
+          public int toll() {
+              return 3;
+          }
+      }
+
+      class Car extends Vehicle {
+          @Override
+          public int toll() {
+              return 6;
+          }
+      }
+
+      class Truck extends Vehicle {
+          @Override
+          public int toll() {
+              return 12;
+          }
+      }
+    body: |
+      ArrayList<Car> passed = new ArrayList<>(); // BUG
+      passed.add(new Car());
+      passed.add(new Truck());
+      int total = 0;
+      for (Vehicle vehicle : passed) {
+          total += vehicle.toll();
+      }
+      System.out.println(total);
+    fix: ArrayList<Vehicle> passed = new ArrayList<>();
+    why: "A Truck is a Vehicle, but it isn't a Car: the two classes sit side by side under Vehicle. So `passed.add(new Truck())` doesn't compile for a list of Cars. The type both have is Vehicle."
+
+  - type: bug
+    after: instanceof-and-casts
+    prompt: "Every commercial vehicle's toll should go on a bill. Which line is wrong?"
+    classes: |
+      interface Commercial {
+          String company();
+      }
+
+      class Vehicle {
+          public int toll() {
+              return 3;
+          }
+      }
+
+      class Car extends Vehicle {
+          @Override
+          public int toll() {
+              return 6;
+          }
+      }
+
+      class Taxi extends Car implements Commercial {
+          @Override
+          public int toll() {
+              return 4;
+          }
+
+          @Override
+          public String company() {
+              return "Metro Cabs";
+          }
+      }
+
+      class Truck extends Vehicle implements Commercial {
+          @Override
+          public int toll() {
+              return 12;
+          }
+
+          @Override
+          public String company() {
+              return "Nordic Freight";
+          }
+      }
+    body: |
+      ArrayList<Vehicle> passed = new ArrayList<>();
+      passed.add(new Taxi());
+      passed.add(new Car());
+      passed.add(new Truck());
+      int billed = 0;
+      for (Vehicle vehicle : passed) {
+          if (vehicle instanceof Truck) { // BUG
+              billed += vehicle.toll();
+          }
+      }
+      System.out.println(billed);
+    fix: "if (vehicle instanceof Commercial) {"
+    why: "Taxis are commercial too, but `instanceof Truck` counts only trucks, so the taxi's 4 is missed. Ask about the interface that all commercial vehicles share: `instanceof Commercial` is `true` for the taxi and the truck, and `false` for the plain car."
+
+  - type: compiles
+    after: many-types
+    classes: |
+      interface Commercial {
+          String company();
+      }
+
+      class Vehicle {
+      }
+
+      class Car extends Vehicle {
+      }
+
+      class Taxi extends Car implements Commercial {
+          @Override
+          public String company() {
+              return "Metro Cabs";
+          }
+      }
+    body: |
+      Commercial customer = new Car();
+      System.out.println(customer.company());
+    why: "No. Taxi, a subclass of Car, is Commercial, but a plain Car isn't: types are passed down the tree, never up. javac says `incompatible types: Car cannot be converted to Commercial`."
+
+  - type: compiles
+    after: instanceof-and-casts
+    classes: |
+      class Vehicle {
+          public int toll() {
+              return 3;
+          }
+      }
+
+      class Truck extends Vehicle {
+          public String company() {
+              return "Nordic Freight";
+          }
+      }
+    body: |
+      Vehicle vehicle = new Truck();
+      Truck truck = (Truck) vehicle;
+      System.out.println(truck.company());
+    why: "Yes, and it prints `Nordic Freight`. javac accepts the cast because a Vehicle might be a Truck, and the cast gives a Truck variable, through which `company()` may be called. Had `vehicle` referred to some other kind of vehicle, the cast would have crashed with a ClassCastException when it ran."
+
+  - type: choice
+    after: many-types
+    prompt: "`Taxi` extends `Car`, `Car` and `Truck` extend `Vehicle`, and Taxi and Truck implement the interface `Commercial`. Which line does NOT compile?"
+    choices:
+      - "`Commercial customer = new Truck();`"
+      - "`Vehicle vehicle = new Taxi();`"
+      - "`Car car = new Truck();`"
+      - "`Object thing = new Taxi();`"
+    answer: 3
+    why: "A variable can refer to objects of its own type and of any type below it. A Truck is a Vehicle, a Commercial and an Object, but it isn't a Car: Car and Truck sit side by side under Vehicle."
+
+  - type: choice
+    after: end-of-part-9
+    prompt: "A game has bats and dragons, which are enemies, and balloons, which aren't. All three fly, at some altitude. Goblins are enemies too, and they don't fly. What's the best way to give bats, dragons and balloons `altitude()`?"
+    choices:
+      - "A class `Flying` with `altitude()`, which Enemy and Balloon both extend"
+      - "An interface `Flying` with `altitude()`, which Bat, Dragon and Balloon implement"
+      - "`Balloon extends Bat`, so that it gets the bat's `altitude()`"
+      - "An `altitude()` in Enemy, and `Balloon extends Enemy`"
+    answer: 2
+    why: "Flying is an ability that unrelated classes share, which is what an interface is for. If Enemy extended a Flying class, goblins would fly too. A balloon isn't a bat or an enemy, so `extends` would give it health and everything else an enemy has."
+
+  - type: boss
+    after: one-list-many-kinds
+    prompt: |
+      The game's scoring works out each enemy's points with a chain of `instanceof`, so every new kind of enemy would need another `else if`. Rewrite it the polymorphic way:
+
+      - In `Enemy.java`, add an abstract method `public abstract int points();`.
+      - Override it in `Goblin` (10 points), `Troll` (50) and `Slime` (2).
+      - In `Main.java`, make `totalPoints` add up `enemy.points()`, without `instanceof`.
+
+      The check runs:
+
+      ```java fragment
+      ArrayList<Enemy> defeated = new ArrayList<>();
+      defeated.add(new Goblin("Snip"));
+      defeated.add(new Troll("Grak"));
+      defeated.add(new Slime("Blob"));
+      defeated.add(new Goblin("Nab"));
+      System.out.println(totalPoints(defeated));
+      ```
+
+      and expects:
+
+      ```
+      72
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Enemy> defeated = new ArrayList<>();
+                defeated.add(new Goblin("Snip"));
+                defeated.add(new Troll("Grak"));
+                defeated.add(new Slime("Blob"));
+                defeated.add(new Goblin("Nab"));
+                System.out.println(totalPoints(defeated));
+            }
+
+            public static int totalPoints(ArrayList<Enemy> defeated) {
+                int total = 0;
+                for (Enemy enemy : defeated) {
+                    if (enemy instanceof Goblin) {
+                        total += 10;
+                    } else if (enemy instanceof Troll) {
+                        total += 50;
+                    } else if (enemy instanceof Slime) {
+                        total += 2;
+                    }
+                }
+                return total;
+            }
+        }
+      Enemy.java: |
+        public abstract class Enemy {
+            private String name;
+
+            public Enemy(String name) {
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+        }
+      Goblin.java: |
+        public class Goblin extends Enemy {
+            public Goblin(String name) {
+                super(name);
+            }
+        }
+      Troll.java: |
+        public class Troll extends Enemy {
+            public Troll(String name) {
+                super(name);
+            }
+        }
+      Slime.java: |
+        public class Slime extends Enemy {
+            public Slime(String name) {
+                super(name);
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Enemy> defeated = new ArrayList<>();
+                defeated.add(new Goblin("Snip"));
+                defeated.add(new Troll("Grak"));
+                defeated.add(new Slime("Blob"));
+                defeated.add(new Goblin("Nab"));
+                System.out.println(totalPoints(defeated));
+            }
+
+            public static int totalPoints(ArrayList<Enemy> defeated) {
+                int total = 0;
+                for (Enemy enemy : defeated) {
+                    total += enemy.points();
+                }
+                return total;
+            }
+        }
+      Enemy.java: |
+        public abstract class Enemy {
+            private String name;
+
+            public Enemy(String name) {
+                this.name = name;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public abstract int points();
+        }
+      Goblin.java: |
+        public class Goblin extends Enemy {
+            public Goblin(String name) {
+                super(name);
+            }
+
+            @Override
+            public int points() {
+                return 10;
+            }
+        }
+      Troll.java: |
+        public class Troll extends Enemy {
+            public Troll(String name) {
+                super(name);
+            }
+
+            @Override
+            public int points() {
+                return 50;
+            }
+        }
+      Slime.java: |
+        public class Slime extends Enemy {
+            public Slime(String name) {
+                super(name);
+            }
+
+            @Override
+            public int points() {
+                return 2;
+            }
+        }
+    hints:
+      - "Enemy gets one new line, `public abstract int points();`. Then each of the three classes won't compile until it has its own `points()`, with `@Override` above it, returning its number."
+      - "The loop in `totalPoints` becomes one line: `total += enemy.points();`. Each object runs its own version."
+    require:
+      - pattern: \bpublic\s+abstract\s+int\s+points\s*\(\s*\)\s*;
+        message: "Add `public abstract int points();` to Enemy."
+      - pattern: \.\s*points\s*\(\s*\)
+        message: "Make `totalPoints` call `enemy.points()`."
+    forbid:
+      - pattern: \binstanceof\b
+        message: "Each enemy knows its own points now, so `totalPoints` needs no `instanceof`."
+    tests:
+      - call: |
+          ArrayList<Enemy> defeated = new ArrayList<>();
+          defeated.add(new Goblin("Snip"));
+          defeated.add(new Troll("Grak"));
+          defeated.add(new Slime("Blob"));
+          defeated.add(new Goblin("Nab"));
+          System.out.println(totalPoints(defeated));
+      - call: |
+          ArrayList<Enemy> defeated = new ArrayList<>();
+          System.out.println(totalPoints(defeated));
+          Enemy grak = new Troll("Grak");
+          defeated.add(grak);
+          defeated.add(grak);
+          defeated.add(new Slime("Ooze"));
+          System.out.println(totalPoints(defeated) + " " + grak.points());
+        hidden: true
+      - call: |
+          ArrayList<Enemy> defeated = new ArrayList<>();
+          for (int i = 0; i < 7; i++) {
+              defeated.add(new Slime("S" + i));
+          }
+          defeated.add(new Goblin("Last"));
+          System.out.println(totalPoints(defeated) + " " + defeated.get(7).getName() + " " + defeated.get(7).points());
+        hidden: true

@@ -849,6 +849,17 @@ await test('Deathmatch: a finished step unlocks its drills; right answers of eve
   // The printing module finished (its drills are open); boss reps off for the instant types first.
   const steps = Object.fromEntries(['printing-first-program', 'printing-several-lines', 'printing-print-and-println', 'printing-comments', 'printing-compiler-errors'].map((id) => [id, { done: true, challenges: {} }]));
   await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ state: { steps }, settings: { boss: false } }));
+  // The drills are picked at random: a seeded Math.random picks the same 12 every run, so the
+  // check for four types can't fail by chance (unseeded, it failed about one run in a hundred).
+  await ctx.addInitScript(() => {
+    let a = 20260930;
+    Math.random = () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  });
   await page.goto(BASE + 'deathmatch/');
   await page.locator('.lobby .modes').waitFor();
   await axe(page, 'deathmatch lobby');

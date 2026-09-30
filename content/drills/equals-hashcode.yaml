@@ -29,7 +29,7 @@ drills:
       HashMap<Stamp, Integer> pages = new HashMap<>();
       pages.put(new Stamp("Peru", 1985), 12);
       System.out.println(album.contains(new Stamp("Peru", 1985)) + " " + pages.get(new Stamp("Peru", 1985)));
-    why: "The list's `contains` compares with `equals`, which Stamp has, so it finds the equal stamp. The map compares hash codes first, and Stamp has no `hashCode` of its own: each new Stamp gets Java's default one, a different number, so `get` never gets as far as `equals` and gives `null`."
+    why: "The list's `contains` compares with `equals`, which Stamp has, so it finds the equal stamp. The map compares hash codes first, and Stamp has no `hashCode` of its own: each new Stamp gets Java's default one, which in practice is almost certainly a different number, so `get` never gets as far as `equals` and gives `null`."
 
   - type: predict
     after: what-hashcode-is
@@ -38,7 +38,7 @@ drills:
       String loud = word.toUpperCase();
       String quiet = loud.toLowerCase();
       System.out.println((word == quiet) + " " + word.equals(quiet) + " " + (word.hashCode() == quiet.hashCode()));
-    why: "`toLowerCase` makes a new String object, so `==` is false. It has the same characters as `word`, so `equals` is true, and equal Strings always have equal hash codes."
+    why: "`loud` is `TEA`, which has capital letters to change, so `toLowerCase` makes a new String object, and `==` is false. It has the same characters as `word`, so `equals` is true, and equal Strings always have equal hash codes."
 
   - type: predict
     after: writing-hashcode
@@ -109,7 +109,7 @@ drills:
     why: "Ticket has both `equals` and `hashCode`, so the second `put` finds the equal key and replaces Ada with Ben. `new Ticket(17, 402)` is another ticket, train 17, seat 402, so the map has two keys."
 
   - type: predict
-    after: approximate-comparison
+    after: equal-enough
     body: |
       HashMap<String, Integer> votes = new HashMap<>();
       String[] typed = {"Red", "red ", " RED", "Blue"};
@@ -159,7 +159,7 @@ drills:
     why: "A hash map calls only a method with exactly the header `public int hashCode()`. Any other name, even `hashcode` with a small `c`, makes a new method that the map never calls, and then a new D3 seat isn't found."
 
   - type: fill
-    after: approximate-comparison
+    after: equal-enough
     prompt: "Fill in the blank, an expression, so that `hashCode` agrees with `equals`, which ignores capital letters."
     classes: |
       class Stamp {
@@ -183,7 +183,7 @@ drills:
           }
 
           public int hashCode() {
-              return Objects.hash([[this.country.toLowerCase()‖country.toLowerCase()‖this.country.toUpperCase()‖country.toUpperCase()]], this.year);
+              return Objects.hash([[this.country.toLowerCase()‖country.toLowerCase()‖this.country.toLowerCase().hashCode()‖country.toLowerCase().hashCode()‖this.country.toUpperCase()‖country.toUpperCase()]], this.year);
           }
       }
     body: |
@@ -230,7 +230,7 @@ drills:
     why: "`hashCode` may use only what `equals` compares. With the passenger in it, the two bookings are equal but get different hash codes, so `containsKey` looks with the wrong hash code and says `false`."
 
   - type: bug
-    after: approximate-comparison
+    after: equal-enough
     prompt: "Station names count as equal whatever their capital letters, and `equals` is right. The program should print `450`. Which line is wrong?"
     classes: |
       class Station {

@@ -1,5 +1,5 @@
 id: equals-hashcode
-summary: Objects of your own classes as the keys of a hash map. equals again, and why a HashMap can't find a key that's made again with the same values, what a hash code is and the rule that ties it to equals, writing hashCode by hand and with Objects.hash, approximate comparison that ignores some values or capital letters, and a small program with objects as keys, printed in an order you choose. MOOC section 8.3.
+summary: Objects of your own classes as the keys of a hash map. equals again, and why a HashMap can't find a key that's made again with the same values, what a hash code is and the rule that ties it to equals, writing hashCode by hand and with Objects.hash, equality that ignores some values or capital letters, and a small program with objects as keys, printed in an order you choose. MOOC section 8.3.
 steps:
   - id: equals-hashcode-equals-again
     slug: equals-again
@@ -127,7 +127,7 @@ steps:
       - `new Seat("B", 7)` is equal to that key, and a list would have found it. The map doesn't: `get` gives `null`, and `containsKey` gives `false`.
       - It gets worse. A `put` with a key that's already in the map should replace its value (module 31), but the new B7 seat didn't replace Ada: the map added it as a second key. Now it holds B7 twice, once for Ada and once for Ben.
 
-      A hash map doesn't go through all of its keys and compare each one with `equals`, the way a list's `contains` does: that would be slow in a big map. It first asks the key for a number, its **hash code**, and uses that number to decide where to look. Seat has an `equals`, but no `hashCode` of its own, so the map looks in the wrong place. The next step shows what a hash code is, and step 3 gives Seat a `hashCode`. Until then, keep one rule in mind: a class whose objects are hash map keys needs both methods.
+      A hash map doesn't go through all of its keys and compare each one with `equals`, the way a list's `contains` does: that would be slow in a big map. It first asks the key for a number, its **hash code**, and uses that number to decide where to look. Seat has an `equals`, but no `hashCode` of its own, so in practice the map looks in the wrong place. The next step shows what a hash code is, and step 3 gives Seat a `hashCode`. Until then, keep one rule in mind: a class whose objects are hash map keys needs both methods.
 
       **Your turn:** a board game puts pieces on squares with names like `a1`. `Square` has an `equals`, but no `hashCode`. What does this program print?
     predict: |
@@ -176,7 +176,7 @@ steps:
       }
     hints:
       - "The list compares with `equals`, and a new `Square(\"a\", 1)` is equal to `corner`. `pieces.get(corner)` looks up the very object that was put in with `rook`."
-      - "Without a `hashCode` of its own, every new Square looks like a different key to the map. So the `put` with a new a1 adds a second key instead of replacing `rook`, and `containsKey` with a third new a1 finds nothing."
+      - "Without a `hashCode` of its own, every new Square gets Java's default hash code, which in practice is different for every object. So to the map, each new a1 almost certainly looks like a different key: the `put` with a new a1 adds a second key instead of replacing `rook`, and `containsKey` with a third new a1 finds nothing."
     more:
       - task: |
           A coin collector describes each coin by its country, its year and its value in cents. Two coins are equal when all three are the same. In `Coin.java`, write the method `equals` the classic way, as in the recap. The check runs:
@@ -508,7 +508,7 @@ steps:
 
       Seat in step 1 has no `hashCode` of its own, so it has the one every class gets from Java. Like the `equals` every class gets, it knows nothing about rows and numbers: it gives, as far as it can, a different number to every object, even to two seats with the same values. Java makes no promise about those numbers: they can change from one run of the program to the next, and from one Java system to another. That's why this course never prints them.
 
-      So `new Seat("B", 7)` has a different hash code from the B7 seat in the map. `get` looks in the bucket of the new hash code, and even if that happens to be the right bucket, the hash codes differ, so `equals` is never called: `null`. The second `put` went the same way: it found no equal key, so it added a second B7.
+      So `new Seat("B", 7)` almost certainly has a different hash code from the B7 seat in the map. Nothing promises that, but in practice two objects hardly ever get the same default hash code. `get` looks in the bucket of the new hash code, and even if that happens to be the right bucket, the hash codes differ, so `equals` is never called: `null`. The second `put` went the same way: it found no equal key, so it added a second B7.
 
       ### The rule
 
@@ -518,9 +518,11 @@ steps:
       - Two objects that aren't equal may have the same hash code. That's allowed, but different hash codes for different objects can make a hash map faster, since fewer keys share a bucket.
       - Calling `hashCode` on the same object again, while the program runs, must give the same number, as long as nothing that `equals` compares has changed.
 
-      Seat breaks the first rule: its `equals` says two B7 seats are equal, but their hash codes differ. Strings and Integers follow it, as the program above showed with `built` and `"Ada"`. That's why module 31's String and Integer keys just worked.
+      Seat breaks the first rule: its `equals` says two B7 seats are equal, but their default hash codes almost certainly differ. Strings and Integers follow it, as the program above showed with `built` and `"Ada"`. That's why module 31's String and Integer keys just worked.
 
       The rule goes one way only. Equal objects must have equal hash codes, but equal hash codes don't make two objects equal. There are far more possible Strings than `int` values, so some different Strings must share a hash code. The last challenge of this step shows two of them.
+
+      That makes comparing hash codes a quick first check, which the MOOC calls **approximate comparison**: different hash codes mean that two objects aren't equal, and the same hash code means that they may be. Only `equals` gives the final answer. A hash map works this way: it calls `equals` only for keys whose hash code is the same.
 
       **Your turn:** a ticket machine keeps the fare to each station, in cents, in a `HashMap<String, Integer>`. What does this program print?
     predict: |
@@ -992,18 +994,14 @@ steps:
                 public static HashMap<Coin, Integer> countCoins(ArrayList<Coin> coins) {
                     HashMap<Coin, Integer> counts = new HashMap<>();
                     for (Coin coin : coins) {
-                        if (counts.containsKey(coin)) {
-                            counts.put(coin, counts.get(coin) + 1);
-                        } else {
-                            counts.put(coin, 1);
-                        }
+                        counts.put(coin, counts.getOrDefault(coin, 0) + 1);
                     }
                     return counts;
                 }
             }
         hints:
-          - "In `Coin.java`, add `import java.util.Objects;` at the top, and the method `public int hashCode() { return Objects.hash(this.country, this.year, this.cents); }`."
-          - "In `countCoins`, make a new `HashMap<Coin, Integer>` and go through the coins. When the map already has the coin, put it back with its count plus one: `counts.put(coin, counts.get(coin) + 1);`. Otherwise put it with 1. Return the map at the end."
+          - "`hashCode` gives `Objects.hash` the three values that `equals` compares, and `Coin.java` needs `import java.util.Objects;` at the top. `countCoins` makes a new `HashMap<Coin, Integer>`, goes through the coins, adds one to each coin's count, and returns the map."
+          - "The method is `public int hashCode() { return Objects.hash(this.country, this.year, this.cents); }`. In the loop of `countCoins`, count as module 31 did: `counts.put(coin, counts.getOrDefault(coin, 0) + 1);`."
         require:
           - pattern: \bpublic\s+int\s+hashCode\s*\(\s*\)
             message: "Write the header exactly as `public int hashCode()`, so that the map uses your method."
@@ -1091,10 +1089,10 @@ steps:
           - "A new mint Chile 1970 stamp has the same values as the key, so the same hash code, and the map finds it. The 1971 stamp isn't equal to any key."
 
   - id: equals-hashcode-approximate
-    slug: approximate-comparison
-    title: "Equal enough: approximate comparison"
+    slug: equal-enough
+    title: "Equal enough: comparing some of the values"
     text: |
-      What counts as equal is up to the class (module 23). So far, equal has meant that every value matched. Sometimes two objects should count as equal even though some of their values differ, or even though they're written with different capital letters. That's **approximate comparison**, and `hashCode` has to follow the same idea of equal as `equals`.
+      What counts as equal is up to the class (module 23). So far, equal has meant that every value matched. Sometimes two objects should count as equal even though some of their values differ, or even though they're written with different capital letters. Then `hashCode` has to follow the same idea of equal as `equals`.
 
       ### Comparing only some values
 
@@ -1219,49 +1217,11 @@ steps:
       - Both methods use the same lower-case text, so they can't disagree. `equalsIgnoreCase` (module 16) would give the same answers in `equals` for letters like these, but `hashCode` still needs the lower-case text.
       - The stamp keeps the country as it was typed, so `toString` shows it that way.
 
-      ### Tidied String keys
+      ### Or tidied String keys
 
-      Often the simplest way needs no class at all. When the key is a piece of text, tidy it before it's used as a key: `trim()` removes the spaces at the ends, and `toLowerCase()` the capital letters (both module 16). Do that before every `put` and every `get`, and the keys are ordinary Strings, which already have `equals` and `hashCode`. This program counts the stamps from each country:
+      When the key is one piece of text, there's a simpler way, which module 31 used: tidy the text with `trim()` and `toLowerCase()` (or `toUpperCase()`) before every `put` and every `get`. Then the keys are ordinary Strings, which already have `equals` and `hashCode`, and no key class is needed. The map keeps the keys in their tidied form, so if the spelling as typed matters for printing, keep it in the value.
 
-      ```java run
-      import java.util.HashMap;
-
-      public class Main {
-          public static void main(String[] args) {
-              HashMap<String, Integer> stamps = new HashMap<>();
-              addStamp(stamps, "Chile");
-              addStamp(stamps, " chile");
-              addStamp(stamps, "CHILE ");
-              addStamp(stamps, "Japan");
-              System.out.println(stamps.get(tidy("Chile")));
-              System.out.println(stamps.get(tidy("japan ")));
-              System.out.println(stamps.size());
-          }
-
-          public static String tidy(String text) {
-              return text.trim().toLowerCase();
-          }
-
-          public static void addStamp(HashMap<String, Integer> stamps, String country) {
-              String key = tidy(country);
-              if (stamps.containsKey(key)) {
-                  stamps.put(key, stamps.get(key) + 1);
-              } else {
-                  stamps.put(key, 1);
-              }
-          }
-      }
-      ```
-
-      ```output
-      3
-      1
-      2
-      ```
-
-      - One `tidy` method makes every key, so a `put` and a `get` can't tidy the text in different ways.
-      - The keys are stored tidied, as `chile` and `japan`. If the spelling as typed matters for printing, keep it in the value.
-      - Which to choose? When the key is one piece of text, tidied String keys are the simplest. When the key is several values that belong together, such as a stamp's country and year, a class with `equals` and `hashCode` keeps them together and says in one place what equal means.
+      Which to choose? When the key is one piece of text, tidied String keys are the simplest. When the key is several values that belong together, such as a stamp's country and year, or when some values shouldn't count, such as the name of a paint color, a class with `equals` and `hashCode` keeps the values together and says in one place what equal means.
 
       **Your turn:** a rail pass counts the trips made between stations, and station names get typed with any mix of capitals. In `Trip.java`, write `equals` and `hashCode`: two trips are equal when they go from the same station to the same station, whatever the capital letters. Compare the lower-case names in `equals`, and give `Objects.hash` the lower-case names in `hashCode`. The check runs:
 

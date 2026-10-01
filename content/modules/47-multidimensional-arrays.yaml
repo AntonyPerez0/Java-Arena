@@ -1,0 +1,2196 @@
+id: multidimensional-arrays
+summary: Arrays with rows and columns. Creating an int[][] and using its cells, going through a grid with nested loops and the lengths of the grid and of a row, totals of rows and columns and the largest value, the cells around a cell and staying inside the grid, rows of different lengths, grids of Strings and of your own objects with Arrays.deepToString, and a look back at the whole of part 12. MOOC sections 12.4 and 12.5.
+steps:
+  - id: multidimensional-arrays-grid
+    slug: a-grid-of-values
+    title: A grid of values
+    text: |
+      An array keeps its values in a line, and one index says where a value is. Some data goes in two directions. A cinema's seats are in rows, and each row has seats from left to right. A spreadsheet has rows and columns, and so does a picture made of pixels. For data like that, Java has **two-dimensional arrays**, where each value has two indexes: its row and its column.
+
+      Here the values are the brightness of the pixels of a tiny picture, from 0 for black to 9 for white:
+
+      ```java main
+      int[][] image = new int[3][4];
+      image[1][2] = 9;
+      image[0][3] = 4;
+      System.out.println(image[1][2]);
+      System.out.println(image[0][3]);
+      System.out.println(image[2][0]);
+      ```
+
+      ```output
+      9
+      4
+      0
+      ```
+
+      - `int[][]` is the type "two-dimensional array of ints". Two pairs of brackets, two indexes.
+      - `new int[3][4]` creates a grid of 3 rows with 4 columns each: 12 ints, all 0 to start with.
+      - `image[1][2] = 9;` stores 9 in row 1, column 2. The row comes first, then the column.
+      - `image[1][2]` reads the value back. Both indexes start from 0, as always.
+
+      This is the grid after the two assignments:
+
+      | | column 0 | column 1 | column 2 | column 3 |
+      |---|---|---|---|---|
+      | **row 0** | 0 | 0 | 0 | 4 |
+      | **row 1** | 0 | 0 | 9 | 0 |
+      | **row 2** | 0 | 0 | 0 | 0 |
+
+      The order of the indexes matters: `image[2][1]` is row 2, column 1, a different cell from `image[1][2]`. Here it still holds 0.
+
+      ### A cell works like a variable
+
+      Each cell behaves like a variable of the element type, just as the elements of an array do. You can use its value in a calculation and change it with `=`, `+=`, `++` or `--`, and the indexes can be any whole-number expressions:
+
+      ```java main
+      int[][] image = new int[3][4];
+      image[1][2] = 9;
+      image[1][2]--;
+      int row = 2;
+      image[row][row + 1] = image[1][2] / 2;
+      System.out.println(image[1][2] + " " + image[2][3]);
+      ```
+
+      ```output
+      8 4
+      ```
+
+      ### Default values
+
+      A new grid starts with the same default values as a new array: 0 for `int`, 0.0 for `double`, `false` for `boolean` and `null` for `String`. That suits a cinema's seat map. In a `boolean[][]` where `true` means booked, every seat starts free:
+
+      ```java main
+      boolean[][] booked = new boolean[5][8];
+      booked[2][3] = true;
+      booked[2][4] = true;
+      System.out.println(booked[2][3]);
+      System.out.println(booked[2][5]);
+      System.out.println(booked[0][0]);
+      ```
+
+      ```output
+      true
+      false
+      false
+      ```
+
+      People count rows and seats from 1, but the indexes start from 0. The ticket for row 3, seat 4 is `booked[2][3]`, so a program that reads seats the way people write them subtracts one from each number: `booked[row - 1][seat - 1]`.
+
+      ### The short way
+
+      When you know the values as you write the program, list them row by row: braces around each row, commas between the rows, and braces around them all.
+
+      ```java main
+      int[][] image = {
+          {0, 3, 7, 3},
+          {3, 8, 9, 8},
+          {0, 3, 7, 3}
+      };
+      System.out.println(image[1][1]);
+      System.out.println(image[2][2]);
+      ```
+
+      ```output
+      8
+      7
+      ```
+
+      The first row in braces is row 0, the next one row 1, and so on. Java counts the rows, and the values in each, to make a grid of the right size. As with a one-dimensional array, the braces alone work only in the line that declares the variable.
+
+      **Your turn:** a cinema's smallest room has 4 rows of 6 seats. Two friends booked row 2, seats 3 and 4, as people count them. Fill in the blanks: create the seat map for exactly this room, and book the second friend's seat, next to the first one's. The program prints:
+
+      ```
+      Row 2, seat 3: true
+      Row 2, seat 4: true
+      Row 2, seat 5: false
+      Row 4, seat 6: false
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              boolean[][] booked = new boolean[[[4]]][[[6]]];
+              booked[1][2] = true;
+              booked[1][[[3]]] = true;
+              System.out.println("Row 2, seat 3: " + booked[1][2]);
+              System.out.println("Row 2, seat 4: " + booked[1][3]);
+              System.out.println("Row 2, seat 5: " + booked[1][4]);
+              System.out.println("Row 4, seat 6: " + booked[3][5]);
+          }
+      }
+    hints:
+      - "The first size is the number of rows and the second the number of seats in a row: `new boolean[4][6]`."
+      - "Row 2, seat 4 as people count is index 1 for the row and index 3 for the seat, one less than each number."
+    require:
+      - pattern: new\s+boolean\s*\[\s*4\s*\]\s*\[\s*6\s*\]
+        message: "The room has 4 rows of 6 seats, so the map is `new boolean[4][6]`: the sizes are counts, not the last index."
+    more:
+      - task: |
+          A garden has two tomato beds, and `picked[bed][week]` holds how many tomatoes were picked from a bed in each of three weeks. What does this program print? Keep the row and the column of each cell apart, and remember the default value.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] picked = new int[2][3];
+                  picked[0][0] = 2;
+                  picked[1][2] = 3;
+                  picked[0][2] = picked[1][2] + 1;
+                  picked[1][0]++;
+                  System.out.println(picked[0][0] + picked[0][1] + picked[0][2]);
+                  System.out.println(picked[1][0] + picked[1][1] + picked[1][2]);
+                  System.out.println(picked[0][1]);
+              }
+          }
+        hints:
+          - "`picked[0][2]` is row 0, column 2: bed 0's third week. It gets bed 1's third week plus one, so 4."
+          - "`picked[1][0]++` adds one to a cell that held the default 0. The cells that are never assigned, such as `picked[0][1]`, stay 0."
+      - task: |
+          A cinema's room has 5 rows of 8 seats. Write its booking program. It reads bookings, one per line, until the line `end`. A booking is a row and a seat, counted from 1 as people count them, with a space between them, such as `3 4`. Every row is 1 to 5 and every seat 1 to 8. Keep track of the booked seats in a `boolean[][]`:
+
+          - a free seat gets booked, and the program prints `Booked row 3, seat 4`
+          - a seat that's already booked stays as it is, and the program prints `Row 3, seat 4 is taken`
+
+          At the end, it prints how many seats were booked. For the input `3 4`, `1 1`, `3 4`, `5 8` and `end` the program prints:
+
+          ```
+          Booked row 3, seat 4
+          Booked row 1, seat 1
+          Row 3, seat 4 is taken
+          Booked row 5, seat 8
+          Seats booked: 3
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  boolean[][] booked = new boolean[5][8];
+                  int count = 0;
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      String[] parts = line.split(" ");
+                      int row = Integer.valueOf(parts[0]);
+                      int seat = Integer.valueOf(parts[1]);
+                      if (booked[row - 1][seat - 1]) {
+                          System.out.println("Row " + row + ", seat " + seat + " is taken");
+                      } else {
+                          booked[row - 1][seat - 1] = true;
+                          count++;
+                          System.out.println("Booked row " + row + ", seat " + seat);
+                      }
+                  }
+                  System.out.println("Seats booked: " + count);
+              }
+          }
+        hints:
+          - "Create the map with `new boolean[5][8]`. For each line, `split(\" \")` gives the row and the seat as text, and `Integer.valueOf` turns each into a number."
+          - "Row `row`, seat `seat` as people count is `booked[row - 1][seat - 1]`. If it's `true`, the seat is taken; otherwise set it to `true` and add one to a counter."
+        require:
+          - pattern: new\s+boolean\s*\[\s*5\s*\]\s*\[\s*8\s*\]
+            message: "Keep the seat map in a `boolean[][]` of 5 rows and 8 seats: `new boolean[5][8]`."
+        forbid:
+          - pattern: \b(ArrayList|HashMap|HashSet|List|Map|Set)\b
+            message: "Keep track of the seats in the two-dimensional array, without a list, set or map."
+        tests:
+          - stdin: |
+              3 4
+              1 1
+              3 4
+              5 8
+              end
+          - stdin: end
+            hidden: true
+          - stdin: |
+              2 2
+              2 3
+              2 2
+              2 3
+              2 4
+              end
+            hidden: true
+          - stdin: |
+              1 8
+              5 1
+              1 8
+              4 7
+              5 1
+              1 8
+              end
+            hidden: true
+
+  - id: multidimensional-arrays-loops
+    slug: going-through-a-grid
+    title: Going through a grid
+    text: |
+      ### An array of arrays
+
+      Java builds a two-dimensional array out of one-dimensional ones. An `int[][]` is an array whose elements are rows, and each row is an `int[]`. That's why `image[1][2]` has two pairs of brackets: `image[1]` is row 1, a whole array, and `[2]` picks an element of that row.
+
+      ```java main
+      int[][] image = {
+          {0, 3, 7, 3},
+          {3, 8, 9, 8},
+          {0, 3, 7, 3}
+      };
+      System.out.println(image.length);
+      System.out.println(image[1].length);
+      int[] middle = image[1];
+      System.out.println(middle[2]);
+      System.out.println(Arrays.toString(image[2]));
+      ```
+
+      ```output
+      3
+      4
+      9
+      [0, 3, 7, 3]
+      ```
+
+      - `image.length` is the length of the outer array: the number of **rows**, 3.
+      - `image[1].length` is the length of row 1: the number of **columns** in that row, 4.
+      - `image[1]` is an ordinary `int[]`. It can be kept in an `int[]` variable, or printed with `Arrays.toString`, like any array.
+
+      ### Nested loops
+
+      To visit every cell, put one loop inside another. The outer loop goes through the rows, and for each row, the inner loop goes through the columns of that row:
+
+      ```java main
+      int[][] image = {
+          {0, 3, 7, 3},
+          {3, 8, 9, 8},
+          {0, 3, 7, 3}
+      };
+      for (int row = 0; row < image.length; row++) {
+          for (int column = 0; column < image[row].length; column++) {
+              if (column > 0) {
+                  System.out.print(" ");
+              }
+              System.out.print(image[row][column]);
+          }
+          System.out.println();
+      }
+      ```
+
+      ```output
+      0 3 7 3
+      3 8 9 8
+      0 3 7 3
+      ```
+
+      - The outer loop runs 3 times, once per row. Each time, the inner loop runs 4 times, once per column, so the body of the inner loop runs 12 times in all: once for each cell.
+      - `print` doesn't end the line, so the values of one row stay on one line. The `println()` after the inner loop ends the line. It's inside the outer loop, so it runs once per row.
+      - The `if` puts a space between two values, but not before the first one, so no line ends with a space.
+
+      The names `row` and `column` make it clear which index is which. Code you read elsewhere often says `i` and `j`, or `y` and `x`, where `y` is the row (counted from the top) and `x` the column.
+
+      ### Filling a grid
+
+      The same two loops can fill a grid. Here every cell gets its row number times its column number, both counted from 1, which makes a multiplication table:
+
+      ```java main
+      int[][] table = new int[3][5];
+      for (int row = 0; row < table.length; row++) {
+          for (int column = 0; column < table[row].length; column++) {
+              table[row][column] = (row + 1) * (column + 1);
+          }
+      }
+      System.out.println(Arrays.toString(table[0]));
+      System.out.println(Arrays.toString(table[2]));
+      System.out.println(table[1][4]);
+      ```
+
+      ```output
+      [1, 2, 3, 4, 5]
+      [3, 6, 9, 12, 15]
+      10
+      ```
+
+      ### for-each over a grid
+
+      When you need the values but not their places, for-each loops are shorter. The outer loop goes through the rows, so its variable is an `int[]`. The inner loop goes through the values of that row:
+
+      ```java main
+      int[][] image = {
+          {0, 3, 7, 3},
+          {3, 8, 9, 8},
+          {0, 3, 7, 3}
+      };
+      int bright = 0;
+      for (int[] row : image) {
+          for (int value : row) {
+              if (value >= 5) {
+                  bright++;
+              }
+          }
+      }
+      System.out.println(bright + " bright pixels");
+      ```
+
+      ```output
+      5 bright pixels
+      ```
+
+      ### Rows and columns mixed up
+
+      The loop over the rows stops at `image.length`, and the loop over the columns at the length of a row. Swap the two, and a grid that isn't square crashes:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              int[][] image = new int[3][4];
+              for (int row = 0; row < image[0].length; row++) {
+                  for (int column = 0; column < image.length; column++) {
+                      image[row][column] = 5;
+                  }
+              }
+              System.out.println("Done");
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 3 out of bounds for length 3
+      	at Main.main(Main.java:6)
+      ```
+
+      The row loop stops at 4, the number of columns, but the grid has only 3 rows, so when `row` reaches 3, `image[3]` is past the end of the outer array. (The column loop, which stops at 3, would also have skipped column 3 without a word.) On a square grid the mistake doesn't show, so it's worth trying your code on a grid that has more columns than rows, or more rows than columns.
+
+      **Your turn:** the program draws a picture from its brightness values, one line per row: `#` for a pixel of 5 or more, and `.` for the others. Fill in the blanks, so the loops go through every row, and through every column of each row. The program prints:
+
+      ```
+      ..#..
+      .###.
+      #####
+      ..#..
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              int[][] image = {
+                  {1, 2, 7, 2, 0},
+                  {0, 6, 8, 5, 1},
+                  {5, 9, 9, 7, 6},
+                  {0, 3, 8, 2, 1}
+              };
+              for (int row = 0; row < [[image.length]]; row++) {
+                  for (int column = 0; column < [[image[row].length‖image[0].length]]; column++) {
+                      if (image[row][column] >= 5) {
+                          System.out.print("#");
+                      } else {
+                          System.out.print(".");
+                      }
+                  }
+                  System.out.println();
+              }
+          }
+      }
+    hints:
+      - "The outer loop goes through the rows, and the number of rows is the length of the outer array: `image.length`."
+      - "The inner loop goes through the columns of row `row`, so it stops at the length of that row: `image[row].length`."
+    more:
+      - task: |
+          A photo app can flip a picture from left to right, as a mirror does. Write a method `mirrored(int[][] image)` that returns a **new** grid of the same size, where each row holds the values of the same row of `image`, in the reverse order. The grid it's given must stay as it was. The check passes this grid:
+
+          ```java fragment
+          int[][] image = {
+              {1, 2, 3},
+              {4, 5, 6}
+          };
+          ```
+
+          and prints each row of the grid your method returns with `Arrays.toString`:
+
+          ```
+          [3, 2, 1]
+          [6, 5, 4]
+          ```
+        seed: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] image = {
+                      {1, 2, 3},
+                      {4, 5, 6}
+                  };
+                  int[][] flipped = mirrored(image);
+                  for (int[] row : flipped) {
+                      System.out.println(Arrays.toString(row));
+                  }
+              }
+
+              // Write the mirrored method here.
+          }
+        solution: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] image = {
+                      {1, 2, 3},
+                      {4, 5, 6}
+                  };
+                  int[][] flipped = mirrored(image);
+                  for (int[] row : flipped) {
+                      System.out.println(Arrays.toString(row));
+                  }
+              }
+
+              public static int[][] mirrored(int[][] image) {
+                  int[][] result = new int[image.length][image[0].length];
+                  for (int row = 0; row < image.length; row++) {
+                      for (int column = 0; column < image[row].length; column++) {
+                          result[row][column] = image[row][image[row].length - 1 - column];
+                      }
+                  }
+                  return result;
+              }
+          }
+        hints:
+          - "The method starts `public static int[][] mirrored(int[][] image) {` and creates the new grid with `new int[image.length][image[0].length]`."
+          - "In row `row`, the value for column `column` comes from the other end of the same row: `image[row][image[row].length - 1 - column]`."
+        tests:
+          - call: |
+              int[][] image = {
+                  {1, 2, 3},
+                  {4, 5, 6}
+              };
+              int[][] flipped = mirrored(image);
+              for (int[] row : flipped) {
+                  System.out.println(Arrays.toString(row));
+              }
+          - call: |
+              int[][] image = {
+                  {7}
+              };
+              int[][] flipped = mirrored(image);
+              System.out.println(flipped.length + " " + flipped[0].length + " " + flipped[0][0]);
+            hidden: true
+          - call: |
+              int[][] image = {
+                  {0, 1, 2, 3},
+                  {4, 5, 6, 7},
+                  {8, 9, 0, 0}
+              };
+              int[][] flipped = mirrored(image);
+              for (int[] row : flipped) {
+                  System.out.println(Arrays.toString(row));
+              }
+              for (int[] row : image) {
+                  System.out.println(Arrays.toString(row));
+              }
+            hidden: true
+          - call: |
+              int[][] image = {
+                  {9, 1},
+                  {2, 8},
+                  {3, 3},
+                  {5, 0}
+              };
+              int[][] flipped = mirrored(image);
+              System.out.println(flipped.length + " " + (flipped != image));
+              for (int[] row : flipped) {
+                  System.out.println(Arrays.toString(row));
+              }
+            hidden: true
+      - task: |
+          What does this program print? Work out what the first loops put in each cell, and how many times the inner one of the last loops runs for each row.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] grid = new int[3][4];
+                  for (int row = 0; row < grid.length; row++) {
+                      for (int column = 0; column < grid[row].length; column++) {
+                          grid[row][column] = row * 10 + column;
+                      }
+                  }
+                  System.out.println(grid[2][1] + " " + grid[1][3]);
+                  System.out.println(grid.length + " " + grid[0].length);
+                  int count = 0;
+                  for (int row = 0; row < grid.length; row++) {
+                      for (int column = row; column < grid[row].length; column++) {
+                          count++;
+                      }
+                  }
+                  System.out.println(count);
+              }
+          }
+        hints:
+          - "Each cell gets its row times 10 plus its column, so `grid[2][1]` is 21. `grid.length` counts the rows, and `grid[0].length` the columns of row 0."
+          - "In the last loops, the column starts from the row number: row 0 counts columns 0 to 3, row 1 columns 1 to 3, and row 2 columns 2 and 3."
+
+  - id: multidimensional-arrays-totals
+    slug: rows-columns-and-totals
+    title: Rows, columns and totals
+    text: |
+      A mattress company has three stores. Its sales table has a row for each store and a column for each month from January to April, and each cell is the number of mattresses that store sold that month:
+
+      ```java fragment
+      String[] stores = {"Riverside", "Station", "Market"};
+      String[] months = {"Jan", "Feb", "Mar", "Apr"};
+      int[][] sales = {
+          {12, 15, 9, 20},
+          {8, 11, 14, 10},
+          {20, 18, 22, 25}
+      };
+      ```
+
+      The names are in two ordinary arrays that match the grid: `stores[row]` names a row, and `months[column]` names a column. This step answers the questions a spreadsheet answers: the total of each row, the total of each column, and the largest value and where it is.
+
+      ### The total of each row
+
+      A store's total is the sum of one row. The sum must start from 0 again for every row, so it's created inside the outer loop:
+
+      ```java main
+      String[] stores = {"Riverside", "Station", "Market"};
+      int[][] sales = {
+          {12, 15, 9, 20},
+          {8, 11, 14, 10},
+          {20, 18, 22, 25}
+      };
+      for (int row = 0; row < sales.length; row++) {
+          int total = 0;
+          for (int column = 0; column < sales[row].length; column++) {
+              total += sales[row][column];
+          }
+          System.out.println(stores[row] + ": " + total);
+      }
+      ```
+
+      ```output
+      Riverside: 56
+      Station: 43
+      Market: 85
+      ```
+
+      With `int total = 0;` before the outer loop instead, each line would go on from the store before it, and print 56, 99 and 184. The last of these is the total of the whole table, which is useful too, but it's not what each line says.
+
+      ### The total of each column
+
+      A month's total goes down a column. The loops trade places: the outer loop goes through the columns, and the inner one through the rows. The number of columns is the length of a row, `sales[0].length`:
+
+      ```java main
+      String[] months = {"Jan", "Feb", "Mar", "Apr"};
+      int[][] sales = {
+          {12, 15, 9, 20},
+          {8, 11, 14, 10},
+          {20, 18, 22, 25}
+      };
+      for (int column = 0; column < sales[0].length; column++) {
+          int total = 0;
+          for (int row = 0; row < sales.length; row++) {
+              total += sales[row][column];
+          }
+          System.out.println(months[column] + ": " + total);
+      }
+      ```
+
+      ```output
+      Jan: 40
+      Feb: 44
+      Mar: 45
+      Apr: 55
+      ```
+
+      The cell is still `sales[row][column]`, row first: only the order of the loops changed. `sales[0].length` assumes that every row is as long as the first one. That's true of this table and of every grid made with `new int[3][4]`. Step 5 meets grids where it isn't.
+
+      ### The largest value, and where it is
+
+      Module 15's search for the largest value works on a grid too. It just remembers two indexes instead of one:
+
+      ```java main
+      String[] stores = {"Riverside", "Station", "Market"};
+      String[] months = {"Jan", "Feb", "Mar", "Apr"};
+      int[][] sales = {
+          {12, 15, 9, 20},
+          {8, 11, 14, 10},
+          {20, 18, 22, 25}
+      };
+      int best = sales[0][0];
+      int bestRow = 0;
+      int bestColumn = 0;
+      for (int row = 0; row < sales.length; row++) {
+          for (int column = 0; column < sales[row].length; column++) {
+              if (sales[row][column] > best) {
+                  best = sales[row][column];
+                  bestRow = row;
+                  bestColumn = column;
+              }
+          }
+      }
+      System.out.println("Best: " + stores[bestRow] + " in " + months[bestColumn] + ", " + best + " mattresses");
+      ```
+
+      ```output
+      Best: Market in Apr, 25 mattresses
+      ```
+
+      As in module 15, the search starts from a real value, the first cell, and not from 0. With `>`, the first of two equal values wins, and "first" means first in the order the loops go: row by row, and from left to right in each row.
+
+      ### Totals in an array
+
+      A method can return all the column totals at once, in a new array with one element for each column. Here the loops go in the usual order, and each value is added to the total of its own column, `totals[column]`:
+
+      ```java run
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[][] sales = {
+                  {12, 15, 9, 20},
+                  {8, 11, 14, 10},
+                  {20, 18, 22, 25}
+              };
+              System.out.println(Arrays.toString(columnTotals(sales)));
+          }
+
+          public static int[] columnTotals(int[][] grid) {
+              int[] totals = new int[grid[0].length];
+              for (int row = 0; row < grid.length; row++) {
+                  for (int column = 0; column < grid[row].length; column++) {
+                      totals[column] += grid[row][column];
+                  }
+              }
+              return totals;
+          }
+      }
+      ```
+
+      ```output
+      [40, 44, 45, 55]
+      ```
+
+      A new int array starts with zeros, so every total starts from 0 without an extra loop.
+
+      **Your turn:** here's another year's table. Fill in the blanks, so the program prints the store that sold the most mattresses in each month. The outer loop goes through the months (the columns), and the inner one compares each store (a row) with the best one so far. The program prints:
+
+      ```
+      Jan: Riverside
+      Feb: Station
+      Mar: Market
+      Apr: Riverside
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              String[] stores = {"Riverside", "Station", "Market"};
+              String[] months = {"Jan", "Feb", "Mar", "Apr"};
+              int[][] sales = {
+                  {14, 15, 9, 21},
+                  {8, 17, 14, 10},
+                  {12, 16, 22, 19}
+              };
+              for (int column = 0; column < [[sales[0].length‖months.length‖4]]; column++) {
+                  int bestRow = 0;
+                  for (int row = 1; row < sales.length; row++) {
+                      if (sales[row][column] > sales[[[bestRow]]][column]) {
+                          bestRow = row;
+                      }
+                  }
+                  System.out.println(months[column] + ": " + stores[bestRow]);
+              }
+          }
+      }
+    hints:
+      - "The outer loop goes through the columns, and the number of columns is the length of a row: `sales[0].length`."
+      - "Each store's sale for the month is compared with the best store's sale for the same month, which is in the row `bestRow`."
+    more:
+      - task: |
+          Write a method `rowTotals(int[][] grid)` that returns a new array with one element for each row of the grid: the total of that row. The check passes this year's mattress sales, the table from the start of this step, and prints what your method returns with `Arrays.toString`:
+
+          ```
+          [56, 43, 85]
+          ```
+        seed: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] sales = {
+                      {12, 15, 9, 20},
+                      {8, 11, 14, 10},
+                      {20, 18, 22, 25}
+                  };
+                  System.out.println(Arrays.toString(rowTotals(sales)));
+              }
+
+              // Write the rowTotals method here.
+          }
+        solution: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] sales = {
+                      {12, 15, 9, 20},
+                      {8, 11, 14, 10},
+                      {20, 18, 22, 25}
+                  };
+                  System.out.println(Arrays.toString(rowTotals(sales)));
+              }
+
+              public static int[] rowTotals(int[][] grid) {
+                  int[] totals = new int[grid.length];
+                  for (int row = 0; row < grid.length; row++) {
+                      for (int column = 0; column < grid[row].length; column++) {
+                          totals[row] += grid[row][column];
+                      }
+                  }
+                  return totals;
+              }
+          }
+        hints:
+          - "The method starts `public static int[] rowTotals(int[][] grid) {`. The array it returns has one element per row: `new int[grid.length]`."
+          - "Go through every cell, and add each value to the total of its own row: `totals[row] += grid[row][column];`"
+        tests:
+          - call: |
+              int[][] sales = {
+                  {12, 15, 9, 20},
+                  {8, 11, 14, 10},
+                  {20, 18, 22, 25}
+              };
+              System.out.println(Arrays.toString(rowTotals(sales)));
+          - call: |
+              int[][] grid = {
+                  {5}
+              };
+              System.out.println(Arrays.toString(rowTotals(grid)));
+            hidden: true
+          - call: |
+              int[][] grid = {
+                  {1, 2},
+                  {3, 4},
+                  {0, 0},
+                  {-6, 10}
+              };
+              System.out.println(Arrays.toString(rowTotals(grid)));
+            hidden: true
+          - call: |
+              int[][] grid = new int[2][5];
+              grid[0][4] = 7;
+              grid[1][0] = 3;
+              grid[1][3] = 9;
+              System.out.println(Arrays.toString(rowTotals(grid)));
+            hidden: true
+      - task: |
+          The company wants a report from any sales table. The program reads the number of stores and the number of months on the first line, with a space between them. Then it reads one line per store, with that store's sales for each month, separated by spaces. It prints the total of the whole table, then the best store and the best month: the row and the column with the largest total, numbered from 1, each with its total. When two tie, the first one wins. For this step's table as input:
+
+          ```text
+          3 4
+          12 15 9 20
+          8 11 14 10
+          20 18 22 25
+          ```
+
+          the program prints:
+
+          ```
+          Total: 184
+          Best store: 3 (85 mattresses)
+          Best month: 4 (55 mattresses)
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String[] size = scanner.nextLine().split(" ");
+                  int stores = Integer.valueOf(size[0]);
+                  int months = Integer.valueOf(size[1]);
+                  int[][] sales = new int[stores][months];
+                  for (int row = 0; row < stores; row++) {
+                      String[] parts = scanner.nextLine().split(" ");
+                      for (int column = 0; column < months; column++) {
+                          sales[row][column] = Integer.valueOf(parts[column]);
+                      }
+                  }
+
+                  int total = 0;
+                  for (int[] row : sales) {
+                      for (int value : row) {
+                          total += value;
+                      }
+                  }
+                  System.out.println("Total: " + total);
+
+                  int bestStore = 0;
+                  for (int row = 1; row < stores; row++) {
+                      if (rowTotal(sales, row) > rowTotal(sales, bestStore)) {
+                          bestStore = row;
+                      }
+                  }
+                  System.out.println("Best store: " + (bestStore + 1) + " (" + rowTotal(sales, bestStore) + " mattresses)");
+
+                  int bestMonth = 0;
+                  for (int column = 1; column < months; column++) {
+                      if (columnTotal(sales, column) > columnTotal(sales, bestMonth)) {
+                          bestMonth = column;
+                      }
+                  }
+                  System.out.println("Best month: " + (bestMonth + 1) + " (" + columnTotal(sales, bestMonth) + " mattresses)");
+              }
+
+              public static int rowTotal(int[][] grid, int row) {
+                  int total = 0;
+                  for (int column = 0; column < grid[row].length; column++) {
+                      total += grid[row][column];
+                  }
+                  return total;
+              }
+
+              public static int columnTotal(int[][] grid, int column) {
+                  int total = 0;
+                  for (int row = 0; row < grid.length; row++) {
+                      total += grid[row][column];
+                  }
+                  return total;
+              }
+          }
+        hints:
+          - "Read the sizes first, create `new int[stores][months]`, and fill it row by row: `split(\" \")` each line, and put `Integer.valueOf(parts[column])` in `sales[row][column]`."
+          - "Small methods help: `rowTotal(sales, row)` and `columnTotal(sales, column)`. Then the best store is a search over the rows with `>`, starting from row 0, and the best month the same search over the columns."
+        require:
+          - pattern: new\s+int\s*\[[^\]]+\]\s*\[[^\]]+\]
+            message: "Read the table into a two-dimensional array: `new int[stores][months]`."
+        tests:
+          - stdin: |
+              3 4
+              12 15 9 20
+              8 11 14 10
+              20 18 22 25
+          - stdin: |
+              1 1
+              7
+            hidden: true
+          - stdin: |
+              2 3
+              5 5 5
+              6 4 5
+            hidden: true
+          - stdin: |
+              4 2
+              0 0
+              3 9
+              9 3
+              1 1
+            hidden: true
+          - stdin: |
+              2 5
+              1 2 3 4 5
+              0 0 0 0 9
+            hidden: true
+
+  - id: multidimensional-arrays-neighbors
+    slug: neighbors
+    title: "Neighbors: the cells around a cell"
+    text: |
+      In the game Minesweeper, a field of squares hides a few mines. Every square without a mine shows a number: how many of the squares around it hide a mine. A program can keep the mines in a `boolean[][]`, with `true` where a mine is, and work out each number from the grid.
+
+      ### The eight cells around a cell
+
+      The cells around row `row`, column `column` are in the rows `row - 1` to `row + 1` and the columns `column - 1` to `column + 1`: a block of 3 by 3 cells, without the one in the middle.
+
+      | | column - 1 | column | column + 1 |
+      |---|---|---|---|
+      | **row - 1** | neighbor | neighbor | neighbor |
+      | **row** | neighbor | the cell itself | neighbor |
+      | **row + 1** | neighbor | neighbor | neighbor |
+
+      Two loops go through the block, and `continue` (from module 8) skips the cell in the middle. This version works in the middle of the field, and crashes at its edge:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              boolean[][] mines = {
+                  {true, false, false, false},
+                  {false, false, true, false},
+                  {true, true, false, false}
+              };
+              System.out.println(countAround(mines, 1, 1));
+              System.out.println(countAround(mines, 1, 2));
+              System.out.println(countAround(mines, 0, 3));
+          }
+
+          public static int countAround(boolean[][] mines, int row, int column) {
+              int count = 0;
+              for (int r = row - 1; r <= row + 1; r++) {
+                  for (int c = column - 1; c <= column + 1; c++) {
+                      if (r == row && c == column) {
+                          continue;
+                      }
+                      if (mines[r][c]) {
+                          count++;
+                      }
+                  }
+              }
+              return count;
+          }
+      }
+      ```
+
+      ```output
+      4
+      1
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index -1 out of bounds for length 3
+      	at Main.countAround(Main.java:20)
+      	at Main.main(Main.java:10)
+      ```
+
+      Row 1, column 1 has four mines around it: up and to the left, to the right, below, and below to the left. Row 0, column 3 is in the top right corner. The rows around it start at -1, and `mines[-1]` doesn't exist.
+
+      ### Staying inside the grid
+
+      A cell on the edge has fewer neighbors: 5 on a side, 3 in a corner. Before the program reads a cell, it checks both indexes: the row from 0 to `mines.length - 1`, and the column from 0 to the length of that row minus one. Here that check is a method of its own, which also gives the rule a name: outside the field, there are no mines.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              boolean[][] mines = {
+                  {true, false, false, false},
+                  {false, false, true, false},
+                  {true, true, false, false}
+              };
+              System.out.println(hasMine(mines, 2, 0));
+              System.out.println(hasMine(mines, -1, 2));
+              System.out.println(hasMine(mines, 1, 4));
+          }
+
+          public static boolean hasMine(boolean[][] mines, int row, int column) {
+              if (row < 0 || row >= mines.length) {
+                  return false;
+              }
+              if (column < 0 || column >= mines[row].length) {
+                  return false;
+              }
+              return mines[row][column];
+          }
+      }
+      ```
+
+      ```output
+      true
+      false
+      false
+      ```
+
+      The order of the checks matters: `mines[row].length` would itself crash for row -1, so the row is checked first. In one condition, `r >= 0 && r < mines.length && c >= 0 && c < mines[r].length && mines[r][c]` does the same: `&&` stops at the first part that's false, so the parts after a bad index are never run.
+
+      ### Up, down, left and right
+
+      Some grids count only four neighbors: the cells above, below, to the left and to the right. Two small arrays can list the steps to each of them, the same index in both arrays making one step:
+
+      ```java fragment
+      int[] rowSteps = {-1, 1, 0, 0};
+      int[] columnSteps = {0, 0, -1, 1};
+      for (int i = 0; i < rowSteps.length; i++) {
+          int r = row + rowSteps[i];
+          int c = column + columnSteps[i];
+          // check that r and c are inside the grid, then use grid[r][c]
+      }
+      ```
+
+      Step -1 for the row is the cell above, step 1 below; step -1 for the column is the cell to the left, step 1 to the right. With eight pairs, the same loop would cover the diagonal neighbors too.
+
+      **Your turn:** make `countAround` work for every cell of the field, at the edges and in the corners too: a place outside the field has no mine. Check the indexes in the loops, or write a method like `hasMine` and call it. The check runs:
+
+      ```java fragment
+      boolean[][] mines = {
+          {true, false, false, false},
+          {false, false, true, false},
+          {true, true, false, false}
+      };
+      System.out.println(countAround(mines, 0, 3));
+      System.out.println(countAround(mines, 1, 1));
+      System.out.println(countAround(mines, 2, 2));
+      System.out.println(countAround(mines, 0, 0));
+      ```
+
+      and expects:
+
+      ```
+      1
+      4
+      2
+      0
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              boolean[][] mines = {
+                  {true, false, false, false},
+                  {false, false, true, false},
+                  {true, true, false, false}
+              };
+              System.out.println(countAround(mines, 0, 3));
+              System.out.println(countAround(mines, 1, 1));
+              System.out.println(countAround(mines, 2, 2));
+              System.out.println(countAround(mines, 0, 0));
+          }
+
+          public static int countAround(boolean[][] mines, int row, int column) {
+              int count = 0;
+              for (int r = row - 1; r <= row + 1; r++) {
+                  for (int c = column - 1; c <= column + 1; c++) {
+                      if (r == row && c == column) {
+                          continue;
+                      }
+                      if (mines[r][c]) {
+                          count++;
+                      }
+                  }
+              }
+              return count;
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              boolean[][] mines = {
+                  {true, false, false, false},
+                  {false, false, true, false},
+                  {true, true, false, false}
+              };
+              System.out.println(countAround(mines, 0, 3));
+              System.out.println(countAround(mines, 1, 1));
+              System.out.println(countAround(mines, 2, 2));
+              System.out.println(countAround(mines, 0, 0));
+          }
+
+          public static int countAround(boolean[][] mines, int row, int column) {
+              int count = 0;
+              for (int r = row - 1; r <= row + 1; r++) {
+                  for (int c = column - 1; c <= column + 1; c++) {
+                      if (r == row && c == column) {
+                          continue;
+                      }
+                      if (r >= 0 && r < mines.length && c >= 0 && c < mines[r].length && mines[r][c]) {
+                          count++;
+                      }
+                  }
+              }
+              return count;
+          }
+      }
+    hints:
+      - "Read `mines[r][c]` only when `r` is from 0 to `mines.length - 1` and `c` from 0 to `mines[r].length - 1`."
+      - "Put the checks in front of the cell in one condition: `r >= 0 && r < mines.length && c >= 0 && c < mines[r].length && mines[r][c]`. `&&` stops at the first false part, so a bad index is never used."
+    forbid:
+      - pattern: \bcatch\b
+        message: "Check the indexes before reading a cell, instead of catching the exception."
+    tests:
+      - call: |
+          boolean[][] mines = {
+              {true, false, false, false},
+              {false, false, true, false},
+              {true, true, false, false}
+          };
+          System.out.println(countAround(mines, 0, 3));
+          System.out.println(countAround(mines, 1, 1));
+          System.out.println(countAround(mines, 2, 2));
+          System.out.println(countAround(mines, 0, 0));
+      - call: |
+          boolean[][] field = {
+              {true}
+          };
+          System.out.println(countAround(field, 0, 0));
+        hidden: true
+      - call: |
+          boolean[][] field = new boolean[2][5];
+          for (int row = 0; row < field.length; row++) {
+              for (int column = 0; column < field[row].length; column++) {
+                  field[row][column] = true;
+              }
+          }
+          System.out.println(countAround(field, 0, 0) + " " + countAround(field, 1, 4) + " " + countAround(field, 0, 2) + " " + countAround(field, 1, 1));
+        hidden: true
+      - call: |
+          boolean[][] field = {
+              {true},
+              {true},
+              {false},
+              {true}
+          };
+          System.out.println(countAround(field, 0, 0) + " " + countAround(field, 2, 0) + " " + countAround(field, 3, 0));
+        hidden: true
+    more:
+      - task: |
+          Now the whole field, as the game shows it at the end. Write a method `printField(boolean[][] mines)` that prints the field one row per line: `*` for a mine, and for every other square the number of mines around it, with nothing between the squares. `countAround` is ready, with the check of the indexes. For the field of this step, the check prints:
+
+          ```
+          *211
+          34*1
+          **21
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  boolean[][] mines = {
+                      {true, false, false, false},
+                      {false, false, true, false},
+                      {true, true, false, false}
+                  };
+                  printField(mines);
+              }
+
+              // Write the printField method here.
+
+              public static int countAround(boolean[][] mines, int row, int column) {
+                  int count = 0;
+                  for (int r = row - 1; r <= row + 1; r++) {
+                      for (int c = column - 1; c <= column + 1; c++) {
+                          if (r == row && c == column) {
+                              continue;
+                          }
+                          if (r >= 0 && r < mines.length && c >= 0 && c < mines[r].length && mines[r][c]) {
+                              count++;
+                          }
+                      }
+                  }
+                  return count;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  boolean[][] mines = {
+                      {true, false, false, false},
+                      {false, false, true, false},
+                      {true, true, false, false}
+                  };
+                  printField(mines);
+              }
+
+              public static void printField(boolean[][] mines) {
+                  for (int row = 0; row < mines.length; row++) {
+                      for (int column = 0; column < mines[row].length; column++) {
+                          if (mines[row][column]) {
+                              System.out.print("*");
+                          } else {
+                              System.out.print(countAround(mines, row, column));
+                          }
+                      }
+                      System.out.println();
+                  }
+              }
+
+              public static int countAround(boolean[][] mines, int row, int column) {
+                  int count = 0;
+                  for (int r = row - 1; r <= row + 1; r++) {
+                      for (int c = column - 1; c <= column + 1; c++) {
+                          if (r == row && c == column) {
+                              continue;
+                          }
+                          if (r >= 0 && r < mines.length && c >= 0 && c < mines[r].length && mines[r][c]) {
+                              count++;
+                          }
+                      }
+                  }
+                  return count;
+              }
+          }
+        hints:
+          - "The method starts `public static void printField(boolean[][] mines) {`. Go through the cells with a loop over the rows and, inside it, a loop over the columns of that row."
+          - "In each cell, `print` either `\"*\"` or `countAround(mines, row, column)`. After the inner loop, `println()` ends the row."
+        tests:
+          - call: |
+              boolean[][] mines = {
+                  {true, false, false, false},
+                  {false, false, true, false},
+                  {true, true, false, false}
+              };
+              printField(mines);
+          - call: |
+              printField(new boolean[2][3]);
+            hidden: true
+          - call: |
+              boolean[][] mines = {
+                  {false, true, false, false, true}
+              };
+              printField(mines);
+            hidden: true
+          - call: |
+              boolean[][] mines = new boolean[3][3];
+              mines[1][1] = true;
+              printField(mines);
+              boolean[][] full = {
+                  {true, true},
+                  {true, true}
+              };
+              printField(full);
+            hidden: true
+      - task: |
+          A hiking map gives the height of the ground in each square, in meters. A square is a **hilltop** when it's higher than each of its neighbors above, below, to the left and to the right. The diagonal squares don't count here, and a square on the edge simply has fewer neighbors. Write a method `printHilltops(int[][] heights)` that prints every hilltop, row by row from the top and from left to right in each row, like `Row 1, column 1: 140 m` (rows and columns counted from 0), and then the number of hilltops. The check passes this map:
+
+          ```java fragment
+          int[][] heights = {
+              {120, 135, 130, 110},
+              {125, 140, 128, 132},
+              {118, 122, 126, 121}
+          };
+          printHilltops(heights);
+          ```
+
+          and expects:
+
+          ```
+          Row 1, column 1: 140 m
+          Row 1, column 3: 132 m
+          Hilltops: 2
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] heights = {
+                      {120, 135, 130, 110},
+                      {125, 140, 128, 132},
+                      {118, 122, 126, 121}
+                  };
+                  printHilltops(heights);
+              }
+
+              // Write the printHilltops method here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] heights = {
+                      {120, 135, 130, 110},
+                      {125, 140, 128, 132},
+                      {118, 122, 126, 121}
+                  };
+                  printHilltops(heights);
+              }
+
+              public static void printHilltops(int[][] heights) {
+                  int[] rowSteps = {-1, 1, 0, 0};
+                  int[] columnSteps = {0, 0, -1, 1};
+                  int count = 0;
+                  for (int row = 0; row < heights.length; row++) {
+                      for (int column = 0; column < heights[row].length; column++) {
+                          boolean hilltop = true;
+                          for (int i = 0; i < rowSteps.length; i++) {
+                              int r = row + rowSteps[i];
+                              int c = column + columnSteps[i];
+                              if (r >= 0 && r < heights.length && c >= 0 && c < heights[r].length && heights[r][c] >= heights[row][column]) {
+                                  hilltop = false;
+                              }
+                          }
+                          if (hilltop) {
+                              System.out.println("Row " + row + ", column " + column + ": " + heights[row][column] + " m");
+                              count++;
+                          }
+                      }
+                  }
+                  System.out.println("Hilltops: " + count);
+              }
+          }
+        hints:
+          - "Go through every square. For each one, start from `boolean hilltop = true;` and look at the four neighbors, with the step arrays of this step or with four separate checks."
+          - "A neighbor that's inside the map and at least as high (`>=`) as the square means it's not a hilltop. After the four neighbors, print the square if it's still a hilltop, and count it."
+        tests:
+          - call: |
+              int[][] heights = {
+                  {120, 135, 130, 110},
+                  {125, 140, 128, 132},
+                  {118, 122, 126, 121}
+              };
+              printHilltops(heights);
+          - call: |
+              int[][] heights = {
+                  {100, 100},
+                  {100, 100}
+              };
+              printHilltops(heights);
+            hidden: true
+          - call: |
+              int[][] heights = {
+                  {3, 5, 4, 6}
+              };
+              printHilltops(heights);
+            hidden: true
+          - call: |
+              int[][] heights = {
+                  {9, 1, 9},
+                  {1, 5, 1},
+                  {9, 1, 9}
+              };
+              printHilltops(heights);
+            hidden: true
+          - call: |
+              int[][] heights = {
+                  {10, 20, 30},
+                  {20, 30, 40},
+                  {30, 40, 50},
+                  {20, 60, 40}
+              };
+              printHilltops(heights);
+            hidden: true
+
+  - id: multidimensional-arrays-uneven-rows-and-objects
+    slug: rows-of-different-lengths
+    title: Rows of different lengths, and grids of objects
+    text: |
+      ### Rows of different lengths
+
+      Step 2 showed that a grid is an array of rows, and each row an array of its own. Nothing says the rows must be equally long. A small clinic logs how many minutes each patient waited, day by day. Some days have more patients than others, and on a day the clinic is closed there are none:
+
+      ```java main
+      int[][] waits = {
+          {12, 25, 8},
+          {},
+          {30, 15},
+          {5, 20, 10, 18}
+      };
+      for (int day = 0; day < waits.length; day++) {
+          System.out.print("Day " + (day + 1) + ":");
+          for (int patient = 0; patient < waits[day].length; patient++) {
+              System.out.print(" " + waits[day][patient]);
+          }
+          System.out.println();
+      }
+      ```
+
+      ```output
+      Day 1: 12 25 8
+      Day 2:
+      Day 3: 30 15
+      Day 4: 5 20 10 18
+      ```
+
+      The inner loop asks each row for its own length, `waits[day].length`, so it fits every row: 3 patients, none, 2 and 4. With `waits[0].length` instead, the inner loop would try 3 patients every day. That's too many for days 2 and 3 and too few for day 4. The program crashes on day 2, which has no patients at all, so it never gets any further. That's why the loops in this module say `grid[row].length`: it works for grids of every shape. (Step 3's column totals used `sales[0].length`, which is fine only when all rows are equally long.)
+
+      ### Printing a whole grid
+
+      `Arrays.toString` doesn't help much with a grid:
+
+      ```java fragment
+      int[][] waits = {{12, 25}, {30}};
+      System.out.println(Arrays.toString(waits));
+      ```
+
+      This prints something like `[[I@4e50df2e, [I@1d81eb93]`. The elements of the outer array are rows, and an array printed as itself shows only `[I@` and a code. The code says nothing about the values, and it can change from one run to the next and from one Java system to another. `Arrays.deepToString` goes into the rows too:
+
+      ```java main
+      int[][] waits = {
+          {12, 25, 8},
+          {},
+          {30, 15}
+      };
+      System.out.println(Arrays.deepToString(waits));
+      ```
+
+      ```output
+      [[12, 25, 8], [], [30, 15]]
+      ```
+
+      It's a handy way to check what a grid holds while you work on a program, as `Arrays.toString` is for a one-dimensional array.
+
+      ### Creating the rows one by one
+
+      `new int[4][]`, with the second size left out, creates only the outer array: four places for rows, each `null` until a row is put there. Then each row can be created with its own length:
+
+      ```java main
+      int[][] stairs = new int[4][];
+      for (int row = 0; row < stairs.length; row++) {
+          stairs[row] = new int[row + 1];
+          for (int column = 0; column < stairs[row].length; column++) {
+              stairs[row][column] = column + 1;
+          }
+      }
+      System.out.println(Arrays.deepToString(stairs));
+      ```
+
+      ```output
+      [[1], [1, 2], [1, 2, 3], [1, 2, 3, 4]]
+      ```
+
+      ### A row is an array of its own
+
+      Each place of the outer array holds a reference to a row, just as an `int[]` variable does (module 15). So `grid[1] = grid[0];` doesn't copy row 0: afterwards both places lead to the same row, and a change made through one shows through the other.
+
+      ```java main
+      int[][] grid = {
+          {1, 2},
+          {3, 4}
+      };
+      grid[1] = grid[0];
+      grid[1][0] = 7;
+      System.out.println(Arrays.deepToString(grid));
+      ```
+
+      ```output
+      [[7, 2], [7, 2]]
+      ```
+
+      A real copy of a row is a new array of the same length, with the values copied over in a loop.
+
+      ### Grids of Strings
+
+      The cells can be of any type. A tic-tac-toe board is a `String[][]`, and a new one holds `null` in every cell, which works well as "nothing here yet":
+
+      ```java main
+      String[][] board = new String[3][3];
+      board[1][1] = "X";
+      board[0][2] = "O";
+      board[2][0] = "X";
+      System.out.println(Arrays.deepToString(board));
+      int free = 0;
+      for (int row = 0; row < board.length; row++) {
+          for (int column = 0; column < board[row].length; column++) {
+              if (board[row][column] == null) {
+                  free++;
+              }
+          }
+      }
+      System.out.println(free + " free squares");
+      System.out.println("X".equals(board[0][0]) + " " + "X".equals(board[1][1]));
+      ```
+
+      ```output
+      [[null, null, O], [null, X, null], [X, null, null]]
+      6 free squares
+      false true
+      ```
+
+      `== null` finds an empty cell. Calling a method on an empty cell, such as `board[0][0].equals("X")`, would crash with a NullPointerException, since there's no String there to call it on. With the known String first, `"X".equals(board[0][0])` is simply `false` for an empty cell.
+
+      ### Grids of your own objects
+
+      Objects of your own classes go in a grid the same way. A box of chocolates holds them in rows:
+
+      ```java run
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              Chocolate[][] box = new Chocolate[2][3];
+              box[0][0] = new Chocolate("praline", 12);
+              box[0][1] = new Chocolate("truffle", 15);
+              box[1][2] = new Chocolate("nougat", 10);
+              System.out.println(Arrays.deepToString(box));
+
+              Chocolate eaten = box[0][1];
+              box[0][1] = null;
+              System.out.println("Ate the " + eaten + ", " + eaten.getGrams() + " g");
+              System.out.println(Arrays.deepToString(box));
+          }
+      }
+      // ==== Chocolate.java ====
+      public class Chocolate {
+          private String name;
+          private int grams;
+
+          public Chocolate(String name, int grams) {
+              this.name = name;
+              this.grams = grams;
+          }
+
+          public int getGrams() {
+              return this.grams;
+          }
+
+          @Override
+          public String toString() {
+              return this.name;
+          }
+      }
+      ```
+
+      ```output
+      [[praline, truffle, null], [null, null, nougat]]
+      Ate the truffle, 15 g
+      [[praline, null, null], [null, null, nougat]]
+      ```
+
+      - `new Chocolate[2][3]` creates the grid, but no chocolates: all six places are `null`. Each chocolate is created with `new Chocolate(...)` and put in its place.
+      - `Arrays.deepToString` writes each object with its own `toString`, and `null` for an empty place.
+      - Setting a place to `null` empties it. The chocolate itself still exists as long as a variable, here `eaten`, refers to it.
+
+      **Your turn:** an outdoor theater's rows get longer toward the back: the front row has 4 seats, and each row has one seat more than the row in front of it. Fill in the blanks: create the outer array for 3 rows, with the length of the rows left out, give each row its length, and print the whole grid. The program prints:
+
+      ```
+      [[1, 2, 3, 4], [1, 2, 3, 4, 5], [1, 2, 3, 4, 5, 6]]
+      ```
+    fill: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[][] seats = new int[[[3]]][];
+              for (int row = 0; row < seats.length; row++) {
+                  seats[row] = new int[[[row + 4‖4 + row]]];
+                  for (int seat = 0; seat < seats[row].length; seat++) {
+                      seats[row][seat] = seat + 1;
+                  }
+              }
+              System.out.println(Arrays.[[deepToString]](seats));
+          }
+      }
+    hints:
+      - "The outer array has a place for each of the 3 rows: `new int[3][]`. Row 0 has 4 seats, row 1 has 5, so row `row` has `row + 4`."
+      - "The method of `Arrays` that prints the values inside the rows too is `deepToString`."
+    more:
+      - task: |
+          What does this program print? Keep in mind which places of the outer array lead to the same row.
+        predict: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[][] grid = new int[3][];
+                  grid[0] = new int[2];
+                  grid[1] = new int[] {4, 5, 6};
+                  grid[2] = grid[1];
+                  grid[2][0] = 9;
+                  System.out.println(grid[1][0] + " " + grid[0][1]);
+                  System.out.println(grid.length + " " + grid[2].length);
+                  System.out.println(Arrays.deepToString(grid));
+              }
+          }
+        hints:
+          - "`grid[2] = grid[1];` makes row 2 and row 1 the same array, so `grid[2][0] = 9` changes `grid[1][0]` too. Row 0 is a new array of two ints, both 0."
+          - "The outer array has 3 places, and row 2 is the row `{4, 5, 6}` (now starting with 9), which has 3 elements."
+      - task: |
+          A box of chocolates once more. `Chocolate.java` is ready: a chocolate has a name and a weight in grams, and its `toString` returns the name. In `ChocolateBox.java`, write the class `ChocolateBox`, which keeps its chocolates in a `Chocolate[][]`, with `null` for an empty place:
+
+          - a constructor `ChocolateBox(int rows, int columns)`, which creates an empty box of that size
+          - `put(int row, int column, Chocolate chocolate)`, which puts the chocolate in that place
+          - `take(int row, int column)`, which returns the chocolate in that place and leaves the place empty, or returns `null` when the place is already empty
+          - `gramsLeft()`, which returns the total weight of the chocolates in the box
+          - `toString()`, which returns the grid as `Arrays.deepToString` writes it
+
+          `Main.java` is a test drive, and it prints:
+
+          ```
+          [[praline, null, truffle], [null, caramel, null]]
+          Grams left: 36
+          Took: truffle
+          Took: null
+          [[praline, null, null], [null, caramel, null]]
+          Grams left: 21
+          ```
+        seed:
+          ChocolateBox.java: |
+            import java.util.Arrays;
+
+            public class ChocolateBox {
+
+                public ChocolateBox(int rows, int columns) {
+
+                }
+
+                public void put(int row, int column, Chocolate chocolate) {
+
+                }
+
+                public Chocolate take(int row, int column) {
+                    return null;
+                }
+
+                public int gramsLeft() {
+                    return 0;
+                }
+
+                @Override
+                public String toString() {
+                    return "";
+                }
+            }
+          Chocolate.java: |
+            public class Chocolate {
+                private String name;
+                private int grams;
+
+                public Chocolate(String name, int grams) {
+                    this.name = name;
+                    this.grams = grams;
+                }
+
+                public int getGrams() {
+                    return this.grams;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    ChocolateBox box = new ChocolateBox(2, 3);
+                    box.put(0, 0, new Chocolate("praline", 12));
+                    box.put(0, 2, new Chocolate("truffle", 15));
+                    box.put(1, 1, new Chocolate("caramel", 9));
+                    System.out.println(box);
+                    System.out.println("Grams left: " + box.gramsLeft());
+                    System.out.println("Took: " + box.take(0, 2));
+                    System.out.println("Took: " + box.take(0, 2));
+                    System.out.println(box);
+                    System.out.println("Grams left: " + box.gramsLeft());
+                }
+            }
+        solution:
+          ChocolateBox.java: |
+            import java.util.Arrays;
+
+            public class ChocolateBox {
+                private Chocolate[][] places;
+
+                public ChocolateBox(int rows, int columns) {
+                    this.places = new Chocolate[rows][columns];
+                }
+
+                public void put(int row, int column, Chocolate chocolate) {
+                    this.places[row][column] = chocolate;
+                }
+
+                public Chocolate take(int row, int column) {
+                    Chocolate chocolate = this.places[row][column];
+                    this.places[row][column] = null;
+                    return chocolate;
+                }
+
+                public int gramsLeft() {
+                    int grams = 0;
+                    for (Chocolate[] row : this.places) {
+                        for (Chocolate chocolate : row) {
+                            if (chocolate != null) {
+                                grams += chocolate.getGrams();
+                            }
+                        }
+                    }
+                    return grams;
+                }
+
+                @Override
+                public String toString() {
+                    return Arrays.deepToString(this.places);
+                }
+            }
+          Chocolate.java: |
+            public class Chocolate {
+                private String name;
+                private int grams;
+
+                public Chocolate(String name, int grams) {
+                    this.name = name;
+                    this.grams = grams;
+                }
+
+                public int getGrams() {
+                    return this.grams;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    ChocolateBox box = new ChocolateBox(2, 3);
+                    box.put(0, 0, new Chocolate("praline", 12));
+                    box.put(0, 2, new Chocolate("truffle", 15));
+                    box.put(1, 1, new Chocolate("caramel", 9));
+                    System.out.println(box);
+                    System.out.println("Grams left: " + box.gramsLeft());
+                    System.out.println("Took: " + box.take(0, 2));
+                    System.out.println("Took: " + box.take(0, 2));
+                    System.out.println(box);
+                    System.out.println("Grams left: " + box.gramsLeft());
+                }
+            }
+        hints:
+          - "The box needs one field, `private Chocolate[][] places;`, which the constructor creates with `new Chocolate[rows][columns]`. `take` keeps the chocolate in a variable, sets the place to `null`, and returns the variable."
+          - "`gramsLeft` goes through every place, and adds `getGrams()` only for a place that isn't `null`: calling a method on `null` crashes. `toString` returns `Arrays.deepToString(this.places)`."
+        require:
+          - pattern: Chocolate\s*\[\s*\]\s*\[\s*\]
+            message: "Keep the chocolates in a two-dimensional array: a `Chocolate[][]`."
+        forbid:
+          - pattern: \b(ArrayList|HashMap|List|Map)\b
+            message: "Keep the chocolates in the two-dimensional array, not in a list or a map."
+        tests:
+          - name: The test drive
+          - call: |
+              ChocolateBox box = new ChocolateBox(1, 2);
+              System.out.println(box + " " + box.gramsLeft() + " " + box.take(0, 1));
+              box.put(0, 1, new Chocolate("mint", 7));
+              box.put(0, 0, new Chocolate("nut", 11));
+              Chocolate taken = box.take(0, 0);
+              System.out.println(taken.getGrams() + " " + box + " " + box.gramsLeft());
+            hidden: true
+          - call: |
+              ChocolateBox box = new ChocolateBox(3, 2);
+              for (int row = 0; row < 3; row++) {
+                  for (int column = 0; column < 2; column++) {
+                      box.put(row, column, new Chocolate("c" + row + column, row + column + 5));
+                  }
+              }
+              System.out.println(box.gramsLeft());
+              System.out.println(box.take(1, 0) + " " + box.take(1, 1) + " " + box.take(1, 1));
+              System.out.println(box);
+              System.out.println(box.gramsLeft());
+            hidden: true
+          - call: |
+              ChocolateBox small = new ChocolateBox(1, 1);
+              ChocolateBox big = new ChocolateBox(2, 4);
+              small.put(0, 0, new Chocolate("fig", 8));
+              big.put(1, 3, new Chocolate("lime", 6));
+              System.out.println(small + " " + small.gramsLeft());
+              System.out.println(big + " " + big.gramsLeft());
+            hidden: true
+
+  - id: multidimensional-arrays-end-of-part-12
+    slug: end-of-part-12
+    title: Four in a row, and the end of part 12
+    text: |
+      This last step builds a small board game with this module's tools, and then looks back at the whole of part 12.
+
+      ### Two-dimensional arrays at a glance
+
+      | You want | Write |
+      | --- | --- |
+      | a grid of 3 rows and 4 columns | `int[][] grid = new int[3][4];` |
+      | a grid with its values | `int[][] grid = {{1, 2}, {3, 4}};` |
+      | the cell in row `r`, column `c` | `grid[r][c]` |
+      | the number of rows | `grid.length` |
+      | the number of cells in row `r` | `grid[r].length` |
+      | every cell | a loop over the rows, with a loop over the columns of the row inside it |
+      | the cells around a cell | the rows `r - 1` to `r + 1` and the columns `c - 1` to `c + 1`, each index checked first |
+      | rows of different lengths | `new int[3][]`, then each row with its own `new int[...]` |
+      | the whole grid as text | `Arrays.deepToString(grid)` |
+
+      ### Four in a row
+
+      In the game Four in a row, two players take turns dropping pieces into the columns of an upright board, often 6 rows by 7 columns. A piece falls down its column to the lowest free place. The first player with four pieces in a line, across, up and down or diagonally, wins.
+
+      The board can be a `char[][]`, with `'.'` for a free place and a player's letter, `'X'` or `'O'`, for a piece. A new `char[][]` holds the character with code 0 in every cell, which doesn't print as anything useful, so the constructor fills the board with `'.'` first. Row 0 is the top row, as the board is printed, so the lowest free place in a column is found by going up the column from the bottom row, `board.length - 1`.
+
+      A line of four starts from some cell and takes the same step three times. A step is a number of rows and a number of columns, as in step 4: `0` rows and `1` column goes across, `1` and `0` goes down, `1` and `1` down to the right, and `1` and `-1` down to the left. Every cell on the way must be inside the board and hold the same piece.
+
+      ### Array or hash map?
+
+      An array finds a cell straight from its indexes, with no `hashCode`, no `equals` and no bucket to search, as module 45's hash map has. On the other hand, a grid reserves room for every cell when it's created. A grid where nearly every place stays empty, such as a map of a whole city with a few marked spots, could keep only the cells that are used in a HashMap, with keys such as `"120,45"` for row 120, column 45. For a game board, where many cells are used and the size is small and fixed, the array is the simpler choice.
+
+      ### The end of part 12
+
+      This step ends the material of the MOOC's twelfth part. Module 44 gave classes type parameters: a class written once with `<T>` and used as `Box<String>` or `Box<Integer>`, classes with several type parameters, and generic interfaces. A type argument is always a reference type (a class, an interface or an array type such as `int[]`), never a primitive type, so `int` becomes `Integer`. Module 45 had you build your own ArrayList and HashMap: a list on top of an array that grows, `remove` that moves the rest along, and a hash map with an array of buckets chosen by hash codes, which is why its lookups stay fast. Module 46 brought random numbers: `Random` and `nextInt`, ranges such as 1 to 6, seeds that give the same numbers again, `nextDouble` and `Math.random()`, shuffling and simulations. This module added grids: two-dimensional arrays, their rows and columns, nested loops and neighbors. Part 13 comes next, with graphical user interfaces. Part 12 ends with [the MOOC's summary page](https://java-programming.mooc.fi/part-12/5-summary) on its own site.
+
+      **Your turn:** `FourInARow.java` has the board, its constructor, which fills the board with `'.'`, and `toString`, which shows the board one row per line. Write `drop(int column, char piece)`: it puts the piece in the lowest free place of the column and returns the row the piece landed in, or, when the column is full, changes nothing and returns -1. The check runs:
+
+      ```java fragment
+      FourInARow game = new FourInARow(4, 5);
+      System.out.println(game.drop(1, 'X'));
+      System.out.println(game.drop(1, 'O'));
+      System.out.println(game.drop(3, 'X'));
+      System.out.println(game);
+      ```
+
+      and expects:
+
+      ```
+      3
+      2
+      3
+      .....
+      .....
+      .O...
+      .X.X.
+      ```
+    seed:
+      FourInARow.java: |
+        public class FourInARow {
+            private char[][] board;
+
+            public FourInARow(int rows, int columns) {
+                this.board = new char[rows][columns];
+                for (int row = 0; row < rows; row++) {
+                    for (int column = 0; column < columns; column++) {
+                        this.board[row][column] = '.';
+                    }
+                }
+            }
+
+            public int drop(int column, char piece) {
+                return -1;
+            }
+
+            @Override
+            public String toString() {
+                StringBuilder text = new StringBuilder();
+                for (int row = 0; row < this.board.length; row++) {
+                    if (row > 0) {
+                        text.append("\n");
+                    }
+                    for (int column = 0; column < this.board[row].length; column++) {
+                        text.append(this.board[row][column]);
+                    }
+                }
+                return text.toString();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                FourInARow game = new FourInARow(4, 5);
+                System.out.println(game.drop(1, 'X'));
+                System.out.println(game.drop(1, 'O'));
+                System.out.println(game.drop(3, 'X'));
+                System.out.println(game);
+            }
+        }
+    solution:
+      FourInARow.java: |
+        public class FourInARow {
+            private char[][] board;
+
+            public FourInARow(int rows, int columns) {
+                this.board = new char[rows][columns];
+                for (int row = 0; row < rows; row++) {
+                    for (int column = 0; column < columns; column++) {
+                        this.board[row][column] = '.';
+                    }
+                }
+            }
+
+            public int drop(int column, char piece) {
+                for (int row = this.board.length - 1; row >= 0; row--) {
+                    if (this.board[row][column] == '.') {
+                        this.board[row][column] = piece;
+                        return row;
+                    }
+                }
+                return -1;
+            }
+
+            @Override
+            public String toString() {
+                StringBuilder text = new StringBuilder();
+                for (int row = 0; row < this.board.length; row++) {
+                    if (row > 0) {
+                        text.append("\n");
+                    }
+                    for (int column = 0; column < this.board[row].length; column++) {
+                        text.append(this.board[row][column]);
+                    }
+                }
+                return text.toString();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                FourInARow game = new FourInARow(4, 5);
+                System.out.println(game.drop(1, 'X'));
+                System.out.println(game.drop(1, 'O'));
+                System.out.println(game.drop(3, 'X'));
+                System.out.println(game);
+            }
+        }
+    hints:
+      - "Go up the column from the bottom row: `for (int row = this.board.length - 1; row >= 0; row--)`. The column stays the same all the way."
+      - "At the first place that holds `'.'`, put the piece there and `return row;` at once. If the loop ends without finding one, the column is full: `return -1;`"
+    tests:
+      - call: |
+          FourInARow game = new FourInARow(4, 5);
+          System.out.println(game.drop(1, 'X'));
+          System.out.println(game.drop(1, 'O'));
+          System.out.println(game.drop(3, 'X'));
+          System.out.println(game);
+      - call: |
+          FourInARow game = new FourInARow(3, 2);
+          System.out.println(game.drop(0, 'X') + " " + game.drop(0, 'O') + " " + game.drop(0, 'X') + " " + game.drop(0, 'O'));
+          System.out.println(game);
+        hidden: true
+      - call: |
+          FourInARow game = new FourInARow(1, 3);
+          System.out.println(game.drop(2, 'O') + " " + game.drop(2, 'X') + " " + game.drop(0, 'X'));
+          System.out.println(game);
+        hidden: true
+      - call: |
+          FourInARow game = new FourInARow(6, 7);
+          for (int i = 0; i < 10; i++) {
+              game.drop(i % 7, 'X');
+              game.drop(6 - i % 4, 'O');
+          }
+          System.out.println(game);
+        hidden: true
+    more:
+      - task: |
+          What does this program print? `inLine` counts the cells in a line, from a starting cell, that hold the same piece as the starting cell.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  char[][] board = {
+                      {'.', '.', '.', 'O'},
+                      {'X', '.', 'O', 'X'},
+                      {'X', 'O', 'X', 'X'},
+                      {'O', 'X', 'X', 'O'}
+                  };
+                  System.out.println(inLine(board, 3, 0, -1, 1));
+                  System.out.println(inLine(board, 1, 0, 1, 0));
+                  System.out.println(inLine(board, 1, 3, 1, -1));
+              }
+
+              public static int inLine(char[][] board, int row, int column, int rowStep, int columnStep) {
+                  char piece = board[row][column];
+                  int count = 0;
+                  while (row >= 0 && row < board.length && column >= 0 && column < board[row].length && board[row][column] == piece) {
+                      count++;
+                      row += rowStep;
+                      column += columnStep;
+                  }
+                  return count;
+              }
+          }
+        hints:
+          - "Each round of the loop counts one cell and then takes one step. It stops at the first cell that holds another piece, or at the edge of the board."
+          - "The first call starts in the bottom left corner and goes up and to the right: rows 3, 2, 1, 0 and columns 0, 1, 2, 3. The last one goes down and to the left from row 1, column 3."
+      - task: |
+          To end part 12, the game needs a winner. Add a method `wins(char piece)` to `FourInARow`: it returns `true` when the board has four of that piece in a line, across, up and down, or diagonally in either direction, and `false` otherwise. `drop` is the one from the first task. `Main.java` is a test drive in which the players drop their pieces in turn, X first, and it prints:
+
+          ```
+          .......
+          .......
+          ......X
+          .....XX
+          ....XXO
+          O..XOOO
+          X wins: true
+          O wins: false
+          ```
+        seed:
+          FourInARow.java: |
+            public class FourInARow {
+                private char[][] board;
+
+                public FourInARow(int rows, int columns) {
+                    this.board = new char[rows][columns];
+                    for (int row = 0; row < rows; row++) {
+                        for (int column = 0; column < columns; column++) {
+                            this.board[row][column] = '.';
+                        }
+                    }
+                }
+
+                public int drop(int column, char piece) {
+                    for (int row = this.board.length - 1; row >= 0; row--) {
+                        if (this.board[row][column] == '.') {
+                            this.board[row][column] = piece;
+                            return row;
+                        }
+                    }
+                    return -1;
+                }
+
+                public boolean wins(char piece) {
+                    return false;
+                }
+
+                @Override
+                public String toString() {
+                    StringBuilder text = new StringBuilder();
+                    for (int row = 0; row < this.board.length; row++) {
+                        if (row > 0) {
+                            text.append("\n");
+                        }
+                        for (int column = 0; column < this.board[row].length; column++) {
+                            text.append(this.board[row][column]);
+                        }
+                    }
+                    return text.toString();
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    FourInARow game = new FourInARow(6, 7);
+                    int[] moves = {3, 4, 4, 5, 5, 6, 5, 6, 6, 0, 6};
+                    char piece = 'X';
+                    for (int column : moves) {
+                        game.drop(column, piece);
+                        if (piece == 'X') {
+                            piece = 'O';
+                        } else {
+                            piece = 'X';
+                        }
+                    }
+                    System.out.println(game);
+                    System.out.println("X wins: " + game.wins('X'));
+                    System.out.println("O wins: " + game.wins('O'));
+                }
+            }
+        solution:
+          FourInARow.java: |
+            public class FourInARow {
+                private char[][] board;
+
+                public FourInARow(int rows, int columns) {
+                    this.board = new char[rows][columns];
+                    for (int row = 0; row < rows; row++) {
+                        for (int column = 0; column < columns; column++) {
+                            this.board[row][column] = '.';
+                        }
+                    }
+                }
+
+                public int drop(int column, char piece) {
+                    for (int row = this.board.length - 1; row >= 0; row--) {
+                        if (this.board[row][column] == '.') {
+                            this.board[row][column] = piece;
+                            return row;
+                        }
+                    }
+                    return -1;
+                }
+
+                public boolean wins(char piece) {
+                    int[] rowSteps = {0, 1, 1, 1};
+                    int[] columnSteps = {1, 0, 1, -1};
+                    for (int row = 0; row < this.board.length; row++) {
+                        for (int column = 0; column < this.board[row].length; column++) {
+                            for (int i = 0; i < rowSteps.length; i++) {
+                                if (this.fourFrom(row, column, rowSteps[i], columnSteps[i], piece)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    return false;
+                }
+
+                private boolean fourFrom(int row, int column, int rowStep, int columnStep, char piece) {
+                    for (int i = 0; i < 4; i++) {
+                        int r = row + i * rowStep;
+                        int c = column + i * columnStep;
+                        if (r < 0 || r >= this.board.length || c < 0 || c >= this.board[r].length) {
+                            return false;
+                        }
+                        if (this.board[r][c] != piece) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+
+                @Override
+                public String toString() {
+                    StringBuilder text = new StringBuilder();
+                    for (int row = 0; row < this.board.length; row++) {
+                        if (row > 0) {
+                            text.append("\n");
+                        }
+                        for (int column = 0; column < this.board[row].length; column++) {
+                            text.append(this.board[row][column]);
+                        }
+                    }
+                    return text.toString();
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    FourInARow game = new FourInARow(6, 7);
+                    int[] moves = {3, 4, 4, 5, 5, 6, 5, 6, 6, 0, 6};
+                    char piece = 'X';
+                    for (int column : moves) {
+                        game.drop(column, piece);
+                        if (piece == 'X') {
+                            piece = 'O';
+                        } else {
+                            piece = 'X';
+                        }
+                    }
+                    System.out.println(game);
+                    System.out.println("X wins: " + game.wins('X'));
+                    System.out.println("O wins: " + game.wins('O'));
+                }
+            }
+        hints:
+          - "Try every cell as the start of a line, in four directions: across (`0`, `1`), down (`1`, `0`), down to the right (`1`, `1`) and down to the left (`1`, `-1`). Going the other way would find the same lines again, from their other end."
+          - "A helper method such as `fourFrom(row, column, rowStep, columnStep, piece)` can look at the cells `row + i * rowStep`, `column + i * columnStep` for `i` from 0 to 3, and return `false` as soon as one is outside the board or holds something else."
+        tests:
+          - name: The test drive
+          - call: |
+              FourInARow game = new FourInARow(4, 6);
+              game.drop(2, 'O');
+              game.drop(3, 'O');
+              game.drop(4, 'O');
+              System.out.println(game.wins('O'));
+              game.drop(5, 'O');
+              System.out.println(game.wins('O') + " " + game.wins('X'));
+            hidden: true
+          - call: |
+              FourInARow game = new FourInARow(5, 3);
+              for (int i = 0; i < 3; i++) {
+                  game.drop(2, 'X');
+              }
+              game.drop(2, 'O');
+              game.drop(2, 'X');
+              System.out.println(game.wins('X') + " " + game.wins('O'));
+              FourInARow column = new FourInARow(4, 1);
+              for (int i = 0; i < 4; i++) {
+                  column.drop(0, 'O');
+              }
+              System.out.println(column.wins('O') + " " + column.wins('X'));
+            hidden: true
+          - call: |
+              FourInARow game = new FourInARow(4, 4);
+              game.drop(0, 'X');
+              game.drop(0, 'X');
+              game.drop(0, 'X');
+              game.drop(0, 'O');
+              game.drop(1, 'X');
+              game.drop(1, 'X');
+              game.drop(1, 'O');
+              game.drop(2, 'X');
+              game.drop(2, 'O');
+              System.out.println(game.wins('O'));
+              game.drop(3, 'O');
+              System.out.println(game.wins('O') + " " + game.wins('X'));
+              System.out.println(game);
+            hidden: true
+          - call: |
+              FourInARow game = new FourInARow(3, 7);
+              game.drop(0, 'X');
+              game.drop(1, 'X');
+              game.drop(2, 'X');
+              game.drop(4, 'X');
+              game.drop(5, 'X');
+              game.drop(6, 'X');
+              game.drop(3, 'O');
+              System.out.println(game.wins('X') + " " + game.wins('O'));
+              game.drop(3, 'X');
+              game.drop(2, 'O');
+              game.drop(4, 'O');
+              game.drop(5, 'O');
+              System.out.println(game.wins('X') + " " + game.wins('O'));
+              System.out.println(game);
+            hidden: true

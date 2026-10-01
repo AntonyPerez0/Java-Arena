@@ -1,0 +1,4733 @@
+id: list-and-map-internals
+summary: How ArrayList and HashMap work inside, by building your own. A list on top of an array that grows, with add, get, indexOf, contains and remove; a generic version made with (T[]) new Object[...]; a hash map with an array of buckets, hash codes, collisions, updates, removing and growing; and why its lookups stay fast. MOOC section 12.2.
+steps:
+  - id: list-and-map-internals-fixed-size
+    slug: fixed-size
+    title: An array's size is fixed
+    text: |
+      Since module 13 you've added to lists without a thought about room: `add` always works, however many elements the list holds already. Since module 31, a HashMap has found a value by its key in a moment. This module opens both of them up. You'll build your own list and your own hash map, on top of plain arrays, and see why `add` never runs out of room and why a lookup in a map stays fast. Java's own ArrayList and HashMap are more refined, and you'll go on using them, but they work on the same ideas.
+
+      ### Arrays, a quick recap
+
+      Module 15's arrays hold a fixed number of values of one type. `new String[3]` makes room for three Strings at the indexes 0 to 2, and each place starts out as `null`. `length` tells how many places there are:
+
+      ```java main
+      String[] playlist = new String[3];
+      playlist[0] = "Morning Rain";
+      playlist[1] = "Night Train";
+      System.out.println(playlist.length);
+      System.out.println(playlist[1]);
+      System.out.println(playlist[2]);
+      ```
+
+      ```output
+      3
+      Night Train
+      null
+      ```
+
+      An array keeps the size it was created with for as long as it exists. There's no way to add a fourth place to this one:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              String[] playlist = new String[3];
+              playlist[0] = "Morning Rain";
+              playlist[1] = "Night Train";
+              playlist[2] = "Paper Boats";
+              playlist[3] = "Slow River";
+              System.out.println("Four songs added");
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 3 out of bounds for length 3
+      	at Main.main(Main.java:7)
+      ```
+
+      A list can't work like that: it has to take a new element whenever you call `add`. Two tricks make that possible.
+
+      ### Room to spare, and a count
+
+      The first trick: make the array bigger than you need, and keep count of how many places are in use. Places 0 to count - 1 hold values, and the rest wait for more:
+
+      ```java main
+      String[] songs = new String[5];
+      int count = 0;
+
+      songs[count] = "Morning Rain";
+      count++;
+      songs[count] = "Night Train";
+      count++;
+
+      System.out.println(count + " songs, room for " + songs.length);
+      for (int i = 0; i < count; i++) {
+          System.out.println(i + ": " + songs[i]);
+      }
+      ```
+
+      ```output
+      2 songs, room for 5
+      0: Morning Rain
+      1: Night Train
+      ```
+
+      - `songs[count] = ...;` followed by `count++;` puts a value in the first free place and moves the count on. The count is two things at once: the number of songs, and the index of the next free place.
+      - The loop stops at `count`, not at `songs.length`. Places 2 to 4 hold `null`, not songs.
+
+      So there are two different numbers to keep apart: how many places the array has (its length, 5), and how many of them are in use (the count, 2). The rest of the module depends on both.
+
+      ### Making room: a bigger array
+
+      Spare room runs out too. When the array is full, the way out is a new, bigger array: create it, copy each value to the same index in the new one, and from then on use the new array:
+
+      ```java run
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              String[] songs = {"Morning Rain", "Night Train", "Paper Boats"};
+              System.out.println(Arrays.toString(songs));
+
+              String[] bigger = new String[songs.length * 2];
+              for (int i = 0; i < songs.length; i++) {
+                  bigger[i] = songs[i];
+              }
+              songs = bigger;
+
+              songs[3] = "Slow River";
+              System.out.println(Arrays.toString(songs));
+          }
+      }
+      ```
+
+      ```output
+      [Morning Rain, Night Train, Paper Boats]
+      [Morning Rain, Night Train, Paper Boats, Slow River, null, null]
+      ```
+
+      - `songs = bigger;` makes the variable `songs` refer to the new array. Nothing refers to the old array of three any more, so the program can't reach it, and Java's garbage collector may free its memory (module 22).
+      - The new array is twice as long as the old one: room for three more songs before the next copy is needed.
+      - Java has a ready-made method that does the same: `Arrays.copyOf(songs, 6)` creates the new array and copies the values for you. This module writes the loop out, to show the work it does.
+
+      Copying takes one assignment per value: an array of a million values means a million assignments. Keep that in mind; the next step shows how a list keeps that cost down.
+
+      Room to spare, a count, and a bigger array when the room runs out: that's all a list needs. The next step puts the three into a class.
+
+      **Your turn:** a knitting club keeps the names of the stitch patterns it has learned in an array, and it has just learned a fourth. Fill in the blanks of `twiceAsLong`, which returns a new array twice as long as `items`, with the same names at the same indexes. The first blank is the new array's length, and the second copies one name. The program prints:
+
+      ```
+      [garter, rib, cable, lace, null, null]
+      6
+      ```
+    fill: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              String[] patterns = {"garter", "rib", "cable"};
+              patterns = twiceAsLong(patterns);
+              patterns[3] = "lace";
+              System.out.println(Arrays.toString(patterns));
+              System.out.println(patterns.length);
+          }
+
+          public static String[] twiceAsLong(String[] items) {
+              int newLength = [[items.length * 2‖2 * items.length]];
+              String[] bigger = new String[newLength];
+              for (int i = 0; i < items.length; i++) {
+                  [[bigger[i] = items[i];]]
+              }
+              return bigger;
+          }
+      }
+    hints:
+      - "The old array's length is `items.length`, and the new one is twice that: `items.length * 2`."
+      - "Each round of the loop copies the name at index `i` to the same index of the new array: `bigger[i] = items[i];`."
+    more:
+      - task: |
+          A pottery class keeps its sign-up sheet in an array with a count, as in this step. What does this program print?
+        predict: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  String[] names = new String[4];
+                  int count = 0;
+                  names[count] = "Ines";
+                  count++;
+                  names[count] = "Kofi";
+                  count++;
+                  System.out.println(count + " of " + names.length);
+                  System.out.println(Arrays.toString(names));
+
+                  String[] longer = new String[names.length + 2];
+                  for (int i = 0; i < count; i++) {
+                      longer[i] = names[i];
+                  }
+                  names = longer;
+                  names[count] = "Lena";
+                  count++;
+                  System.out.println(count + " of " + names.length + ": " + names[2] + ", " + names[3]);
+              }
+          }
+        hints:
+          - "The count goes up by one for each name, and it's also the index where the next name goes. The array keeps its length of 4, and its unused places print as `null`."
+          - "The longer array has 4 + 2 places. Only the two names are copied, so after Lena goes in at index 2, index 3 is still `null`."
+      - task: |
+          A solar panel reports how many watt-hours it made each day. The program reads the reports, one whole number per line, until the line `end`. Keep them in an `int` array that starts with room for 2 reports. Only when a report doesn't fit, create an array twice as long, copy the reports into it, and go on with the new array. No ArrayList.
+
+          After `end`, print how many reports were read and the length of the array, as shown, and then the reports in the order they came, on one line, each followed by a space. For the input shown, the program prints:
+
+          ```
+          5 reports in an array of length 8
+          410 380 455 120 390
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int[] reports = new int[2];
+                  int count = 0;
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      if (count == reports.length) {
+                          int[] bigger = new int[reports.length * 2];
+                          for (int i = 0; i < count; i++) {
+                              bigger[i] = reports[i];
+                          }
+                          reports = bigger;
+                      }
+                      reports[count] = Integer.parseInt(line);
+                      count++;
+                  }
+                  System.out.println(count + " reports in an array of length " + reports.length);
+                  for (int i = 0; i < count; i++) {
+                      System.out.print(reports[i] + " ");
+                  }
+                  System.out.println();
+              }
+          }
+        hints:
+          - "Before the loop: `int[] reports = new int[2];` and `int count = 0;`. For each report, `reports[count] = Integer.parseInt(line);` and then `count++;`."
+          - "Just before storing a report, check `if (count == reports.length)`: then the array is full. Create `int[] bigger = new int[reports.length * 2];`, copy the reports in a loop, and set `reports = bigger;`."
+        require:
+          - pattern: \bnew\s+int\s*\[
+            message: "Keep the reports in an `int` array that starts as `new int[2]`, and replace it with one twice as long when it's full."
+        forbid:
+          - pattern: \b(ArrayList|List|LinkedList)\b
+            message: "Do it with an `int` array, without a list: growing the array is the point."
+        tests:
+          - stdin: |
+              410
+              380
+              455
+              120
+              390
+              end
+          - stdin: |
+              200
+              300
+              end
+            hidden: true
+          - stdin: end
+            hidden: true
+          - stdin: |
+              1
+              2
+              3
+              4
+              5
+              6
+              7
+              8
+              9
+              end
+            hidden: true
+
+  - id: list-and-map-internals-own-list
+    slug: own-list
+    title: A list of your own
+    text: |
+      Step 1 kept an array, a count and the copying in `main`. A list keeps all three inside an object, and the code that uses it only calls `add`. Here's a Playlist class that keeps song titles that way:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Playlist playlist = new Playlist();
+              String[] songs = {"Morning Rain", "Night Train", "Paper Boats", "Slow River", "Copper Sky", "Lantern Light"};
+              for (String song : songs) {
+                  playlist.add(song);
+                  System.out.println("size " + playlist.size() + ", array length " + playlist.capacity());
+              }
+              System.out.println(playlist);
+          }
+      }
+      // ==== Playlist.java ====
+      public class Playlist {
+          private String[] songs;
+          private int size;
+
+          public Playlist() {
+              this.songs = new String[4];
+              this.size = 0;
+          }
+
+          public void add(String song) {
+              if (this.size == this.songs.length) {
+                  grow();
+              }
+              this.songs[this.size] = song;
+              this.size++;
+          }
+
+          private void grow() {
+              String[] bigger = new String[this.songs.length * 2];
+              for (int i = 0; i < this.size; i++) {
+                  bigger[i] = this.songs[i];
+              }
+              this.songs = bigger;
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public int capacity() {
+              return this.songs.length;
+          }
+
+          @Override
+          public String toString() {
+              String text = "[";
+              for (int i = 0; i < this.size; i++) {
+                  if (i > 0) {
+                      text += ", ";
+                  }
+                  text += this.songs[i];
+              }
+              return text + "]";
+          }
+      }
+      ```
+
+      ```output
+      size 1, array length 4
+      size 2, array length 4
+      size 3, array length 4
+      size 4, array length 4
+      size 5, array length 8
+      size 6, array length 8
+      [Morning Rain, Night Train, Paper Boats, Slow River, Copper Sky, Lantern Light]
+      ```
+
+      ```classes
+      class Playlist
+      - songs: String[]
+      - size: int
+      + Playlist()
+      + add(song: String): void
+      + size(): int
+      + capacity(): int
+      + toString(): String
+      - grow(): void
+      ```
+
+      - The instance variables are the array and the count from step 1, here called `size`. Both are private: code that uses a Playlist can't touch the array. It sees only the public methods, and it doesn't need to know that there's an array inside.
+      - `add` first checks whether the array is full: when `size` equals the array's length, there's no free place, and `grow` makes room. Then the song goes to index `size`, and `size` goes up by one.
+      - `grow` is private: it's a helper for the class's own methods, not something for other code to call. It copies the first `size` songs, which at that moment is every place in the array.
+      - `capacity()` is here only to watch the array grow. Java's ArrayList has no such method: how long its array is stays its own business.
+      - `toString` builds the text the way Java's lists print: the songs in square brackets, separated by commas. It goes up to `size`, so the empty places don't show.
+
+      ### How often does it grow?
+
+      Each `grow` copies every song added so far, which sounds slow. But each time the array becomes twice as long, so the copying gets rarer as the list gets longer. Starting with room for 4, a list of 1000 songs grows 8 times: to 8, 16, 32, 64, 128, 256, 512 and 1024 places. All the copying adds up to 4 + 8 + 16 + 32 + 64 + 128 + 256 + 512 = 1020 values: about one copy for each song added. That's why `add` stays fast on average, however long the list gets.
+
+      Growing by a fixed amount would be much worse. With 4 more places each time, the same 1000 songs would mean 249 copies of the array, and 124,500 values copied in all.
+
+      Java's own ArrayList grows the same way, only by a smaller step. In OpenJDK, whose class library this site uses, each new array is about one and a half times as long as the old one. The exact factor is an implementation detail: Java's documentation promises only that `add` stays fast on average.
+
+      **Your turn:** an event keeps its guest list in an array. In `GuestList.java`, write the class `GuestList` with:
+
+      - a constructor with no parameters, which creates a `String` array with room for 2 names
+      - `add(String name)`, which adds a name at the end; when the array is full, it first moves the names into an array twice as long
+      - `size()`, which returns the number of names added
+      - `toString()`, which returns the names in the order they were added, separated by a comma and a space, without brackets; a list without names gives the empty String
+
+      Keep the names in the array, not in an ArrayList. The check runs:
+
+      ```java fragment
+      GuestList guests = new GuestList();
+      guests.add("Amara");
+      guests.add("Bruno");
+      guests.add("Chen");
+      System.out.println(guests.size());
+      System.out.println(guests);
+      ```
+
+      and expects:
+
+      ```
+      3
+      Amara, Bruno, Chen
+      ```
+    seed:
+      GuestList.java: |
+        public class GuestList {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                GuestList guests = new GuestList();
+                guests.add("Amara");
+                guests.add("Bruno");
+                guests.add("Chen");
+                System.out.println(guests.size());
+                System.out.println(guests);
+            }
+        }
+    solution:
+      GuestList.java: |
+        public class GuestList {
+            private String[] names;
+            private int size;
+
+            public GuestList() {
+                this.names = new String[2];
+                this.size = 0;
+            }
+
+            public void add(String name) {
+                if (this.size == this.names.length) {
+                    grow();
+                }
+                this.names[this.size] = name;
+                this.size++;
+            }
+
+            private void grow() {
+                String[] bigger = new String[this.names.length * 2];
+                for (int i = 0; i < this.size; i++) {
+                    bigger[i] = this.names[i];
+                }
+                this.names = bigger;
+            }
+
+            public int size() {
+                return this.size;
+            }
+
+            @Override
+            public String toString() {
+                String text = "";
+                for (int i = 0; i < this.size; i++) {
+                    if (i > 0) {
+                        text += ", ";
+                    }
+                    text += this.names[i];
+                }
+                return text;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                GuestList guests = new GuestList();
+                guests.add("Amara");
+                guests.add("Bruno");
+                guests.add("Chen");
+                System.out.println(guests.size());
+                System.out.println(guests);
+            }
+        }
+    hints:
+      - "Two instance variables, as in Playlist: `private String[] names;` and `private int size;`. The constructor sets `this.names = new String[2];`."
+      - "In `add`, check `if (this.size == this.names.length)` first, and then grow: a new array of twice the length, a loop that copies the names, and `this.names = bigger;`. After that, `this.names[this.size] = name;` and `this.size++;`."
+    require:
+      - pattern: \bnew\s+String\s*\[
+        message: "Keep the names in a `String` array, created with `new String[...]`."
+    forbid:
+      - pattern: \b(ArrayList|LinkedList|List)\b
+        message: "Keep the names in an array, without a list: the array that grows is the point."
+    tests:
+      - call: |
+          GuestList guests = new GuestList();
+          guests.add("Amara");
+          guests.add("Bruno");
+          guests.add("Chen");
+          System.out.println(guests.size());
+          System.out.println(guests);
+      - call: |
+          GuestList guests = new GuestList();
+          System.out.println(guests.size() + " [" + guests + "]");
+          guests.add("Dmitri");
+          System.out.println(guests.size() + " [" + guests + "]");
+          guests.add("Eva");
+          System.out.println(guests.size() + " [" + guests + "]");
+        hidden: true
+      - call: |
+          GuestList guests = new GuestList();
+          for (int i = 1; i <= 50; i++) {
+              guests.add("Guest " + i);
+          }
+          String text = guests.toString();
+          System.out.println(guests.size());
+          System.out.println(text.substring(0, 25));
+          System.out.println(text.substring(text.length() - 20));
+        hidden: true
+    more:
+      - task: |
+          This Playlist's constructor takes the length of its first array. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Playlist party = new Playlist(3);
+                  party.add("Copper Sky");
+                  party.add("Night Train");
+                  System.out.println(party.size() + " " + party.capacity());
+                  party.add("Paper Boats");
+                  party.add("Slow River");
+                  System.out.println(party.size() + " " + party.capacity());
+                  party.add("Morning Rain");
+                  party.add("Lantern Light");
+                  party.add("Copper Sky");
+                  System.out.println(party.size() + " " + party.capacity());
+              }
+          }
+          // ==== Playlist.java ====
+          public class Playlist {
+              private String[] songs;
+              private int size;
+
+              public Playlist(int room) {
+                  this.songs = new String[room];
+                  this.size = 0;
+              }
+
+              public void add(String song) {
+                  if (this.size == this.songs.length) {
+                      grow();
+                  }
+                  this.songs[this.size] = song;
+                  this.size++;
+              }
+
+              private void grow() {
+                  String[] bigger = new String[this.songs.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.songs[i];
+                  }
+                  this.songs = bigger;
+              }
+
+              public int size() {
+                  return this.size;
+              }
+
+              public int capacity() {
+                  return this.songs.length;
+              }
+          }
+        hints:
+          - "The array grows only when a song arrives and every place is taken. The first two songs fit in the 3 places."
+          - "The fourth song finds 3 of 3 places used, so the array becomes 6 long. The seventh song finds 6 of 6 used. A song added twice still takes a place of its own."
+      - task: |
+          A science center's turnstile counts the people who come in during each hour. `TurnstileLog.java` keeps the counts in an `int` array that should grow, but the program crashes with an ArrayIndexOutOfBoundsException as soon as the third hour's count is added. There are two mistakes in `TurnstileLog.java`, one in `add` and one in `grow`. Fix them. The check runs:
+
+          ```java fragment
+          TurnstileLog log = new TurnstileLog();
+          int[] hours = {14, 3, 22, 9, 17};
+          for (int people : hours) {
+              log.add(people);
+          }
+          System.out.println(log.size() + " hours, " + log.total() + " people");
+          ```
+
+          and expects:
+
+          ```
+          5 hours, 65 people
+          ```
+        seed:
+          TurnstileLog.java: |
+            public class TurnstileLog {
+                private int[] values;
+                private int size;
+
+                public TurnstileLog() {
+                    this.values = new int[2];
+                    this.size = 0;
+                }
+
+                public void add(int people) {
+                    if (this.size > this.values.length) {
+                        grow();
+                    }
+                    this.values[this.size] = people;
+                    this.size++;
+                }
+
+                private void grow() {
+                    int[] bigger = new int[this.values.length * 2];
+                    for (int i = 0; i < this.size; i++) {
+                        bigger[i] = this.values[i];
+                    }
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public int total() {
+                    int sum = 0;
+                    for (int i = 0; i < this.size; i++) {
+                        sum += this.values[i];
+                    }
+                    return sum;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TurnstileLog log = new TurnstileLog();
+                    int[] hours = {14, 3, 22, 9, 17};
+                    for (int people : hours) {
+                        log.add(people);
+                    }
+                    System.out.println(log.size() + " hours, " + log.total() + " people");
+                }
+            }
+        solution:
+          TurnstileLog.java: |
+            public class TurnstileLog {
+                private int[] values;
+                private int size;
+
+                public TurnstileLog() {
+                    this.values = new int[2];
+                    this.size = 0;
+                }
+
+                public void add(int people) {
+                    if (this.size == this.values.length) {
+                        grow();
+                    }
+                    this.values[this.size] = people;
+                    this.size++;
+                }
+
+                private void grow() {
+                    int[] bigger = new int[this.values.length * 2];
+                    for (int i = 0; i < this.size; i++) {
+                        bigger[i] = this.values[i];
+                    }
+                    this.values = bigger;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public int total() {
+                    int sum = 0;
+                    for (int i = 0; i < this.size; i++) {
+                        sum += this.values[i];
+                    }
+                    return sum;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TurnstileLog log = new TurnstileLog();
+                    int[] hours = {14, 3, 22, 9, 17};
+                    for (int people : hours) {
+                        log.add(people);
+                    }
+                    System.out.println(log.size() + " hours, " + log.total() + " people");
+                }
+            }
+        hints:
+          - "With 2 values in an array of length 2, `this.size > this.values.length` is `2 > 2`, which is false, so `grow` isn't called, and the value goes to index 2. The array is full exactly when the two are equal."
+          - "`grow` fills a new array, but `this.values` still refers to the old one when the method ends. Add `this.values = bigger;` after the loop."
+        tests:
+          - call: |
+              TurnstileLog log = new TurnstileLog();
+              int[] hours = {14, 3, 22, 9, 17};
+              for (int people : hours) {
+                  log.add(people);
+              }
+              System.out.println(log.size() + " hours, " + log.total() + " people");
+          - call: |
+              TurnstileLog log = new TurnstileLog();
+              System.out.println(log.size() + " " + log.total());
+              log.add(9);
+              log.add(1);
+              System.out.println(log.size() + " " + log.total());
+            hidden: true
+          - call: |
+              TurnstileLog log = new TurnstileLog();
+              for (int hour = 1; hour <= 40; hour++) {
+                  log.add(hour % 6);
+              }
+              System.out.println(log.size() + " " + log.total());
+            hidden: true
+
+  - id: list-and-map-internals-get-and-search
+    slug: get-and-search
+    title: get, indexOf and contains
+    text: |
+      A list you can only add to isn't much use. This step gives Playlist the methods that read it: `get` for the song at an index, `indexOf` to find where a song is, and `contains` to ask whether it's there at all.
+
+      ### get, with a check on the index
+
+      The first idea is one line:
+
+      ```java fragment
+      public String get(int index) {
+          return this.songs[index];
+      }
+      ```
+
+      With a good index, it works. But take a playlist of 3 songs, whose array has 4 places. `get(3)` returns `null` from the empty place, without a word of warning, though the list has no song at index 3. And `get(7)` crashes with an ArrayIndexOutOfBoundsException that talks about an array of length 4, which the code using the list has never heard of.
+
+      So `get` checks the index against the size itself, and refuses a bad one by throwing an exception, as module 42 did with IllegalArgumentException. The right class here is **IndexOutOfBoundsException**, the parent of ArrayIndexOutOfBoundsException in module 42's family of exceptions. ArrayList's own `get` throws one too.
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Playlist playlist = new Playlist();
+              playlist.add("Morning Rain");
+              playlist.add("Night Train");
+              playlist.add("Paper Boats");
+              System.out.println(playlist.get(2));
+              System.out.println(playlist.get(3));
+          }
+      }
+      // ==== Playlist.java ====
+      public class Playlist {
+          private String[] songs;
+          private int size;
+
+          public Playlist() {
+              this.songs = new String[4];
+              this.size = 0;
+          }
+
+          public void add(String song) {
+              if (this.size == this.songs.length) {
+                  grow();
+              }
+              this.songs[this.size] = song;
+              this.size++;
+          }
+
+          private void grow() {
+              String[] bigger = new String[this.songs.length * 2];
+              for (int i = 0; i < this.size; i++) {
+                  bigger[i] = this.songs[i];
+              }
+              this.songs = bigger;
+          }
+
+          public String get(int index) {
+              if (index < 0 || index >= this.size) {
+                  throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+              }
+              return this.songs[index];
+          }
+      }
+      ```
+
+      ```output
+      Paper Boats
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.IndexOutOfBoundsException: Index 3 out of bounds for size 3
+      	at Playlist.get(Playlist.java:28)
+      	at Main.main(Main.java:8)
+      ```
+
+      - The good indexes are 0 to `size - 1`. Anything below 0, or at `size` or above, is refused, even when the array happens to have a place there.
+      - The message says what went wrong in the list's own terms: its size, not the length of an array nobody can see.
+      - The stack trace shows both methods: the exception was thrown in `Playlist.get`, on line 28 of Playlist.java, which `main` called on line 8.
+
+      ### indexOf and contains
+
+      `indexOf` is module 28's linear search: it looks at the songs one at a time, from index 0, and returns the index of the first song that equals the one it's given, or -1 when none does. `contains` then needs only one line:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Playlist playlist = new Playlist();
+              playlist.add("Morning Rain");
+              playlist.add("Night Train");
+              playlist.add("Paper Boats");
+              playlist.add("Night Train");
+              playlist.add("Copper Sky");
+
+              System.out.println(playlist.indexOf("Night Train"));
+              System.out.println(playlist.indexOf("Slow River"));
+              System.out.println(playlist.contains("Copper Sky"));
+              for (int i = 0; i < playlist.size(); i++) {
+                  System.out.println((i + 1) + ". " + playlist.get(i));
+              }
+          }
+      }
+      // ==== Playlist.java ====
+      public class Playlist {
+          private String[] songs;
+          private int size;
+
+          public Playlist() {
+              this.songs = new String[4];
+              this.size = 0;
+          }
+
+          public void add(String song) {
+              if (this.size == this.songs.length) {
+                  grow();
+              }
+              this.songs[this.size] = song;
+              this.size++;
+          }
+
+          private void grow() {
+              String[] bigger = new String[this.songs.length * 2];
+              for (int i = 0; i < this.size; i++) {
+                  bigger[i] = this.songs[i];
+              }
+              this.songs = bigger;
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public String get(int index) {
+              if (index < 0 || index >= this.size) {
+                  throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+              }
+              return this.songs[index];
+          }
+
+          public int indexOf(String song) {
+              for (int i = 0; i < this.size; i++) {
+                  if (this.songs[i].equals(song)) {
+                      return i;
+                  }
+              }
+              return -1;
+          }
+
+          public boolean contains(String song) {
+              return indexOf(song) >= 0;
+          }
+      }
+      ```
+
+      ```output
+      1
+      -1
+      true
+      1. Morning Rain
+      2. Night Train
+      3. Paper Boats
+      4. Night Train
+      5. Copper Sky
+      ```
+
+      - `indexOf` compares with `equals`, not `==`. A title the user types is a String object of its own, and `equals` compares the characters (modules 23 and 32). `Night Train` is in the list twice; `indexOf` returns as soon as it finds the first one.
+      - The loop stops at `this.size`. After it, the array holds `null`, and `this.songs[i].equals(song)` on a `null` place would throw a NullPointerException: there's no object there to call `equals` on. (This list expects nobody to add `null` itself. Java's ArrayList allows it, and its code checks for it.)
+      - `contains` asks `indexOf` and checks for -1, so the search is written only once.
+      - With `size()` and `get`, a for loop goes through the list just like an ArrayList. A for-each loop over a Playlist doesn't compile: for-each works on arrays and on classes that implement Java's interface Iterable, and Playlist doesn't.
+
+      **Your turn:** in `GuestList.java`, the guest list from step 2 is ready. Add two methods:
+
+      - `get(int index)`, which returns the name at that index. For an index below 0, or at the size or above, it throws an IndexOutOfBoundsException with the message `Index 3 out of bounds for size 3` (with the index and the size in it).
+      - `contains(String name)`, which returns `true` if the name is on the list.
+
+      The check runs:
+
+      ```java fragment
+      GuestList guests = new GuestList();
+      guests.add("Amara");
+      guests.add("Bruno");
+      guests.add("Chen");
+      System.out.println(guests.get(1));
+      System.out.println(guests.contains("Chen") + " " + guests.contains("Dana"));
+      try {
+          System.out.println(guests.get(3));
+      } catch (IndexOutOfBoundsException e) {
+          System.out.println(e.getMessage());
+      }
+      ```
+
+      and expects:
+
+      ```
+      Bruno
+      true false
+      Index 3 out of bounds for size 3
+      ```
+    seed:
+      GuestList.java: |
+        public class GuestList {
+            private String[] names;
+            private int size;
+
+            public GuestList() {
+                this.names = new String[2];
+                this.size = 0;
+            }
+
+            public void add(String name) {
+                if (this.size == this.names.length) {
+                    grow();
+                }
+                this.names[this.size] = name;
+                this.size++;
+            }
+
+            private void grow() {
+                String[] bigger = new String[this.names.length * 2];
+                for (int i = 0; i < this.size; i++) {
+                    bigger[i] = this.names[i];
+                }
+                this.names = bigger;
+            }
+
+            public int size() {
+                return this.size;
+            }
+
+            // Write get and contains here.
+
+            @Override
+            public String toString() {
+                String text = "";
+                for (int i = 0; i < this.size; i++) {
+                    if (i > 0) {
+                        text += ", ";
+                    }
+                    text += this.names[i];
+                }
+                return text;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                GuestList guests = new GuestList();
+                guests.add("Amara");
+                guests.add("Bruno");
+                guests.add("Chen");
+                System.out.println(guests.get(1));
+                System.out.println(guests.contains("Chen") + " " + guests.contains("Dana"));
+                try {
+                    System.out.println(guests.get(3));
+                } catch (IndexOutOfBoundsException e) {
+                    System.out.println(e.getMessage());
+                }
+            }
+        }
+    solution:
+      GuestList.java: |
+        public class GuestList {
+            private String[] names;
+            private int size;
+
+            public GuestList() {
+                this.names = new String[2];
+                this.size = 0;
+            }
+
+            public void add(String name) {
+                if (this.size == this.names.length) {
+                    grow();
+                }
+                this.names[this.size] = name;
+                this.size++;
+            }
+
+            private void grow() {
+                String[] bigger = new String[this.names.length * 2];
+                for (int i = 0; i < this.size; i++) {
+                    bigger[i] = this.names[i];
+                }
+                this.names = bigger;
+            }
+
+            public int size() {
+                return this.size;
+            }
+
+            public String get(int index) {
+                if (index < 0 || index >= this.size) {
+                    throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                }
+                return this.names[index];
+            }
+
+            public boolean contains(String name) {
+                for (int i = 0; i < this.size; i++) {
+                    if (this.names[i].equals(name)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public String toString() {
+                String text = "";
+                for (int i = 0; i < this.size; i++) {
+                    if (i > 0) {
+                        text += ", ";
+                    }
+                    text += this.names[i];
+                }
+                return text;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                GuestList guests = new GuestList();
+                guests.add("Amara");
+                guests.add("Bruno");
+                guests.add("Chen");
+                System.out.println(guests.get(1));
+                System.out.println(guests.contains("Chen") + " " + guests.contains("Dana"));
+                try {
+                    System.out.println(guests.get(3));
+                } catch (IndexOutOfBoundsException e) {
+                    System.out.println(e.getMessage());
+                }
+            }
+        }
+    hints:
+      - "Check the index against the size first, as Playlist's `get` does, and refuse a bad one before reading the array. GuestList has no `indexOf`, so `contains` loops the way Playlist's `indexOf` does."
+      - "`get` starts with `if (index < 0 || index >= this.size) { throw new IndexOutOfBoundsException(\"Index \" + index + \" out of bounds for size \" + this.size); }` and then returns `this.names[index]`. `contains` loops from 0 up to `this.size`, not `this.names.length`: the places after the size hold `null`. Compare with `this.names[i].equals(name)`, and return `false` after the loop."
+    require:
+      - pattern: \bthrow\s+new\s+IndexOutOfBoundsException\s*\(
+        message: "Refuse a bad index with `throw new IndexOutOfBoundsException(...)`."
+    tests:
+      - call: |
+          GuestList guests = new GuestList();
+          guests.add("Amara");
+          guests.add("Bruno");
+          guests.add("Chen");
+          System.out.println(guests.get(1));
+          System.out.println(guests.contains("Chen") + " " + guests.contains("Dana"));
+          try {
+              System.out.println(guests.get(3));
+          } catch (IndexOutOfBoundsException e) {
+              System.out.println(e.getMessage());
+          }
+      - call: |
+          GuestList guests = new GuestList();
+          System.out.println(guests.contains("Amara"));
+          try {
+              System.out.println(guests.get(0));
+          } catch (IndexOutOfBoundsException e) {
+              System.out.println(e.getMessage());
+          }
+          guests.add("Eitan");
+          System.out.println(guests.get(0) + " " + guests.contains("Eitan") + " " + guests.contains("eitan"));
+          try {
+              System.out.println(guests.get(-1));
+          } catch (IndexOutOfBoundsException e) {
+              System.out.println(e.getMessage());
+          }
+        hidden: true
+      - call: |
+          GuestList guests = new GuestList();
+          for (int i = 1; i <= 5; i++) {
+              guests.add("Guest " + i);
+          }
+          String wanted = "Guest ";
+          System.out.println(guests.contains(wanted + 5) + " " + guests.contains("Guest 6") + " " + guests.get(4));
+          try {
+              System.out.println(guests.get(5));
+          } catch (IndexOutOfBoundsException e) {
+              System.out.println(e.getMessage());
+          }
+        hidden: true
+    more:
+      - task: |
+          What does this program print? `Playlist.java` has the methods from this step.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Playlist list = new Playlist();
+                  list.add("Slow River");
+                  list.add("Copper Sky");
+                  list.add("Slow River");
+                  System.out.println(list.indexOf("Slow River") + " " + list.contains("copper sky"));
+                  try {
+                      System.out.println(list.get(2));
+                      System.out.println(list.get(3));
+                  } catch (IndexOutOfBoundsException e) {
+                      System.out.println(e.getMessage());
+                  }
+                  System.out.println(list.size());
+              }
+          }
+          // ==== Playlist.java ====
+          public class Playlist {
+              private String[] songs;
+              private int size;
+
+              public Playlist() {
+                  this.songs = new String[4];
+                  this.size = 0;
+              }
+
+              public void add(String song) {
+                  if (this.size == this.songs.length) {
+                      grow();
+                  }
+                  this.songs[this.size] = song;
+                  this.size++;
+              }
+
+              private void grow() {
+                  String[] bigger = new String[this.songs.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.songs[i];
+                  }
+                  this.songs = bigger;
+              }
+
+              public int size() {
+                  return this.size;
+              }
+
+              public String get(int index) {
+                  if (index < 0 || index >= this.size) {
+                      throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                  }
+                  return this.songs[index];
+              }
+
+              public int indexOf(String song) {
+                  for (int i = 0; i < this.size; i++) {
+                      if (this.songs[i].equals(song)) {
+                          return i;
+                      }
+                  }
+                  return -1;
+              }
+
+              public boolean contains(String song) {
+                  return indexOf(song) >= 0;
+              }
+          }
+        hints:
+          - "`indexOf` returns the index of the first match. `equals` tells capitals from small letters, so `copper sky` isn't in the list."
+          - "The array has 4 places, but the size is 3, so `get(3)` throws. Its `println` never happens, and the `catch` block prints the message. A failed `get` changes nothing."
+      - task: |
+          `Playlist.java` has the methods from this step. Add two more, like the ones ArrayList has:
+
+          - `set(int index, String song)`, which puts the song at that index in place of the one there, and returns the song it replaced. A bad index is refused just as `get` refuses it, with the same exception and message.
+          - `lastIndexOf(String song)`, which returns the index of the last song that equals the given one, or -1 if there's none.
+
+          The check runs:
+
+          ```java fragment
+          Playlist list = new Playlist();
+          list.add("Night Train");
+          list.add("Paper Boats");
+          list.add("Night Train");
+          System.out.println(list.lastIndexOf("Night Train") + " " + list.lastIndexOf("Copper Sky"));
+          String old = list.set(1, "Slow River");
+          System.out.println(old + " -> " + list.get(1));
+          ```
+
+          and expects:
+
+          ```
+          2 -1
+          Paper Boats -> Slow River
+          ```
+        seed:
+          Playlist.java: |
+            public class Playlist {
+                private String[] songs;
+                private int size;
+
+                public Playlist() {
+                    this.songs = new String[4];
+                    this.size = 0;
+                }
+
+                public void add(String song) {
+                    if (this.size == this.songs.length) {
+                        grow();
+                    }
+                    this.songs[this.size] = song;
+                    this.size++;
+                }
+
+                private void grow() {
+                    String[] bigger = new String[this.songs.length * 2];
+                    for (int i = 0; i < this.size; i++) {
+                        bigger[i] = this.songs[i];
+                    }
+                    this.songs = bigger;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public String get(int index) {
+                    if (index < 0 || index >= this.size) {
+                        throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                    }
+                    return this.songs[index];
+                }
+
+                public int indexOf(String song) {
+                    for (int i = 0; i < this.size; i++) {
+                        if (this.songs[i].equals(song)) {
+                            return i;
+                        }
+                    }
+                    return -1;
+                }
+
+                public boolean contains(String song) {
+                    return indexOf(song) >= 0;
+                }
+
+                // Write set and lastIndexOf here.
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Playlist list = new Playlist();
+                    list.add("Night Train");
+                    list.add("Paper Boats");
+                    list.add("Night Train");
+                    System.out.println(list.lastIndexOf("Night Train") + " " + list.lastIndexOf("Copper Sky"));
+                    String old = list.set(1, "Slow River");
+                    System.out.println(old + " -> " + list.get(1));
+                }
+            }
+        solution:
+          Playlist.java: |
+            public class Playlist {
+                private String[] songs;
+                private int size;
+
+                public Playlist() {
+                    this.songs = new String[4];
+                    this.size = 0;
+                }
+
+                public void add(String song) {
+                    if (this.size == this.songs.length) {
+                        grow();
+                    }
+                    this.songs[this.size] = song;
+                    this.size++;
+                }
+
+                private void grow() {
+                    String[] bigger = new String[this.songs.length * 2];
+                    for (int i = 0; i < this.size; i++) {
+                        bigger[i] = this.songs[i];
+                    }
+                    this.songs = bigger;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public String get(int index) {
+                    if (index < 0 || index >= this.size) {
+                        throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                    }
+                    return this.songs[index];
+                }
+
+                public int indexOf(String song) {
+                    for (int i = 0; i < this.size; i++) {
+                        if (this.songs[i].equals(song)) {
+                            return i;
+                        }
+                    }
+                    return -1;
+                }
+
+                public boolean contains(String song) {
+                    return indexOf(song) >= 0;
+                }
+
+                public String set(int index, String song) {
+                    String old = get(index);
+                    this.songs[index] = song;
+                    return old;
+                }
+
+                public int lastIndexOf(String song) {
+                    for (int i = this.size - 1; i >= 0; i--) {
+                        if (this.songs[i].equals(song)) {
+                            return i;
+                        }
+                    }
+                    return -1;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Playlist list = new Playlist();
+                    list.add("Night Train");
+                    list.add("Paper Boats");
+                    list.add("Night Train");
+                    System.out.println(list.lastIndexOf("Night Train") + " " + list.lastIndexOf("Copper Sky"));
+                    String old = list.set(1, "Slow River");
+                    System.out.println(old + " -> " + list.get(1));
+                }
+            }
+        hints:
+          - "`set` can let `get` do the checking: `String old = get(index);` throws for a bad index, and otherwise gives the song to return. Then put the new song at `this.songs[index]`."
+          - "`lastIndexOf` searches from the end: `for (int i = this.size - 1; i >= 0; i--)`. The first match it meets is the last one in the list."
+        tests:
+          - call: |
+              Playlist list = new Playlist();
+              list.add("Night Train");
+              list.add("Paper Boats");
+              list.add("Night Train");
+              System.out.println(list.lastIndexOf("Night Train") + " " + list.lastIndexOf("Copper Sky"));
+              String old = list.set(1, "Slow River");
+              System.out.println(old + " -> " + list.get(1));
+          - call: |
+              Playlist list = new Playlist();
+              System.out.println(list.lastIndexOf("Copper Sky"));
+              try {
+                  list.set(0, "Copper Sky");
+                  System.out.println("set");
+              } catch (IndexOutOfBoundsException e) {
+                  System.out.println(e.getMessage());
+              }
+              for (int i = 0; i < 6; i++) {
+                  list.add("Song " + (i % 3));
+              }
+              System.out.println(list.lastIndexOf("Song 0") + " " + list.lastIndexOf("Song 2") + " " + list.indexOf("Song 2"));
+              System.out.println(list.set(5, "Encore") + " " + list.get(5) + " " + list.size());
+            hidden: true
+          - call: |
+              Playlist list = new Playlist();
+              list.add("A");
+              list.add("B");
+              try {
+                  list.set(2, "C");
+                  System.out.println("set");
+              } catch (IndexOutOfBoundsException e) {
+                  System.out.println(e.getMessage());
+              }
+              try {
+                  list.set(-1, "C");
+                  System.out.println("set");
+              } catch (IndexOutOfBoundsException e) {
+                  System.out.println(e.getMessage());
+              }
+              System.out.println(list.get(0) + list.get(1) + " " + list.size());
+            hidden: true
+
+  - id: list-and-map-internals-remove
+    slug: remove
+    title: Removing, and moving the rest along
+    text: |
+      When an ArrayList removes an element, it closes the gap: every element after it moves one place toward the front, and its index goes down by one. Your own list has to do that work itself.
+
+      ### Why not just null?
+
+      Setting the removed place to `null` would leave a hole in the middle of the list. The songs after it would keep their old indexes, `get` would return `null` from the hole, and `indexOf` would crash on it. A list has no holes: its songs are always at the indexes 0 to `size - 1`.
+
+      So the songs after the removed one each move one place to the left. Here the song at index 1 (B) is removed from a list of five, in an array of 8 (a dash is an empty place):
+
+      ```text
+      index:     0  1  2  3  4  5
+      before:    A  B  C  D  E  -    size 5
+      move C:    A  C  C  D  E  -
+      move D:    A  C  D  D  E  -
+      move E:    A  C  D  E  E  -
+      clear 4:   A  C  D  E  -  -    size 4
+      ```
+
+      Each move copies a song from the next place, from the front to the back. After the last move, the old last place still holds a copy of E, so it's set to `null` before the size goes down. Nothing reads the places after the size anyway, but a leftover reference there could keep an object in memory after the list has let go of it: remove the last song, and the reference in its place would be the only one left. ArrayList clears that place too.
+
+      ### remove in code
+
+      Like ArrayList, Playlist gets two `remove` methods: one by index, which returns the removed song, and one by value, which returns whether it found the song:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Playlist playlist = new Playlist();
+              playlist.add("Morning Rain");
+              playlist.add("Night Train");
+              playlist.add("Paper Boats");
+              playlist.add("Slow River");
+              playlist.add("Copper Sky");
+              System.out.println(playlist);
+
+              String removed = playlist.remove(1);
+              System.out.println("Removed " + removed + ": " + playlist);
+              System.out.println(playlist.remove("Copper Sky") + " " + playlist.remove("Lantern Light"));
+              System.out.println(playlist + ", size " + playlist.size());
+          }
+      }
+      // ==== Playlist.java ====
+      public class Playlist {
+          private String[] songs;
+          private int size;
+
+          public Playlist() {
+              this.songs = new String[4];
+              this.size = 0;
+          }
+
+          public void add(String song) {
+              if (this.size == this.songs.length) {
+                  grow();
+              }
+              this.songs[this.size] = song;
+              this.size++;
+          }
+
+          private void grow() {
+              String[] bigger = new String[this.songs.length * 2];
+              for (int i = 0; i < this.size; i++) {
+                  bigger[i] = this.songs[i];
+              }
+              this.songs = bigger;
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public String get(int index) {
+              if (index < 0 || index >= this.size) {
+                  throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+              }
+              return this.songs[index];
+          }
+
+          public int indexOf(String song) {
+              for (int i = 0; i < this.size; i++) {
+                  if (this.songs[i].equals(song)) {
+                      return i;
+                  }
+              }
+              return -1;
+          }
+
+          public String remove(int index) {
+              String removed = get(index);
+              for (int i = index; i < this.size - 1; i++) {
+                  this.songs[i] = this.songs[i + 1];
+              }
+              this.songs[this.size - 1] = null;
+              this.size--;
+              return removed;
+          }
+
+          public boolean remove(String song) {
+              int index = indexOf(song);
+              if (index < 0) {
+                  return false;
+              }
+              remove(index);
+              return true;
+          }
+
+          @Override
+          public String toString() {
+              String text = "[";
+              for (int i = 0; i < this.size; i++) {
+                  if (i > 0) {
+                      text += ", ";
+                  }
+                  text += this.songs[i];
+              }
+              return text + "]";
+          }
+      }
+      ```
+
+      ```output
+      [Morning Rain, Night Train, Paper Boats, Slow River, Copper Sky]
+      Removed Night Train: [Morning Rain, Paper Boats, Slow River, Copper Sky]
+      true false
+      [Morning Rain, Paper Boats, Slow River], size 3
+      ```
+
+      - `remove(int index)` calls `get(index)` first. That checks the index, throwing for a bad one, and it gives the song to return.
+      - The loop runs from the removed place up to the second-to-last song: each place takes the song from the place after it. The order matters. Going from the back to the front, E would be copied into D's place, then from there into C's, and so on, and every place would end up holding E.
+      - `remove(String song)` lets `indexOf` find the song, and then the other `remove` does the moving. Which of the two Java calls depends on the argument: a String goes to `remove(String song)`, an int to `remove(int index)`, just as with an ArrayList (module 14).
+
+      ### Long lists, long waits
+
+      Removing at index `i` from a list of `n` songs moves the `n - 1 - i` songs after it. Removing the last song moves nothing; removing the first moves all the others. To see it, this smaller Playlist, with only what the experiment needs, counts its moves:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] sizes = {10, 1000, 100000};
+              for (int size : sizes) {
+                  Playlist playlist = new Playlist();
+                  for (int i = 1; i <= size; i++) {
+                      playlist.add("Song " + i);
+                  }
+                  playlist.remove(0);
+                  int first = playlist.getMoves();
+                  playlist.remove(playlist.size() - 1);
+                  int last = playlist.getMoves() - first;
+                  System.out.println(size + " songs: removing the first moved " + first + ", removing the last moved " + last);
+              }
+          }
+      }
+      // ==== Playlist.java ====
+      public class Playlist {
+          private String[] songs;
+          private int size;
+          private int moves;
+
+          public Playlist() {
+              this.songs = new String[4];
+              this.size = 0;
+              this.moves = 0;
+          }
+
+          public void add(String song) {
+              if (this.size == this.songs.length) {
+                  String[] bigger = new String[this.songs.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.songs[i];
+                  }
+                  this.songs = bigger;
+              }
+              this.songs[this.size] = song;
+              this.size++;
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public int getMoves() {
+              return this.moves;
+          }
+
+          public String remove(int index) {
+              String removed = this.songs[index];
+              for (int i = index; i < this.size - 1; i++) {
+                  this.songs[i] = this.songs[i + 1];
+                  this.moves++;
+              }
+              this.songs[this.size - 1] = null;
+              this.size--;
+              return removed;
+          }
+      }
+      ```
+
+      ```output
+      10 songs: removing the first moved 9, removing the last moved 0
+      1000 songs: removing the first moved 999, removing the last moved 0
+      100000 songs: removing the first moved 99999, removing the last moved 0
+      ```
+
+      Removing from the middle moves about half the list. Java's ArrayList moves its elements the same way. It uses a fast copying method of Java's own, but the work still grows with the number of elements after the gap. So a program that keeps removing the first element of a long ArrayList, like a line where people leave from the front, does a lot of moving; removing at the end costs nothing extra. Adding at the end moves nothing either (apart from the occasional `grow`), but adding in the middle, with ArrayList's `add(index, value)`, moves everything after it one place the other way. The last challenge of this step builds that.
+
+      **Your turn:** a road trip planner keeps its stops in a list of its own. Fill in the three blanks of `remove` in `Itinerary.java`: how far the loop goes, the index each place takes its stop from, and the last statement, which updates the size. The program prints:
+
+      ```
+      Turin is off the trip
+      Rome is off the trip
+      [Lyon, Genoa, Pisa, Siena], 4 stops
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              Itinerary trip = new Itinerary();
+              trip.add("Lyon");
+              trip.add("Turin");
+              trip.add("Genoa");
+              trip.add("Pisa");
+              System.out.println(trip.remove(1) + " is off the trip");
+              trip.add("Siena");
+              trip.add("Rome");
+              System.out.println(trip.remove(4) + " is off the trip");
+              System.out.println(trip + ", " + trip.size() + " stops");
+          }
+      }
+      // ==== Itinerary.java ====
+      public class Itinerary {
+          private String[] stops;
+          private int size;
+
+          public Itinerary() {
+              this.stops = new String[4];
+              this.size = 0;
+          }
+
+          public void add(String stop) {
+              if (this.size == this.stops.length) {
+                  String[] bigger = new String[this.stops.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.stops[i];
+                  }
+                  this.stops = bigger;
+              }
+              this.stops[this.size] = stop;
+              this.size++;
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public String remove(int index) {
+              if (index < 0 || index >= this.size) {
+                  throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+              }
+              String removed = this.stops[index];
+              for (int i = index; i < [[this.size - 1‖size - 1]]; i++) {
+                  this.stops[i] = this.stops[[[i + 1]]];
+              }
+              this.stops[this.size - 1] = null;
+              [[this.size--;‖size--;‖this.size -= 1;‖this.size = this.size - 1;]]
+              return removed;
+          }
+
+          @Override
+          public String toString() {
+              String text = "[";
+              for (int i = 0; i < this.size; i++) {
+                  if (i > 0) {
+                      text += ", ";
+                  }
+                  text += this.stops[i];
+              }
+              return text + "]";
+          }
+      }
+    hints:
+      - "Each place takes the stop from the place after it. The last place that takes a stop is the second-to-last one: one round more would read past the last stop, outside a full array. And at the end the list has one stop fewer."
+      - "The loop goes while `i < this.size - 1`, and each round reads `this.stops[i + 1]`. With `i < this.size`, the last round would read `this.stops[this.size]`. The last statement is `this.size--;`."
+    more:
+      - task: |
+          This loop should remove every song whose title starts with B, but it removes while it goes forward through the list. `Playlist.java` has the methods from this step. What does the program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Playlist list = new Playlist();
+                  list.add("Anthem");
+                  list.add("Ballad");
+                  list.add("Blues");
+                  list.add("Carol");
+                  list.add("Bolero");
+                  for (int i = 0; i < list.size(); i++) {
+                      if (list.get(i).startsWith("B")) {
+                          list.remove(i);
+                      }
+                  }
+                  System.out.println(list);
+                  System.out.println(list.size());
+              }
+          }
+          // ==== Playlist.java ====
+          public class Playlist {
+              private String[] songs;
+              private int size;
+
+              public Playlist() {
+                  this.songs = new String[4];
+                  this.size = 0;
+              }
+
+              public void add(String song) {
+                  if (this.size == this.songs.length) {
+                      grow();
+                  }
+                  this.songs[this.size] = song;
+                  this.size++;
+              }
+
+              private void grow() {
+                  String[] bigger = new String[this.songs.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.songs[i];
+                  }
+                  this.songs = bigger;
+              }
+
+              public int size() {
+                  return this.size;
+              }
+
+              public String get(int index) {
+                  if (index < 0 || index >= this.size) {
+                      throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                  }
+                  return this.songs[index];
+              }
+
+              public String remove(int index) {
+                  String removed = get(index);
+                  for (int i = index; i < this.size - 1; i++) {
+                      this.songs[i] = this.songs[i + 1];
+                  }
+                  this.songs[this.size - 1] = null;
+                  this.size--;
+                  return removed;
+              }
+
+              @Override
+              public String toString() {
+                  String text = "[";
+                  for (int i = 0; i < this.size; i++) {
+                      if (i > 0) {
+                          text += ", ";
+                      }
+                      text += this.songs[i];
+                  }
+                  return text + "]";
+              }
+          }
+        hints:
+          - "When `i` is 1, Ballad is removed, and every song after it moves one place to the left: Blues is now at index 1. The loop then goes on with `i` = 2."
+          - "Write the list down after each removal and follow `i`. Blues is never looked at, and the loop stops when `i` reaches the new size."
+      - task: |
+          ArrayList's `add(int index, E element)` inserts an element at an index, and moves the ones from that index on one place to the right. Add the same to `Itinerary.java`: write `add(int index, String stop)`.
+
+          - The index can be from 0 to the size; at the size, the stop goes at the end. Any other index is refused with an IndexOutOfBoundsException with the message `Index 5 out of bounds for size 3` (with the index and the size in it), as `remove` does.
+          - When the array is full, it first grows, just as the other `add` does.
+          - Then each stop from the index on moves one place to the right, the new stop goes in at the index, and the size goes up by one.
+
+          Which way must the loop go this time? The check runs:
+
+          ```java fragment
+          Itinerary trip = new Itinerary();
+          trip.add("Lyon");
+          trip.add("Genoa");
+          trip.add("Siena");
+          trip.add(1, "Turin");
+          trip.add(0, "Geneva");
+          trip.add(5, "Rome");
+          System.out.println(trip + ", " + trip.size() + " stops");
+          ```
+
+          and expects:
+
+          ```
+          [Geneva, Lyon, Turin, Genoa, Siena, Rome], 6 stops
+          ```
+        seed:
+          Itinerary.java: |
+            public class Itinerary {
+                private String[] stops;
+                private int size;
+
+                public Itinerary() {
+                    this.stops = new String[4];
+                    this.size = 0;
+                }
+
+                public void add(String stop) {
+                    if (this.size == this.stops.length) {
+                        grow();
+                    }
+                    this.stops[this.size] = stop;
+                    this.size++;
+                }
+
+                // Write add(int index, String stop) here.
+
+                private void grow() {
+                    String[] bigger = new String[this.stops.length * 2];
+                    for (int i = 0; i < this.size; i++) {
+                        bigger[i] = this.stops[i];
+                    }
+                    this.stops = bigger;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public String remove(int index) {
+                    if (index < 0 || index >= this.size) {
+                        throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                    }
+                    String removed = this.stops[index];
+                    for (int i = index; i < this.size - 1; i++) {
+                        this.stops[i] = this.stops[i + 1];
+                    }
+                    this.stops[this.size - 1] = null;
+                    this.size--;
+                    return removed;
+                }
+
+                @Override
+                public String toString() {
+                    String text = "[";
+                    for (int i = 0; i < this.size; i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.stops[i];
+                    }
+                    return text + "]";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Itinerary trip = new Itinerary();
+                    trip.add("Lyon");
+                    trip.add("Genoa");
+                    trip.add("Siena");
+                    trip.add(1, "Turin");
+                    trip.add(0, "Geneva");
+                    trip.add(5, "Rome");
+                    System.out.println(trip + ", " + trip.size() + " stops");
+                }
+            }
+        solution:
+          Itinerary.java: |
+            public class Itinerary {
+                private String[] stops;
+                private int size;
+
+                public Itinerary() {
+                    this.stops = new String[4];
+                    this.size = 0;
+                }
+
+                public void add(String stop) {
+                    if (this.size == this.stops.length) {
+                        grow();
+                    }
+                    this.stops[this.size] = stop;
+                    this.size++;
+                }
+
+                public void add(int index, String stop) {
+                    if (index < 0 || index > this.size) {
+                        throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                    }
+                    if (this.size == this.stops.length) {
+                        grow();
+                    }
+                    for (int i = this.size; i > index; i--) {
+                        this.stops[i] = this.stops[i - 1];
+                    }
+                    this.stops[index] = stop;
+                    this.size++;
+                }
+
+                private void grow() {
+                    String[] bigger = new String[this.stops.length * 2];
+                    for (int i = 0; i < this.size; i++) {
+                        bigger[i] = this.stops[i];
+                    }
+                    this.stops = bigger;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public String remove(int index) {
+                    if (index < 0 || index >= this.size) {
+                        throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                    }
+                    String removed = this.stops[index];
+                    for (int i = index; i < this.size - 1; i++) {
+                        this.stops[i] = this.stops[i + 1];
+                    }
+                    this.stops[this.size - 1] = null;
+                    this.size--;
+                    return removed;
+                }
+
+                @Override
+                public String toString() {
+                    String text = "[";
+                    for (int i = 0; i < this.size; i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.stops[i];
+                    }
+                    return text + "]";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Itinerary trip = new Itinerary();
+                    trip.add("Lyon");
+                    trip.add("Genoa");
+                    trip.add("Siena");
+                    trip.add(1, "Turin");
+                    trip.add(0, "Geneva");
+                    trip.add(5, "Rome");
+                    System.out.println(trip + ", " + trip.size() + " stops");
+                }
+            }
+        hints:
+          - "Check the index first: refuse it when `index < 0 || index > this.size` (the size itself is allowed here). Then grow if `this.size == this.stops.length`."
+          - "Move the stops from the back: `for (int i = this.size; i > index; i--) { this.stops[i] = this.stops[i - 1]; }`. From the front, the first move would overwrite the next stop before it moved. Then `this.stops[index] = stop;` and `this.size++;`."
+        require:
+          - pattern: \bthrow\s+new\s+IndexOutOfBoundsException\s*\(
+            min: 2
+            message: "Refuse a bad index in the new `add` with `throw new IndexOutOfBoundsException(...)`, as `remove` does."
+        tests:
+          - call: |
+              Itinerary trip = new Itinerary();
+              trip.add("Lyon");
+              trip.add("Genoa");
+              trip.add("Siena");
+              trip.add(1, "Turin");
+              trip.add(0, "Geneva");
+              trip.add(5, "Rome");
+              System.out.println(trip + ", " + trip.size() + " stops");
+          - call: |
+              Itinerary trip = new Itinerary();
+              trip.add(0, "Bern");
+              System.out.println(trip + " " + trip.size());
+              try {
+                  trip.add(2, "Basel");
+                  System.out.println("added");
+              } catch (IndexOutOfBoundsException e) {
+                  System.out.println(e.getMessage());
+              }
+              try {
+                  trip.add(-1, "Basel");
+                  System.out.println("added");
+              } catch (IndexOutOfBoundsException e) {
+                  System.out.println(e.getMessage());
+              }
+              System.out.println(trip + " " + trip.size());
+            hidden: true
+          - call: |
+              Itinerary trip = new Itinerary();
+              for (int i = 1; i <= 9; i++) {
+                  trip.add(0, "Stop " + i);
+              }
+              trip.add(4, "Lunch");
+              System.out.println(trip);
+              System.out.println(trip.size() + " " + trip.remove(9) + " " + trip.remove(0));
+            hidden: true
+
+  - id: list-and-map-internals-generic-list
+    slug: generic-list
+    title: "Any type: a generic list"
+    text: |
+      Playlist holds Strings, and nothing else. A list of whole numbers, or of objects of your own class, would be the same class again with another type in it. Module 44's type parameters are made for this: write the class once, as `SimpleList<T>`, with T wherever Playlist said String.
+
+      ### The array is the snag
+
+      The instance variable becomes `private T[] values;`, an array of T. But creating it, the obvious way, doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              SimpleList<String> songs = new SimpleList<>();
+              System.out.println("A new list");
+          }
+      }
+      // ==== SimpleList.java ====
+      public class SimpleList<T> {
+          private T[] values;
+          private int size;
+
+          public SimpleList() {
+              this.values = new T[4];
+              this.size = 0;
+          }
+      }
+      ```
+
+      ```javac
+      SimpleList.java:6: error: generic array creation
+              this.values = new T[4];
+                            ^
+      1 error
+      ```
+
+      An array knows the type of its elements while the program runs: an array created as `new String[4]` stays an array of Strings. So to create an array, Java must know the element type at that moment. Type parameters don't last that long. javac uses T to check the code, and then the type argument is gone: the running program doesn't know whether a SimpleList was made for Strings or for Integers. So `new T[4]` can't be created.
+
+      The way around it is an array of Object, which can hold any object, since every class inherits from Object (module 34). Cast it to `T[]`, and the rest of the class can treat it as an array of T:
+
+      ```java fragment
+      this.values = (T[]) new Object[4];
+      ```
+
+      Java's own ArrayList keeps an Object array inside as well.
+
+      ### javac warns about the cast
+
+      With that line, the class compiles and runs, but javac prints a note:
+
+      ```text
+      Note: SimpleList.java uses unchecked or unsafe operations.
+      Note: Recompile with -Xlint:unchecked for details.
+      ```
+
+      It's a warning, not an error. "Unchecked" means that javac can't check this cast: it doesn't know what T will be, so it can't promise that the array really fits. Here the cast is safe, for a reason javac can't see: the array never leaves the class, and the only values that go into it come through `add(T value)`, which takes nothing but T.
+
+      To tell javac that you've checked it, put the annotation `@SuppressWarnings("unchecked")` above each method or constructor that has such a cast. Like `@Override`, it's a note to javac. It turns the warning off for that one method, and changes nothing else. The code in this course uses it, so that javac stays quiet. If you leave it out, you'll see the note, and the program still runs.
+
+      ### SimpleList
+
+      Here's the whole class: Playlist with T in place of String, and a cast in the constructor and in `grow`, the two places that create an array:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              SimpleList<String> songs = new SimpleList<>();
+              songs.add("Night Train");
+              songs.add("Paper Boats");
+              System.out.println(songs + " " + songs.contains("Paper Boats"));
+
+              SimpleList<Integer> minutes = new SimpleList<>();
+              int[] lengths = {4, 3, 5, 6, 2};
+              for (int length : lengths) {
+                  minutes.add(length);
+              }
+              int total = 0;
+              for (int i = 0; i < minutes.size(); i++) {
+                  total += minutes.get(i);
+              }
+              System.out.println(minutes + ", " + total + " minutes in all");
+
+              minutes.remove(1);
+              minutes.remove(Integer.valueOf(6));
+              System.out.println(minutes);
+          }
+      }
+      // ==== SimpleList.java ====
+      public class SimpleList<T> {
+          private T[] values;
+          private int size;
+
+          @SuppressWarnings("unchecked")
+          public SimpleList() {
+              this.values = (T[]) new Object[4];
+              this.size = 0;
+          }
+
+          public void add(T value) {
+              if (this.size == this.values.length) {
+                  grow();
+              }
+              this.values[this.size] = value;
+              this.size++;
+          }
+
+          @SuppressWarnings("unchecked")
+          private void grow() {
+              T[] bigger = (T[]) new Object[this.values.length * 2];
+              for (int i = 0; i < this.size; i++) {
+                  bigger[i] = this.values[i];
+              }
+              this.values = bigger;
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public T get(int index) {
+              if (index < 0 || index >= this.size) {
+                  throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+              }
+              return this.values[index];
+          }
+
+          public int indexOf(T value) {
+              for (int i = 0; i < this.size; i++) {
+                  if (this.values[i].equals(value)) {
+                      return i;
+                  }
+              }
+              return -1;
+          }
+
+          public boolean contains(T value) {
+              return indexOf(value) >= 0;
+          }
+
+          public T remove(int index) {
+              T removed = get(index);
+              for (int i = index; i < this.size - 1; i++) {
+                  this.values[i] = this.values[i + 1];
+              }
+              this.values[this.size - 1] = null;
+              this.size--;
+              return removed;
+          }
+
+          public boolean remove(T value) {
+              int index = indexOf(value);
+              if (index < 0) {
+                  return false;
+              }
+              remove(index);
+              return true;
+          }
+
+          @Override
+          public String toString() {
+              String text = "[";
+              for (int i = 0; i < this.size; i++) {
+                  if (i > 0) {
+                      text += ", ";
+                  }
+                  text += this.values[i];
+              }
+              return text + "]";
+          }
+      }
+      ```
+
+      ```output
+      [Night Train, Paper Boats] true
+      [4, 3, 5, 6, 2], 20 minutes in all
+      [4, 5, 2]
+      ```
+
+      - One class, two lists: `SimpleList<String>` and `SimpleList<Integer>`. For each of them, javac reads every T as the type argument, so `minutes.get(i)` gives an Integer, and `total += minutes.get(i);` needs no cast.
+      - `indexOf` compares with `equals`, which every object has, so the search works for any type. Integer's `equals` compares the numbers. For a class of your own, write an `equals` (module 32): without one, `equals` is true only for the very same object, and `contains` can't find an equal copy.
+      - `toString` adds each value to the text, which calls the value's own `toString`.
+      - The type argument must be a reference type, not a primitive type, as module 44 showed: `SimpleList<Integer>`, not `SimpleList<int>`. Java turns `4` into an Integer when it goes in, and back into an int when it comes out.
+      - In a `SimpleList<Integer>`, `remove(1)` removes the value at index 1, because 1 is an int and `remove(int index)` takes an int as it is. `remove(Integer.valueOf(6))` gives an Integer, which matches `remove(T value)`. It's the same rule as for ArrayList in module 14, and now you can see where it comes from: the two methods in your own class.
+
+      **Your turn:** a market stall keeps its products and their prices in two lists of one generic class. Fill in the three blanks of `SimpleList.java`: the type parameter in the class header, the class of the array that's created, and the return type of `get`. The program prints:
+
+      ```
+      pears: 6.5 in all
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              SimpleList<String> products = new SimpleList<>();
+              products.add("apples");
+              products.add("pears");
+              SimpleList<Double> prices = new SimpleList<>();
+              prices.add(2.5);
+              prices.add(4.0);
+              System.out.println(products.get(1) + ": " + (prices.get(0) + prices.get(1)) + " in all");
+          }
+      }
+      // ==== SimpleList.java ====
+      public class SimpleList<[[T]]> {
+          private T[] values;
+          private int size;
+
+          @SuppressWarnings("unchecked")
+          public SimpleList() {
+              this.values = (T[]) new [[Object]][4];
+              this.size = 0;
+          }
+
+          public void add(T value) {
+              if (this.size == this.values.length) {
+                  grow();
+              }
+              this.values[this.size] = value;
+              this.size++;
+          }
+
+          @SuppressWarnings("unchecked")
+          private void grow() {
+              T[] bigger = (T[]) new Object[this.values.length * 2];
+              for (int i = 0; i < this.size; i++) {
+                  bigger[i] = this.values[i];
+              }
+              this.values = bigger;
+          }
+
+          public [[T]] get(int index) {
+              if (index < 0 || index >= this.size) {
+                  throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+              }
+              return this.values[index];
+          }
+      }
+    hints:
+      - "The rest of the class already says T: `private T[] values;` and `add(T value)`."
+      - "The class header is `public class SimpleList<T>`, and `get` returns a T. `new T[4]` isn't allowed, so the array created is an array of `Object`, cast to `T[]`, as `grow` does."
+    more:
+      - task: |
+          `SimpleList.java` is the class from this step. A list of Integers has two `remove` methods that both seem to fit. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  SimpleList<Integer> scores = new SimpleList<>();
+                  int[] values = {3, 1, 4, 1, 5};
+                  for (int value : values) {
+                      scores.add(value);
+                  }
+                  scores.remove(1);
+                  System.out.println(scores);
+                  scores.remove(Integer.valueOf(1));
+                  System.out.println(scores);
+                  System.out.println(scores.remove(Integer.valueOf(9)) + " " + scores.indexOf(5));
+              }
+          }
+          // ==== SimpleList.java ====
+          public class SimpleList<T> {
+              private T[] values;
+              private int size;
+
+              @SuppressWarnings("unchecked")
+              public SimpleList() {
+                  this.values = (T[]) new Object[4];
+                  this.size = 0;
+              }
+
+              public void add(T value) {
+                  if (this.size == this.values.length) {
+                      grow();
+                  }
+                  this.values[this.size] = value;
+                  this.size++;
+              }
+
+              @SuppressWarnings("unchecked")
+              private void grow() {
+                  T[] bigger = (T[]) new Object[this.values.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.values[i];
+                  }
+                  this.values = bigger;
+              }
+
+              public T get(int index) {
+                  if (index < 0 || index >= this.size) {
+                      throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                  }
+                  return this.values[index];
+              }
+
+              public int indexOf(T value) {
+                  for (int i = 0; i < this.size; i++) {
+                      if (this.values[i].equals(value)) {
+                          return i;
+                      }
+                  }
+                  return -1;
+              }
+
+              public T remove(int index) {
+                  T removed = get(index);
+                  for (int i = index; i < this.size - 1; i++) {
+                      this.values[i] = this.values[i + 1];
+                  }
+                  this.values[this.size - 1] = null;
+                  this.size--;
+                  return removed;
+              }
+
+              public boolean remove(T value) {
+                  int index = indexOf(value);
+                  if (index < 0) {
+                      return false;
+                  }
+                  remove(index);
+                  return true;
+              }
+
+              @Override
+              public String toString() {
+                  String text = "[";
+                  for (int i = 0; i < this.size; i++) {
+                      if (i > 0) {
+                          text += ", ";
+                      }
+                      text += this.values[i];
+                  }
+                  return text + "]";
+              }
+          }
+        hints:
+          - "`scores.remove(1)` gives an int, and `remove(int index)` takes an int as it is, so it removes the value at index 1, whatever that value is."
+          - "`Integer.valueOf(1)` is an Integer, which matches `remove(T value)`: it removes the first value that equals 1. The value 9 isn't there, so that `remove` returns false. Count the indexes again after the removals."
+      - task: |
+          A card game keeps a discard pile: each card goes on top, and a player can take the top card, the one put there last. In `Pile.java`, write the generic class `Pile<T>`, on top of an array of its own, with:
+
+          - a constructor with no parameters, which creates the array with room for 4 values, as `(T[]) new Object[4]`
+          - `put(T value)`, which puts a value on top; when the array is full, it first moves the values into an array twice as long
+          - `take()`, which removes the top value from the pile and returns it. On an empty pile, it throws an IllegalStateException with the message `The pile is empty`.
+          - `size()`, which returns the number of values in the pile
+
+          No ArrayList: the top of the pile is simply the last used place of the array. The check runs:
+
+          ```java fragment
+          Pile<String> discards = new Pile<>();
+          discards.put("7 of hearts");
+          discards.put("queen of spades");
+          discards.put("2 of clubs");
+          System.out.println(discards.take());
+          System.out.println(discards.take() + ", " + discards.size() + " left");
+          ```
+
+          and expects:
+
+          ```
+          2 of clubs
+          queen of spades, 1 left
+          ```
+        seed:
+          Pile.java: |
+            public class Pile<T> {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Pile<String> discards = new Pile<>();
+                    discards.put("7 of hearts");
+                    discards.put("queen of spades");
+                    discards.put("2 of clubs");
+                    System.out.println(discards.take());
+                    System.out.println(discards.take() + ", " + discards.size() + " left");
+                }
+            }
+        solution:
+          Pile.java: |
+            public class Pile<T> {
+                private T[] values;
+                private int size;
+
+                @SuppressWarnings("unchecked")
+                public Pile() {
+                    this.values = (T[]) new Object[4];
+                    this.size = 0;
+                }
+
+                @SuppressWarnings("unchecked")
+                public void put(T value) {
+                    if (this.size == this.values.length) {
+                        T[] bigger = (T[]) new Object[this.values.length * 2];
+                        for (int i = 0; i < this.size; i++) {
+                            bigger[i] = this.values[i];
+                        }
+                        this.values = bigger;
+                    }
+                    this.values[this.size] = value;
+                    this.size++;
+                }
+
+                public T take() {
+                    if (this.size == 0) {
+                        throw new IllegalStateException("The pile is empty");
+                    }
+                    T top = this.values[this.size - 1];
+                    this.values[this.size - 1] = null;
+                    this.size--;
+                    return top;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Pile<String> discards = new Pile<>();
+                    discards.put("7 of hearts");
+                    discards.put("queen of spades");
+                    discards.put("2 of clubs");
+                    System.out.println(discards.take());
+                    System.out.println(discards.take() + ", " + discards.size() + " left");
+                }
+            }
+        hints:
+          - "Two instance variables, as in SimpleList: `private T[] values;` and `private int size;`. The constructor sets `this.values = (T[]) new Object[4];`, with `@SuppressWarnings(\"unchecked\")` above it if you want javac to stay quiet."
+          - "`put` works like SimpleList's `add`. `take` checks `this.size == 0` first and throws; otherwise it keeps `this.values[this.size - 1]` in a variable, sets that place to `null`, lowers the size, and returns the value. Nothing has to move: the top is at the end."
+        require:
+          - pattern: \(\s*T\s*\[\s*\]\s*\)\s*new\s+Object\s*\[
+            message: "Create the array as `(T[]) new Object[4]`: `new T[4]` doesn't compile."
+          - pattern: \bthrow\s+new\s+IllegalStateException\s*\(
+            message: "Refuse `take` on an empty pile with `throw new IllegalStateException(\"The pile is empty\")`."
+        forbid:
+          - pattern: \b(ArrayList|LinkedList|List|ArrayDeque|Stack)\b
+            message: "Keep the values in an array of your own, without Java's collections."
+        tests:
+          - call: |
+              Pile<String> discards = new Pile<>();
+              discards.put("7 of hearts");
+              discards.put("queen of spades");
+              discards.put("2 of clubs");
+              System.out.println(discards.take());
+              System.out.println(discards.take() + ", " + discards.size() + " left");
+          - call: |
+              Pile<Integer> numbers = new Pile<>();
+              for (int i = 1; i <= 10; i++) {
+                  numbers.put(i * i);
+              }
+              System.out.println(numbers.size());
+              int sum = 0;
+              while (numbers.size() > 0) {
+                  int top = numbers.take();
+                  sum += top;
+                  if (numbers.size() % 3 == 0) {
+                      System.out.print(top + " ");
+                  }
+              }
+              System.out.println(sum);
+              try {
+                  numbers.take();
+                  System.out.println("took one");
+              } catch (IllegalStateException e) {
+                  System.out.println(e.getMessage());
+              }
+            hidden: true
+          - call: |
+              Pile<String> pile = new Pile<>();
+              try {
+                  pile.take();
+                  System.out.println("took one");
+              } catch (IllegalStateException e) {
+                  System.out.println(e.getMessage());
+              }
+              pile.put("ace");
+              System.out.println(pile.take() + " " + pile.size());
+              pile.put("king");
+              pile.put("jack");
+              System.out.println(pile.take() + " " + pile.size());
+            hidden: true
+
+  - id: list-and-map-internals-own-map
+    slug: own-hash-map
+    title: A hash map of your own
+    text: |
+      A list finds a value by its index. A map finds it by its key, and module 32 told how a hash map does that: it keeps its entries in many small groups called **buckets**, and the key's hash code picks the bucket. This step builds one, `SimpleMap<K, V>`, with K for the type of the keys and V for the values, the names HashMap uses too.
+
+      ### A key and its value
+
+      Each entry of the map is a key with its value, an object of a small generic class with two type parameters, like module 44's Duo:
+
+      ```java fragment
+      public class KeyValue<K, V> {
+          private K key;
+          private V value;
+
+          public KeyValue(K key, V value) {
+              this.key = key;
+              this.value = value;
+          }
+
+          public K getKey() {
+              return this.key;
+          }
+
+          public V getValue() {
+              return this.value;
+          }
+
+          public void setValue(V value) {
+              this.value = value;
+          }
+      }
+      ```
+
+      The value can change, which step 7 needs. The key can't: the bucket a pair sits in depends on its key.
+
+      ### An array of buckets
+
+      Each bucket is a list of pairs, and the map keeps an array of buckets:
+
+      ```java fragment
+      private ArrayList<KeyValue<K, V>>[] buckets;
+      ```
+
+      Read the type from the inside out: `KeyValue<K, V>` is one pair, `ArrayList<KeyValue<K, V>>` is a list of pairs, that is one bucket, and the `[]` at the end makes it an array of buckets. (The buckets could be SimpleLists from step 5 just as well; ArrayList keeps the code shorter.)
+
+      Creating the array runs into the wall from step 5: `new ArrayList<KeyValue<K, V>>[8]` is a generic array creation, and javac refuses it. Leave out the angle brackets, `new ArrayList[8]`, and it compiles, with the same unchecked note as before. The constructor gets `@SuppressWarnings("unchecked")` again, and puts an empty list in every place of the array:
+
+      ```java fragment
+      @SuppressWarnings("unchecked")
+      public SimpleMap() {
+          this.buckets = new ArrayList[8];
+          for (int i = 0; i < this.buckets.length; i++) {
+              this.buckets[i] = new ArrayList<>();
+          }
+          this.size = 0;
+      }
+      ```
+
+      ### Picking the bucket
+
+      The key's bucket is the remainder of its hash code divided by the number of buckets, as in module 32's `bucketOf`:
+
+      ```java fragment
+      private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+          int index = Math.abs(key.hashCode() % this.buckets.length);
+          return this.buckets[index];
+      }
+      ```
+
+      - `key.hashCode()` works for any K, since every object has a `hashCode` (module 32).
+      - A hash code can be negative, and then so is the remainder: with 8 buckets it's anything from -7 to 7. `Math.abs` turns that into 0 to 7, always an index the array has. (Java's `Math.floorMod(key.hashCode(), this.buckets.length)` is another way to a remainder that's never negative. It can pick other buckets for negative hash codes, which works just as well, as long as the map always uses the same way.)
+      - Equal keys have equal hash codes, so a key always leads to the same bucket. That's how `put` and `get` meet: `get` looks in the bucket where `put` left the pair.
+
+      ### put and get
+
+      Here's the whole map, a first version, as a phone book of the office's extension numbers. To show where each name goes, `main` works out the buckets itself, the same way `bucketFor` does:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              SimpleMap<String, Integer> extensions = new SimpleMap<>();
+              String[] names = {"Amara", "Bo", "Carmen", "Dev", "Elif"};
+              int[] numbers = {214, 102, 305, 118, 240};
+              for (int i = 0; i < names.length; i++) {
+                  extensions.put(names[i], numbers[i]);
+                  System.out.println(names[i] + " goes to bucket " + Math.abs(names[i].hashCode() % 8));
+              }
+              System.out.println("Dev: " + extensions.get("Dev"));
+              System.out.println("Frank: " + extensions.get("Frank"));
+              System.out.println(extensions.size() + " extensions");
+          }
+      }
+      // ==== SimpleMap.java ====
+      import java.util.ArrayList;
+
+      public class SimpleMap<K, V> {
+          private ArrayList<KeyValue<K, V>>[] buckets;
+          private int size;
+
+          @SuppressWarnings("unchecked")
+          public SimpleMap() {
+              this.buckets = new ArrayList[8];
+              for (int i = 0; i < this.buckets.length; i++) {
+                  this.buckets[i] = new ArrayList<>();
+              }
+              this.size = 0;
+          }
+
+          private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+              int index = Math.abs(key.hashCode() % this.buckets.length);
+              return this.buckets[index];
+          }
+
+          public void put(K key, V value) {
+              bucketFor(key).add(new KeyValue<>(key, value));
+              this.size++;
+          }
+
+          public V get(K key) {
+              for (KeyValue<K, V> pair : bucketFor(key)) {
+                  if (pair.getKey().equals(key)) {
+                      return pair.getValue();
+                  }
+              }
+              return null;
+          }
+
+          public int size() {
+              return this.size;
+          }
+      }
+      // ==== KeyValue.java ====
+      public class KeyValue<K, V> {
+          private K key;
+          private V value;
+
+          public KeyValue(K key, V value) {
+              this.key = key;
+              this.value = value;
+          }
+
+          public K getKey() {
+              return this.key;
+          }
+
+          public V getValue() {
+              return this.value;
+          }
+
+          public void setValue(V value) {
+              this.value = value;
+          }
+      }
+      ```
+
+      ```output
+      Amara goes to bucket 4
+      Bo goes to bucket 5
+      Carmen goes to bucket 2
+      Dev goes to bucket 5
+      Elif goes to bucket 4
+      Dev: 118
+      Frank: null
+      5 extensions
+      ```
+
+      After the five `put` calls, the buckets look like this:
+
+      ```text
+      bucket 0:  -
+      bucket 1:  -
+      bucket 2:  Carmen=305
+      bucket 3:  -
+      bucket 4:  Amara=214, Elif=240
+      bucket 5:  Bo=102, Dev=118
+      bucket 6:  -
+      bucket 7:  -
+      ```
+
+      - `put` adds a new pair to the end of its key's bucket, and counts it.
+      - `get("Dev")` works out Dev's bucket, 5, and looks only there: it compares Dev with Bo, then with Dev, and returns 118. The other three names are never looked at.
+      - `get("Frank")` goes to bucket 2, finds only Carmen there, and returns `null`, as HashMap's `get` does for a missing key. To find out that Frank isn't there, it looked at one key, not five.
+      - The keys are compared with `equals`, never with `==`: a name the user types is a String object of its own (module 32).
+      - Five keys in 8 buckets, but only three buckets are used. Hash codes don't spread keys out perfectly, and some keys share a bucket. That's expected, and step 7 looks at it more closely.
+
+      This `put` has a flaw: it never checks whether the key is in the map already. Step 7 fixes that.
+
+      **Your turn:** `SimpleMap.java` is the map from this step, without its `get`. Write `get(K key)`: it returns the value of the key, or `null` when the map doesn't have the key. Look only in the key's own bucket. The check runs:
+
+      ```java fragment
+      SimpleMap<String, Integer> extensions = new SimpleMap<>();
+      extensions.put("Amara", 214);
+      extensions.put("Bo", 102);
+      extensions.put("Carmen", 305);
+      System.out.println(extensions.get("Bo"));
+      System.out.println(extensions.get("Frank"));
+      ```
+
+      and expects:
+
+      ```
+      102
+      null
+      ```
+    seed:
+      SimpleMap.java: |
+        import java.util.ArrayList;
+
+        public class SimpleMap<K, V> {
+            private ArrayList<KeyValue<K, V>>[] buckets;
+            private int size;
+
+            @SuppressWarnings("unchecked")
+            public SimpleMap() {
+                this.buckets = new ArrayList[8];
+                for (int i = 0; i < this.buckets.length; i++) {
+                    this.buckets[i] = new ArrayList<>();
+                }
+                this.size = 0;
+            }
+
+            private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                int index = Math.abs(key.hashCode() % this.buckets.length);
+                return this.buckets[index];
+            }
+
+            public void put(K key, V value) {
+                bucketFor(key).add(new KeyValue<>(key, value));
+                this.size++;
+            }
+
+            public V get(K key) {
+                return null;
+            }
+
+            public int size() {
+                return this.size;
+            }
+        }
+      KeyValue.java: |
+        public class KeyValue<K, V> {
+            private K key;
+            private V value;
+
+            public KeyValue(K key, V value) {
+                this.key = key;
+                this.value = value;
+            }
+
+            public K getKey() {
+                return this.key;
+            }
+
+            public V getValue() {
+                return this.value;
+            }
+
+            public void setValue(V value) {
+                this.value = value;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                SimpleMap<String, Integer> extensions = new SimpleMap<>();
+                extensions.put("Amara", 214);
+                extensions.put("Bo", 102);
+                extensions.put("Carmen", 305);
+                System.out.println(extensions.get("Bo"));
+                System.out.println(extensions.get("Frank"));
+            }
+        }
+    solution:
+      SimpleMap.java: |
+        import java.util.ArrayList;
+
+        public class SimpleMap<K, V> {
+            private ArrayList<KeyValue<K, V>>[] buckets;
+            private int size;
+
+            @SuppressWarnings("unchecked")
+            public SimpleMap() {
+                this.buckets = new ArrayList[8];
+                for (int i = 0; i < this.buckets.length; i++) {
+                    this.buckets[i] = new ArrayList<>();
+                }
+                this.size = 0;
+            }
+
+            private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                int index = Math.abs(key.hashCode() % this.buckets.length);
+                return this.buckets[index];
+            }
+
+            public void put(K key, V value) {
+                bucketFor(key).add(new KeyValue<>(key, value));
+                this.size++;
+            }
+
+            public V get(K key) {
+                for (KeyValue<K, V> pair : bucketFor(key)) {
+                    if (pair.getKey().equals(key)) {
+                        return pair.getValue();
+                    }
+                }
+                return null;
+            }
+
+            public int size() {
+                return this.size;
+            }
+        }
+      KeyValue.java: |
+        public class KeyValue<K, V> {
+            private K key;
+            private V value;
+
+            public KeyValue(K key, V value) {
+                this.key = key;
+                this.value = value;
+            }
+
+            public K getKey() {
+                return this.key;
+            }
+
+            public V getValue() {
+                return this.value;
+            }
+
+            public void setValue(V value) {
+                this.value = value;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                SimpleMap<String, Integer> extensions = new SimpleMap<>();
+                extensions.put("Amara", 214);
+                extensions.put("Bo", 102);
+                extensions.put("Carmen", 305);
+                System.out.println(extensions.get("Bo"));
+                System.out.println(extensions.get("Frank"));
+            }
+        }
+    hints:
+      - "`bucketFor(key)` gives the key's bucket, a list of KeyValue pairs. Go through it with `for (KeyValue<K, V> pair : bucketFor(key))`."
+      - "Compare with `pair.getKey().equals(key)`, and return `pair.getValue()` when they're equal. After the loop, return `null`."
+    forbid:
+      - pattern: \bV\s+get\s*\([^)]*\)\s*\{(?:(?!\bpublic\b)[\s\S])*(?::\s*(?:this\s*\.\s*)?buckets\s*\)|<=?\s*(?:this\s*\.\s*)?buckets\s*\.\s*length)
+        message: "`get` doesn't go through every bucket: it looks only in the bucket of its key, `bucketFor(key)`."
+    tests:
+      - call: |
+          SimpleMap<String, Integer> extensions = new SimpleMap<>();
+          extensions.put("Amara", 214);
+          extensions.put("Bo", 102);
+          extensions.put("Carmen", 305);
+          System.out.println(extensions.get("Bo"));
+          System.out.println(extensions.get("Frank"));
+      - call: |
+          SimpleMap<String, String> words = new SimpleMap<>();
+          words.put("Aa", "first");
+          words.put("BB", "second");
+          String start = "B";
+          System.out.println(words.get(start + "B") + " " + words.get("Aa") + " " + words.get("aa"));
+          System.out.println(words.get("") + " " + words.size());
+        hidden: true
+      - call: |
+          SimpleMap<Integer, String> lockers = new SimpleMap<>();
+          for (int i = -20; i <= 5000; i += 7) {
+              lockers.put(i, "L" + i);
+          }
+          System.out.println(lockers.get(-20) + " " + lockers.get(-6) + " " + lockers.get(4999) + " " + lockers.get(5000));
+          System.out.println(lockers.get(Integer.valueOf(1000) + 1) + " " + lockers.size());
+        hidden: true
+    more:
+      - task: |
+          A dry cleaner's map from ticket numbers to customers is the SimpleMap of this step, with 8 buckets. An Integer's hash code is its own value. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  SimpleMap<Integer, String> tickets = new SimpleMap<>();
+                  int[] numbers = {14, 6, 22, -3, 40};
+                  String[] names = {"Rosa", "Yusuf", "Mila", "Tom", "Ada"};
+                  for (int i = 0; i < numbers.length; i++) {
+                      tickets.put(numbers[i], names[i]);
+                  }
+                  for (int number : numbers) {
+                      System.out.print(Math.abs(Integer.valueOf(number).hashCode() % 8) + " ");
+                  }
+                  System.out.println();
+                  System.out.println(tickets.get(22) + " " + tickets.get(30) + " " + tickets.get(-3));
+              }
+          }
+          // ==== SimpleMap.java ====
+          import java.util.ArrayList;
+
+          public class SimpleMap<K, V> {
+              private ArrayList<KeyValue<K, V>>[] buckets;
+              private int size;
+
+              @SuppressWarnings("unchecked")
+              public SimpleMap() {
+                  this.buckets = new ArrayList[8];
+                  for (int i = 0; i < this.buckets.length; i++) {
+                      this.buckets[i] = new ArrayList<>();
+                  }
+                  this.size = 0;
+              }
+
+              private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                  int index = Math.abs(key.hashCode() % this.buckets.length);
+                  return this.buckets[index];
+              }
+
+              public void put(K key, V value) {
+                  bucketFor(key).add(new KeyValue<>(key, value));
+                  this.size++;
+              }
+
+              public V get(K key) {
+                  for (KeyValue<K, V> pair : bucketFor(key)) {
+                      if (pair.getKey().equals(key)) {
+                          return pair.getValue();
+                      }
+                  }
+                  return null;
+              }
+          }
+          // ==== KeyValue.java ====
+          public class KeyValue<K, V> {
+              private K key;
+              private V value;
+
+              public KeyValue(K key, V value) {
+                  this.key = key;
+                  this.value = value;
+              }
+
+              public K getKey() {
+                  return this.key;
+              }
+
+              public V getValue() {
+                  return this.value;
+              }
+          }
+        hints:
+          - "The bucket is the remainder of dividing by 8, without its minus sign: 14 % 8 is 6, and -3 % 8 is -3, which `Math.abs` makes 3."
+          - "Three of the tickets share bucket 6. `get(22)` looks in bucket 6 and finds 22 there. `get(30)` looks in bucket 6 too, but none of its keys equals 30."
+      - task: |
+          Two more methods for `SimpleMap.java`, like HashMap's:
+
+          - `containsKey(K key)`, which returns `true` if the map has the key. A key's value may be `null`, so look for the key itself, not its value.
+          - `keys()`, which returns a new `ArrayList<K>` with all the keys, bucket by bucket: first the keys in bucket 0, in the order they were put there, then the keys in bucket 1, and so on.
+
+          That's also why Java's HashMap lists its keys in an order that looks random: it goes through its buckets too. The check runs:
+
+          ```java fragment
+          SimpleMap<String, Integer> extensions = new SimpleMap<>();
+          String[] names = {"Amara", "Bo", "Carmen", "Dev", "Elif"};
+          for (int i = 0; i < names.length; i++) {
+              extensions.put(names[i], 100 + i);
+          }
+          System.out.println(extensions.keys());
+          System.out.println(extensions.containsKey("Elif") + " " + extensions.containsKey("Frank"));
+          ```
+
+          and expects:
+
+          ```
+          [Carmen, Amara, Elif, Bo, Dev]
+          true false
+          ```
+        seed:
+          SimpleMap.java: |
+            import java.util.ArrayList;
+
+            public class SimpleMap<K, V> {
+                private ArrayList<KeyValue<K, V>>[] buckets;
+                private int size;
+
+                @SuppressWarnings("unchecked")
+                public SimpleMap() {
+                    this.buckets = new ArrayList[8];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    this.size = 0;
+                }
+
+                private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                    int index = Math.abs(key.hashCode() % this.buckets.length);
+                    return this.buckets[index];
+                }
+
+                public void put(K key, V value) {
+                    bucketFor(key).add(new KeyValue<>(key, value));
+                    this.size++;
+                }
+
+                public V get(K key) {
+                    for (KeyValue<K, V> pair : bucketFor(key)) {
+                        if (pair.getKey().equals(key)) {
+                            return pair.getValue();
+                        }
+                    }
+                    return null;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                // Write containsKey and keys here.
+            }
+          KeyValue.java: |
+            public class KeyValue<K, V> {
+                private K key;
+                private V value;
+
+                public KeyValue(K key, V value) {
+                    this.key = key;
+                    this.value = value;
+                }
+
+                public K getKey() {
+                    return this.key;
+                }
+
+                public V getValue() {
+                    return this.value;
+                }
+
+                public void setValue(V value) {
+                    this.value = value;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SimpleMap<String, Integer> extensions = new SimpleMap<>();
+                    String[] names = {"Amara", "Bo", "Carmen", "Dev", "Elif"};
+                    for (int i = 0; i < names.length; i++) {
+                        extensions.put(names[i], 100 + i);
+                    }
+                    System.out.println(extensions.keys());
+                    System.out.println(extensions.containsKey("Elif") + " " + extensions.containsKey("Frank"));
+                }
+            }
+        solution:
+          SimpleMap.java: |
+            import java.util.ArrayList;
+
+            public class SimpleMap<K, V> {
+                private ArrayList<KeyValue<K, V>>[] buckets;
+                private int size;
+
+                @SuppressWarnings("unchecked")
+                public SimpleMap() {
+                    this.buckets = new ArrayList[8];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    this.size = 0;
+                }
+
+                private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                    int index = Math.abs(key.hashCode() % this.buckets.length);
+                    return this.buckets[index];
+                }
+
+                public void put(K key, V value) {
+                    bucketFor(key).add(new KeyValue<>(key, value));
+                    this.size++;
+                }
+
+                public V get(K key) {
+                    for (KeyValue<K, V> pair : bucketFor(key)) {
+                        if (pair.getKey().equals(key)) {
+                            return pair.getValue();
+                        }
+                    }
+                    return null;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public boolean containsKey(K key) {
+                    for (KeyValue<K, V> pair : bucketFor(key)) {
+                        if (pair.getKey().equals(key)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                public ArrayList<K> keys() {
+                    ArrayList<K> keys = new ArrayList<>();
+                    for (ArrayList<KeyValue<K, V>> bucket : this.buckets) {
+                        for (KeyValue<K, V> pair : bucket) {
+                            keys.add(pair.getKey());
+                        }
+                    }
+                    return keys;
+                }
+            }
+          KeyValue.java: |
+            public class KeyValue<K, V> {
+                private K key;
+                private V value;
+
+                public KeyValue(K key, V value) {
+                    this.key = key;
+                    this.value = value;
+                }
+
+                public K getKey() {
+                    return this.key;
+                }
+
+                public V getValue() {
+                    return this.value;
+                }
+
+                public void setValue(V value) {
+                    this.value = value;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SimpleMap<String, Integer> extensions = new SimpleMap<>();
+                    String[] names = {"Amara", "Bo", "Carmen", "Dev", "Elif"};
+                    for (int i = 0; i < names.length; i++) {
+                        extensions.put(names[i], 100 + i);
+                    }
+                    System.out.println(extensions.keys());
+                    System.out.println(extensions.containsKey("Elif") + " " + extensions.containsKey("Frank"));
+                }
+            }
+        hints:
+          - "`containsKey` looks in the key's own bucket, like `get`, and returns `true` when a pair's key equals the key. Why not `return get(key) != null;`? It would say `false` for a key whose value is `null`."
+          - "`keys()` needs two loops: one over the buckets, `for (ArrayList<KeyValue<K, V>> bucket : this.buckets)`, and inside it one over the pairs of that bucket, adding each `pair.getKey()` to a new `ArrayList<K>`."
+        tests:
+          - call: |
+              SimpleMap<String, Integer> extensions = new SimpleMap<>();
+              String[] names = {"Amara", "Bo", "Carmen", "Dev", "Elif"};
+              for (int i = 0; i < names.length; i++) {
+                  extensions.put(names[i], 100 + i);
+              }
+              System.out.println(extensions.keys());
+              System.out.println(extensions.containsKey("Elif") + " " + extensions.containsKey("Frank"));
+          - call: |
+              SimpleMap<Integer, String> map = new SimpleMap<>();
+              System.out.println(map.keys() + " " + map.containsKey(3));
+              int[] keys = {17, 3, -9, 8, 11, 0, 24};
+              for (int key : keys) {
+                  map.put(key, null);
+              }
+              System.out.println(map.keys());
+              System.out.println(map.containsKey(11) + " " + map.containsKey(19) + " " + map.containsKey(-9) + " " + map.containsKey(9));
+            hidden: true
+          - call: |
+              SimpleMap<String, String> map = new SimpleMap<>();
+              map.put("Aa", "x");
+              map.put("BB", "y");
+              map.put("Oakdale", "z");
+              String typed = "Oak";
+              System.out.println(map.keys() + " " + map.containsKey(typed + "dale") + " " + map.containsKey("AaBB"));
+            hidden: true
+
+  - id: list-and-map-internals-collisions-and-growing
+    slug: collisions-and-growing
+    title: Collisions, updates, removing and growing
+    text: |
+      The map from step 6 can put and get. This step makes it a map you could really use: one that handles keys that share a bucket, gives each key only one value, removes keys, and grows as it fills up.
+
+      ### Two keys, one bucket
+
+      In step 6, Amara and Elif both went to bucket 4. Their hash codes are different, 63372932 and 2162724, but the remainders after dividing by 8 are the same. Two different keys can even have the very same hash code: module 32 showed that `"Aa"` and `"BB"` both have 2112. When two keys land in one bucket, that's called a **collision**.
+
+      Collisions are why each bucket is a list and not a single place. A collision costs no data: both pairs are in the bucket, and `get` compares the keys with `equals` to find the right one. It only costs time, since `get` may have to look at more than one pair.
+
+      ### The same key twice
+
+      Step 6's `put` always adds a new pair. Put Bo's extension in again, as 109, and bucket 5 ends up with two pairs for Bo: `size()` says 6 for five people, and `get("Bo")` still finds the old pair first and returns 102. A map has one value per key, and a new `put` replaces the old value (module 31).
+
+      So `put` looks for the key in its bucket first. If it's there, the pair gets the new value, with KeyValue's `setValue`, and that's all. Only a new key adds a pair and grows the size:
+
+      ```java fragment
+      public void put(K key, V value) {
+          ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+          for (KeyValue<K, V> pair : bucket) {
+              if (pair.getKey().equals(key)) {
+                  pair.setValue(value);
+                  return;
+              }
+          }
+          bucket.add(new KeyValue<>(key, value));
+          this.size++;
+      }
+      ```
+
+      ### Removing a key
+
+      `remove` finds the key's pair in its bucket, takes it out of the bucket, and returns its value, or `null` when the key isn't there, as HashMap's `remove` does:
+
+      ```java fragment
+      public V remove(K key) {
+          ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+          for (int i = 0; i < bucket.size(); i++) {
+              if (bucket.get(i).getKey().equals(key)) {
+                  this.size--;
+                  return bucket.remove(i).getValue();
+              }
+          }
+          return null;
+      }
+      ```
+
+      - The loop goes by index, so that `bucket.remove(i)` can remove the pair at that index. It returns the removed pair, and `getValue()` gives its value.
+      - The bucket's own `remove` moves the pairs after the removed one, as in step 4. A bucket holds only a few pairs, so that's quick.
+
+      ### Growing
+
+      The map has 8 buckets. With 800 keys in it, each bucket would hold about 100 pairs, and `get` would compare with up to 100 keys: a linear search again, only a bit shorter. A map stays fast only while its buckets stay short, so it adds buckets as it fills up.
+
+      The rule here: when the map has more than 0.75 pairs per bucket, that is when `size > 0.75 * buckets.length`, the array of buckets becomes twice as long. Java's HashMap uses the same limit, 0.75, unless you give it another one, and it doubles its buckets too.
+
+      Growing can't just copy bucket 5 to bucket 5 of the new array. A key's bucket depends on the number of buckets: Bo's hash code is 2157, and 2157 % 8 is 5, but 2157 % 16 is 13. After growing, `get("Bo")` looks in bucket 13, so Bo's pair must be there. So every pair is put again, into the bucket its hash code picks in the new array:
+
+      ```java fragment
+      @SuppressWarnings("unchecked")
+      private void grow() {
+          ArrayList<KeyValue<K, V>>[] old = this.buckets;
+          this.buckets = new ArrayList[old.length * 2];
+          for (int i = 0; i < this.buckets.length; i++) {
+              this.buckets[i] = new ArrayList<>();
+          }
+          for (ArrayList<KeyValue<K, V>> bucket : old) {
+              for (KeyValue<K, V> pair : bucket) {
+                  bucketFor(pair.getKey()).add(pair);
+              }
+          }
+      }
+      ```
+
+      - `old` keeps the old array while `this.buckets` gets the new one, with an empty list in each place.
+      - `bucketFor` divides by `this.buckets.length`, which is now 16, so it picks the bucket in the new array.
+      - The pairs themselves move, not copies of them, and the size stays the same.
+
+      Like the list's `grow`, this takes time, one step for each pair. But it doubles the buckets each time, so it happens rarely, and `put` stays fast on average.
+
+      ### The whole map at work
+
+      Here's the map with all of this, counting the words of a short poem. `bucketCount()` is there only to watch the map grow:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              String[] poem = {
+                  "the rain on the roof",
+                  "the rain in the street",
+                  "a song for the rain",
+                  "and a song for the feet"
+              };
+              SimpleMap<String, Integer> counts = new SimpleMap<>();
+              for (String line : poem) {
+                  for (String word : line.split(" ")) {
+                      Integer count = counts.get(word);
+                      if (count == null) {
+                          counts.put(word, 1);
+                      } else {
+                          counts.put(word, count + 1);
+                      }
+                  }
+              }
+              System.out.println(counts.size() + " different words in " + counts.bucketCount() + " buckets");
+              String[] wanted = {"the", "rain", "song", "feet", "sun"};
+              for (String word : wanted) {
+                  System.out.println(word + ": " + counts.get(word));
+              }
+              System.out.println("removed the: " + counts.remove("the") + ", " + counts.size() + " words left");
+          }
+      }
+      // ==== SimpleMap.java ====
+      import java.util.ArrayList;
+
+      public class SimpleMap<K, V> {
+          private ArrayList<KeyValue<K, V>>[] buckets;
+          private int size;
+
+          @SuppressWarnings("unchecked")
+          public SimpleMap() {
+              this.buckets = new ArrayList[8];
+              for (int i = 0; i < this.buckets.length; i++) {
+                  this.buckets[i] = new ArrayList<>();
+              }
+              this.size = 0;
+          }
+
+          private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+              int index = Math.abs(key.hashCode() % this.buckets.length);
+              return this.buckets[index];
+          }
+
+          public void put(K key, V value) {
+              ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+              for (KeyValue<K, V> pair : bucket) {
+                  if (pair.getKey().equals(key)) {
+                      pair.setValue(value);
+                      return;
+                  }
+              }
+              bucket.add(new KeyValue<>(key, value));
+              this.size++;
+              if (this.size > 0.75 * this.buckets.length) {
+                  grow();
+              }
+          }
+
+          public V get(K key) {
+              for (KeyValue<K, V> pair : bucketFor(key)) {
+                  if (pair.getKey().equals(key)) {
+                      return pair.getValue();
+                  }
+              }
+              return null;
+          }
+
+          public V remove(K key) {
+              ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+              for (int i = 0; i < bucket.size(); i++) {
+                  if (bucket.get(i).getKey().equals(key)) {
+                      this.size--;
+                      return bucket.remove(i).getValue();
+                  }
+              }
+              return null;
+          }
+
+          @SuppressWarnings("unchecked")
+          private void grow() {
+              ArrayList<KeyValue<K, V>>[] old = this.buckets;
+              this.buckets = new ArrayList[old.length * 2];
+              for (int i = 0; i < this.buckets.length; i++) {
+                  this.buckets[i] = new ArrayList<>();
+              }
+              for (ArrayList<KeyValue<K, V>> bucket : old) {
+                  for (KeyValue<K, V> pair : bucket) {
+                      bucketFor(pair.getKey()).add(pair);
+                  }
+              }
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public int bucketCount() {
+              return this.buckets.length;
+          }
+      }
+      // ==== KeyValue.java ====
+      public class KeyValue<K, V> {
+          private K key;
+          private V value;
+
+          public KeyValue(K key, V value) {
+              this.key = key;
+              this.value = value;
+          }
+
+          public K getKey() {
+              return this.key;
+          }
+
+          public V getValue() {
+              return this.value;
+          }
+
+          public void setValue(V value) {
+              this.value = value;
+          }
+      }
+      ```
+
+      ```output
+      11 different words in 16 buckets
+      the: 6
+      rain: 3
+      song: 2
+      feet: 1
+      sun: null
+      removed the: 6, 10 words left
+      ```
+
+      - The poem has 21 words, but 11 different ones. Each word after the first time only changes its count, so the size counts each word once.
+      - The seventh new word took the size to 7, more than 0.75 * 8 = 6, and the map grew to 16 buckets. With 11 words it's still below 0.75 * 16 = 12.
+      - `counts.get(word)` returns an Integer, which is `null` for a word not counted yet. That's why `count` is an `Integer`, not an `int`.
+
+      **Your turn:** a parking office keeps its permits in a SimpleMap, from a car's plate to the holder's name. Java's HashMap's `put` returns the value the key had before, or `null` for a new key, so a program can tell a renewal from a new permit. `SimpleMap.java` has step 6's `put`, which returns nothing. Rewrite it to return a `V`:
+
+      - when the key is in its bucket already, give its pair the new value, and return the old one
+      - otherwise, add a new pair, count it, and return `null`
+
+      The check runs:
+
+      ```java fragment
+      SimpleMap<String, String> permits = new SimpleMap<>();
+      System.out.println(permits.put("KX-482", "Ines"));
+      System.out.println(permits.put("BT-907", "Theo"));
+      System.out.println(permits.put("KX-482", "Rafael"));
+      System.out.println(permits.get("KX-482") + ", " + permits.size() + " permits");
+      ```
+
+      and expects:
+
+      ```
+      null
+      null
+      Ines
+      Rafael, 2 permits
+      ```
+    seed:
+      SimpleMap.java: |
+        import java.util.ArrayList;
+
+        public class SimpleMap<K, V> {
+            private ArrayList<KeyValue<K, V>>[] buckets;
+            private int size;
+
+            @SuppressWarnings("unchecked")
+            public SimpleMap() {
+                this.buckets = new ArrayList[8];
+                for (int i = 0; i < this.buckets.length; i++) {
+                    this.buckets[i] = new ArrayList<>();
+                }
+                this.size = 0;
+            }
+
+            private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                int index = Math.abs(key.hashCode() % this.buckets.length);
+                return this.buckets[index];
+            }
+
+            public void put(K key, V value) {
+                bucketFor(key).add(new KeyValue<>(key, value));
+                this.size++;
+            }
+
+            public V get(K key) {
+                for (KeyValue<K, V> pair : bucketFor(key)) {
+                    if (pair.getKey().equals(key)) {
+                        return pair.getValue();
+                    }
+                }
+                return null;
+            }
+
+            public int size() {
+                return this.size;
+            }
+        }
+      KeyValue.java: |
+        public class KeyValue<K, V> {
+            private K key;
+            private V value;
+
+            public KeyValue(K key, V value) {
+                this.key = key;
+                this.value = value;
+            }
+
+            public K getKey() {
+                return this.key;
+            }
+
+            public V getValue() {
+                return this.value;
+            }
+
+            public void setValue(V value) {
+                this.value = value;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                SimpleMap<String, String> permits = new SimpleMap<>();
+                System.out.println(permits.put("KX-482", "Ines"));
+                System.out.println(permits.put("BT-907", "Theo"));
+                System.out.println(permits.put("KX-482", "Rafael"));
+                System.out.println(permits.get("KX-482") + ", " + permits.size() + " permits");
+            }
+        }
+    solution:
+      SimpleMap.java: |
+        import java.util.ArrayList;
+
+        public class SimpleMap<K, V> {
+            private ArrayList<KeyValue<K, V>>[] buckets;
+            private int size;
+
+            @SuppressWarnings("unchecked")
+            public SimpleMap() {
+                this.buckets = new ArrayList[8];
+                for (int i = 0; i < this.buckets.length; i++) {
+                    this.buckets[i] = new ArrayList<>();
+                }
+                this.size = 0;
+            }
+
+            private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                int index = Math.abs(key.hashCode() % this.buckets.length);
+                return this.buckets[index];
+            }
+
+            public V put(K key, V value) {
+                ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+                for (KeyValue<K, V> pair : bucket) {
+                    if (pair.getKey().equals(key)) {
+                        V old = pair.getValue();
+                        pair.setValue(value);
+                        return old;
+                    }
+                }
+                bucket.add(new KeyValue<>(key, value));
+                this.size++;
+                return null;
+            }
+
+            public V get(K key) {
+                for (KeyValue<K, V> pair : bucketFor(key)) {
+                    if (pair.getKey().equals(key)) {
+                        return pair.getValue();
+                    }
+                }
+                return null;
+            }
+
+            public int size() {
+                return this.size;
+            }
+        }
+      KeyValue.java: |
+        public class KeyValue<K, V> {
+            private K key;
+            private V value;
+
+            public KeyValue(K key, V value) {
+                this.key = key;
+                this.value = value;
+            }
+
+            public K getKey() {
+                return this.key;
+            }
+
+            public V getValue() {
+                return this.value;
+            }
+
+            public void setValue(V value) {
+                this.value = value;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                SimpleMap<String, String> permits = new SimpleMap<>();
+                System.out.println(permits.put("KX-482", "Ines"));
+                System.out.println(permits.put("BT-907", "Theo"));
+                System.out.println(permits.put("KX-482", "Rafael"));
+                System.out.println(permits.get("KX-482") + ", " + permits.size() + " permits");
+            }
+        }
+    hints:
+      - "The header becomes `public V put(K key, V value)`. Go through `bucketFor(key)` first, as the lesson's `put` does."
+      - "When a pair's key equals the key, keep `pair.getValue()` in a variable `V old`, call `pair.setValue(value)`, and `return old;`. After the loop, add the new pair, count it, and `return null;`."
+    require:
+      - pattern: \bpublic\s+V\s+put\s*\(
+        message: "Make `put` return the old value: `public V put(K key, V value)`."
+    tests:
+      - call: |
+          SimpleMap<String, String> permits = new SimpleMap<>();
+          System.out.println(permits.put("KX-482", "Ines"));
+          System.out.println(permits.put("BT-907", "Theo"));
+          System.out.println(permits.put("KX-482", "Rafael"));
+          System.out.println(permits.get("KX-482") + ", " + permits.size() + " permits");
+      - call: |
+          SimpleMap<String, Integer> map = new SimpleMap<>();
+          String[] keys = {"Aa", "BB", "Aa", "BB", "Aa", "C"};
+          for (int i = 0; i < keys.length; i++) {
+              System.out.print(map.put(keys[i], i) + " ");
+          }
+          System.out.println();
+          String start = "B";
+          System.out.println(map.get("Aa") + " " + map.get(start + "B") + " " + map.get("C") + " " + map.size());
+        hidden: true
+      - call: |
+          SimpleMap<Integer, String> map = new SimpleMap<>();
+          for (int i = 0; i < 40; i++) {
+              map.put(i % 13 * 1000, "v" + i);
+          }
+          System.out.println(map.size() + " " + map.get(0) + " " + map.get(12000) + " " + map.get(5000));
+          System.out.println(map.put(Integer.valueOf(3000), "new") + " " + map.size());
+        hidden: true
+    more:
+      - task: |
+          An office mailroom's map from pigeonhole numbers to the people who use them is the SimpleMap of this step, with one change: its constructor takes the number of buckets to start with. An Integer's hash code is its own value. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  SimpleMap<Integer, String> pigeonholes = new SimpleMap<>(4);
+                  pigeonholes.put(11, "Kenji");
+                  pigeonholes.put(12, "Marisol");
+                  pigeonholes.put(13, "Olu");
+                  System.out.println(pigeonholes.size() + " " + pigeonholes.bucketCount());
+                  pigeonholes.put(14, "Farida");
+                  System.out.println(pigeonholes.size() + " " + pigeonholes.bucketCount());
+                  pigeonholes.put(12, "Rasmus");
+                  System.out.println(pigeonholes.size() + " " + pigeonholes.get(12));
+                  System.out.println(pigeonholes.remove(13) + " " + pigeonholes.remove(15) + " " + pigeonholes.size());
+              }
+          }
+          // ==== SimpleMap.java ====
+          import java.util.ArrayList;
+
+          public class SimpleMap<K, V> {
+              private ArrayList<KeyValue<K, V>>[] buckets;
+              private int size;
+
+              @SuppressWarnings("unchecked")
+              public SimpleMap(int bucketCount) {
+                  this.buckets = new ArrayList[bucketCount];
+                  for (int i = 0; i < this.buckets.length; i++) {
+                      this.buckets[i] = new ArrayList<>();
+                  }
+                  this.size = 0;
+              }
+
+              private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                  int index = Math.abs(key.hashCode() % this.buckets.length);
+                  return this.buckets[index];
+              }
+
+              public void put(K key, V value) {
+                  ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+                  for (KeyValue<K, V> pair : bucket) {
+                      if (pair.getKey().equals(key)) {
+                          pair.setValue(value);
+                          return;
+                      }
+                  }
+                  bucket.add(new KeyValue<>(key, value));
+                  this.size++;
+                  if (this.size > 0.75 * this.buckets.length) {
+                      grow();
+                  }
+              }
+
+              public V get(K key) {
+                  for (KeyValue<K, V> pair : bucketFor(key)) {
+                      if (pair.getKey().equals(key)) {
+                          return pair.getValue();
+                      }
+                  }
+                  return null;
+              }
+
+              public V remove(K key) {
+                  ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+                  for (int i = 0; i < bucket.size(); i++) {
+                      if (bucket.get(i).getKey().equals(key)) {
+                          this.size--;
+                          return bucket.remove(i).getValue();
+                      }
+                  }
+                  return null;
+              }
+
+              @SuppressWarnings("unchecked")
+              private void grow() {
+                  ArrayList<KeyValue<K, V>>[] old = this.buckets;
+                  this.buckets = new ArrayList[old.length * 2];
+                  for (int i = 0; i < this.buckets.length; i++) {
+                      this.buckets[i] = new ArrayList<>();
+                  }
+                  for (ArrayList<KeyValue<K, V>> bucket : old) {
+                      for (KeyValue<K, V> pair : bucket) {
+                          bucketFor(pair.getKey()).add(pair);
+                      }
+                  }
+              }
+
+              public int size() {
+                  return this.size;
+              }
+
+              public int bucketCount() {
+                  return this.buckets.length;
+              }
+          }
+          // ==== KeyValue.java ====
+          public class KeyValue<K, V> {
+              private K key;
+              private V value;
+
+              public KeyValue(K key, V value) {
+                  this.key = key;
+                  this.value = value;
+              }
+
+              public K getKey() {
+                  return this.key;
+              }
+
+              public V getValue() {
+                  return this.value;
+              }
+
+              public void setValue(V value) {
+                  this.value = value;
+              }
+          }
+        hints:
+          - "With 4 buckets, the map grows when the size goes above 0.75 * 4 = 3. Three people don't make it grow; the fourth does, and then there are 8 buckets."
+          - "Putting pigeonhole 12 again changes the person in it but not the size. `remove` returns the removed value, or `null` for a pigeonhole that isn't in the map."
+      - task: |
+          `SimpleMap.java` has everything from this step except the body of `grow`, so the map never gets more than its 8 buckets. `put` already calls `grow` when the size goes above 0.75 times the number of buckets. Write `grow`: it makes the array of buckets twice as long, with an empty list in each place, and puts every pair into its bucket in the new array. The check runs:
+
+          ```java fragment
+          SimpleMap<Integer, String> map = new SimpleMap<>();
+          for (int i = 1; i <= 7; i++) {
+              map.put(i * 5, "value " + i);
+          }
+          System.out.println(map.size() + " keys in " + map.bucketCount() + " buckets");
+          System.out.println(map.get(5) + ", " + map.get(10) + ", " + map.get(35) + ", " + map.get(40));
+          ```
+
+          and expects:
+
+          ```
+          7 keys in 16 buckets
+          value 1, value 2, value 7, null
+          ```
+        seed:
+          SimpleMap.java: |
+            import java.util.ArrayList;
+
+            public class SimpleMap<K, V> {
+                private ArrayList<KeyValue<K, V>>[] buckets;
+                private int size;
+
+                @SuppressWarnings("unchecked")
+                public SimpleMap() {
+                    this.buckets = new ArrayList[8];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    this.size = 0;
+                }
+
+                private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                    int index = Math.abs(key.hashCode() % this.buckets.length);
+                    return this.buckets[index];
+                }
+
+                public void put(K key, V value) {
+                    ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+                    for (KeyValue<K, V> pair : bucket) {
+                        if (pair.getKey().equals(key)) {
+                            pair.setValue(value);
+                            return;
+                        }
+                    }
+                    bucket.add(new KeyValue<>(key, value));
+                    this.size++;
+                    if (this.size > 0.75 * this.buckets.length) {
+                        grow();
+                    }
+                }
+
+                @SuppressWarnings("unchecked")
+                private void grow() {
+
+                }
+
+                public V get(K key) {
+                    for (KeyValue<K, V> pair : bucketFor(key)) {
+                        if (pair.getKey().equals(key)) {
+                            return pair.getValue();
+                        }
+                    }
+                    return null;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public int bucketCount() {
+                    return this.buckets.length;
+                }
+            }
+          KeyValue.java: |
+            public class KeyValue<K, V> {
+                private K key;
+                private V value;
+
+                public KeyValue(K key, V value) {
+                    this.key = key;
+                    this.value = value;
+                }
+
+                public K getKey() {
+                    return this.key;
+                }
+
+                public V getValue() {
+                    return this.value;
+                }
+
+                public void setValue(V value) {
+                    this.value = value;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SimpleMap<Integer, String> map = new SimpleMap<>();
+                    for (int i = 1; i <= 7; i++) {
+                        map.put(i * 5, "value " + i);
+                    }
+                    System.out.println(map.size() + " keys in " + map.bucketCount() + " buckets");
+                    System.out.println(map.get(5) + ", " + map.get(10) + ", " + map.get(35) + ", " + map.get(40));
+                }
+            }
+        solution:
+          SimpleMap.java: |
+            import java.util.ArrayList;
+
+            public class SimpleMap<K, V> {
+                private ArrayList<KeyValue<K, V>>[] buckets;
+                private int size;
+
+                @SuppressWarnings("unchecked")
+                public SimpleMap() {
+                    this.buckets = new ArrayList[8];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    this.size = 0;
+                }
+
+                private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                    int index = Math.abs(key.hashCode() % this.buckets.length);
+                    return this.buckets[index];
+                }
+
+                public void put(K key, V value) {
+                    ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+                    for (KeyValue<K, V> pair : bucket) {
+                        if (pair.getKey().equals(key)) {
+                            pair.setValue(value);
+                            return;
+                        }
+                    }
+                    bucket.add(new KeyValue<>(key, value));
+                    this.size++;
+                    if (this.size > 0.75 * this.buckets.length) {
+                        grow();
+                    }
+                }
+
+                @SuppressWarnings("unchecked")
+                private void grow() {
+                    ArrayList<KeyValue<K, V>>[] old = this.buckets;
+                    this.buckets = new ArrayList[old.length * 2];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    for (ArrayList<KeyValue<K, V>> bucket : old) {
+                        for (KeyValue<K, V> pair : bucket) {
+                            bucketFor(pair.getKey()).add(pair);
+                        }
+                    }
+                }
+
+                public V get(K key) {
+                    for (KeyValue<K, V> pair : bucketFor(key)) {
+                        if (pair.getKey().equals(key)) {
+                            return pair.getValue();
+                        }
+                    }
+                    return null;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public int bucketCount() {
+                    return this.buckets.length;
+                }
+            }
+          KeyValue.java: |
+            public class KeyValue<K, V> {
+                private K key;
+                private V value;
+
+                public KeyValue(K key, V value) {
+                    this.key = key;
+                    this.value = value;
+                }
+
+                public K getKey() {
+                    return this.key;
+                }
+
+                public V getValue() {
+                    return this.value;
+                }
+
+                public void setValue(V value) {
+                    this.value = value;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SimpleMap<Integer, String> map = new SimpleMap<>();
+                    for (int i = 1; i <= 7; i++) {
+                        map.put(i * 5, "value " + i);
+                    }
+                    System.out.println(map.size() + " keys in " + map.bucketCount() + " buckets");
+                    System.out.println(map.get(5) + ", " + map.get(10) + ", " + map.get(35) + ", " + map.get(40));
+                }
+            }
+        hints:
+          - "Keep the old array in a variable, `ArrayList<KeyValue<K, V>>[] old = this.buckets;`, then set `this.buckets = new ArrayList[old.length * 2];` and fill it with empty lists, as the constructor does."
+          - "Then go through every bucket of `old`, and every pair in it, and add the pair to `bucketFor(pair.getKey())`. That picks its bucket in the new array, since `bucketFor` divides by `this.buckets.length`. Copying old bucket 2 to new bucket 2 would lose keys: 10 % 8 is 2, but 10 % 16 is 10."
+        tests:
+          - call: |
+              SimpleMap<Integer, String> map = new SimpleMap<>();
+              for (int i = 1; i <= 7; i++) {
+                  map.put(i * 5, "value " + i);
+              }
+              System.out.println(map.size() + " keys in " + map.bucketCount() + " buckets");
+              System.out.println(map.get(5) + ", " + map.get(10) + ", " + map.get(35) + ", " + map.get(40));
+          - call: |
+              SimpleMap<String, Integer> map = new SimpleMap<>();
+              for (int i = 0; i < 100; i++) {
+                  map.put("key" + i, i);
+              }
+              int found = 0;
+              for (int i = 0; i < 100; i++) {
+                  if (map.get("key" + i) == i) {
+                      found++;
+                  }
+              }
+              System.out.println(map.size() + " " + map.bucketCount() + " " + found);
+              map.put("key50", -1);
+              System.out.println(map.size() + " " + map.get("key50") + " " + map.get("key100"));
+            hidden: true
+          - call: |
+              SimpleMap<Integer, Integer> map = new SimpleMap<>();
+              for (int i = -30; i < 30; i++) {
+                  map.put(i * 37, i);
+              }
+              int found = 0;
+              for (int i = -30; i < 30; i++) {
+                  if (map.get(i * 37) == i) {
+                      found++;
+                  }
+              }
+              System.out.println(map.size() + " " + map.bucketCount() + " " + found);
+            hidden: true
+
+  - id: list-and-map-internals-fast-lookups
+    slug: why-lookups-are-fast
+    title: Why lookups stay fast
+    text: |
+      Module 33 counted the comparisons of an ArrayList's `contains` and a HashMap's `containsKey`, by counting the calls to a key's `equals`. Now that the list and the map are your own, the counting can go inside them. For this experiment only, SimpleList and SimpleMap count every comparison they make, `contains` in the list and `get` in the map. Both classes keep only the methods the experiment needs:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] sizes = {100, 1000, 10000, 100000};
+              for (int size : sizes) {
+                  SimpleList<Integer> list = new SimpleList<>();
+                  SimpleMap<Integer, Integer> map = new SimpleMap<>();
+                  for (int i = 1; i <= size; i++) {
+                      list.add(i);
+                      map.put(i, i);
+                  }
+                  list.contains(size);
+                  map.get(size);
+                  System.out.println(size + " values: list " + list.getComparisons() + ", map " + map.getComparisons());
+              }
+          }
+      }
+      // ==== SimpleList.java ====
+      public class SimpleList<T> {
+          private T[] values;
+          private int size;
+          private int comparisons;
+
+          @SuppressWarnings("unchecked")
+          public SimpleList() {
+              this.values = (T[]) new Object[4];
+              this.size = 0;
+              this.comparisons = 0;
+          }
+
+          @SuppressWarnings("unchecked")
+          public void add(T value) {
+              if (this.size == this.values.length) {
+                  T[] bigger = (T[]) new Object[this.values.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.values[i];
+                  }
+                  this.values = bigger;
+              }
+              this.values[this.size] = value;
+              this.size++;
+          }
+
+          public boolean contains(T value) {
+              for (int i = 0; i < this.size; i++) {
+                  this.comparisons++;
+                  if (this.values[i].equals(value)) {
+                      return true;
+                  }
+              }
+              return false;
+          }
+
+          public int getComparisons() {
+              return this.comparisons;
+          }
+      }
+      // ==== SimpleMap.java ====
+      import java.util.ArrayList;
+
+      public class SimpleMap<K, V> {
+          private ArrayList<KeyValue<K, V>>[] buckets;
+          private int size;
+          private int comparisons;
+
+          @SuppressWarnings("unchecked")
+          public SimpleMap() {
+              this.buckets = new ArrayList[8];
+              for (int i = 0; i < this.buckets.length; i++) {
+                  this.buckets[i] = new ArrayList<>();
+              }
+              this.size = 0;
+              this.comparisons = 0;
+          }
+
+          private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+              int index = Math.abs(key.hashCode() % this.buckets.length);
+              return this.buckets[index];
+          }
+
+          public void put(K key, V value) {
+              ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+              for (KeyValue<K, V> pair : bucket) {
+                  if (pair.getKey().equals(key)) {
+                      pair.setValue(value);
+                      return;
+                  }
+              }
+              bucket.add(new KeyValue<>(key, value));
+              this.size++;
+              if (this.size > 0.75 * this.buckets.length) {
+                  grow();
+              }
+          }
+
+          public V get(K key) {
+              for (KeyValue<K, V> pair : bucketFor(key)) {
+                  this.comparisons++;
+                  if (pair.getKey().equals(key)) {
+                      return pair.getValue();
+                  }
+              }
+              return null;
+          }
+
+          @SuppressWarnings("unchecked")
+          private void grow() {
+              ArrayList<KeyValue<K, V>>[] old = this.buckets;
+              this.buckets = new ArrayList[old.length * 2];
+              for (int i = 0; i < this.buckets.length; i++) {
+                  this.buckets[i] = new ArrayList<>();
+              }
+              for (ArrayList<KeyValue<K, V>> bucket : old) {
+                  for (KeyValue<K, V> pair : bucket) {
+                      bucketFor(pair.getKey()).add(pair);
+                  }
+              }
+          }
+
+          public int getComparisons() {
+              return this.comparisons;
+          }
+      }
+      // ==== KeyValue.java ====
+      public class KeyValue<K, V> {
+          private K key;
+          private V value;
+
+          public KeyValue(K key, V value) {
+              this.key = key;
+              this.value = value;
+          }
+
+          public K getKey() {
+              return this.key;
+          }
+
+          public V getValue() {
+              return this.value;
+          }
+
+          public void setValue(V value) {
+              this.value = value;
+          }
+      }
+      ```
+
+      ```output
+      100 values: list 100, map 1
+      1000 values: list 1000, map 1
+      10000 values: list 10000, map 1
+      100000 values: list 100000, map 1
+      ```
+
+      - The list's `contains` compared the wanted value with every value before it found it at the end. Ten times the values, ten times the comparisons.
+      - The map's `get` went straight to the bucket of its key, and compared once, at every size. The map had grown along with its keys, so that bucket held just that one key.
+      - A value that isn't there is the worst case for the list: `contains` compares with every value before it can say `false`. The map looks in one bucket and is done.
+
+      Comparisons aren't the whole cost. Working out a hash code takes a moment too (a String's goes through all its characters, module 32), but that work depends on the key, not on how many keys the map holds.
+
+      ### What keeps the map fast
+
+      Three things you built work together:
+
+      1. **The hash code picks the bucket.** `get` never looks at the other buckets at all.
+      2. **Growing keeps the buckets short.** There are never more than 0.75 pairs per bucket on average, however many keys go in. Without `grow`, 100,000 keys in 8 buckets would mean about 12,500 per bucket.
+      3. **Good hash codes spread the keys out.** If every key had the same hash code, they'd all share one bucket, and `get` would compare with key after key: a list again, in a slower form. That's why module 32's `hashCode` combined all the values `equals` compares, multiplying by 31 along the way. Java's String and Integer already have hash codes that spread well.
+
+      The map pays for its speed in other ways. It needs more memory: an array of buckets, a list for each bucket and an object for each pair. Now and then a `put` has to grow the map and put every pair again. And its keys come out bucket by bucket, not in the order they went in.
+
+      ### The two, side by side
+
+      | | Your list, and ArrayList | Your map, and HashMap |
+      | --- | --- | --- |
+      | Adding | at the end, quick; now and then the array is copied into a bigger one | quick; now and then every pair is put again into twice as many buckets |
+      | By position | `get(index)` goes straight to the place in the array | no positions |
+      | Finding | `contains` and `indexOf` compare with one element after another | `get` and `containsKey` look in one short bucket |
+      | Removing | moves every element after the removed one | removes from one short bucket |
+      | Order | the order of adding | bucket by bucket |
+
+      Java's own ArrayList and HashMap are built on these same ideas, with refinements. HashMap starts with 16 buckets by default. In OpenJDK, ArrayList's array grows by half its length rather than doubling, and HashMap mixes the bits of each hash code before it picks a bucket, so that keys spread out better, and turns a bucket that gets very long into a tree, which is quicker to search. These are implementation details, not promises: another Java could do them differently. You'll go on using Java's versions; now you know what they do when you call `add`, `get` and `put`.
+
+      **Your turn:** this time count the comparisons yourself. `SimpleList` and `SimpleMap` are the counting versions from this step, except that this map has no `grow`: it keeps its 8 buckets. An Integer's hash code is its own value. The counts add up: each `getComparisons()` gives every comparison made so far. What does this program print?
+    predict: |
+      public class Main {
+          public static void main(String[] args) {
+              SimpleList<String> trees = new SimpleList<>();
+              String[] names = {"oak", "elm", "ash", "fir", "yew"};
+              for (String name : names) {
+                  trees.add(name);
+              }
+              trees.contains("ash");
+              System.out.println(trees.getComparisons());
+              trees.contains("pine");
+              System.out.println(trees.getComparisons());
+
+              SimpleMap<Integer, String> plots = new SimpleMap<>();
+              plots.put(3, "beans");
+              plots.put(11, "kale");
+              plots.put(19, "leeks");
+              plots.put(4, "chard");
+              plots.get(19);
+              System.out.println(plots.getComparisons());
+              plots.get(27);
+              plots.get(5);
+              System.out.println(plots.getComparisons());
+          }
+      }
+      // ==== SimpleList.java ====
+      public class SimpleList<T> {
+          private T[] values;
+          private int size;
+          private int comparisons;
+
+          @SuppressWarnings("unchecked")
+          public SimpleList() {
+              this.values = (T[]) new Object[4];
+              this.size = 0;
+              this.comparisons = 0;
+          }
+
+          @SuppressWarnings("unchecked")
+          public void add(T value) {
+              if (this.size == this.values.length) {
+                  T[] bigger = (T[]) new Object[this.values.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.values[i];
+                  }
+                  this.values = bigger;
+              }
+              this.values[this.size] = value;
+              this.size++;
+          }
+
+          public boolean contains(T value) {
+              for (int i = 0; i < this.size; i++) {
+                  this.comparisons++;
+                  if (this.values[i].equals(value)) {
+                      return true;
+                  }
+              }
+              return false;
+          }
+
+          public int getComparisons() {
+              return this.comparisons;
+          }
+      }
+      // ==== SimpleMap.java ====
+      import java.util.ArrayList;
+
+      public class SimpleMap<K, V> {
+          private ArrayList<KeyValue<K, V>>[] buckets;
+          private int size;
+          private int comparisons;
+
+          @SuppressWarnings("unchecked")
+          public SimpleMap() {
+              this.buckets = new ArrayList[8];
+              for (int i = 0; i < this.buckets.length; i++) {
+                  this.buckets[i] = new ArrayList<>();
+              }
+              this.size = 0;
+              this.comparisons = 0;
+          }
+
+          private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+              int index = Math.abs(key.hashCode() % this.buckets.length);
+              return this.buckets[index];
+          }
+
+          public void put(K key, V value) {
+              ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+              for (KeyValue<K, V> pair : bucket) {
+                  if (pair.getKey().equals(key)) {
+                      pair.setValue(value);
+                      return;
+                  }
+              }
+              bucket.add(new KeyValue<>(key, value));
+              this.size++;
+          }
+
+          public V get(K key) {
+              for (KeyValue<K, V> pair : bucketFor(key)) {
+                  this.comparisons++;
+                  if (pair.getKey().equals(key)) {
+                      return pair.getValue();
+                  }
+              }
+              return null;
+          }
+
+          public int getComparisons() {
+              return this.comparisons;
+          }
+      }
+      // ==== KeyValue.java ====
+      public class KeyValue<K, V> {
+          private K key;
+          private V value;
+
+          public KeyValue(K key, V value) {
+              this.key = key;
+              this.value = value;
+          }
+
+          public K getKey() {
+              return this.key;
+          }
+
+          public V getValue() {
+              return this.value;
+          }
+
+          public void setValue(V value) {
+              this.value = value;
+          }
+      }
+    hints:
+      - "The list compares from the start: ash is the third value, so finding it takes 3 comparisons. Pine isn't there, so `contains` compares with all 5 values. The count goes on from 3."
+      - "Only `get` counts in the map. 3, 11 and 19 all go to bucket 3, in that order, so `get(19)` compares 3 times. 27 goes to bucket 3 too, and isn't there. 5 goes to bucket 5, which is empty: no comparisons at all."
+    more:
+      - task: |
+          A seed library keeps its seed packets in drawers. A drawer is named by its cabinet, a letter, and its number, like C-117, and the library finds packets with a SimpleMap from Drawer to packet. `Drawer.java` has an `equals` that compares both, but its `hashCode` uses only the cabinet, so all the drawers of a cabinet share one bucket, however many buckets the map has.
+
+          `SimpleMap.java` is the counting map from this step. `Main.java` puts the 300 drawers of cabinet C in the map, finds each of them once, and prints `fast` when that took fewer than 600 comparisons, or `slow` and the count. Right now it prints `slow: 45150 comparisons`. Write a better `hashCode` in `Drawer.java`, one that uses both the cabinet and the number, so that equal drawers still get equal hash codes. Then the program prints:
+
+          ```
+          fast
+          C-117: tomatoes
+          ```
+        seed:
+          Drawer.java: |
+            public class Drawer {
+                private String cabinet;
+                private int number;
+
+                public Drawer(String cabinet, int number) {
+                    this.cabinet = cabinet;
+                    this.number = number;
+                }
+
+                @Override
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Drawer)) {
+                        return false;
+                    }
+                    Drawer other = (Drawer) compared;
+                    return this.cabinet.equals(other.cabinet) && this.number == other.number;
+                }
+
+                @Override
+                public int hashCode() {
+                    return this.cabinet.hashCode();
+                }
+
+                @Override
+                public String toString() {
+                    return this.cabinet + "-" + this.number;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SimpleMap<Drawer, String> packets = new SimpleMap<>();
+                    for (int i = 1; i <= 300; i++) {
+                        packets.put(new Drawer("C", i), "packet " + i);
+                    }
+                    packets.put(new Drawer("C", 117), "tomatoes");
+                    for (int i = 1; i <= 300; i++) {
+                        packets.get(new Drawer("C", i));
+                    }
+                    if (packets.getComparisons() < 600) {
+                        System.out.println("fast");
+                    } else {
+                        System.out.println("slow: " + packets.getComparisons() + " comparisons");
+                    }
+                    Drawer wanted = new Drawer("C", 117);
+                    System.out.println(wanted + ": " + packets.get(wanted));
+                }
+            }
+          SimpleMap.java: |
+            import java.util.ArrayList;
+
+            public class SimpleMap<K, V> {
+                private ArrayList<KeyValue<K, V>>[] buckets;
+                private int size;
+                private int comparisons;
+
+                @SuppressWarnings("unchecked")
+                public SimpleMap() {
+                    this.buckets = new ArrayList[8];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    this.size = 0;
+                    this.comparisons = 0;
+                }
+
+                private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                    int index = Math.abs(key.hashCode() % this.buckets.length);
+                    return this.buckets[index];
+                }
+
+                public void put(K key, V value) {
+                    ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+                    for (KeyValue<K, V> pair : bucket) {
+                        if (pair.getKey().equals(key)) {
+                            pair.setValue(value);
+                            return;
+                        }
+                    }
+                    bucket.add(new KeyValue<>(key, value));
+                    this.size++;
+                    if (this.size > 0.75 * this.buckets.length) {
+                        grow();
+                    }
+                }
+
+                public V get(K key) {
+                    for (KeyValue<K, V> pair : bucketFor(key)) {
+                        this.comparisons++;
+                        if (pair.getKey().equals(key)) {
+                            return pair.getValue();
+                        }
+                    }
+                    return null;
+                }
+
+                @SuppressWarnings("unchecked")
+                private void grow() {
+                    ArrayList<KeyValue<K, V>>[] old = this.buckets;
+                    this.buckets = new ArrayList[old.length * 2];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    for (ArrayList<KeyValue<K, V>> bucket : old) {
+                        for (KeyValue<K, V> pair : bucket) {
+                            bucketFor(pair.getKey()).add(pair);
+                        }
+                    }
+                }
+
+                public int getComparisons() {
+                    return this.comparisons;
+                }
+            }
+          KeyValue.java: |
+            public class KeyValue<K, V> {
+                private K key;
+                private V value;
+
+                public KeyValue(K key, V value) {
+                    this.key = key;
+                    this.value = value;
+                }
+
+                public K getKey() {
+                    return this.key;
+                }
+
+                public V getValue() {
+                    return this.value;
+                }
+
+                public void setValue(V value) {
+                    this.value = value;
+                }
+            }
+        solution:
+          Drawer.java: |
+            public class Drawer {
+                private String cabinet;
+                private int number;
+
+                public Drawer(String cabinet, int number) {
+                    this.cabinet = cabinet;
+                    this.number = number;
+                }
+
+                @Override
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof Drawer)) {
+                        return false;
+                    }
+                    Drawer other = (Drawer) compared;
+                    return this.cabinet.equals(other.cabinet) && this.number == other.number;
+                }
+
+                @Override
+                public int hashCode() {
+                    return 31 * this.cabinet.hashCode() + this.number;
+                }
+
+                @Override
+                public String toString() {
+                    return this.cabinet + "-" + this.number;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SimpleMap<Drawer, String> packets = new SimpleMap<>();
+                    for (int i = 1; i <= 300; i++) {
+                        packets.put(new Drawer("C", i), "packet " + i);
+                    }
+                    packets.put(new Drawer("C", 117), "tomatoes");
+                    for (int i = 1; i <= 300; i++) {
+                        packets.get(new Drawer("C", i));
+                    }
+                    if (packets.getComparisons() < 600) {
+                        System.out.println("fast");
+                    } else {
+                        System.out.println("slow: " + packets.getComparisons() + " comparisons");
+                    }
+                    Drawer wanted = new Drawer("C", 117);
+                    System.out.println(wanted + ": " + packets.get(wanted));
+                }
+            }
+          SimpleMap.java: |
+            import java.util.ArrayList;
+
+            public class SimpleMap<K, V> {
+                private ArrayList<KeyValue<K, V>>[] buckets;
+                private int size;
+                private int comparisons;
+
+                @SuppressWarnings("unchecked")
+                public SimpleMap() {
+                    this.buckets = new ArrayList[8];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    this.size = 0;
+                    this.comparisons = 0;
+                }
+
+                private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+                    int index = Math.abs(key.hashCode() % this.buckets.length);
+                    return this.buckets[index];
+                }
+
+                public void put(K key, V value) {
+                    ArrayList<KeyValue<K, V>> bucket = bucketFor(key);
+                    for (KeyValue<K, V> pair : bucket) {
+                        if (pair.getKey().equals(key)) {
+                            pair.setValue(value);
+                            return;
+                        }
+                    }
+                    bucket.add(new KeyValue<>(key, value));
+                    this.size++;
+                    if (this.size > 0.75 * this.buckets.length) {
+                        grow();
+                    }
+                }
+
+                public V get(K key) {
+                    for (KeyValue<K, V> pair : bucketFor(key)) {
+                        this.comparisons++;
+                        if (pair.getKey().equals(key)) {
+                            return pair.getValue();
+                        }
+                    }
+                    return null;
+                }
+
+                @SuppressWarnings("unchecked")
+                private void grow() {
+                    ArrayList<KeyValue<K, V>>[] old = this.buckets;
+                    this.buckets = new ArrayList[old.length * 2];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    for (ArrayList<KeyValue<K, V>> bucket : old) {
+                        for (KeyValue<K, V> pair : bucket) {
+                            bucketFor(pair.getKey()).add(pair);
+                        }
+                    }
+                }
+
+                public int getComparisons() {
+                    return this.comparisons;
+                }
+            }
+          KeyValue.java: |
+            public class KeyValue<K, V> {
+                private K key;
+                private V value;
+
+                public KeyValue(K key, V value) {
+                    this.key = key;
+                    this.value = value;
+                }
+
+                public K getKey() {
+                    return this.key;
+                }
+
+                public V getValue() {
+                    return this.value;
+                }
+
+                public void setValue(V value) {
+                    this.value = value;
+                }
+            }
+        hints:
+          - "Combine both values the way module 32's Seat did, using exactly the two values that `equals` compares."
+          - "`return 31 * this.cabinet.hashCode() + this.number;` (or `Objects.hash(this.cabinet, this.number)`, with `import java.util.Objects;`). Just adding the two isn't enough: then A-12 and B-11 would share a hash code, since B's code is one more than A's. And the hash code must not depend on anything `equals` doesn't compare, or equal drawers could get different hash codes."
+        tests:
+          - name: The program as given
+          - call: |
+              SimpleMap<Drawer, Integer> map = new SimpleMap<>();
+              String[] cabinets = {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"};
+              for (String cabinet : cabinets) {
+                  for (int i = 1; i <= 30; i++) {
+                      map.put(new Drawer(cabinet, i), i);
+                  }
+              }
+              int found = 0;
+              for (String cabinet : cabinets) {
+                  for (int i = 1; i <= 30; i++) {
+                      if (map.get(new Drawer(cabinet, i)) == i) {
+                          found++;
+                      }
+                  }
+              }
+              System.out.println(found);
+              System.out.println(map.getComparisons() < 600 ? "fast" : "slow");
+            hidden: true
+          - call: |
+              Drawer one = new Drawer("B", 12);
+              Drawer same = new Drawer("B", 12);
+              System.out.println(one.hashCode() == same.hashCode());
+              System.out.println(one.equals(new Drawer("B", 21)) + " " + one.equals(new Drawer("C", 12)));
+              SimpleMap<Drawer, String> map = new SimpleMap<>();
+              map.put(one, "basil");
+              map.put(same, "thyme");
+              System.out.println(map.get(new Drawer("B", 12)) + " " + map.get(new Drawer("B", 13)));
+            hidden: true
+      - task: |
+          To end the module: Java's HashSet keeps each value once, and finds it fast. Build your own, the way SimpleMap works, only with values and no pairs. A word game uses it for the words already played: each word may be played only once.
+
+          In `SimpleSet.java`, write the generic class `SimpleSet<T>`, with an array of buckets that are `ArrayList<T>` lists:
+
+          - a constructor with no parameters: 8 buckets, each an empty list
+          - `add(T value)`: if the set has the value already, it returns `false` and changes nothing. Otherwise it puts the value in its bucket and returns `true`. After adding, when the size is more than 0.75 times the number of buckets, the buckets become twice as many, with every value put again in its new bucket.
+          - `contains(T value)`, which returns whether the set has the value
+          - `remove(T value)`, which removes the value and returns `true`, or returns `false` when the set doesn't have it
+          - `size()`, the number of values in the set
+          - `bucketCount()`, the number of buckets, so that the check can watch the set grow
+
+          Pick a value's bucket as SimpleMap does, with its hash code. The check runs:
+
+          ```java fragment
+          SimpleSet<String> played = new SimpleSet<>();
+          System.out.println(played.add("maple") + " " + played.add("otter") + " " + played.add("maple"));
+          System.out.println(played.contains("otter") + " " + played.contains("cedar") + " " + played.size());
+          ```
+
+          and expects:
+
+          ```
+          true true false
+          true false 2
+          ```
+        seed:
+          SimpleSet.java: |
+            import java.util.ArrayList;
+
+            public class SimpleSet<T> {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SimpleSet<String> played = new SimpleSet<>();
+                    System.out.println(played.add("maple") + " " + played.add("otter") + " " + played.add("maple"));
+                    System.out.println(played.contains("otter") + " " + played.contains("cedar") + " " + played.size());
+                }
+            }
+        solution:
+          SimpleSet.java: |
+            import java.util.ArrayList;
+
+            public class SimpleSet<T> {
+                private ArrayList<T>[] buckets;
+                private int size;
+
+                @SuppressWarnings("unchecked")
+                public SimpleSet() {
+                    this.buckets = new ArrayList[8];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    this.size = 0;
+                }
+
+                private ArrayList<T> bucketFor(T value) {
+                    int index = Math.abs(value.hashCode() % this.buckets.length);
+                    return this.buckets[index];
+                }
+
+                public boolean add(T value) {
+                    ArrayList<T> bucket = bucketFor(value);
+                    if (bucket.contains(value)) {
+                        return false;
+                    }
+                    bucket.add(value);
+                    this.size++;
+                    if (this.size > 0.75 * this.buckets.length) {
+                        grow();
+                    }
+                    return true;
+                }
+
+                public boolean contains(T value) {
+                    return bucketFor(value).contains(value);
+                }
+
+                public boolean remove(T value) {
+                    if (bucketFor(value).remove(value)) {
+                        this.size--;
+                        return true;
+                    }
+                    return false;
+                }
+
+                @SuppressWarnings("unchecked")
+                private void grow() {
+                    ArrayList<T>[] old = this.buckets;
+                    this.buckets = new ArrayList[old.length * 2];
+                    for (int i = 0; i < this.buckets.length; i++) {
+                        this.buckets[i] = new ArrayList<>();
+                    }
+                    for (ArrayList<T> bucket : old) {
+                        for (T value : bucket) {
+                            bucketFor(value).add(value);
+                        }
+                    }
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                public int bucketCount() {
+                    return this.buckets.length;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    SimpleSet<String> played = new SimpleSet<>();
+                    System.out.println(played.add("maple") + " " + played.add("otter") + " " + played.add("maple"));
+                    System.out.println(played.contains("otter") + " " + played.contains("cedar") + " " + played.size());
+                }
+            }
+        hints:
+          - "Start from SimpleMap: `private ArrayList<T>[] buckets;` and a size, the same constructor (with `new ArrayList[8]`), and a `bucketFor(T value)` that picks the bucket from `value.hashCode()`. A bucket is a short ArrayList, so its own `contains` and `remove` can do the searching inside it."
+          - "`add` returns `false` when `bucketFor(value).contains(value)`. Otherwise it adds, counts, grows when `this.size > 0.75 * this.buckets.length`, and returns `true`. `grow` is SimpleMap's, with values instead of pairs. In `remove`, the bucket's `remove(value)` returns whether it removed something."
+        require:
+          - pattern: \bArrayList\s*<\s*T\s*>\s*\[\s*\]
+            message: "Keep the values in an array of buckets, `ArrayList<T>[]`, as SimpleMap keeps its pairs."
+          - pattern: \.\s*hashCode\s*\(
+            message: "Pick each value's bucket from its hash code, `value.hashCode()`, as SimpleMap does."
+        forbid:
+          - pattern: \b(HashSet|HashMap|TreeSet|TreeMap|Set|Map)\b
+            message: "Build the set from your own buckets, without Java's sets and maps."
+        tests:
+          - call: |
+              SimpleSet<String> played = new SimpleSet<>();
+              System.out.println(played.add("maple") + " " + played.add("otter") + " " + played.add("maple"));
+              System.out.println(played.contains("otter") + " " + played.contains("cedar") + " " + played.size());
+          - call: |
+              SimpleSet<Integer> numbers = new SimpleSet<>();
+              int added = 0;
+              for (int i = 0; i < 150; i++) {
+                  if (numbers.add(i % 100 * 7)) {
+                      added++;
+                  }
+              }
+              System.out.println(added + " " + numbers.size() + " " + numbers.bucketCount());
+              int removed = 0;
+              for (int i = 0; i < 100; i += 2) {
+                  if (numbers.remove(i * 7)) {
+                      removed++;
+                  }
+              }
+              System.out.println(removed + " " + numbers.size() + " " + numbers.remove(14) + " " + numbers.remove(5));
+              System.out.println(numbers.contains(7) + " " + numbers.contains(14) + " " + numbers.contains(693) + " " + numbers.add(14) + " " + numbers.size());
+            hidden: true
+          - call: |
+              SimpleSet<String> words = new SimpleSet<>();
+              System.out.println(words.size() + " " + words.bucketCount() + " " + words.contains("Aa") + " " + words.remove("Aa"));
+              String[] all = {"Aa", "BB", "Oakdale", "uno", "dos", "tres", "cuatro"};
+              for (String word : all) {
+                  words.add(word);
+              }
+              String start = "B";
+              System.out.println(words.size() + " " + words.bucketCount() + " " + words.contains(start + "B") + " " + words.add("Aa"));
+              System.out.println(words.remove("BB") + " " + words.contains("BB") + " " + words.contains("Aa") + " " + words.contains("Oakdale") + " " + words.size());
+            hidden: true

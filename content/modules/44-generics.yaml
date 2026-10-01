@@ -1,0 +1,2155 @@
+id: generics
+summary: Classes that take a type as a parameter, as ArrayList does in `ArrayList<String>`. A class with a type parameter T, used with different type arguments and the diamond, why a type argument must be a reference type (Integer, not int), several type parameters, a class that keeps a list of T, generic interfaces implemented for one type or kept generic, and what the compiler checks for you. MOOC section 12.1.
+steps:
+  - id: generics-why
+    slug: why-type-parameters
+    title: Why type parameters
+    text: |
+      Since module 13 you've written types like `ArrayList<String>` and `ArrayList<Integer>`, and since module 31 `HashMap<String, Integer>`. ArrayList is one class, written once by Java's developers. Yet each list knows the type of its values: `get` on an `ArrayList<String>` gives a String, `get` on an `ArrayList<Integer>` gives an Integer, and adding a number to a list of Strings doesn't compile. The type in the angle brackets makes that work. This module shows how to write classes like that yourself.
+
+      ### A box for one type
+
+      A storeroom keeps things in boxes, one thing per box. Here's a class for a box that holds a String:
+
+      ```java fragment
+      public class StringBox {
+          private String content;
+
+          public StringBox(String content) {
+              this.content = content;
+          }
+
+          public String getContent() {
+              return this.content;
+          }
+      }
+      ```
+
+      A box for a number would be the same class again, with `Integer` in place of `String` in three places. A box for a Book, once more. The code would be the same each time, and only the type would change.
+
+      ### Why not Object?
+
+      Every class inherits from Object (module 34), so a box whose content is an Object takes anything. But then what comes out is just an Object, and Java no longer knows what kind:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              ObjectBox box = new ObjectBox("tent pegs");
+              String content = box.getContent();
+              System.out.println(content.toUpperCase());
+          }
+      }
+      // ==== ObjectBox.java ====
+      public class ObjectBox {
+          private Object content;
+
+          public ObjectBox(Object content) {
+              this.content = content;
+          }
+
+          public Object getContent() {
+              return this.content;
+          }
+
+          public void setContent(Object content) {
+              this.content = content;
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: incompatible types: Object cannot be converted to String
+              String content = box.getContent();
+                                             ^
+      1 error
+      ```
+
+      You know there's a String in the box, but the compiler only knows that `getContent()` returns an Object. A cast, `(String) box.getContent()`, would make it compile (module 36). But nothing stops other code from putting a number into that box, and then the cast fails while the program runs, with a ClassCastException.
+
+      ### A type parameter
+
+      The way out is to let the code that creates a box say what goes in it. The class gets a **type parameter**, written in angle brackets after its name:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Box<String> pegs = new Box<String>("tent pegs");
+              System.out.println(pegs.getContent().toUpperCase());
+
+              Box<Integer> coins = new Box<Integer>(340);
+              int total = coins.getContent() + 25;
+              System.out.println(total);
+          }
+      }
+      // ==== Box.java ====
+      public class Box<T> {
+          private T content;
+
+          public Box(T content) {
+              this.content = content;
+          }
+
+          public T getContent() {
+              return this.content;
+          }
+
+          public void setContent(T content) {
+              this.content = content;
+          }
+      }
+      ```
+
+      ```output
+      TENT PEGS
+      365
+      ```
+
+      - `public class Box<T>` says that Box has a type parameter called T. T stands for a type that isn't decided yet: each box decides it when it's created.
+      - Inside the class, T is used like any other type: for the instance variable, `private T content;`, for the constructor's parameter, as the return type of `getContent`, and as the type of `setContent`'s parameter.
+      - `Box<String>` is a box whose T is String. For this box, `getContent()` returns a String, so `toUpperCase()` works without a cast. `coins` is a `Box<Integer>`, so its `getContent()` returns an Integer, which can be added to.
+      - The constructor's header is `public Box(T content)`. The `<T>` comes only after the class's name in the class header, never after the constructor's name.
+
+      You can picture it like this: when Java checks code that uses a `Box<String>`, it reads every T in Box as String. One class, written once, works for any type. That's how ArrayList is written too: its header begins `public class ArrayList<E>`, and its `get` returns an E.
+
+      ### Naming a type parameter
+
+      A type parameter can have any name, but the custom is a single capital letter, so that it's easy to tell from a class's name: `T` for "type", `E` for "element" (Java's lists use it), and `K` and `V` for "key" and "value" (HashMap uses them).
+
+      **Your turn:** a learning app shows a word of the day and a number of the day, with one class for both. Fill in the three blanks so that `Featured` works for any type: the type parameter in the class header, the type of the instance variable, and the return type of `get`. The program prints:
+
+      ```
+      Word of the day: lantern (7 letters)
+      Number of the day: 64, half of it is 32
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              Featured<String> word = new Featured<String>("lantern");
+              System.out.println("Word of the day: " + word.get() + " (" + word.get().length() + " letters)");
+
+              Featured<Integer> number = new Featured<Integer>(64);
+              System.out.println("Number of the day: " + number.get() + ", half of it is " + number.get() / 2);
+          }
+      }
+      // ==== Featured.java ====
+      public class Featured<[[T]]> {
+          private [[T]] item;
+
+          public Featured(T item) {
+              this.item = item;
+          }
+
+          public [[T]] get() {
+              return this.item;
+          }
+      }
+    hints:
+      - "The constructor's parameter is already written as `T item`. What does that tell you about the type parameter's name?"
+      - "The instance variable holds a T, and `get` returns it, so both of the other blanks are `T` too. With `Object` there, `word.get().length()` wouldn't compile."
+    more:
+      - task: |
+          Two boxes from the storeroom both hold a seven: one as a String, the other as an Integer. `Box` is the class from this step. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Box<String> label = new Box<String>("7");
+                  Box<Integer> count = new Box<Integer>(7);
+                  System.out.println(label.getContent() + 1);
+                  System.out.println(count.getContent() + 1);
+                  label.setContent(label.getContent() + count.getContent());
+                  count.setContent(count.getContent() * 2);
+                  System.out.println(label.getContent() + " " + count.getContent());
+              }
+          }
+          // ==== Box.java ====
+          public class Box<T> {
+              private T content;
+
+              public Box(T content) {
+                  this.content = content;
+              }
+
+              public T getContent() {
+                  return this.content;
+              }
+
+              public void setContent(T content) {
+                  this.content = content;
+              }
+          }
+        hints:
+          - "For `label`, a `Box<String>`, `getContent()` returns a String, and a String plus a number joins them: `\"7\" + 1` is `71`. For `count`, a `Box<Integer>`, it returns an Integer, so `+ 1` adds."
+          - "`label.getContent() + count.getContent()` is a String plus an Integer, which joins them into `77`. `count` doubles to 14."
+      - task: |
+          A sports club's trophies pass from holder to holder. The chess trophy goes to a player, given by name. The relay shield goes to a team, given by its number. In `Trophy.java`, write the class `Trophy<T>` with:
+
+          - a constructor `Trophy(String name, T holder)`: the trophy's name and its first holder
+          - `getHolder()`, which returns the current holder
+          - `passTo(T newHolder)`, which makes `newHolder` the holder, and returns the holder before it
+          - `toString()`, which returns the trophy's name, a colon and the holder, like `Chess Cup: Ravi`
+
+          The name is always a String; only the holder's type changes. The check runs:
+
+          ```java fragment
+          Trophy<String> chess = new Trophy<String>("Chess Cup", "Ada");
+          String before = chess.passTo("Ravi");
+          System.out.println(before + " passed it on");
+          System.out.println(chess);
+          Trophy<Integer> relay = new Trophy<Integer>("Relay Shield", 4);
+          int old = relay.passTo(7);
+          System.out.println(old + relay.getHolder());
+          System.out.println(relay);
+          ```
+
+          and expects:
+
+          ```
+          Ada passed it on
+          Chess Cup: Ravi
+          11
+          Relay Shield: 7
+          ```
+        seed:
+          Trophy.java: |
+            public class Trophy {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Trophy<String> chess = new Trophy<String>("Chess Cup", "Ada");
+                    String before = chess.passTo("Ravi");
+                    System.out.println(before + " passed it on");
+                    System.out.println(chess);
+                    Trophy<Integer> relay = new Trophy<Integer>("Relay Shield", 4);
+                    int old = relay.passTo(7);
+                    System.out.println(old + relay.getHolder());
+                    System.out.println(relay);
+                }
+            }
+        solution:
+          Trophy.java: |
+            public class Trophy<T> {
+                private String name;
+                private T holder;
+
+                public Trophy(String name, T holder) {
+                    this.name = name;
+                    this.holder = holder;
+                }
+
+                public T getHolder() {
+                    return this.holder;
+                }
+
+                public T passTo(T newHolder) {
+                    T previous = this.holder;
+                    this.holder = newHolder;
+                    return previous;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + ": " + this.holder;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Trophy<String> chess = new Trophy<String>("Chess Cup", "Ada");
+                    String before = chess.passTo("Ravi");
+                    System.out.println(before + " passed it on");
+                    System.out.println(chess);
+                    Trophy<Integer> relay = new Trophy<Integer>("Relay Shield", 4);
+                    int old = relay.passTo(7);
+                    System.out.println(old + relay.getHolder());
+                    System.out.println(relay);
+                }
+            }
+        hints:
+          - "The header is `public class Trophy<T>`. The class has two instance variables: `private String name;` and `private T holder;`. The constructor is `public Trophy(String name, T holder)`, without `<T>`."
+          - "`passTo` returns a T and takes a T: `public T passTo(T newHolder)`. Keep the old holder in a variable first, `T previous = this.holder;`, then set the new one, and return `previous`."
+        tests:
+          - call: |
+              Trophy<String> chess = new Trophy<String>("Chess Cup", "Ada");
+              String before = chess.passTo("Ravi");
+              System.out.println(before + " passed it on");
+              System.out.println(chess);
+              Trophy<Integer> relay = new Trophy<Integer>("Relay Shield", 4);
+              int old = relay.passTo(7);
+              System.out.println(old + relay.getHolder());
+              System.out.println(relay);
+          - call: |
+              Trophy<String> quiz = new Trophy<String>("Quiz Bowl", "Room 12");
+              System.out.println(quiz.getHolder());
+              System.out.println(quiz.passTo("Room 3") + " then " + quiz.passTo("Room 7") + " then " + quiz.getHolder());
+              System.out.println(quiz);
+              Trophy<Double> fastest = new Trophy<Double>("Fastest Lap", 72.4);
+              double previous = fastest.passTo(70.9);
+              System.out.println(previous - fastest.getHolder() > 1);
+              System.out.println(fastest);
+            hidden: true
+
+  - id: generics-type-arguments
+    slug: type-arguments
+    title: One class, many types
+    text: |
+      Step 1's Box is one class, and every box chooses its own type. This step shows boxes of more types, a shorter way to create them, and the one kind of type that can't go in the angle brackets.
+
+      ### Parameter and argument
+
+      In `public class Box<T>`, T is the **type parameter**. In `Box<String>`, String is the **type argument**: the type that T stands for in that box. It's the same pair of words as for methods: a method has a parameter, and each call gives it an argument. A class has a type parameter, and each use of it gives a type argument.
+
+      ### The diamond
+
+      `Box<String> pegs = new Box<String>("tent pegs");` names String twice. Java can work out the second one from the variable's type, so you can leave it out and keep only the angle brackets:
+
+      ```java fragment
+      Box<String> pegs = new Box<>("tent pegs");
+      ```
+
+      The empty `<>` is called the **diamond**, after its shape. You've written it since module 13, in `new ArrayList<>()`. It works wherever Java can see which type is needed: in a variable's declaration, as here, and also in `return new Box<>(...)` in a method whose return type is, say, `Box<String>`. From here on, this module writes the diamond.
+
+      Leave out the angle brackets completely, as in `new Box("tent pegs")`, and you get an old form from before Java had type parameters. javac compiles it, but it adds a note that the program "uses unchecked or unsafe operations", because it can no longer check the types. Write at least the `<>`.
+
+      ### Any class or interface will do
+
+      A type argument can be any class or interface: one of Java's own, one of yours, even a type with a type argument of its own:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              Box<Double> paint = new Box<>(2.5);
+              Box<PowerTool> drill = new Box<>(new PowerTool("cordless drill", 1.8));
+              Box<ArrayList<String>> camping = new Box<>(new ArrayList<>());
+              camping.getContent().add("tent");
+              camping.getContent().add("lantern");
+
+              System.out.println(paint.getContent() * 2 + " liters of paint");
+              System.out.println(drill.getContent().getName() + ", " + drill.getContent().getKilos() + " kg");
+              System.out.println(camping.getContent().size() + " things: " + camping.getContent());
+          }
+      }
+      // ==== Box.java ====
+      public class Box<T> {
+          private T content;
+
+          public Box(T content) {
+              this.content = content;
+          }
+
+          public T getContent() {
+              return this.content;
+          }
+
+          public void setContent(T content) {
+              this.content = content;
+          }
+      }
+      // ==== PowerTool.java ====
+      public class PowerTool {
+          private String name;
+          private double kilos;
+
+          public PowerTool(String name, double kilos) {
+              this.name = name;
+              this.kilos = kilos;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public double getKilos() {
+              return this.kilos;
+          }
+      }
+      ```
+
+      ```output
+      5.0 liters of paint
+      cordless drill, 1.8 kg
+      2 things: [tent, lantern]
+      ```
+
+      - For `drill`, a `Box<PowerTool>`, `getContent()` returns a PowerTool, so the PowerTool's own methods can be called on it.
+      - `Box<ArrayList<String>>` is a box whose T is `ArrayList<String>`. Its `getContent()` returns the list itself, not a copy, so `add` puts the tent and the lantern into the list in the box. Module 33's `HashMap<String, ArrayList<String>>` nested types the same way.
+      - In `new Box<>(new ArrayList<>())`, both diamonds are worked out from the variable's type.
+
+      ### Integer, not int
+
+      Module 13 showed that a list can't hold `int`s. A type argument can't be a primitive type at all, for your classes or Java's:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Box<int> chairs = new Box<>(12);
+              System.out.println(chairs.getContent());
+          }
+      }
+      // ==== Box.java ====
+      public class Box<T> {
+          private T content;
+
+          public Box(T content) {
+              this.content = content;
+          }
+
+          public T getContent() {
+              return this.content;
+          }
+
+          public void setContent(T content) {
+              this.content = content;
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:3: error: unexpected type
+              Box<int> chairs = new Box<>(12);
+                  ^
+        required: reference
+        found:    int
+      1 error
+      ```
+
+      A type argument must be a reference type (module 22): a class, an interface, even an array type, never a primitive type. That's what javac's `required: reference` means. For a primitive type, use its object partner, its **wrapper class**:
+
+      | primitive type | type argument |
+      | --- | --- |
+      | `int` | `Integer` |
+      | `double` | `Double` |
+      | `boolean` | `Boolean` |
+      | `char` | `Character` |
+
+      That's why it's `List<Integer>`, never `List<int>`. Java converts between the two by itself, as it does with lists: `new Box<>(12)` for a `Box<Integer>` turns 12 into an Integer, and `int chairs = box.getContent();` turns it back into an int. It converts only between a primitive type and its own partner, though: a `Box<Double>` takes `2.0`, but not `2`.
+
+      **Your turn:** the storeroom's app keeps three boxes: the number of screws left, the liters of paint left, and whether the box of fuses is still sealed. Fill in the three type arguments. The program prints:
+
+      ```
+      The fuses are still sealed
+      210 screws
+      1.75 liters of paint
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              Box<[[Integer]]> screws = new Box<>(250);
+              Box<[[Double]]> paint = new Box<>(3.5);
+              Box<[[Boolean]]> sealed = new Box<>(true);
+
+              screws.setContent(screws.getContent() - 40);
+              paint.setContent(paint.getContent() / 2);
+              if (sealed.getContent()) {
+                  System.out.println("The fuses are still sealed");
+              }
+              System.out.println(screws.getContent() + " screws");
+              System.out.println(paint.getContent() + " liters of paint");
+          }
+      }
+      // ==== Box.java ====
+      public class Box<T> {
+          private T content;
+
+          public Box(T content) {
+              this.content = content;
+          }
+
+          public T getContent() {
+              return this.content;
+          }
+
+          public void setContent(T content) {
+              this.content = content;
+          }
+      }
+    hints:
+      - "A type argument must be a reference type (a class, an interface or an array type, never a primitive type), so `int`, `double` and `boolean` won't do. Each primitive type has a wrapper class, written with a capital letter."
+      - "The screws are a whole number, `Integer`; the paint has decimals, `Double`; and sealed is true or false, `Boolean`."
+    more:
+      - task: |
+          A scout troop packs for a camping trip. `Box` is the class from this module. Look at the types, and at which list each box holds. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Box<Integer> tents = new Box<>(5);
+                  Box<Double> water = new Box<>(5.0);
+                  tents.setContent(tents.getContent() / 2);
+                  water.setContent(water.getContent() / 2);
+                  System.out.println(tents.getContent() + " " + water.getContent());
+
+                  ArrayList<String> gear = new ArrayList<>();
+                  Box<ArrayList<String>> red = new Box<>(gear);
+                  Box<ArrayList<String>> blue = new Box<>(gear);
+                  red.getContent().add("rope");
+                  blue.getContent().add("stakes");
+                  System.out.println(red.getContent().size() + " " + blue.getContent());
+              }
+          }
+          // ==== Box.java ====
+          public class Box<T> {
+              private T content;
+
+              public Box(T content) {
+                  this.content = content;
+              }
+
+              public T getContent() {
+                  return this.content;
+              }
+
+              public void setContent(T content) {
+                  this.content = content;
+              }
+          }
+        hints:
+          - "`tents` is a `Box<Integer>`, so `getContent() / 2` divides two whole numbers, and the decimals are dropped. `water` is a `Box<Double>`, so its division keeps them."
+          - "`red` and `blue` are two boxes, but both hold the same list, `gear`: a box keeps a reference to the list, not a copy (module 22). Both `add`s go into that one list."
+      - task: |
+          The storeroom keeps screws in several boxes, each a `Box<Integer>` holding how many screws it has. `Box.java` is ready. In `Main.java`, write two methods:
+
+          - `total(ArrayList<Box<Integer>> boxes)`, which returns the number of screws in all the boxes together
+          - `fullest(ArrayList<Box<Integer>> boxes)`, which returns the box with the most screws, the first of them if several have the most. The list has at least one box.
+
+          The check runs:
+
+          ```java fragment
+          ArrayList<Box<Integer>> boxes = new ArrayList<>();
+          boxes.add(new Box<>(120));
+          boxes.add(new Box<>(450));
+          boxes.add(new Box<>(80));
+          System.out.println(total(boxes));
+          Box<Integer> most = fullest(boxes);
+          System.out.println(most.getContent());
+          most.setContent(0);
+          System.out.println(total(boxes));
+          ```
+
+          and expects:
+
+          ```
+          650
+          450
+          200
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Box<Integer>> boxes = new ArrayList<>();
+                    boxes.add(new Box<>(120));
+                    boxes.add(new Box<>(450));
+                    boxes.add(new Box<>(80));
+                    System.out.println(total(boxes));
+                    Box<Integer> most = fullest(boxes);
+                    System.out.println(most.getContent());
+                    most.setContent(0);
+                    System.out.println(total(boxes));
+                }
+
+                // Write the methods total and fullest here.
+            }
+          Box.java: |
+            public class Box<T> {
+                private T content;
+
+                public Box(T content) {
+                    this.content = content;
+                }
+
+                public T getContent() {
+                    return this.content;
+                }
+
+                public void setContent(T content) {
+                    this.content = content;
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Box<Integer>> boxes = new ArrayList<>();
+                    boxes.add(new Box<>(120));
+                    boxes.add(new Box<>(450));
+                    boxes.add(new Box<>(80));
+                    System.out.println(total(boxes));
+                    Box<Integer> most = fullest(boxes);
+                    System.out.println(most.getContent());
+                    most.setContent(0);
+                    System.out.println(total(boxes));
+                }
+
+                public static int total(ArrayList<Box<Integer>> boxes) {
+                    int sum = 0;
+                    for (Box<Integer> box : boxes) {
+                        sum += box.getContent();
+                    }
+                    return sum;
+                }
+
+                public static Box<Integer> fullest(ArrayList<Box<Integer>> boxes) {
+                    Box<Integer> most = boxes.get(0);
+                    for (Box<Integer> box : boxes) {
+                        if (box.getContent() > most.getContent()) {
+                            most = box;
+                        }
+                    }
+                    return most;
+                }
+            }
+          Box.java: |
+            public class Box<T> {
+                private T content;
+
+                public Box(T content) {
+                    this.content = content;
+                }
+
+                public T getContent() {
+                    return this.content;
+                }
+
+                public void setContent(T content) {
+                    this.content = content;
+                }
+            }
+        hints:
+          - "The headers are `public static int total(ArrayList<Box<Integer>> boxes)` and `public static Box<Integer> fullest(ArrayList<Box<Integer>> boxes)`. A for-each loop goes through the boxes: `for (Box<Integer> box : boxes)`."
+          - "In `total`, add each `box.getContent()` to an int sum: Java turns the Integer into an int. In `fullest`, start with `boxes.get(0)` and replace it only when a box has strictly more, `>`, so the first of several fullest boxes stays."
+        tests:
+          - call: |
+              ArrayList<Box<Integer>> boxes = new ArrayList<>();
+              boxes.add(new Box<>(120));
+              boxes.add(new Box<>(450));
+              boxes.add(new Box<>(80));
+              System.out.println(total(boxes));
+              Box<Integer> most = fullest(boxes);
+              System.out.println(most.getContent());
+              most.setContent(0);
+              System.out.println(total(boxes));
+          - call: |
+              ArrayList<Box<Integer>> boxes = new ArrayList<>();
+              boxes.add(new Box<>(35));
+              System.out.println(total(boxes) + " " + fullest(boxes).getContent());
+              boxes.add(new Box<>(90));
+              boxes.add(new Box<>(12));
+              boxes.add(new Box<>(90));
+              System.out.println(total(boxes));
+              System.out.println(fullest(boxes) == boxes.get(1));
+              System.out.println(fullest(boxes) == boxes.get(3));
+            hidden: true
+          - call: |
+              ArrayList<Box<Integer>> boxes = new ArrayList<>();
+              boxes.add(new Box<>(0));
+              boxes.add(new Box<>(0));
+              System.out.println(total(boxes));
+              System.out.println(fullest(boxes) == boxes.get(0));
+            hidden: true
+
+  - id: generics-several
+    slug: several-type-parameters
+    title: Several type parameters, and a list of T
+    text: |
+      `HashMap<String, Integer>` takes two type arguments, one for the keys and one for the values. A class of yours can have as many type parameters as it needs, separated by commas. And a class with a type parameter can pass it on to the classes it uses, such as an ArrayList.
+
+      ### Two type parameters
+
+      A sports app is full of values that come in twos: the home side and the away side of a match, a player and the number on their shirt, the goals of the two sides. One class can hold any two values:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Duo<String, String> match = new Duo<>("Harbor FC", "Mill Town");
+              Duo<String, Integer> shirt = new Duo<>("Noor", 9);
+              Duo<Integer, Integer> goals = new Duo<>(2, 1);
+
+              System.out.println(match.getFirst() + " (home) against " + match.getSecond() + " (away)");
+              System.out.println(shirt.getFirst() + " wears number " + shirt.getSecond());
+              System.out.println("Goals in all: " + (goals.getFirst() + goals.getSecond()));
+
+              Duo<String, String> returnMatch = match.swapped();
+              System.out.println("Return match: " + returnMatch);
+              Duo<Integer, String> byNumber = shirt.swapped();
+              System.out.println("Number " + byNumber.getFirst() + " is " + byNumber.getSecond());
+          }
+      }
+      // ==== Duo.java ====
+      public class Duo<A, B> {
+          private A first;
+          private B second;
+
+          public Duo(A first, B second) {
+              this.first = first;
+              this.second = second;
+          }
+
+          public A getFirst() {
+              return this.first;
+          }
+
+          public B getSecond() {
+              return this.second;
+          }
+
+          public Duo<B, A> swapped() {
+              return new Duo<>(this.second, this.first);
+          }
+
+          @Override
+          public String toString() {
+              return "(" + this.first + ", " + this.second + ")";
+          }
+      }
+      ```
+
+      ```output
+      Harbor FC (home) against Mill Town (away)
+      Noor wears number 9
+      Goals in all: 3
+      Return match: (Mill Town, Harbor FC)
+      Number 9 is Noor
+      ```
+
+      - `Duo<A, B>` has two type parameters, A and B. Each use gives two type arguments, in the same order: in `Duo<String, Integer>`, A is String and B is Integer.
+      - The two can be the same type, as in `match` and `goals`, or different, as in `shirt`.
+      - `swapped()` returns a new Duo with the two values the other way around. Its return type, `Duo<B, A>`, says that the types swap places too: `shirt` is a `Duo<String, Integer>`, so `shirt.swapped()` is a `Duo<Integer, String>`. For a match, swapping gives the return match, where the away side plays at home.
+      - `return new Duo<>(...)` can use the diamond, because Java knows the method's return type.
+
+      ### A list of T
+
+      A rotation is a list of people who take turns at a job, such as the lifeguards of a lake who take turns in its tower, starting over from the first when everyone has had a turn. A class for a rotation holds an ArrayList, and the type of its members is the rotation's own type parameter:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Rotation<String> tower = new Rotation<>();
+              tower.add("Abena");
+              tower.add("Joaquin");
+              tower.add("Leilani");
+              for (int day = 1; day <= 5; day++) {
+                  System.out.println("Day " + day + ": " + tower.next());
+              }
+
+              Rotation<Integer> keepers = new Rotation<>();
+              keepers.add(1);
+              keepers.add(12);
+              System.out.println("Goalkeepers: " + keepers.next() + ", " + keepers.next() + ", " + keepers.next());
+          }
+      }
+      // ==== Rotation.java ====
+      import java.util.ArrayList;
+
+      public class Rotation<T> {
+          private ArrayList<T> members;
+          private int turn;
+
+          public Rotation() {
+              this.members = new ArrayList<>();
+              this.turn = 0;
+          }
+
+          public void add(T member) {
+              this.members.add(member);
+          }
+
+          public T next() {
+              T member = this.members.get(this.turn);
+              this.turn++;
+              if (this.turn == this.members.size()) {
+                  this.turn = 0;
+              }
+              return member;
+          }
+      }
+      ```
+
+      ```output
+      Day 1: Abena
+      Day 2: Joaquin
+      Day 3: Leilani
+      Day 4: Abena
+      Day 5: Joaquin
+      Goalkeepers: 1, 12, 1
+      ```
+
+      - `private ArrayList<T> members;` passes the rotation's T on to ArrayList: a `Rotation<String>` keeps an `ArrayList<String>`, and a `Rotation<Integer>` an `ArrayList<Integer>`.
+      - `new ArrayList<>()` in the constructor gets its type from the instance variable's type, `ArrayList<T>`.
+      - `next()` returns a T, the member whose turn it is, and moves the turn on, back to 0 after the last member.
+      - Rotation never looks inside its members: it stores them and hands them back. That's why it works for any type.
+
+      **Your turn:** a language app's flashcards have a front and a back, and the two may be of different types: a word and its translation, or a question and a number. In `Flashcard.java`, write the class `Flashcard<F, B>` with:
+
+      - a constructor `Flashcard(F front, B back)`
+      - `getFront()` and `getBack()`
+      - `flipped()`, which returns a new Flashcard with the back as its front and the front as its back. The card it's called on stays as it was.
+      - `toString()`, which returns the front and the back with ` / ` between them, like `perro / dog`
+
+      The check runs:
+
+      ```java fragment
+      Flashcard<String, String> word = new Flashcard<>("perro", "dog");
+      System.out.println(word);
+      System.out.println(word.flipped());
+      Flashcard<String, Integer> fact = new Flashcard<>("Days in a week", 7);
+      Flashcard<Integer, String> asked = fact.flipped();
+      System.out.println(asked);
+      int days = asked.getFront();
+      System.out.println(days * 2 + " days in two weeks");
+      ```
+
+      and expects:
+
+      ```
+      perro / dog
+      dog / perro
+      7 / Days in a week
+      14 days in two weeks
+      ```
+    seed:
+      Flashcard.java: |
+        public class Flashcard {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Flashcard<String, String> word = new Flashcard<>("perro", "dog");
+                System.out.println(word);
+                System.out.println(word.flipped());
+                Flashcard<String, Integer> fact = new Flashcard<>("Days in a week", 7);
+                Flashcard<Integer, String> asked = fact.flipped();
+                System.out.println(asked);
+                int days = asked.getFront();
+                System.out.println(days * 2 + " days in two weeks");
+            }
+        }
+    solution:
+      Flashcard.java: |
+        public class Flashcard<F, B> {
+            private F front;
+            private B back;
+
+            public Flashcard(F front, B back) {
+                this.front = front;
+                this.back = back;
+            }
+
+            public F getFront() {
+                return this.front;
+            }
+
+            public B getBack() {
+                return this.back;
+            }
+
+            public Flashcard<B, F> flipped() {
+                return new Flashcard<>(this.back, this.front);
+            }
+
+            @Override
+            public String toString() {
+                return this.front + " / " + this.back;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Flashcard<String, String> word = new Flashcard<>("perro", "dog");
+                System.out.println(word);
+                System.out.println(word.flipped());
+                Flashcard<String, Integer> fact = new Flashcard<>("Days in a week", 7);
+                Flashcard<Integer, String> asked = fact.flipped();
+                System.out.println(asked);
+                int days = asked.getFront();
+                System.out.println(days * 2 + " days in two weeks");
+            }
+        }
+    hints:
+      - "The header is `public class Flashcard<F, B>`. The front is an F and the back a B: `private F front;` and `private B back;`, and `getFront()` returns an F, `getBack()` a B."
+      - "A flipped card has a B in front and an F at the back, so the return type of `flipped` is `Flashcard<B, F>`, and its body is `return new Flashcard<>(this.back, this.front);`. It makes a new card and leaves this one as it was."
+    tests:
+      - call: |
+          Flashcard<String, String> word = new Flashcard<>("perro", "dog");
+          System.out.println(word);
+          System.out.println(word.flipped());
+          Flashcard<String, Integer> fact = new Flashcard<>("Days in a week", 7);
+          Flashcard<Integer, String> asked = fact.flipped();
+          System.out.println(asked);
+          int days = asked.getFront();
+          System.out.println(days * 2 + " days in two weeks");
+      - call: |
+          Flashcard<String, Boolean> claim = new Flashcard<>("Bats are blind", false);
+          Flashcard<Boolean, String> back = claim.flipped();
+          System.out.println(claim);
+          System.out.println(claim.getFront().length() + " " + claim.getBack());
+          System.out.println(back.getFront() || back.getBack().isEmpty());
+          System.out.println(back.flipped());
+          Flashcard<Double, Integer> numbers = new Flashcard<>(0.5, 2);
+          System.out.println(numbers.getFront() * numbers.getBack() + " " + numbers.flipped());
+        hidden: true
+    more:
+      - task: |
+          Two lifeguards share the lake with this step's Rotation and Duo: each day one sits in the tower and the other walks the shore. Look at where the rotation's turn is after two calls to `next()`. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Rotation<String> guards = new Rotation<>();
+                  guards.add("Abena");
+                  guards.add("Joaquin");
+                  Duo<String, String> today = new Duo<>(guards.next(), guards.next());
+                  Duo<String, String> tomorrow = today.swapped();
+                  System.out.println(today.getFirst() + " takes the tower, " + today.getSecond() + " walks the shore");
+                  System.out.println(tomorrow);
+                  guards.add("Leilani");
+                  System.out.println(guards.next() + " " + guards.next());
+              }
+          }
+          // ==== Duo.java ====
+          public class Duo<A, B> {
+              private A first;
+              private B second;
+
+              public Duo(A first, B second) {
+                  this.first = first;
+                  this.second = second;
+              }
+
+              public A getFirst() {
+                  return this.first;
+              }
+
+              public B getSecond() {
+                  return this.second;
+              }
+
+              public Duo<B, A> swapped() {
+                  return new Duo<>(this.second, this.first);
+              }
+
+              @Override
+              public String toString() {
+                  return "(" + this.first + ", " + this.second + ")";
+              }
+          }
+          // ==== Rotation.java ====
+          import java.util.ArrayList;
+
+          public class Rotation<T> {
+              private ArrayList<T> members;
+              private int turn;
+
+              public Rotation() {
+                  this.members = new ArrayList<>();
+                  this.turn = 0;
+              }
+
+              public void add(T member) {
+                  this.members.add(member);
+              }
+
+              public T next() {
+                  T member = this.members.get(this.turn);
+                  this.turn++;
+                  if (this.turn == this.members.size()) {
+                      this.turn = 0;
+                  }
+                  return member;
+              }
+          }
+        hints:
+          - "The two `next()` calls give Abena and then Joaquin, and `swapped()` makes a new Duo the other way around. `today` itself doesn't change."
+          - "After Joaquin, the turn reached the size of the list, 2, so it went back to 0. Adding Leilani doesn't move the turn: the next two are Abena and Joaquin again."
+      - task: |
+          At the finish line of a race, the first three get a place on the podium, and everyone else who finishes is only counted. In `Podium.java`, write the class `Podium<T>`, which keeps the first three in an `ArrayList<T>` (a `List<T>` variable that holds an ArrayList is fine too), with:
+
+          - a constructor `Podium()`, which starts with nobody
+          - `finish(T competitor)`, which records the next one to finish. Only the first three get a place.
+          - `getPlace(int place)`, which returns the competitor in place 1, 2 or 3, or `null` if nobody has that place yet
+          - `finishers()`, which returns how many have finished in all, on the podium or not
+
+          A runner can be given by name, a `Podium<String>`, or by the number on their bib, a `Podium<Integer>`. The check runs:
+
+          ```java fragment
+          Podium<String> sprint = new Podium<>();
+          sprint.finish("Mo");
+          sprint.finish("Lin");
+          sprint.finish("Ada");
+          sprint.finish("Kai");
+          System.out.println(sprint.getPlace(1) + ", " + sprint.getPlace(2) + ", " + sprint.getPlace(3));
+          System.out.println(sprint.finishers() + " finished");
+          Podium<Integer> marathon = new Podium<>();
+          marathon.finish(204);
+          int winner = marathon.getPlace(1);
+          System.out.println("Bib " + winner + " wins");
+          ```
+
+          and expects:
+
+          ```
+          Mo, Lin, Ada
+          4 finished
+          Bib 204 wins
+          ```
+        seed:
+          Podium.java: |
+            import java.util.ArrayList;
+
+            public class Podium {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Podium<String> sprint = new Podium<>();
+                    sprint.finish("Mo");
+                    sprint.finish("Lin");
+                    sprint.finish("Ada");
+                    sprint.finish("Kai");
+                    System.out.println(sprint.getPlace(1) + ", " + sprint.getPlace(2) + ", " + sprint.getPlace(3));
+                    System.out.println(sprint.finishers() + " finished");
+                    Podium<Integer> marathon = new Podium<>();
+                    marathon.finish(204);
+                    int winner = marathon.getPlace(1);
+                    System.out.println("Bib " + winner + " wins");
+                }
+            }
+        solution:
+          Podium.java: |
+            import java.util.ArrayList;
+
+            public class Podium<T> {
+                private ArrayList<T> places;
+                private int finishers;
+
+                public Podium() {
+                    this.places = new ArrayList<>();
+                    this.finishers = 0;
+                }
+
+                public void finish(T competitor) {
+                    if (this.places.size() < 3) {
+                        this.places.add(competitor);
+                    }
+                    this.finishers++;
+                }
+
+                public T getPlace(int place) {
+                    if (place > this.places.size()) {
+                        return null;
+                    }
+                    return this.places.get(place - 1);
+                }
+
+                public int finishers() {
+                    return this.finishers;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Podium<String> sprint = new Podium<>();
+                    sprint.finish("Mo");
+                    sprint.finish("Lin");
+                    sprint.finish("Ada");
+                    sprint.finish("Kai");
+                    System.out.println(sprint.getPlace(1) + ", " + sprint.getPlace(2) + ", " + sprint.getPlace(3));
+                    System.out.println(sprint.finishers() + " finished");
+                    Podium<Integer> marathon = new Podium<>();
+                    marathon.finish(204);
+                    int winner = marathon.getPlace(1);
+                    System.out.println("Bib " + winner + " wins");
+                }
+            }
+        hints:
+          - "The header is `public class Podium<T>`, with `private ArrayList<T> places;` and an int that counts the finishers. The constructor makes the list with `new ArrayList<>()`."
+          - "`finish` adds the competitor only while the list has fewer than 3, and counts every finisher. Place 1 is at index 0, so `getPlace` returns `this.places.get(place - 1)`, or `null` when the place is past the end of the list."
+        require:
+          - pattern: \b(?:Array)?List\s*<\s*\w+\s*>
+            message: "Keep the podium's competitors in an `ArrayList<T>`, or in a `List<T>` that holds one."
+        tests:
+          - call: |
+              Podium<String> sprint = new Podium<>();
+              sprint.finish("Mo");
+              sprint.finish("Lin");
+              sprint.finish("Ada");
+              sprint.finish("Kai");
+              System.out.println(sprint.getPlace(1) + ", " + sprint.getPlace(2) + ", " + sprint.getPlace(3));
+              System.out.println(sprint.finishers() + " finished");
+              Podium<Integer> marathon = new Podium<>();
+              marathon.finish(204);
+              int winner = marathon.getPlace(1);
+              System.out.println("Bib " + winner + " wins");
+          - call: |
+              Podium<String> swim = new Podium<>();
+              System.out.println(swim.finishers() + " " + swim.getPlace(1));
+              swim.finish("Rosa");
+              swim.finish("Jun");
+              System.out.println(swim.getPlace(2) + " " + swim.getPlace(3) + " " + swim.finishers());
+              for (int i = 0; i < 6; i++) {
+                  swim.finish("Late " + i);
+              }
+              System.out.println(swim.getPlace(1) + " " + swim.getPlace(2) + " " + swim.getPlace(3) + " " + swim.finishers());
+              Podium<Integer> bikes = new Podium<>();
+              bikes.finish(31);
+              bikes.finish(8);
+              System.out.println(bikes.getPlace(1) + bikes.getPlace(2));
+            hidden: true
+
+  - id: generics-interfaces
+    slug: generic-interfaces
+    title: Generic interfaces
+    text: |
+      An interface can have a type parameter too. You've used one since module 38:
+
+      ```java fragment
+      public interface Comparable<T> {
+          int compareTo(T other);
+      }
+      ```
+
+      A Talk class implemented it as `Comparable<Talk>`, so its `compareTo` took a Talk. Java's `List<E>`, `Map<K, V>` and `Iterator<E>` from modules 35 and 39 are generic interfaces as well.
+
+      ### A generic interface of your own
+
+      A comic convention's ticket form checks what people type. The name to print on the entry pass must be long enough, the T-shirt size must be S, M or L, and the number of tickets must be 1, 2 or 4. Every check takes a value and answers yes or no; only the type of the value differs. One interface describes them all:
+
+      ```java fragment
+      public interface Rule<T> {
+          boolean allows(T value);
+      }
+      ```
+
+      A class can implement a generic interface in two ways: for one type that it chooses, or for any type, by keeping the type parameter.
+
+      ### Implemented for one type
+
+      ```java fragment
+      public class MinLength implements Rule<String> {
+          private int min;
+
+          public MinLength(int min) {
+              this.min = min;
+          }
+
+          @Override
+          public boolean allows(String value) {
+              return value.length() >= this.min;
+          }
+      }
+      ```
+
+      `implements Rule<String>` chooses String for T, exactly like `implements Comparable<Talk>`. So MinLength's `allows` takes a String, and it can call `length()` on it. MinLength has no type parameter of its own: it's a Rule for Strings only.
+
+      ### Kept generic
+
+      ```java fragment
+      import java.util.ArrayList;
+
+      public class OneOf<T> implements Rule<T> {
+          private ArrayList<T> allowed;
+
+          public OneOf() {
+              this.allowed = new ArrayList<>();
+          }
+
+          public void add(T value) {
+              this.allowed.add(value);
+          }
+
+          @Override
+          public boolean allows(T value) {
+              return this.allowed.contains(value);
+          }
+      }
+      ```
+
+      `OneOf<T> implements Rule<T>` has a type parameter of its own, and it hands it on to the interface. A `OneOf<String>` is a `Rule<String>`, and a `OneOf<Integer>` is a `Rule<Integer>`. OneOf works for any type because all it does with a value is `contains`, which compares with `equals`, and every object has an `equals`.
+
+      ### Using them
+
+      A `Rule<String>` can be a variable's type or a parameter's type, like any interface (module 35), and it accepts any class that is a Rule for Strings:
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              Rule<String> passName = new MinLength(4);
+              OneOf<String> sizes = new OneOf<>();
+              sizes.add("S");
+              sizes.add("M");
+              sizes.add("L");
+              OneOf<Integer> tickets = new OneOf<>();
+              tickets.add(1);
+              tickets.add(2);
+              tickets.add(4);
+
+              System.out.println(passName.allows("Ari") + " " + passName.allows("Arianna"));
+              System.out.println(tickets.allows(3) + " " + tickets.allows(4));
+
+              ArrayList<String> typed = new ArrayList<>();
+              typed.add("M");
+              typed.add("XL");
+              typed.add("m");
+              typed.add("L");
+              System.out.println(countAllowed(sizes, typed) + " of " + typed.size() + " are sizes");
+              System.out.println(countAllowed(passName, typed) + " of " + typed.size() + " are long enough for a pass");
+          }
+
+          public static int countAllowed(Rule<String> rule, ArrayList<String> values) {
+              int count = 0;
+              for (String value : values) {
+                  if (rule.allows(value)) {
+                      count++;
+                  }
+              }
+              return count;
+          }
+      }
+      // ==== Rule.java ====
+      public interface Rule<T> {
+          boolean allows(T value);
+      }
+      // ==== MinLength.java ====
+      public class MinLength implements Rule<String> {
+          private int min;
+
+          public MinLength(int min) {
+              this.min = min;
+          }
+
+          @Override
+          public boolean allows(String value) {
+              return value.length() >= this.min;
+          }
+      }
+      // ==== OneOf.java ====
+      import java.util.ArrayList;
+
+      public class OneOf<T> implements Rule<T> {
+          private ArrayList<T> allowed;
+
+          public OneOf() {
+              this.allowed = new ArrayList<>();
+          }
+
+          public void add(T value) {
+              this.allowed.add(value);
+          }
+
+          @Override
+          public boolean allows(T value) {
+              return this.allowed.contains(value);
+          }
+      }
+      ```
+
+      ```output
+      false true
+      false true
+      2 of 4 are sizes
+      0 of 4 are long enough for a pass
+      ```
+
+      - `countAllowed` takes any `Rule<String>`: a OneOf of Strings and a MinLength both fit. Each object runs its own `allows`.
+      - `tickets`, a `Rule<Integer>`, doesn't fit: `countAllowed(tickets, typed)` doesn't compile, because a rule for numbers can't check text. Step 5 shows more of what the compiler checks.
+      - `"m"` isn't a size: `contains` uses String's `equals`, which tells small letters from capitals.
+
+      **Your turn:** the form also asks for the buyer's age, which must be from 13 to 120. `Rule.java` is ready. In `Between.java`, write the class `Between`, which implements `Rule<Integer>`. Its constructor `Between(int min, int max)` takes the smallest and the largest value allowed, and `allows` allows a value from `min` to `max`, both included. The check runs:
+
+      ```java fragment
+      Rule<Integer> age = new Between(13, 120);
+      System.out.println(age.allows(12) + " " + age.allows(13) + " " + age.allows(120) + " " + age.allows(121));
+      ```
+
+      and expects:
+
+      ```
+      false true true false
+      ```
+    seed:
+      Between.java: |
+        public class Between {
+
+        }
+      Rule.java: |
+        public interface Rule<T> {
+            boolean allows(T value);
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Rule<Integer> age = new Between(13, 120);
+                System.out.println(age.allows(12) + " " + age.allows(13) + " " + age.allows(120) + " " + age.allows(121));
+            }
+        }
+    solution:
+      Between.java: |
+        public class Between implements Rule<Integer> {
+            private int min;
+            private int max;
+
+            public Between(int min, int max) {
+                this.min = min;
+                this.max = max;
+            }
+
+            @Override
+            public boolean allows(Integer value) {
+                return value >= this.min && value <= this.max;
+            }
+        }
+      Rule.java: |
+        public interface Rule<T> {
+            boolean allows(T value);
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Rule<Integer> age = new Between(13, 120);
+                System.out.println(age.allows(12) + " " + age.allows(13) + " " + age.allows(120) + " " + age.allows(121));
+            }
+        }
+    hints:
+      - "The header is `public class Between implements Rule<Integer>`. Keep `min` and `max` in two int instance variables."
+      - "With T chosen as Integer, the method to write is `public boolean allows(Integer value)`, with `@Override` above it. `allows(int value)` wouldn't do: its parameter type isn't the interface's. The body is `return value >= this.min && value <= this.max;`."
+    require:
+      - pattern: \bclass\s+Between\s+implements\s+Rule\s*<\s*Integer\s*>
+        message: "Write the header as `public class Between implements Rule<Integer>`."
+    tests:
+      - call: |
+          Rule<Integer> age = new Between(13, 120);
+          System.out.println(age.allows(12) + " " + age.allows(13) + " " + age.allows(120) + " " + age.allows(121));
+      - call: |
+          Between floors = new Between(-2, 9);
+          System.out.println(floors.allows(-3) + " " + floors.allows(-2) + " " + floors.allows(0) + " " + floors.allows(9) + " " + floors.allows(10));
+          Rule<Integer> exact = new Between(7, 7);
+          System.out.println(exact.allows(6) + " " + exact.allows(7) + " " + exact.allows(8));
+        hidden: true
+    more:
+      - task: |
+          A shoe shop's app checks the sizes in stock and the names on its gift cards. `Rule`, `MinLength` and `OneOf` are this step's. Look at when 42 is added. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  OneOf<Integer> inStock = new OneOf<>();
+                  inStock.add(38);
+                  inStock.add(40);
+                  Rule<Integer> sizes = inStock;
+                  inStock.add(42);
+                  System.out.println(sizes.allows(42) + " " + sizes.allows(39));
+
+                  Rule<String> name = new MinLength(3);
+                  String[] names = {"Al", "Bea", "Christopher", ""};
+                  int count = 0;
+                  for (String n : names) {
+                      if (name.allows(n)) {
+                          count++;
+                      }
+                  }
+                  System.out.println(count);
+              }
+          }
+          // ==== Rule.java ====
+          public interface Rule<T> {
+              boolean allows(T value);
+          }
+          // ==== MinLength.java ====
+          public class MinLength implements Rule<String> {
+              private int min;
+
+              public MinLength(int min) {
+                  this.min = min;
+              }
+
+              @Override
+              public boolean allows(String value) {
+                  return value.length() >= this.min;
+              }
+          }
+          // ==== OneOf.java ====
+          import java.util.ArrayList;
+
+          public class OneOf<T> implements Rule<T> {
+              private ArrayList<T> allowed;
+
+              public OneOf() {
+                  this.allowed = new ArrayList<>();
+              }
+
+              public void add(T value) {
+                  this.allowed.add(value);
+              }
+
+              @Override
+              public boolean allows(T value) {
+                  return this.allowed.contains(value);
+              }
+          }
+        hints:
+          - "`Rule<Integer> sizes = inStock;` doesn't copy anything: `sizes` and `inStock` refer to the same OneOf object, so the 42 added afterwards is in it too."
+          - "MinLength(3) allows Strings of 3 characters or more: Bea and Christopher. Al has 2, and the empty String has 0."
+      - task: |
+          To change an order, a person types its booking reference, which must pass several rules at once. `Rule.java`, `MinLength.java`, `NoSpaces.java` and `Between.java` are ready. In `AllOf.java`, write the class `AllOf<T>`, which implements `Rule<T>` and stays generic. It keeps its rules in an `ArrayList<Rule<T>>` (a `List<Rule<T>>` variable that holds an ArrayList is fine too), and has:
+
+          - a constructor `AllOf()`, which starts with no rules
+          - `add(Rule<T> rule)`, which adds a rule
+          - `allows(T value)`, which allows a value only when every rule in the list allows it. With no rules, it allows everything.
+
+          The check runs:
+
+          ```java fragment
+          AllOf<String> reference = new AllOf<>();
+          reference.add(new MinLength(4));
+          reference.add(new NoSpaces());
+          System.out.println(reference.allows("K7Q") + " " + reference.allows("K7Q 22X") + " " + reference.allows("K7Q22X"));
+          AllOf<Integer> pin = new AllOf<>();
+          System.out.println(pin.allows(7));
+          pin.add(new Between(1000, 9999));
+          System.out.println(pin.allows(7) + " " + pin.allows(2468));
+          ```
+
+          and expects:
+
+          ```
+          false false true
+          true
+          false true
+          ```
+        seed:
+          AllOf.java: |
+            import java.util.ArrayList;
+
+            public class AllOf {
+
+            }
+          Rule.java: |
+            public interface Rule<T> {
+                boolean allows(T value);
+            }
+          MinLength.java: |
+            public class MinLength implements Rule<String> {
+                private int min;
+
+                public MinLength(int min) {
+                    this.min = min;
+                }
+
+                @Override
+                public boolean allows(String value) {
+                    return value.length() >= this.min;
+                }
+            }
+          NoSpaces.java: |
+            public class NoSpaces implements Rule<String> {
+                @Override
+                public boolean allows(String value) {
+                    return !value.contains(" ");
+                }
+            }
+          Between.java: |
+            public class Between implements Rule<Integer> {
+                private int min;
+                private int max;
+
+                public Between(int min, int max) {
+                    this.min = min;
+                    this.max = max;
+                }
+
+                @Override
+                public boolean allows(Integer value) {
+                    return value >= this.min && value <= this.max;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    AllOf<String> reference = new AllOf<>();
+                    reference.add(new MinLength(4));
+                    reference.add(new NoSpaces());
+                    System.out.println(reference.allows("K7Q") + " " + reference.allows("K7Q 22X") + " " + reference.allows("K7Q22X"));
+                    AllOf<Integer> pin = new AllOf<>();
+                    System.out.println(pin.allows(7));
+                    pin.add(new Between(1000, 9999));
+                    System.out.println(pin.allows(7) + " " + pin.allows(2468));
+                }
+            }
+        solution:
+          AllOf.java: |
+            import java.util.ArrayList;
+
+            public class AllOf<T> implements Rule<T> {
+                private ArrayList<Rule<T>> rules;
+
+                public AllOf() {
+                    this.rules = new ArrayList<>();
+                }
+
+                public void add(Rule<T> rule) {
+                    this.rules.add(rule);
+                }
+
+                @Override
+                public boolean allows(T value) {
+                    for (Rule<T> rule : this.rules) {
+                        if (!rule.allows(value)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            }
+          Rule.java: |
+            public interface Rule<T> {
+                boolean allows(T value);
+            }
+          MinLength.java: |
+            public class MinLength implements Rule<String> {
+                private int min;
+
+                public MinLength(int min) {
+                    this.min = min;
+                }
+
+                @Override
+                public boolean allows(String value) {
+                    return value.length() >= this.min;
+                }
+            }
+          NoSpaces.java: |
+            public class NoSpaces implements Rule<String> {
+                @Override
+                public boolean allows(String value) {
+                    return !value.contains(" ");
+                }
+            }
+          Between.java: |
+            public class Between implements Rule<Integer> {
+                private int min;
+                private int max;
+
+                public Between(int min, int max) {
+                    this.min = min;
+                    this.max = max;
+                }
+
+                @Override
+                public boolean allows(Integer value) {
+                    return value >= this.min && value <= this.max;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    AllOf<String> reference = new AllOf<>();
+                    reference.add(new MinLength(4));
+                    reference.add(new NoSpaces());
+                    System.out.println(reference.allows("K7Q") + " " + reference.allows("K7Q 22X") + " " + reference.allows("K7Q22X"));
+                    AllOf<Integer> pin = new AllOf<>();
+                    System.out.println(pin.allows(7));
+                    pin.add(new Between(1000, 9999));
+                    System.out.println(pin.allows(7) + " " + pin.allows(2468));
+                }
+            }
+        hints:
+          - "The header is `public class AllOf<T> implements Rule<T>`, like OneOf's. The instance variable is `private ArrayList<Rule<T>> rules;`, and `add` takes a `Rule<T>`."
+          - "`allows` goes through the rules with `for (Rule<T> rule : this.rules)`, and returns `false` as soon as one rule doesn't allow the value. After the loop, every rule has allowed it, so it returns `true`, which is also the answer when there are no rules."
+        require:
+          - pattern: \bclass\s+AllOf\s*<\s*(\w+)\s*>\s+implements\s+Rule\s*<\s*\1\s*>
+            message: "Write the header as `public class AllOf<T> implements Rule<T>`, so that AllOf stays generic."
+          - pattern: \b(?:Array)?List\s*<\s*Rule\s*<\s*\w+\s*>\s*>
+            message: "Keep the rules in an `ArrayList<Rule<T>>`, or in a `List<Rule<T>>` that holds one."
+        tests:
+          - call: |
+              AllOf<String> reference = new AllOf<>();
+              reference.add(new MinLength(4));
+              reference.add(new NoSpaces());
+              System.out.println(reference.allows("K7Q") + " " + reference.allows("K7Q 22X") + " " + reference.allows("K7Q22X"));
+              AllOf<Integer> pin = new AllOf<>();
+              System.out.println(pin.allows(7));
+              pin.add(new Between(1000, 9999));
+              System.out.println(pin.allows(7) + " " + pin.allows(2468));
+          - call: |
+              AllOf<Integer> age = new AllOf<>();
+              age.add(new Between(0, 120));
+              age.add(new Between(18, 200));
+              System.out.println(age.allows(17) + " " + age.allows(18) + " " + age.allows(120) + " " + age.allows(121));
+              Rule<String> title = new AllOf<>();
+              System.out.println(title.allows("") + " " + title.allows("any text at all"));
+              AllOf<String> code = new AllOf<>();
+              code.add(new NoSpaces());
+              code.add(new MinLength(2));
+              code.add(new MinLength(6));
+              System.out.println(code.allows("abc") + " " + code.allows("abcdef") + " " + code.allows("abc def"));
+            hidden: true
+
+  - id: generics-together
+    slug: putting-it-together
+    title: "Putting it together: what the compiler checks"
+    text: |
+      This step builds one more generic class with tools from earlier modules, and then looks at the biggest gain from type parameters: the compiler checks the types for you, so many mistakes can't even run.
+
+      ### A history of the last few items
+
+      A web shop shows the products you viewed most recently, and a vet's app keeps a dog's last few weights, in kilograms. Both keep the newest few items of some type and forget older ones:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              History<String> viewed = new History<>(3);
+              viewed.add("lamp");
+              viewed.add("rug");
+              viewed.add("kettle");
+              viewed.add("mirror");
+              System.out.println(viewed);
+              System.out.println("Latest: " + viewed.latest());
+
+              History<Double> weights = new History<>(2);
+              weights.add(18.5);
+              weights.add(21.0);
+              weights.add(19.5);
+              System.out.println(weights);
+
+              try {
+                  History<Integer> none = new History<>(0);
+                  System.out.println(none);
+              } catch (IllegalArgumentException e) {
+                  System.out.println(e.getMessage());
+              }
+          }
+      }
+      // ==== History.java ====
+      import java.util.ArrayList;
+
+      public class History<T> {
+          private ArrayList<T> items;
+          private int limit;
+
+          public History(int limit) {
+              if (limit < 1) {
+                  throw new IllegalArgumentException("A history must keep at least 1 item, not " + limit);
+              }
+              this.items = new ArrayList<>();
+              this.limit = limit;
+          }
+
+          public void add(T item) {
+              this.items.add(item);
+              if (this.items.size() > this.limit) {
+                  this.items.remove(0);
+              }
+          }
+
+          public T latest() {
+              if (this.items.isEmpty()) {
+                  throw new IllegalStateException("The history is empty");
+              }
+              return this.items.get(this.items.size() - 1);
+          }
+
+          @Override
+          public String toString() {
+              return this.items.toString();
+          }
+      }
+      ```
+
+      ```output
+      [rug, kettle, mirror]
+      Latest: mirror
+      [21.0, 19.5]
+      A history must keep at least 1 item, not 0
+      ```
+
+      - Everything in History comes from earlier modules: an ArrayList, removing its first element, `toString`, and the exceptions of module 42. The only new part is T.
+      - `add` puts the new item at the end, and when the list has grown past the limit, it removes the oldest, at index 0. `remove(0)` removes by index even in a `History<Integer>`, because 0 is an int.
+      - The constructor refuses a limit below 1, and `latest()` on an empty history throws an IllegalStateException. A generic class checks its values like any other.
+      - `toString` hands the job to the list's own `toString`, which calls `toString` on each item.
+
+      ### The compiler checks the types
+
+      A `History<Double>`'s `add` takes only Doubles, and a `Box<Integer>` from step 1 holds only Integers. Try to put a String in one, or take a String out of one, and the program doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Box<Integer> coins = new Box<>(340);
+              coins.setContent("a lot");
+              String count = coins.getContent();
+              System.out.println(count);
+          }
+      }
+      // ==== Box.java ====
+      public class Box<T> {
+          private T content;
+
+          public Box(T content) {
+              this.content = content;
+          }
+
+          public T getContent() {
+              return this.content;
+          }
+
+          public void setContent(T content) {
+              this.content = content;
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: incompatible types: String cannot be converted to Integer
+              coins.setContent("a lot");
+                               ^
+      Main.java:5: error: incompatible types: Integer cannot be converted to String
+              String count = coins.getContent();
+                                             ^
+      Note: Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+      2 errors
+      ```
+
+      With step 1's ObjectBox, javac would accept the first line, and the second too once it had a cast, `(String) coins.getContent()`. Neither mistake would be caught before the program ran. The cast fails with a ClassCastException when the box still holds 340, and a String put into a box of coins goes unnoticed until some code takes it out as an Integer, maybe much later and in a different place. With a type parameter, javac finds both before the program ever runs, and points at the very lines. That's the main reason type parameters exist.
+
+      The checks go everywhere the types go: a `Rule<Integer>` can't be passed to a method that wants a `Rule<String>`, and a `Duo<String, Integer>`'s `swapped()` can't be stored in a `Duo<String, Integer>` variable.
+
+      ### Inside the class, T could be anything
+
+      The checks work in the other direction too. Inside Box, nobody knows yet what T will be, so this doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Box<String> pegs = new Box<>("tent pegs");
+              System.out.println(pegs.letters());
+          }
+      }
+      // ==== Box.java ====
+      public class Box<T> {
+          private T content;
+
+          public Box(T content) {
+              this.content = content;
+          }
+
+          public int letters() {
+              return this.content.length();
+          }
+      }
+      ```
+
+      ```javac
+      Box.java:9: error: cannot find symbol
+              return this.content.length();
+                                 ^
+        symbol:   method length()
+        location: variable content of type T
+        where T is a type-variable:
+          T extends Object declared in class Box
+      1 error
+      ```
+
+      This box happens to hold a String, but another Box could hold an Integer, which has no `length()`. The last lines of the message say what javac knows about T: `T extends Object`, some type of object or other. So inside a generic class, a value of type T can do only what every object can: the methods of Object, such as `toString()` and `equals`. That's why History, Rotation and OneOf work for any type: they store values, hand them back, print them and compare them with `equals`, and that's all. (Java can also promise more about T, as in `<T extends Comparable<T>>`, a type parameter that must be Comparable. That's called a **bounded type parameter**. You saw one in module 38's long error message; this course doesn't need them.)
+
+      **Your turn:** a drawing app lets you undo changes to the brush. The brush color is a String and its size an Integer, and one class handles both. In `Undoable.java`, write the class `Undoable<T>` with:
+
+      - a constructor `Undoable(T start)`, which takes the first value
+      - `get()`, which returns the current value
+      - `set(T value)`, which changes the value and remembers the old one
+      - `undo()`, which goes back to the value before the last `set`. Each `undo` goes one step further back. When only the first value is left, `undo` throws an IllegalStateException with the message `Nothing to undo`, and the value stays as it is.
+
+      Keep the values in an `ArrayList<T>`, the current one last. The check runs:
+
+      ```java fragment
+      Undoable<String> color = new Undoable<>("black");
+      color.set("red");
+      color.set("blue");
+      color.undo();
+      System.out.println(color.get());
+      color.undo();
+      System.out.println(color.get());
+      try {
+          color.undo();
+      } catch (IllegalStateException e) {
+          System.out.println(e.getMessage());
+      }
+      System.out.println(color.get());
+      ```
+
+      and expects:
+
+      ```
+      red
+      black
+      Nothing to undo
+      black
+      ```
+    seed:
+      Undoable.java: |
+        import java.util.ArrayList;
+
+        public class Undoable {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Undoable<String> color = new Undoable<>("black");
+                color.set("red");
+                color.set("blue");
+                color.undo();
+                System.out.println(color.get());
+                color.undo();
+                System.out.println(color.get());
+                try {
+                    color.undo();
+                } catch (IllegalStateException e) {
+                    System.out.println(e.getMessage());
+                }
+                System.out.println(color.get());
+            }
+        }
+    solution:
+      Undoable.java: |
+        import java.util.ArrayList;
+
+        public class Undoable<T> {
+            private ArrayList<T> values;
+
+            public Undoable(T start) {
+                this.values = new ArrayList<>();
+                this.values.add(start);
+            }
+
+            public T get() {
+                return this.values.get(this.values.size() - 1);
+            }
+
+            public void set(T value) {
+                this.values.add(value);
+            }
+
+            public void undo() {
+                if (this.values.size() == 1) {
+                    throw new IllegalStateException("Nothing to undo");
+                }
+                this.values.remove(this.values.size() - 1);
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Undoable<String> color = new Undoable<>("black");
+                color.set("red");
+                color.set("blue");
+                color.undo();
+                System.out.println(color.get());
+                color.undo();
+                System.out.println(color.get());
+                try {
+                    color.undo();
+                } catch (IllegalStateException e) {
+                    System.out.println(e.getMessage());
+                }
+                System.out.println(color.get());
+            }
+        }
+    hints:
+      - "The header is `public class Undoable<T>`, with one instance variable, `private ArrayList<T> values;`. The constructor makes the list and adds `start` to it, so the list is never empty."
+      - "`get` returns the last value, `this.values.get(this.values.size() - 1)`, and `set` adds to the end. `undo` first checks whether only one value is left, and throws `new IllegalStateException(\"Nothing to undo\")` if so; otherwise it removes the last value."
+    require:
+      - pattern: \bthrow\s+new\s+IllegalStateException\s*\(
+        message: "When there's nothing to undo, throw an IllegalStateException: `throw new IllegalStateException(\"Nothing to undo\");`."
+    tests:
+      - call: |
+          Undoable<String> color = new Undoable<>("black");
+          color.set("red");
+          color.set("blue");
+          color.undo();
+          System.out.println(color.get());
+          color.undo();
+          System.out.println(color.get());
+          try {
+              color.undo();
+          } catch (IllegalStateException e) {
+              System.out.println(e.getMessage());
+          }
+          System.out.println(color.get());
+      - call: |
+          Undoable<Integer> size = new Undoable<>(4);
+          try {
+              size.undo();
+              System.out.println("undone");
+          } catch (IllegalStateException e) {
+              System.out.println("refused: " + e.getMessage());
+          }
+          size.set(size.get() + 2);
+          size.set(size.get() * 3);
+          size.set(size.get() - 1);
+          System.out.println(size.get());
+          size.undo();
+          size.undo();
+          int now = size.get();
+          System.out.println(now);
+          size.set(10);
+          size.undo();
+          System.out.println(size.get());
+          size.undo();
+          System.out.println(size.get());
+        hidden: true
+      - call: |
+          Undoable<String> brush = new Undoable<>("black");
+          brush.set("red");
+          brush.set("black");
+          brush.undo();
+          System.out.println(brush.get());
+          brush.undo();
+          System.out.println(brush.get());
+        hidden: true
+    more:
+      - task: |
+          A game keeps a player's last few scores in this step's History. Look closely at what `remove(0)` removes. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  History<Integer> scores = new History<>(3);
+                  scores.add(10);
+                  scores.add(0);
+                  scores.add(7);
+                  scores.add(0);
+                  System.out.println(scores + " " + scores.latest());
+                  History<String> pages = new History<>(1);
+                  pages.add("home");
+                  pages.add("cart");
+                  System.out.println(pages);
+              }
+          }
+          // ==== History.java ====
+          import java.util.ArrayList;
+
+          public class History<T> {
+              private ArrayList<T> items;
+              private int limit;
+
+              public History(int limit) {
+                  if (limit < 1) {
+                      throw new IllegalArgumentException("A history must keep at least 1 item, not " + limit);
+                  }
+                  this.items = new ArrayList<>();
+                  this.limit = limit;
+              }
+
+              public void add(T item) {
+                  this.items.add(item);
+                  if (this.items.size() > this.limit) {
+                      this.items.remove(0);
+                  }
+              }
+
+              public T latest() {
+                  if (this.items.isEmpty()) {
+                      throw new IllegalStateException("The history is empty");
+                  }
+                  return this.items.get(this.items.size() - 1);
+              }
+
+              @Override
+              public String toString() {
+                  return this.items.toString();
+              }
+          }
+        hints:
+          - "`remove(0)` removes the element at index 0, the oldest one, not an element whose value is 0. Inside History, `0` is an int, so it's the index version of `remove`, whatever T is."
+          - "After the fourth score, the list is `[10, 0, 7, 0]`, longer than 3, so the 10 at index 0 goes. The history of pages keeps only 1 item."
+      - task: |
+          A game's difficulty level must stay from 1 to 5, and a nickname must have at least 3 letters. Module 42's Oven refused a bad setting in its constructor and in `setDegrees`; one generic class can do that for any type, with a rule from step 4. `Rule.java`, `Between.java` and `MinLength.java` are ready. In `Guarded.java`, write the class `Guarded<T>` with:
+
+          - a constructor `Guarded(T start, Rule<T> rule)`. The start value must pass the rule too: if it doesn't, the constructor throws an IllegalArgumentException with the message `Not allowed: ` followed by the value, like `Not allowed: 9`.
+          - `get()`, which returns the value
+          - `set(T value)`, which changes the value if the rule allows it. If not, it throws an IllegalArgumentException with the same kind of message, and the old value stays.
+
+          The check runs:
+
+          ```java fragment
+          Guarded<Integer> difficulty = new Guarded<>(3, new Between(1, 5));
+          difficulty.set(4);
+          try {
+              difficulty.set(9);
+          } catch (IllegalArgumentException e) {
+              System.out.println(e.getMessage());
+          }
+          System.out.println(difficulty.get());
+          ```
+
+          and expects:
+
+          ```
+          Not allowed: 9
+          4
+          ```
+        seed:
+          Guarded.java: |
+            public class Guarded {
+
+            }
+          Rule.java: |
+            public interface Rule<T> {
+                boolean allows(T value);
+            }
+          Between.java: |
+            public class Between implements Rule<Integer> {
+                private int min;
+                private int max;
+
+                public Between(int min, int max) {
+                    this.min = min;
+                    this.max = max;
+                }
+
+                @Override
+                public boolean allows(Integer value) {
+                    return value >= this.min && value <= this.max;
+                }
+            }
+          MinLength.java: |
+            public class MinLength implements Rule<String> {
+                private int min;
+
+                public MinLength(int min) {
+                    this.min = min;
+                }
+
+                @Override
+                public boolean allows(String value) {
+                    return value.length() >= this.min;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Guarded<Integer> difficulty = new Guarded<>(3, new Between(1, 5));
+                    difficulty.set(4);
+                    try {
+                        difficulty.set(9);
+                    } catch (IllegalArgumentException e) {
+                        System.out.println(e.getMessage());
+                    }
+                    System.out.println(difficulty.get());
+                }
+            }
+        solution:
+          Guarded.java: |
+            public class Guarded<T> {
+                private T value;
+                private Rule<T> rule;
+
+                public Guarded(T start, Rule<T> rule) {
+                    this.rule = rule;
+                    this.set(start);
+                }
+
+                public T get() {
+                    return this.value;
+                }
+
+                public void set(T value) {
+                    if (!this.rule.allows(value)) {
+                        throw new IllegalArgumentException("Not allowed: " + value);
+                    }
+                    this.value = value;
+                }
+            }
+          Rule.java: |
+            public interface Rule<T> {
+                boolean allows(T value);
+            }
+          Between.java: |
+            public class Between implements Rule<Integer> {
+                private int min;
+                private int max;
+
+                public Between(int min, int max) {
+                    this.min = min;
+                    this.max = max;
+                }
+
+                @Override
+                public boolean allows(Integer value) {
+                    return value >= this.min && value <= this.max;
+                }
+            }
+          MinLength.java: |
+            public class MinLength implements Rule<String> {
+                private int min;
+
+                public MinLength(int min) {
+                    this.min = min;
+                }
+
+                @Override
+                public boolean allows(String value) {
+                    return value.length() >= this.min;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Guarded<Integer> difficulty = new Guarded<>(3, new Between(1, 5));
+                    difficulty.set(4);
+                    try {
+                        difficulty.set(9);
+                    } catch (IllegalArgumentException e) {
+                        System.out.println(e.getMessage());
+                    }
+                    System.out.println(difficulty.get());
+                }
+            }
+        hints:
+          - "The header is `public class Guarded<T>`, with two instance variables: `private T value;` and `private Rule<T> rule;`. The rule's type argument is the same T, so a `Guarded<Integer>` takes a `Rule<Integer>`."
+          - "`set` checks first, `if (!this.rule.allows(value))`, and throws `new IllegalArgumentException(\"Not allowed: \" + value)`; only after the check does it set `this.value`. The constructor can store the rule and then call `this.set(start)`, so the start value gets the same check."
+        require:
+          - pattern: \bthrow\s+new\s+IllegalArgumentException\s*\(
+            message: "Refuse a value with `throw new IllegalArgumentException(...)`."
+          - pattern: \bRule\s*<\s*\w+\s*>\s+\w+\s*[;)]
+            message: "Keep the rule in an instance variable of type `Rule<T>`, and take it in the constructor as a `Rule<T>`."
+        tests:
+          - call: |
+              Guarded<Integer> difficulty = new Guarded<>(3, new Between(1, 5));
+              difficulty.set(4);
+              try {
+                  difficulty.set(9);
+              } catch (IllegalArgumentException e) {
+                  System.out.println(e.getMessage());
+              }
+              System.out.println(difficulty.get());
+          - call: |
+              Guarded<String> nickname = new Guarded<>("Lumi", new MinLength(3));
+              try {
+                  nickname.set("Jo");
+                  System.out.println("accepted");
+              } catch (IllegalArgumentException e) {
+                  System.out.println("refused: " + e.getMessage());
+              }
+              nickname.set("Joe");
+              System.out.println(nickname.get().toUpperCase());
+              try {
+                  new Guarded<>(0, new Between(1, 5));
+                  System.out.println("accepted");
+              } catch (IllegalArgumentException e) {
+                  System.out.println("refused: " + e.getMessage());
+              }
+              Guarded<Integer> edge = new Guarded<>(1, new Between(1, 5));
+              edge.set(5);
+              int doubled = edge.get() * 2;
+              System.out.println(doubled);
+            hidden: true

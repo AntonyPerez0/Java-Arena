@@ -1,0 +1,292 @@
+topic: randomness
+drills:
+  - type: predict
+    after: seeds
+    body: |
+      Random random = new Random(3);
+      int odd = 0;
+      int largest = 0;
+      for (int i = 0; i < 1000; i++) {
+          int value = random.nextInt(4) * 2 + 1;
+          if (value % 2 == 1) {
+              odd++;
+          }
+          if (value > largest) {
+              largest = value;
+          }
+      }
+      System.out.println(odd + " " + largest);
+    why: "`nextInt(4)` gives 0, 1, 2 or 3. Times 2 that's 0, 2, 4 or 6, and plus 1 it's 1, 3, 5 or 7: always odd, so all 1000 values count, and the largest of them is 7. Whatever the seed, 1000 draws are plenty for 7 to come up."
+
+  - type: predict
+    after: seeds
+    body: |
+      Random first = new Random(99);
+      Random second = new Random(99);
+      int same = 0;
+      for (int i = 0; i < 5; i++) {
+          if (first.nextInt(100) == second.nextInt(100)) {
+              same++;
+          }
+      }
+      System.out.println(same + " of 5");
+    why: "Two generators with the same seed hand out the same series of numbers, as long as they're asked the same questions in the same order. Each round asks both for `nextInt(100)`, so every pair is equal."
+
+  - type: predict
+    after: decimals-and-chances
+    body: |
+      Random random = new Random(8);
+      int smallest = 100;
+      int largest = -100;
+      for (int i = 0; i < 1000; i++) {
+          int slot = (int) (random.nextDouble() * 3);
+          if (slot < smallest) {
+              smallest = slot;
+          }
+          if (slot > largest) {
+              largest = slot;
+          }
+      }
+      System.out.println(smallest + " to " + largest);
+    why: "`nextDouble()` is from 0.0 up to, but never, 1.0, so times 3 it's from 0.0 up to just below 3.0. The cast to `int` drops the decimals, which leaves 0, 1 or 2. 3 would need `nextDouble()` to return 1.0, which it never does."
+
+  - type: predict
+    after: picking-and-shuffling
+    body: |
+      ArrayList<String> hat = new ArrayList<>();
+      hat.add("Ada");
+      hat.add("Ben");
+      hat.add("Cleo");
+      hat.add("Dev");
+      Random random = new Random(12);
+      HashSet<String> drawn = new HashSet<>();
+      while (!hat.isEmpty()) {
+          drawn.add(hat.remove(random.nextInt(hat.size())));
+      }
+      System.out.println(drawn.size() + " " + hat.size());
+    why: "`remove` takes the drawn name out of the hat and returns it, so a name can't be drawn twice, and the bound `hat.size()` shrinks with every draw. The loop ends when the hat is empty, after four draws of four different names."
+
+  - type: predict
+    after: picking-and-shuffling
+    body: |
+      ArrayList<Integer> numbers = new ArrayList<>();
+      for (int i = 1; i <= 4; i++) {
+          numbers.add(i);
+      }
+      ArrayList<Integer> copy = new ArrayList<>(numbers);
+      Collections.shuffle(copy, new Random(4));
+      System.out.println(numbers + " " + copy.contains(3));
+    why: "`new ArrayList<>(numbers)` makes a separate list, and only that copy is shuffled, so `numbers` keeps its order. A shuffle changes the order, never which elements there are, so the copy still holds the 3."
+
+  - type: fill
+    after: seeds
+    prompt: "Fill in the blank, a number, so that `coins` (the coins in a treasure chest) is a whole number from 10 to 20, both included, and the program prints the output shown."
+    body: |
+      Random random = new Random(5);
+      int smallest = 100;
+      int largest = -100;
+      for (int i = 0; i < 10000; i++) {
+          int coins = random.nextInt([[11]]) + 10;
+          if (coins < smallest) {
+              smallest = coins;
+          }
+          if (coins > largest) {
+              largest = coins;
+          }
+      }
+      System.out.println(smallest + " " + largest);
+    why: "From 10 to 20 there are 20 - 10 + 1 = 11 whole numbers, so the bound is 11. `nextInt(11)` gives 0 to 10, and adding 10 moves that to 10 to 20. With a bound of 10, 20 would never come up."
+
+  - type: fill
+    after: picking-and-shuffling
+    prompt: "Fill in the blank, a method name, so that the questions come out in a random order, the same one on every run."
+    body: |
+      ArrayList<String> questions = new ArrayList<>();
+      questions.add("Q1");
+      questions.add("Q2");
+      questions.add("Q3");
+      questions.add("Q4");
+      Collections.[[shuffle]](questions, new Random(7));
+      System.out.println(questions);
+    why: "`Collections.shuffle(list, random)` puts the list in a random order chosen by the given Random. With a seeded Random, it's the same order on every run."
+
+  - type: bug
+    after: seeds
+    prompt: "The program rolls a die 6000 times and should print the smallest and the largest roll, 1 and 6. Which line is wrong?"
+    body: |
+      Random random = new Random(2);
+      int smallest = 100;
+      int largest = -100;
+      for (int i = 0; i < 6000; i++) {
+          int roll = random.nextInt(6); // BUG
+          if (roll < smallest) {
+              smallest = roll;
+          }
+          if (roll > largest) {
+              largest = roll;
+          }
+      }
+      System.out.println(smallest + " " + largest);
+    fix: int roll = random.nextInt(6) + 1;
+    why: "`nextInt(6)` gives six numbers, but from 0 to 5. Adding 1 shifts them to 1 to 6, the faces of a die. `nextInt(7)` would be wrong too: 0 to 6, seven numbers."
+
+  - type: bug
+    after: seeds
+    prompt: "`roll` should roll a die with the Random it's given, so that the 100 rolls show every face. Which line is wrong?"
+    pre: |
+      public static int roll(Random random) {
+          return new Random(42).nextInt(6) + 1; // BUG
+      }
+    body: |
+      Random random = new Random(42);
+      HashSet<Integer> faces = new HashSet<>();
+      for (int i = 0; i < 100; i++) {
+          faces.add(roll(random));
+      }
+      System.out.println(faces.size() + " different faces");
+    fix: return random.nextInt(6) + 1;
+    why: "`new Random(42)` starts a new generator from the same seed on every call, and takes its first number: the same number every time, so the set holds just one face. The method should use its parameter, which keeps going through its series from call to call."
+
+  - type: bug
+    after: decimals-and-chances
+    prompt: "The program should roll a die 6000 times with `Math.random()` and print the largest roll, 6. Which line is wrong?"
+    body: |
+      int largest = 0;
+      for (int i = 0; i < 6000; i++) {
+          int roll = (int) Math.random() * 6 + 1; // BUG
+          if (roll > largest) {
+              largest = roll;
+          }
+      }
+      System.out.println("largest " + largest);
+    fix: int roll = (int) (Math.random() * 6) + 1;
+    why: "A cast applies to the value right after it. `(int) Math.random()` turns a number below 1.0 into 0, so every roll is 0 * 6 + 1 = 1. With parentheses, `Math.random() * 6` is worked out first, from 0.0 up to 6.0, and the cast makes it 0 to 5."
+
+  - type: compiles
+    after: decimals-and-chances
+    body: |
+      Random random = new Random();
+      int percent = random.nextDouble() * 100;
+      System.out.println(percent + "%");
+    why: "No. `random.nextDouble() * 100` is a `double`, and Java won't put a double in an `int` variable on its own, since the decimals would be lost: `possible lossy conversion from double to int`. A cast says that's what you want: `int percent = (int) (random.nextDouble() * 100);`."
+
+  - type: compiles
+    after: picking-and-shuffling
+    body: |
+      ArrayList<String> names = new ArrayList<>();
+      names.add("Ada");
+      names.add("Ben");
+      Collections.shuffle(names);
+      System.out.println(names.size());
+    why: "Yes, and it prints 2. `Collections.shuffle` also has a version without a Random: it then uses a generator of its own, without a seed. That's fine in a game, but the order can't be repeated, so a program that should be tested passes a Random of its own."
+
+  - type: choice
+    after: next-int
+    prompt: Which expression gives a whole number from 5 to 10, both included, each as likely as the others?
+    choices:
+      - "`random.nextInt(10) + 5`"
+      - "`random.nextInt(6) + 5`"
+      - "`random.nextInt(5) + 5`"
+      - "`random.nextInt(11) - 5`"
+    answer: 2
+    why: "From 5 to 10 there are six numbers, so the bound is 6: `nextInt(6)` gives 0 to 5, and adding 5 makes it 5 to 10. `nextInt(10) + 5` goes up to 14, `nextInt(5) + 5` stops at 9, and `nextInt(11) - 5` gives -5 to 5."
+
+  - type: choice
+    after: decimals-and-chances
+    prompt: "A class needs random numbers, and its tests should see the same numbers on every run. Where should its Random come from?"
+    choices:
+      - "Each method that needs a number creates `new Random()`"
+      - "The class takes a Random as a constructor parameter, so a test can pass `new Random(42)` and the game `new Random()`"
+      - "The class uses `Math.random()`, which needs no object"
+      - "Each method that needs a number creates `new Random(42)`"
+    answer: 2
+    why: "Taking the Random as a parameter lets whoever creates the object decide: a seed for a test, which then gets the same numbers on every run, and no seed for the real thing. `new Random()` and `Math.random()` can't be given a seed, and a `new Random(42)` in each method starts the same series again on every call, so it returns the same number each time."
+
+  - type: boss
+    after: simulations-and-checks
+    prompt: |
+      In some board games, rolling a double (two dice showing the same number) gets you out of jail. Write the method `rollsUntilDouble(Random random)`, which rolls two dice again and again until they show the same number, and returns how many times it rolled. Roll the first die and then the second, each with `random.nextInt(6) + 1`, so that a seed gives the same rolls as the check's. The check runs:
+
+      ```java fragment
+      Random random = new Random(17);
+      for (int i = 0; i < 5; i++) {
+          System.out.print(rollsUntilDouble(random) + " ");
+      }
+      System.out.println();
+      ```
+
+      and expects:
+
+      ```
+      1 7 9 1 2
+      ```
+    seed: |
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(17);
+              for (int i = 0; i < 5; i++) {
+                  System.out.print(rollsUntilDouble(random) + " ");
+              }
+              System.out.println();
+          }
+
+          public static int rollsUntilDouble(Random random) {
+              return 0;
+          }
+      }
+    solution: |
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(17);
+              for (int i = 0; i < 5; i++) {
+                  System.out.print(rollsUntilDouble(random) + " ");
+              }
+              System.out.println();
+          }
+
+          public static int rollsUntilDouble(Random random) {
+              int rolls = 0;
+              while (true) {
+                  int first = random.nextInt(6) + 1;
+                  int second = random.nextInt(6) + 1;
+                  rolls++;
+                  if (first == second) {
+                      return rolls;
+                  }
+              }
+          }
+      }
+    hints:
+      - "Count the rolls in a variable. In a `while (true)` loop, roll both dice and add one to the count."
+      - "When `first == second`, return the count. Use the Random from the parameter for both dice, the first one first."
+    tests:
+      - call: |
+          Random random = new Random(17);
+          for (int i = 0; i < 5; i++) {
+              System.out.print(rollsUntilDouble(random) + " ");
+          }
+          System.out.println();
+      - call: |
+          Random random = new Random(1234);
+          for (int i = 0; i < 8; i++) {
+              System.out.print(rollsUntilDouble(random) + " ");
+          }
+          System.out.println();
+        hidden: true
+      - call: |
+          Random random = new Random();
+          int total = 0;
+          int smallest = 100;
+          for (int i = 0; i < 6000; i++) {
+              int rolls = rollsUntilDouble(random);
+              total += rolls;
+              smallest = Math.min(smallest, rolls);
+          }
+          double average = (double) total / 6000;
+          System.out.println("smallest " + smallest);
+          System.out.println("average between 5.5 and 6.5: " + (average > 5.5 && average < 6.5));
+        hidden: true

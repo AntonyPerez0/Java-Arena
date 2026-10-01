@@ -1,0 +1,1754 @@
+id: randomness
+summary: Random numbers. The class Random and nextInt with a bound, shifting a range such as 1 to 6, seeds and why the same seed gives the same numbers, classes that take a Random so they can be tested, nextDouble, nextBoolean and Math.random() for decimal numbers and chances, picking a random element, shuffling and drawing without repeats, and simulations and checks for programs whose results are random. MOOC section 12.3.
+steps:
+  - id: randomness-next-int
+    slug: next-int
+    title: Random and nextInt
+    text: |
+      Every program in this course so far does the same thing each time it runs with the same input. Plenty of programs shouldn't: a board game rolls dice, a quiz asks its questions in a new order, a workout app picks today's exercises, and a simulation tries out thousands of possible days. They need numbers that nobody can predict: **random numbers**. Java makes them with the class `Random`, from the package `java.util`.
+
+      ### Asking for a number
+
+      ```java fragment
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random();
+              for (int i = 0; i < 5; i++) {
+                  System.out.println(random.nextInt(10));
+              }
+          }
+      }
+      ```
+
+      A run might print:
+
+      ```text
+      5
+      2
+      7
+      0
+      0
+      ```
+
+      Run it again, and you'll get other numbers.
+
+      - `import java.util.Random;` makes the class available, like the import line of a Scanner.
+      - `new Random()` creates a **random number generator**: an object whose job is to hand out random numbers.
+      - `random.nextInt(10)` returns a random whole number from 0 to 9. The number in the parentheses is the **bound**: the result is always at least 0 and always less than the bound. All ten numbers are equally likely, and each call is a new draw, so the same number can come up twice in a row, like the two zeros above.
+
+      Make one Random at the start, and ask it for as many numbers as you need, the way one Scanner reads all the input.
+
+      ### From 0 to bound - 1
+
+      The bound itself never comes up. Since the numbers change from run to run, you can't check that by comparing them with a list written down earlier. But you can keep the smallest and the largest of many numbers:
+
+      ```java main
+      Random random = new Random();
+      int smallest = 100;
+      int largest = -100;
+      for (int i = 0; i < 10000; i++) {
+          int number = random.nextInt(10);
+          if (number < smallest) {
+              smallest = number;
+          }
+          if (number > largest) {
+              largest = number;
+          }
+      }
+      System.out.println("smallest " + smallest + ", largest " + largest);
+      ```
+
+      ```output
+      smallest 0, largest 9
+      ```
+
+      In 10000 numbers, each of the ten values comes up about a thousand times, so 0 and 9 are there, and 10 never is. The numbers behind it differ on every run, but this output doesn't. Step 5 comes back to this way of checking random results.
+
+      `nextInt(10)` gives exactly the indexes of an array or a list of 10 elements, from 0 to 9. Step 4 uses that.
+
+      ### Shifting the range
+
+      A die shows 1 to 6, not 0 to 5. `nextInt(6)` gives six different numbers, 0 to 5, and adding 1 to each moves them up to 1 to 6:
+
+      ```java fragment
+      int roll = random.nextInt(6) + 1;
+      ```
+
+      The same works for any range. For the whole numbers from `low` to `high`, both included:
+
+      - there are `high - low + 1` of them, and that's the bound
+      - adding `low` moves the smallest one from 0 up to `low`
+
+      So a treasure chest with 10 to 20 coins in it is `random.nextInt(11) + 10`: 11 numbers, from 0 + 10 = 10 to 10 + 10 = 20. A change of -3 to 3 is `random.nextInt(7) - 3`.
+
+      Two easy slips: `random.nextInt(20) + 10` gives 10 to 29, since the bound is how many numbers there are, not the largest one. And `random.nextInt(10) + 10` stops at 19: when you count the numbers in a range, count both ends.
+
+      (Since Java 17, a Random can also do this in one call: `random.nextInt(1, 7)` gives 1 to 6, the first number included and the second not, like `substring`. This course shifts the range itself, which works in every version of Java.)
+
+      ### Two dice
+
+      A board game moves a piece by the total of two dice. Each die is a call of its own:
+
+      ```java fragment
+      int first = random.nextInt(6) + 1;
+      int second = random.nextInt(6) + 1;
+      System.out.println("You rolled " + first + " and " + second + ": move " + (first + second) + " squares");
+      ```
+
+      `random.nextInt(11) + 2` also gives a number from 2 to 12, but not the way two dice do. Of the 36 ways two dice can land, six make 7 (1 and 6, 2 and 5, 3 and 4, and the other way around), and just one makes 2 (1 and 1). So with two dice, a 7 comes up six times as often as a 2, while `nextInt(11) + 2` makes all eleven totals equally likely. When a program imitates something random, it should do what the real thing does: roll each die.
+
+      ### A Random as a parameter
+
+      A method that needs random numbers can take the Random as a parameter, the way methods in earlier modules took the Scanner they read from:
+
+      ```java fragment
+      public static int rollDie(Random random) {
+          return random.nextInt(6) + 1;
+      }
+      ```
+
+      `main` creates one Random and passes it to every call. The next step shows why that's more than a habit.
+
+      **Your turn:** in a board game, a storm card blows your piece back a random number of squares: 2, 3, 4 or 5, each as likely as the others. Fill in the blanks so that `stormSquares` returns such a number. `main` draws 10000 storm cards and prints the smallest and the largest number of squares:
+
+      ```
+      smallest 2, largest 5
+      ```
+    fill: |
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random();
+              int smallest = 100;
+              int largest = -100;
+              for (int i = 0; i < 10000; i++) {
+                  int squares = stormSquares(random);
+                  if (squares < smallest) {
+                      smallest = squares;
+                  }
+                  if (squares > largest) {
+                      largest = squares;
+                  }
+              }
+              System.out.println("smallest " + smallest + ", largest " + largest);
+          }
+
+          public static int stormSquares(Random random) {
+              return random.nextInt([[4]]) + [[2]];
+          }
+      }
+    hints:
+      - "How many whole numbers are there from 2 to 5, counting both ends? That count is the bound, and `nextInt` starts at 0."
+      - "2, 3, 4 and 5 are four numbers, so the bound is 4: `nextInt(4)` gives 0 to 3. Adding the smallest number of squares, 2, moves that up to 2 to 5."
+    tests:
+      - name: 10000 storm cards
+      - call: |
+          Random random = new Random();
+          boolean[] seen = new boolean[4];
+          for (int i = 0; i < 4000; i++) {
+              int squares = stormSquares(random);
+              if (squares >= 2 && squares <= 5) {
+                  seen[squares - 2] = true;
+              }
+          }
+          System.out.println("2 to 5 all came up: " + Arrays.toString(seen));
+        hidden: true
+    more:
+      - task: |
+          A board game moves your piece by the total of two dice. Write the method `rollTwoDice(Random random)`, which rolls two six-sided dice with the Random it's given and returns their total. Roll each die with a `nextInt` call of its own: as the lesson showed, `nextInt(11) + 2` gives the right range but the wrong chances.
+
+          The check rolls 18000 times. It prints whether every total was from 2 to 12, and whether a 7 came up at least three times as often as a 2, which is true for real dice:
+
+          ```
+          every total from 2 to 12: true
+          7 at least 3 times as often as 2: true
+          ```
+        seed: |
+          import java.util.Random;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Random random = new Random();
+                  System.out.println("You rolled " + rollTwoDice(random));
+              }
+
+              public static int rollTwoDice(Random random) {
+                  return 0;
+              }
+          }
+        solution: |
+          import java.util.Random;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Random random = new Random();
+                  System.out.println("You rolled " + rollTwoDice(random));
+              }
+
+              public static int rollTwoDice(Random random) {
+                  int first = random.nextInt(6) + 1;
+                  int second = random.nextInt(6) + 1;
+                  return first + second;
+              }
+          }
+        hints:
+          - "Roll one die from 1 to 6 the way the lesson did, then roll a second one, and add them up. Use the Random from the parameter: no `new Random()` in the method."
+          - "`int first = random.nextInt(6) + 1;`, the same for `second`, then `return first + second;`."
+        tests:
+          - call: |
+              Random random = new Random();
+              int[] counts = new int[13];
+              boolean inRange = true;
+              for (int i = 0; i < 18000; i++) {
+                  int total = rollTwoDice(random);
+                  if (total < 2 || total > 12) {
+                      inRange = false;
+                  } else {
+                      counts[total]++;
+                  }
+              }
+              System.out.println("every total from 2 to 12: " + inRange);
+              System.out.println("7 at least 3 times as often as 2: " + (counts[7] >= 3 * counts[2]));
+          - call: |
+              Random random = new Random();
+              int[] counts = new int[13];
+              for (int i = 0; i < 18000; i++) {
+                  int total = rollTwoDice(random);
+                  if (total >= 2 && total <= 12) {
+                      counts[total]++;
+                  }
+              }
+              boolean allSeen = true;
+              for (int total = 2; total <= 12; total++) {
+                  if (counts[total] == 0) {
+                      allSeen = false;
+                  }
+              }
+              System.out.println("every total came up: " + allSeen);
+              System.out.println("7 at least 3 times as often as 12: " + (counts[7] >= 3 * counts[12]));
+              System.out.println("6 more often than 3: " + (counts[6] > counts[3]));
+            hidden: true
+          - call: |
+              Random random = new Random(11);
+              for (int i = 0; i < 10; i++) {
+                  System.out.print(rollTwoDice(random) + " ");
+              }
+              System.out.println();
+            hidden: true
+      - task: |
+          A wind card moves your piece anything from 2 squares back to 2 squares ahead. What does this program print? (The 1 in `new Random(1)` is a seed, which the next step explains. It doesn't change the answer.)
+        predict: |
+          import java.util.Random;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Random random = new Random(1);
+                  int low = 100;
+                  int high = -100;
+                  for (int i = 0; i < 10000; i++) {
+                      int move = random.nextInt(5) - 2;
+                      if (move < low) {
+                          low = move;
+                      }
+                      if (move > high) {
+                          high = move;
+                      }
+                  }
+                  System.out.println(low + " to " + high);
+              }
+          }
+        hints:
+          - "`nextInt(5)` gives 0, 1, 2, 3 or 4, never 5. In 10000 draws, each of the five comes up many times."
+          - "Subtracting 2 moves the whole range down by two."
+
+  - id: randomness-seeds
+    slug: seeds
+    title: "Seeds: the same numbers every time"
+    text: |
+      Random numbers make a program hard to test. If the output changes on every run, what should a test expect? It turns out that a Random's numbers aren't as unpredictable as they look.
+
+      ### A seed
+
+      Give `new Random` a whole number, and it hands out the same numbers on every run:
+
+      ```java run
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(42);
+              for (int i = 0; i < 5; i++) {
+                  System.out.println(random.nextInt(10));
+              }
+          }
+      }
+      ```
+
+      ```output
+      0
+      3
+      8
+      4
+      0
+      ```
+
+      Run it as often as you like: it prints these five numbers every time, on any computer. The 42 is the generator's **seed**.
+
+      A Random doesn't roll anything. It works out its numbers one after the other with a fixed formula, starting from its seed. The numbers look random: they're spread evenly, and you can't easily guess the next one from the ones before it. But the same seed always leads to the same series. Numbers made this way are called **pseudorandom**.
+
+      `new Random()` without a seed makes up a seed of its own, from the computer's clock and a counter, so it's different on every run. That's why the programs in the previous step printed new numbers each time.
+
+      ### Same seed, same numbers
+
+      Two generators with the same seed give the same numbers:
+
+      ```java run
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random first = new Random(2024);
+              Random second = new Random(2024);
+              for (int i = 0; i < 5; i++) {
+                  int a = first.nextInt(6) + 1;
+                  int b = second.nextInt(6) + 1;
+                  System.out.println(a + " " + b);
+              }
+          }
+      }
+      ```
+
+      ```output
+      1 1
+      3 3
+      1 1
+      5 5
+      6 6
+      ```
+
+      A seed fixes the series only for the same calls in the same order. Ask one of them for one extra number in between, and from there on the two series are out of step: one runs a number ahead of the other.
+
+      Java's documentation spells out the exact formula that Random uses, so a seed gives the same numbers on every computer and every version of Java. That's what makes seeds useful:
+
+      - **Tests.** A program with a seeded Random prints the same output on every run, so a test can compare it with the output written down from an earlier run. The checks in this module do exactly that.
+      - **Games.** A game that builds its map from random numbers can let players share a seed: the same seed builds the same map. A daily puzzle can use the date as its seed, so that everyone gets the same puzzle that day.
+      - **Simulations and bug hunts.** When a run with random numbers does something strange, running it again with the same seed repeats it exactly, so you can look at it step by step.
+
+      ### A class that takes its Random
+
+      The dice cup of a board game holds several dice and rolls them all at once. Where should its Random come from? If the class makes its own `new Random()`, nobody can test it: its rolls change on every run. So it takes a Random as a constructor parameter, and whoever creates the cup decides which:
+
+      ```java run
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              DiceCup cup = new DiceCup(3, new Random(7));
+              for (int i = 0; i < 4; i++) {
+                  System.out.println("Rolled " + cup.roll());
+              }
+          }
+      }
+      // ==== DiceCup.java ====
+      import java.util.Random;
+
+      public class DiceCup {
+          private int dice;
+          private Random random;
+
+          public DiceCup(int dice, Random random) {
+              this.dice = dice;
+              this.random = random;
+          }
+
+          public int roll() {
+              int total = 0;
+              for (int i = 0; i < this.dice; i++) {
+                  total += this.random.nextInt(6) + 1;
+              }
+              return total;
+          }
+      }
+      ```
+
+      ```output
+      Rolled 12
+      Rolled 15
+      Rolled 12
+      Rolled 3
+      ```
+
+      - The game creates its cup with `new DiceCup(3, new Random())`, and gets new rolls every game.
+      - A test creates it with a seed, as this `main` does, and gets the same rolls every time, so it can check them.
+      - The class is the same in both cases. It doesn't care where its numbers come from, just as a class that reads with a Scanner doesn't care whether the Scanner reads the keyboard or a String. Module 26 tested methods by giving them `new Scanner("12\n8\n15\n")`; a seeded Random is the same idea.
+
+      Keep the Random in an instance variable and use it for every roll. A method that creates a `new Random(7)` each time it's called starts the same series over on every call, and gets the same first number every time.
+
+      **Your turn:** a board game app has a practice mode with the same dice every time, so that players can compare their moves. Read a seed, a whole number, from the input, and create a Random with it. Then roll two dice three times. For each pair, roll the first die and then the second, each with `random.nextInt(6) + 1`, and print them and their total like `3 + 5 = 8`. With the input `42`, the program prints:
+
+      ```
+      3 + 4 = 7
+      1 + 3 = 4
+      1 + 2 = 3
+      ```
+    seed: |
+      import java.util.Random;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Random;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int seed = Integer.valueOf(scanner.nextLine());
+              Random random = new Random(seed);
+              for (int i = 0; i < 3; i++) {
+                  int first = random.nextInt(6) + 1;
+                  int second = random.nextInt(6) + 1;
+                  System.out.println(first + " + " + second + " = " + (first + second));
+              }
+          }
+      }
+    hints:
+      - "Read the seed with `Integer.valueOf(scanner.nextLine())`, and give it to the Random: `new Random(seed)`."
+      - "Loop three times. In the loop, roll `first` and then `second`, and print `first + \" + \" + second + \" = \" + (first + second)`."
+    require:
+      - pattern: new\s+Random\s*\(\s*[^)\s]
+        message: "Create the Random with the seed you read: `new Random(seed)`."
+      - pattern: \.nextInt\s*\(\s*6\s*\)
+        message: "Roll each die with `random.nextInt(6) + 1`, so that a seed gives the same dice as the check's."
+    tests:
+      - stdin: "42"
+      - stdin: "7"
+        hidden: true
+      - stdin: "123456"
+        hidden: true
+      - stdin: "-5"
+        hidden: true
+    more:
+      - task: |
+          `rollDie` creates a new Random, with a seed, every time it's called. What does this program print? You can't know which numbers come up, but you can know how many different ones.
+        predict: |
+          import java.util.HashSet;
+          import java.util.Random;
+
+          public class Main {
+              public static void main(String[] args) {
+                  HashSet<Integer> fresh = new HashSet<>();
+                  for (int i = 0; i < 100; i++) {
+                      fresh.add(rollDie());
+                  }
+                  Random random = new Random(2024);
+                  HashSet<Integer> shared = new HashSet<>();
+                  for (int i = 0; i < 100; i++) {
+                      shared.add(random.nextInt(6) + 1);
+                  }
+                  System.out.println(fresh.size() + " " + shared.size());
+              }
+
+              public static int rollDie() {
+                  Random random = new Random(2024);
+                  return random.nextInt(6) + 1;
+              }
+          }
+        hints:
+          - "Each call of `rollDie` starts a new generator from the seed 2024, and takes its first number. Every call takes the same first number."
+          - "The second loop keeps one generator and takes 100 numbers from it, one after the other. In 100 rolls, every face of a die comes up."
+      - task: |
+          A game's weather simulation starts at a given temperature, and every day the temperature changes by a random whole number of degrees from -3 to 3. In `WeatherSim.java`, write the class `WeatherSim` with:
+
+          - a constructor `WeatherSim(int start, Random random)`
+          - `nextDay()`, which changes the temperature by `random.nextInt(7) - 3`, one call a day, and returns the new temperature
+          - `getTemperature()`, which returns the temperature now
+
+          The check runs:
+
+          ```java fragment
+          WeatherSim sim = new WeatherSim(15, new Random(42));
+          for (int day = 1; day <= 5; day++) {
+              System.out.println("Day " + day + ": " + sim.nextDay());
+          }
+          ```
+
+          and expects:
+
+          ```
+          Day 1: 13
+          Day 2: 15
+          Day 3: 18
+          Day 4: 18
+          Day 5: 20
+          ```
+        seed:
+          WeatherSim.java: |
+            import java.util.Random;
+
+            public class WeatherSim {
+
+            }
+          Main.java: |
+            import java.util.Random;
+
+            public class Main {
+                public static void main(String[] args) {
+                    WeatherSim sim = new WeatherSim(15, new Random(42));
+                    for (int day = 1; day <= 5; day++) {
+                        System.out.println("Day " + day + ": " + sim.nextDay());
+                    }
+                }
+            }
+        solution:
+          WeatherSim.java: |
+            import java.util.Random;
+
+            public class WeatherSim {
+                private int temperature;
+                private Random random;
+
+                public WeatherSim(int start, Random random) {
+                    this.temperature = start;
+                    this.random = random;
+                }
+
+                public int nextDay() {
+                    this.temperature += this.random.nextInt(7) - 3;
+                    return this.temperature;
+                }
+
+                public int getTemperature() {
+                    return this.temperature;
+                }
+            }
+          Main.java: |
+            import java.util.Random;
+
+            public class Main {
+                public static void main(String[] args) {
+                    WeatherSim sim = new WeatherSim(15, new Random(42));
+                    for (int day = 1; day <= 5; day++) {
+                        System.out.println("Day " + day + ": " + sim.nextDay());
+                    }
+                }
+            }
+        hints:
+          - "Keep the temperature and the Random in instance variables, set in the constructor, like DiceCup's in the lesson."
+          - "`nextDay` adds `this.random.nextInt(7) - 3` to the temperature and returns it. Don't create a Random in the class: use the one from the constructor."
+        require:
+          - pattern: \.nextInt\s*\(\s*7\s*\)
+            message: "Change the temperature by `this.random.nextInt(7) - 3`, so that a seed gives the same days as the check's."
+        tests:
+          - call: |
+              WeatherSim sim = new WeatherSim(15, new Random(42));
+              for (int day = 1; day <= 5; day++) {
+                  System.out.println("Day " + day + ": " + sim.nextDay());
+              }
+          - call: |
+              WeatherSim sim = new WeatherSim(-4, new Random(7));
+              System.out.println(sim.getTemperature());
+              for (int day = 1; day <= 6; day++) {
+                  sim.nextDay();
+              }
+              System.out.println(sim.getTemperature());
+            hidden: true
+          - call: |
+              WeatherSim one = new WeatherSim(20, new Random(99));
+              WeatherSim two = new WeatherSim(20, new Random(99));
+              boolean same = true;
+              for (int day = 0; day < 50; day++) {
+                  if (one.nextDay() != two.nextDay()) {
+                      same = false;
+                  }
+              }
+              System.out.println("same seed, same weather: " + same);
+            hidden: true
+          - call: |
+              WeatherSim sim = new WeatherSim(0, new Random());
+              boolean[] seen = new boolean[7];
+              boolean inRange = true;
+              int before = sim.getTemperature();
+              for (int day = 0; day < 7000; day++) {
+                  int change = sim.nextDay() - before;
+                  if (change < -3 || change > 3) {
+                      inRange = false;
+                  } else {
+                      seen[change + 3] = true;
+                  }
+                  before = sim.getTemperature();
+              }
+              System.out.println("changes from -3 to 3: " + inRange);
+              System.out.println("each change came up: " + Arrays.toString(seen));
+            hidden: true
+
+  - id: randomness-chances
+    slug: decimals-and-chances
+    title: Decimal numbers and chances
+    text: |
+      `nextInt` gives whole numbers. For decimal numbers, and for things that should happen with a given chance, there's `nextDouble`.
+
+      ### nextDouble
+
+      `random.nextDouble()` returns a random `double` from 0.0 up to, but not including, 1.0. Every value in between is as likely as any other:
+
+      ```java run
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(3);
+              for (int i = 0; i < 4; i++) {
+                  System.out.println(random.nextDouble());
+              }
+          }
+      }
+      ```
+
+      ```output
+      0.731057369148862
+      0.07099203475193139
+      0.06712000939049956
+      0.768156984078079
+      ```
+
+      To get a decimal number in another range, stretch it and move it, as with `nextInt`. Multiplying by 3.0 spreads the numbers out from 0.0 up to 3.0, and adding 2.0 moves them to 2.0 up to 5.0. A reaction game that waits a random time before it shows its signal, so that players can't count along:
+
+      ```java fragment
+      double waitSeconds = 2.0 + random.nextDouble() * 3.0;
+      ```
+
+      For a range from `low` up to `high`, multiply by `high - low` and add `low`.
+
+      ### A chance
+
+      How do you make something happen 30% of the time? Draw a `nextDouble()` and compare it with 0.3. The numbers are spread evenly from 0.0 to 1.0, so 30% of them are below 0.3:
+
+      ```java fragment
+      if (random.nextDouble() < 0.3) {
+          System.out.println("You found a treasure!");
+      }
+      ```
+
+      With a seed, you can see how close it gets:
+
+      ```java run
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(5);
+              int treasures = 0;
+              for (int i = 0; i < 10000; i++) {
+                  if (random.nextDouble() < 0.3) {
+                      treasures++;
+                  }
+              }
+              System.out.println(treasures + " treasures on 10000 squares");
+          }
+      }
+      ```
+
+      ```output
+      3014 treasures on 10000 squares
+      ```
+
+      About 3000, but not exactly: random results wobble around what you expect. The more tries, the smaller the wobble is compared with the whole.
+
+      - `random.nextDouble() < 0.05` is true 5% of the time, and `random.nextDouble() < 1.0` always.
+      - Whole numbers work too: `random.nextInt(100) < 30` is true for 0 to 29, which is 30 of the 100 numbers.
+      - For a 50-50 choice, such as a coin flip, `random.nextBoolean()` returns `true` or `false`, each half the time.
+
+      ### Several outcomes
+
+      A board game's chance square sends you 2 squares ahead half the time, gives you another roll 30% of the time, and makes you miss a turn the other 20%. To choose between several outcomes, draw **one** number and split the range from 0.0 to 1.0 into parts:
+
+      ```java fragment
+      public static String chanceSquare(Random random) {
+          double draw = random.nextDouble();
+          if (draw < 0.5) {
+              return "move 2 squares ahead";
+          } else if (draw < 0.8) {
+              return "roll again";
+          } else {
+              return "miss a turn";
+          }
+      }
+      ```
+
+      - 0.0 to 0.5 is half of the range: 50% for moving ahead.
+      - 0.5 to 0.8 is 0.3 of it: 30% for another roll. The `else if` is only reached when the draw is 0.5 or more, so its test is `< 0.8`, which is 0.5 + 0.3, not `< 0.3`.
+      - The rest, 0.8 to 1.0, is 20% for missing a turn.
+
+      Draw the number once, before the `if`. With a new `random.nextDouble()` in each test, the second test would only be reached half the time, and then be true 80% of that time: another roll 40% of the time instead of 30%.
+
+      ### Math.random()
+
+      `Math.random()` returns a random double from 0.0 up to 1.0, just like `nextDouble()`. It needs no import and no object, which makes it handy in a quick program:
+
+      ```java fragment
+      if (Math.random() < 0.3) {
+          System.out.println("You found a treasure!");
+      }
+      ```
+
+      Behind the scenes, Java creates one Random for `Math.random()` the first time it's called, without a seed, and you can't give it one. So a program built on `Math.random()` can't repeat its numbers, and its exact output can't be tested. For anything you want to test, pass a Random around instead.
+
+      To get a whole number from `Math.random()`, multiply it and cast the result to `int`. A cast to `int` drops the decimals: `(int) 5.83` is 5. So a die roll is:
+
+      ```java fragment
+      int roll = (int) (Math.random() * 6) + 1;
+      ```
+
+      `Math.random() * 6` is from 0.0 up to 6.0, the cast turns it into a whole number from 0 to 5, and adding 1 makes it 1 to 6. The parentheses around `Math.random() * 6` matter. Like the cast to `double` in module 4, a cast applies to the value right after it: `(int) Math.random() * 6` casts `Math.random()` alone, which is below 1.0 and so always becomes 0, and 0 * 6 is 0.
+
+      **Your turn:** a board game has bonus squares: landing on one gives you a bonus 25% of the time. Fill in the blanks so that `bonus` returns `true` with that chance, using `nextDouble`. `main` lands on 10000 bonus squares, with a seeded Random, and prints how many gave a bonus:
+
+      ```
+      Bonus on 2506 of 10000 squares
+      ```
+    fill: |
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(23);
+              int bonuses = 0;
+              for (int i = 0; i < 10000; i++) {
+                  if (bonus(random)) {
+                      bonuses++;
+                  }
+              }
+              System.out.println("Bonus on " + bonuses + " of 10000 squares");
+          }
+
+          public static boolean bonus(Random random) {
+              return random.[[nextDouble]]() < [[0.25]];
+          }
+      }
+    hints:
+      - "The method that gives a decimal number from 0.0 up to 1.0 is `nextDouble`."
+      - "25% of the numbers from 0.0 to 1.0 are below 0.25."
+    tests:
+      - name: 10000 squares, seed 23
+      - call: |
+          Random random = new Random();
+          int bonuses = 0;
+          for (int i = 0; i < 20000; i++) {
+              if (bonus(random)) {
+                  bonuses++;
+              }
+          }
+          System.out.println("between 22% and 28%: " + (bonuses > 4400 && bonuses < 5600));
+        hidden: true
+    more:
+      - task: |
+          A reaction game waits a random time before it shows `GO!`, so that players can't count along. Write the method `waitSeconds()`, which returns a random `double` from 1.5 up to 4.0 seconds (4.0 itself left out), using `Math.random()`.
+
+          The check calls it 10000 times. It prints whether every wait was in the range, and whether the waits filled the range, with some below 1.6 seconds and some above 3.9:
+
+          ```
+          all from 1.5 up to 4.0: true
+          some below 1.6: true
+          some above 3.9: true
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("Get ready...");
+                  System.out.println("Waiting " + waitSeconds() + " seconds");
+                  System.out.println("GO!");
+              }
+
+              public static double waitSeconds() {
+                  return 0.0;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("Get ready...");
+                  System.out.println("Waiting " + waitSeconds() + " seconds");
+                  System.out.println("GO!");
+              }
+
+              public static double waitSeconds() {
+                  return 1.5 + Math.random() * 2.5;
+              }
+          }
+        hints:
+          - "The range is 4.0 - 1.5 = 2.5 seconds wide, so multiply `Math.random()` by 2.5. That gives 0.0 up to 2.5."
+          - "Then add 1.5, the shortest wait: `return 1.5 + Math.random() * 2.5;`"
+        require:
+          - pattern: Math\.random\s*\(
+            message: "Use `Math.random()` for the random part."
+        tests:
+          - call: |
+              boolean inRange = true;
+              boolean low = false;
+              boolean high = false;
+              for (int i = 0; i < 10000; i++) {
+                  double wait = waitSeconds();
+                  if (wait < 1.5 || wait >= 4.0) {
+                      inRange = false;
+                  }
+                  if (wait < 1.6) {
+                      low = true;
+                  }
+                  if (wait > 3.9) {
+                      high = true;
+                  }
+              }
+              System.out.println("all from 1.5 up to 4.0: " + inRange);
+              System.out.println("some below 1.6: " + low);
+              System.out.println("some above 3.9: " + high);
+          - call: |
+              double total = 0;
+              for (int i = 0; i < 10000; i++) {
+                  total += waitSeconds();
+              }
+              double average = total / 10000;
+              System.out.println("average between 2.65 and 2.85: " + (average > 2.65 && average < 2.85));
+            hidden: true
+      - task: |
+          A capsule machine at a fair gives a `sticker` 50% of the time, a `keychain` 25% of the time, a `badge` 20% of the time and a `plush toy` the other 5%. In `PrizeMachine.java`, write the class `PrizeMachine` with a constructor `PrizeMachine(Random random)` and a method `prize()`. `prize()` draws one `nextDouble()` from the machine's Random and returns the prize: a sticker below 0.5, a keychain below 0.75, a badge below 0.95, and a plush toy otherwise. The check runs:
+
+          ```java fragment
+          PrizeMachine machine = new PrizeMachine(new Random(24));
+          for (int i = 0; i < 6; i++) {
+              System.out.println(machine.prize());
+          }
+          ```
+
+          and expects:
+
+          ```
+          keychain
+          badge
+          sticker
+          sticker
+          keychain
+          plush toy
+          ```
+        seed:
+          PrizeMachine.java: |
+            import java.util.Random;
+
+            public class PrizeMachine {
+
+            }
+          Main.java: |
+            import java.util.Random;
+
+            public class Main {
+                public static void main(String[] args) {
+                    PrizeMachine machine = new PrizeMachine(new Random(24));
+                    for (int i = 0; i < 6; i++) {
+                        System.out.println(machine.prize());
+                    }
+                }
+            }
+        solution:
+          PrizeMachine.java: |
+            import java.util.Random;
+
+            public class PrizeMachine {
+                private Random random;
+
+                public PrizeMachine(Random random) {
+                    this.random = random;
+                }
+
+                public String prize() {
+                    double draw = this.random.nextDouble();
+                    if (draw < 0.5) {
+                        return "sticker";
+                    } else if (draw < 0.75) {
+                        return "keychain";
+                    } else if (draw < 0.95) {
+                        return "badge";
+                    } else {
+                        return "plush toy";
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Random;
+
+            public class Main {
+                public static void main(String[] args) {
+                    PrizeMachine machine = new PrizeMachine(new Random(24));
+                    for (int i = 0; i < 6; i++) {
+                        System.out.println(machine.prize());
+                    }
+                }
+            }
+        hints:
+          - "Keep the Random in an instance variable. In `prize()`, draw the number once: `double draw = this.random.nextDouble();`"
+          - "Then `if (draw < 0.5)` gives a sticker, `else if (draw < 0.75)` a keychain (0.5 + 0.25), `else if (draw < 0.95)` a badge (0.75 + 0.2), and `else` a plush toy."
+        require:
+          - pattern: \.nextDouble\s*\(
+            message: "Draw the prize's number with `nextDouble()`, so that a seed gives the same prizes as the check's."
+        tests:
+          - call: |
+              PrizeMachine machine = new PrizeMachine(new Random(24));
+              for (int i = 0; i < 6; i++) {
+                  System.out.println(machine.prize());
+              }
+          - call: |
+              PrizeMachine machine = new PrizeMachine(new Random(2025));
+              for (int i = 0; i < 10; i++) {
+                  System.out.print(machine.prize() + ", ");
+              }
+              System.out.println();
+            hidden: true
+          - call: |
+              PrizeMachine machine = new PrizeMachine(new Random());
+              int stickers = 0;
+              int keychains = 0;
+              int badges = 0;
+              int toys = 0;
+              for (int i = 0; i < 20000; i++) {
+                  String prize = machine.prize();
+                  if (prize.equals("sticker")) {
+                      stickers++;
+                  } else if (prize.equals("keychain")) {
+                      keychains++;
+                  } else if (prize.equals("badge")) {
+                      badges++;
+                  } else if (prize.equals("plush toy")) {
+                      toys++;
+                  }
+              }
+              System.out.println("stickers 47% to 53%: " + (stickers > 9400 && stickers < 10600));
+              System.out.println("keychains 22% to 28%: " + (keychains > 4400 && keychains < 5600));
+              System.out.println("badges 17% to 23%: " + (badges > 3400 && badges < 4600));
+              System.out.println("plush toys 3% to 7%: " + (toys > 600 && toys < 1400));
+            hidden: true
+
+  - id: randomness-lists
+    slug: picking-and-shuffling
+    title: Picking, shuffling and drawing
+    text: |
+      Random numbers often choose among things: an exercise from a list, the order of a quiz's questions, who goes first.
+
+      ### A random element
+
+      `nextInt(size)` gives a number from 0 to size - 1: exactly the indexes of a list of that size. So `list.get(random.nextInt(list.size()))` is a random element, each one as likely as the others. A workout app picks the exercise of the day this way:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> exercises = new ArrayList<>();
+              exercises.add("squats");
+              exercises.add("push-ups");
+              exercises.add("plank");
+              exercises.add("lunges");
+              Random random = new Random(8);
+              for (int day = 1; day <= 4; day++) {
+                  String exercise = exercises.get(random.nextInt(exercises.size()));
+                  System.out.println("Day " + day + ": " + exercise);
+              }
+          }
+      }
+      ```
+
+      ```output
+      Day 1: plank
+      Day 2: lunges
+      Day 3: plank
+      Day 4: squats
+      ```
+
+      - With `exercises.size()` as the bound, the code stays right when the list changes: add a fifth exercise, and it can come up too.
+      - The same exercise can come up on several days. Each pick is a new draw that knows nothing about the earlier ones. Drawing without repeats comes later in this step.
+      - An array works the same way: `array[random.nextInt(array.length)]`.
+
+      An empty list has no element to pick, and `nextInt(0)` has no number to give: the bound must be positive, or `nextInt` throws an exception.
+
+      ```java run crash
+      import java.util.ArrayList;
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> exercises = new ArrayList<>();
+              Random random = new Random();
+              String exercise = exercises.get(random.nextInt(exercises.size()));
+              System.out.println("Today: " + exercise);
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.IllegalArgumentException: bound must be positive
+      	at Main.main(Main.java:8)
+      ```
+
+      When a list might be empty, check `isEmpty()` before you pick.
+
+      ### Shuffling
+
+      `Collections.shuffle(list)` puts a list's elements in a random order, like shuffling a deck of cards. Give it a Random too, `Collections.shuffle(list, random)`, and it uses that one, so a seed gives the same order every time. A quiz app asks its questions in a new order every round:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> questions = new ArrayList<>();
+              questions.add("How many sides does a hexagon have?");
+              questions.add("Which metal is liquid at room temperature?");
+              questions.add("What is the capital of Canada?");
+              questions.add("Which gas do plants take in?");
+              Collections.shuffle(questions, new Random(3));
+              for (int i = 0; i < questions.size(); i++) {
+                  System.out.println((i + 1) + ". " + questions.get(i));
+              }
+          }
+      }
+      ```
+
+      ```output
+      1. Which metal is liquid at room temperature?
+      2. How many sides does a hexagon have?
+      3. Which gas do plants take in?
+      4. What is the capital of Canada?
+      ```
+
+      - `shuffle` changes the list itself and returns nothing. Every element is still there, once; only the order is new.
+      - Every possible order has about the same chance of coming up.
+      - To keep the original order as well, shuffle a copy: `new ArrayList<>(questions)` makes one (module 14).
+      - `Collections` is in `java.util`, like Random. Module 28 used its `sort`.
+
+      ### Drawing without repeats
+
+      Picking with `nextInt` can pick the same element twice. When each element may come up only once, like names drawn out of a hat, there are two easy ways.
+
+      **Shuffle, and take from the front.** To pick three different exercises for today, shuffle a copy of the list and take its first three elements.
+
+      **Remove what you draw.** Pick a random index, and remove the element there. `list.remove(index)` returns the element it removed, so one line does both. What's drawn is no longer in the list, so it can't come up again, and the next bound, `list.size()`, is one smaller. A class decides the order of its presentations by drawing names:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> hat = new ArrayList<>();
+              hat.add("Ines");
+              hat.add("Tomasz");
+              hat.add("Priya");
+              hat.add("Kofi");
+              Random random = new Random(21);
+              int turn = 1;
+              while (!hat.isEmpty()) {
+                  String name = hat.remove(random.nextInt(hat.size()));
+                  System.out.println(turn + ". " + name);
+                  turn++;
+              }
+          }
+      }
+      ```
+
+      ```output
+      1. Priya
+      2. Ines
+      3. Tomasz
+      4. Kofi
+      ```
+
+      A third way is to keep drawing, and throw away whatever was drawn before, checking with `contains`. It works too, but when most of the elements have been drawn, most of the draws are thrown away.
+
+      **Your turn:** a trivia night picks a random category for each round. Fill in the blanks so that `pickCategory` returns a random category from the list, each as likely as the others. `main` picks for three rounds with a seeded Random:
+
+      ```
+      Round 1: science
+      Round 2: sports
+      Round 3: history
+      ```
+    fill: |
+      import java.util.ArrayList;
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<String> categories = new ArrayList<>();
+              categories.add("history");
+              categories.add("science");
+              categories.add("music");
+              categories.add("sports");
+              categories.add("movies");
+              Random random = new Random(30);
+              for (int round = 1; round <= 3; round++) {
+                  System.out.println("Round " + round + ": " + pickCategory(categories, random));
+              }
+          }
+
+          public static String pickCategory(ArrayList<String> categories, Random random) {
+              return categories.get(random.[[nextInt]](categories.[[size()]]));
+          }
+      }
+    hints:
+      - "A random index of a list is a whole number from 0 to the list's size - 1: `nextInt` with the size as its bound."
+      - "The list's size is `categories.size()`, so the index is `random.nextInt(categories.size())`."
+    tests:
+      - name: Five categories, seed 30
+      - call: |
+          ArrayList<String> categories = new ArrayList<>();
+          categories.add("art");
+          categories.add("food");
+          Random random = new Random(4);
+          for (int i = 0; i < 6; i++) {
+              System.out.print(pickCategory(categories, random) + " ");
+          }
+          System.out.println();
+        hidden: true
+      - call: |
+          ArrayList<String> categories = new ArrayList<>();
+          categories.add("geography");
+          categories.add("animals");
+          categories.add("books");
+          Random random = new Random();
+          HashSet<String> seen = new HashSet<>();
+          for (int i = 0; i < 300; i++) {
+              seen.add(pickCategory(categories, random));
+          }
+          System.out.println("all three came up: " + (seen.size() == 3));
+        hidden: true
+    more:
+      - task: |
+          A teacher gives every student the spelling words in a different order, and keeps the master list in its own order. Write the method `shuffledCopy(ArrayList<String> words, Random random)`, which returns a new list with the same words, shuffled with `Collections.shuffle` and the given Random. The list it's given must keep its order. The check runs:
+
+          ```java fragment
+          ArrayList<String> words = new ArrayList<>();
+          words.add("rhythm");
+          words.add("island");
+          words.add("receive");
+          words.add("necessary");
+          words.add("calendar");
+          System.out.println(shuffledCopy(words, new Random(5)));
+          System.out.println(words);
+          ```
+
+          and expects:
+
+          ```
+          [necessary, island, calendar, rhythm, receive]
+          [rhythm, island, receive, necessary, calendar]
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.Random;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> words = new ArrayList<>();
+                  words.add("rhythm");
+                  words.add("island");
+                  words.add("receive");
+                  words.add("necessary");
+                  words.add("calendar");
+                  System.out.println(shuffledCopy(words, new Random(5)));
+                  System.out.println(words);
+              }
+
+              public static ArrayList<String> shuffledCopy(ArrayList<String> words, Random random) {
+                  return words;
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.Random;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<String> words = new ArrayList<>();
+                  words.add("rhythm");
+                  words.add("island");
+                  words.add("receive");
+                  words.add("necessary");
+                  words.add("calendar");
+                  System.out.println(shuffledCopy(words, new Random(5)));
+                  System.out.println(words);
+              }
+
+              public static ArrayList<String> shuffledCopy(ArrayList<String> words, Random random) {
+                  ArrayList<String> copy = new ArrayList<>(words);
+                  Collections.shuffle(copy, random);
+                  return copy;
+              }
+          }
+        hints:
+          - "Make a copy first: `ArrayList<String> copy = new ArrayList<>(words);`. Shuffling `words` itself would change the teacher's list."
+          - "Shuffle the copy with `Collections.shuffle(copy, random);` and return it."
+        require:
+          - pattern: Collections\.shuffle\s*\(\s*\w+\s*,\s*random\s*\)
+            message: "Shuffle with `Collections.shuffle(..., random)`, using the Random from the parameter."
+        tests:
+          - call: |
+              ArrayList<String> words = new ArrayList<>();
+              words.add("rhythm");
+              words.add("island");
+              words.add("receive");
+              words.add("necessary");
+              words.add("calendar");
+              System.out.println(shuffledCopy(words, new Random(5)));
+              System.out.println(words);
+          - call: |
+              ArrayList<String> words = new ArrayList<>();
+              words.add("beautiful");
+              words.add("Wednesday");
+              words.add("separate");
+              Random random = new Random(77);
+              System.out.println(shuffledCopy(words, random));
+              System.out.println(shuffledCopy(words, random));
+              System.out.println(words);
+            hidden: true
+          - call: |
+              ArrayList<String> words = new ArrayList<>();
+              for (int i = 1; i <= 8; i++) {
+                  words.add("word" + i);
+              }
+              ArrayList<String> shuffled = shuffledCopy(words, new Random());
+              System.out.println("a new list: " + (shuffled != words));
+              Collections.sort(shuffled);
+              ArrayList<String> sorted = new ArrayList<>(words);
+              Collections.sort(sorted);
+              System.out.println("the same words: " + shuffled.equals(sorted));
+            hidden: true
+      - task: |
+          Housemates draw chores out of a hat. In `ChoreHat.java`, write the class `ChoreHat` with:
+
+          - a constructor `ChoreHat(ArrayList<String> chores, Random random)`, which keeps a copy of the list, so that the list it was given isn't emptied by the draws
+          - `draw()`, which picks an index with `random.nextInt` of how many chores are left, removes that chore from the hat and returns it. When the hat is empty, it returns `nothing left`.
+          - `left()`, which returns how many chores are still in the hat
+
+          The check runs:
+
+          ```java fragment
+          ArrayList<String> chores = new ArrayList<>();
+          chores.add("dishes");
+          chores.add("vacuuming");
+          chores.add("trash");
+          ChoreHat hat = new ChoreHat(chores, new Random(6));
+          for (int i = 0; i < 4; i++) {
+              System.out.println(hat.draw());
+          }
+          System.out.println(hat.left() + " left, " + chores.size() + " chores in all");
+          ```
+
+          and expects:
+
+          ```
+          vacuuming
+          dishes
+          trash
+          nothing left
+          0 left, 3 chores in all
+          ```
+        seed:
+          ChoreHat.java: |
+            import java.util.ArrayList;
+            import java.util.Random;
+
+            public class ChoreHat {
+
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Random;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<String> chores = new ArrayList<>();
+                    chores.add("dishes");
+                    chores.add("vacuuming");
+                    chores.add("trash");
+                    ChoreHat hat = new ChoreHat(chores, new Random(6));
+                    for (int i = 0; i < 4; i++) {
+                        System.out.println(hat.draw());
+                    }
+                    System.out.println(hat.left() + " left, " + chores.size() + " chores in all");
+                }
+            }
+        solution:
+          ChoreHat.java: |
+            import java.util.ArrayList;
+            import java.util.Random;
+
+            public class ChoreHat {
+                private ArrayList<String> chores;
+                private Random random;
+
+                public ChoreHat(ArrayList<String> chores, Random random) {
+                    this.chores = new ArrayList<>(chores);
+                    this.random = random;
+                }
+
+                public String draw() {
+                    if (this.chores.isEmpty()) {
+                        return "nothing left";
+                    }
+                    return this.chores.remove(this.random.nextInt(this.chores.size()));
+                }
+
+                public int left() {
+                    return this.chores.size();
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Random;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<String> chores = new ArrayList<>();
+                    chores.add("dishes");
+                    chores.add("vacuuming");
+                    chores.add("trash");
+                    ChoreHat hat = new ChoreHat(chores, new Random(6));
+                    for (int i = 0; i < 4; i++) {
+                        System.out.println(hat.draw());
+                    }
+                    System.out.println(hat.left() + " left, " + chores.size() + " chores in all");
+                }
+            }
+        hints:
+          - "In the constructor, keep a copy: `this.chores = new ArrayList<>(chores);`. Keep the Random in an instance variable too."
+          - "`draw()` returns `nothing left` when `this.chores.isEmpty()`. Otherwise it returns `this.chores.remove(this.random.nextInt(this.chores.size()))`: `remove` with an index returns the element it removed."
+        tests:
+          - call: |
+              ArrayList<String> chores = new ArrayList<>();
+              chores.add("dishes");
+              chores.add("vacuuming");
+              chores.add("trash");
+              ChoreHat hat = new ChoreHat(chores, new Random(6));
+              for (int i = 0; i < 4; i++) {
+                  System.out.println(hat.draw());
+              }
+              System.out.println(hat.left() + " left, " + chores.size() + " chores in all");
+          - call: |
+              ArrayList<String> chores = new ArrayList<>();
+              chores.add("laundry");
+              chores.add("plants");
+              chores.add("bathroom");
+              chores.add("shopping");
+              chores.add("cooking");
+              ChoreHat hat = new ChoreHat(chores, new Random(31));
+              System.out.println(hat.left());
+              System.out.println(hat.draw() + ", " + hat.draw());
+              System.out.println(hat.left());
+            hidden: true
+          - call: |
+              ArrayList<String> chores = new ArrayList<>();
+              for (int i = 1; i <= 10; i++) {
+                  chores.add("chore " + i);
+              }
+              ChoreHat hat = new ChoreHat(chores, new Random());
+              HashSet<String> drawn = new HashSet<>();
+              for (int i = 0; i < 10; i++) {
+                  drawn.add(hat.draw());
+              }
+              System.out.println("10 different chores: " + (drawn.size() == 10 && chores.containsAll(drawn)));
+              System.out.println(hat.draw() + ", " + hat.left());
+              ChoreHat empty = new ChoreHat(new ArrayList<>(), new Random());
+              System.out.println(empty.draw());
+            hidden: true
+
+  - id: randomness-simulations
+    slug: simulations-and-checks
+    title: Simulations, and checking random results
+    text: |
+      This last step puts random numbers to work in whole programs: simulations that answer questions about chance, checks that a random result is right, and a word on where Random doesn't belong.
+
+      ### Simulations
+
+      Some questions about chance are hard to work out by hand but easy to try: play the game many times, and count. That's a **simulation**. How many rolls of a die does it take, on average, to get the first six?
+
+      ```java run
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(1);
+              int games = 10000;
+              int totalRolls = 0;
+              for (int i = 0; i < games; i++) {
+                  totalRolls += rollsUntilSix(random);
+              }
+              System.out.println("Average rolls: " + (double) totalRolls / games);
+          }
+
+          public static int rollsUntilSix(Random random) {
+              int rolls = 0;
+              int roll = 0;
+              while (roll != 6) {
+                  roll = random.nextInt(6) + 1;
+                  rolls++;
+              }
+              return rolls;
+          }
+      }
+      ```
+
+      ```output
+      Average rolls: 5.9766
+      ```
+
+      Close to 6, which is also what probability math says: with a chance of 1 in 6 on each roll, it takes 6 rolls on average. In a single game it can take 1 roll, or 20. Simulations earn their keep when the math gets hard: a whole board game with several players, special squares and cards is much easier to simulate than to calculate.
+
+      - The more games a simulation plays, the closer its answer usually is to the true one. Try 100 games instead of 10000, with a few different seeds, and the averages are much further apart.
+      - The seed makes the whole simulation repeatable. Anyone who runs it gets exactly the same average, and can check your work.
+
+      ### Checking random results
+
+      A test of a program with random numbers has two tools. With a seed, it can compare the exact output, as this module's checks do. Without one, it can still check what must be true of **every** run, however the numbers fall. Such facts are called **properties**:
+
+      - every value is in its range: a die roll is from 1 to 6
+      - every possible value comes up, given enough tries: in 6000 rolls, all six faces
+      - a draw without repeats has no repeats, and a shuffled list has the same elements as before
+      - a share is close to its chance: of 100000 tries with a 30% chance, between 28% and 32% hit
+
+      The last one needs a margin, since random results wobble. With enough tries, a wide margin is practically never crossed by chance: when such a check fails, look for the mistake in the code. The hidden tests of this module's challenges check properties like these.
+
+      Here's a property of a shuffle. However the list is shuffled, sorting it gives back the sorted original:
+
+      ```java main
+      ArrayList<String> guests = new ArrayList<>();
+      guests.add("Noor");
+      guests.add("Emil");
+      guests.add("Sade");
+      guests.add("Luca");
+      ArrayList<String> sorted = new ArrayList<>(guests);
+      Collections.sort(sorted);
+      Random random = new Random();
+      boolean same = true;
+      for (int i = 0; i < 1000; i++) {
+          ArrayList<String> shuffled = new ArrayList<>(guests);
+          Collections.shuffle(shuffled, random);
+          Collections.sort(shuffled);
+          if (!shuffled.equals(sorted)) {
+              same = false;
+          }
+      }
+      System.out.println("The same guests after 1000 shuffles: " + same);
+      ```
+
+      ```output
+      The same guests after 1000 shuffles: true
+      ```
+
+      ### Not for secrets
+
+      Random is fine for games, simulations and tests, but not for passwords, secret codes or anything else that someone would like to guess. Its formula is public, and someone who sees enough of its numbers can work out the ones that come next. Java has a separate class for secrets, `SecureRandom` in the package `java.security`, which is built so that its numbers can't be worked out that way.
+
+      **Your turn:** a coin flip streak counter. Write the method `longestStreak(Random random, int flips)`, which flips a coin `flips` times and returns the longest streak: the most flips in a row that landed on the same side. Flip each coin with one `random.nextBoolean()` call (`true` is heads, `false` is tails), so that a seed gives the same flips as the check's. `flips` is at least 1. For example, the flips heads, tails, tails, tails, heads have a longest streak of 3. The check runs:
+
+      ```java fragment
+      Random random = new Random(42);
+      System.out.println(longestStreak(random, 10));
+      System.out.println(longestStreak(random, 100));
+      ```
+
+      and expects:
+
+      ```
+      2
+      6
+      ```
+    seed: |
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(42);
+              System.out.println(longestStreak(random, 10));
+              System.out.println(longestStreak(random, 100));
+          }
+
+          public static int longestStreak(Random random, int flips) {
+              return 0;
+          }
+      }
+    solution: |
+      import java.util.Random;
+
+      public class Main {
+          public static void main(String[] args) {
+              Random random = new Random(42);
+              System.out.println(longestStreak(random, 10));
+              System.out.println(longestStreak(random, 100));
+          }
+
+          public static int longestStreak(Random random, int flips) {
+              boolean previous = random.nextBoolean();
+              int streak = 1;
+              int longest = 1;
+              for (int i = 1; i < flips; i++) {
+                  boolean flip = random.nextBoolean();
+                  if (flip == previous) {
+                      streak++;
+                  } else {
+                      streak = 1;
+                  }
+                  if (streak > longest) {
+                      longest = streak;
+                  }
+                  previous = flip;
+              }
+              return longest;
+          }
+      }
+    hints:
+      - "Flip the first coin before the loop, and keep it in `previous`. The streak so far is 1, and so is the longest one."
+      - "Loop for the other `flips - 1` coins. When a flip is the same as `previous`, the streak grows; otherwise it starts again at 1. Update the longest streak, and remember the flip in `previous` for the next round."
+    require:
+      - pattern: \.nextBoolean\s*\(
+        message: "Flip each coin with `random.nextBoolean()`, so that a seed gives the same flips as the check's."
+    tests:
+      - call: |
+          Random random = new Random(42);
+          System.out.println(longestStreak(random, 10));
+          System.out.println(longestStreak(random, 100));
+      - call: |
+          Random random = new Random(3);
+          System.out.println(longestStreak(random, 1));
+          System.out.println(longestStreak(random, 2));
+          System.out.println(longestStreak(random, 20));
+          System.out.println(longestStreak(random, 1000));
+        hidden: true
+      - call: |
+          Random random = new Random();
+          boolean inRange = true;
+          for (int i = 0; i < 1000; i++) {
+              int streak = longestStreak(random, 5);
+              if (streak < 1 || streak > 5) {
+                  inRange = false;
+              }
+          }
+          System.out.println("from 1 to 5 in 5 flips: " + inRange);
+          System.out.println("1 flip: " + longestStreak(random, 1));
+        hidden: true
+      - call: |
+          Random random = new Random(8);
+          int first = longestStreak(random, 30);
+          int second = longestStreak(random, 30);
+          Random again = new Random(8);
+          System.out.println(first + " " + second + " " + longestStreak(again, 30) + " " + longestStreak(again, 30));
+        hidden: true
+    more:
+      - task: |
+          `Collections.shuffle` only changes the order of a list. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.Random;
+
+          public class Main {
+              public static void main(String[] args) {
+                  ArrayList<Integer> cards = new ArrayList<>();
+                  for (int i = 1; i <= 5; i++) {
+                      cards.add(i * 10);
+                  }
+                  ArrayList<Integer> deck = new ArrayList<>(cards);
+                  Collections.shuffle(deck, new Random(9));
+                  int sum = 0;
+                  for (int card : deck) {
+                      sum += card;
+                  }
+                  System.out.println(deck.size() + " " + sum);
+                  System.out.println(deck.contains(30) + " " + deck.contains(60));
+                  Collections.sort(deck);
+                  System.out.println(deck.equals(cards));
+              }
+          }
+        hints:
+          - "The deck is a copy of the cards 10, 20, 30, 40 and 50, in some new order. The order changes, but not which numbers there are, nor how many."
+          - "After sorting, the deck is in increasing order again, just like `cards`, and `equals` compares two lists element by element."
+      - task: |
+          To finish the module, a random seating plan for a dinner party. In `SeatingPlan.java`, write the class `SeatingPlan` with:
+
+          - a constructor `SeatingPlan(ArrayList<String> guests, int tables, Random random)`. It shuffles a copy of the guest list with `Collections.shuffle(copy, random)` (the list it's given keeps its order), and then deals the shuffled guests out to the tables in turn, the way cards are dealt: the first guest to table 1, the second to table 2, and so on, back to table 1 after the last table.
+          - `table(int number)`, which returns an `ArrayList<String>` of the guests at that table, in the order they were dealt. Tables are numbered from 1.
+          - `toString()`, which returns one line for each table, like `Table 1: Noor, Luca`, with the names separated by a comma and a space, and a line break between the tables.
+
+          The check runs:
+
+          ```java fragment
+          ArrayList<String> guests = new ArrayList<>();
+          guests.add("Noor");
+          guests.add("Emil");
+          guests.add("Sade");
+          guests.add("Luca");
+          guests.add("Mei");
+          guests.add("Arjun");
+          guests.add("Rosa");
+          SeatingPlan plan = new SeatingPlan(guests, 3, new Random(4));
+          System.out.println(plan);
+          System.out.println(plan.table(2).size() + " at table 2");
+          ```
+
+          and expects:
+
+          ```
+          Table 1: Emil, Arjun, Luca
+          Table 2: Sade, Rosa
+          Table 3: Noor, Mei
+          2 at table 2
+          ```
+        seed:
+          SeatingPlan.java: |
+            import java.util.ArrayList;
+            import java.util.Collections;
+            import java.util.Random;
+
+            public class SeatingPlan {
+
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Random;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<String> guests = new ArrayList<>();
+                    guests.add("Noor");
+                    guests.add("Emil");
+                    guests.add("Sade");
+                    guests.add("Luca");
+                    guests.add("Mei");
+                    guests.add("Arjun");
+                    guests.add("Rosa");
+                    SeatingPlan plan = new SeatingPlan(guests, 3, new Random(4));
+                    System.out.println(plan);
+                    System.out.println(plan.table(2).size() + " at table 2");
+                }
+            }
+        solution:
+          SeatingPlan.java: |
+            import java.util.ArrayList;
+            import java.util.Collections;
+            import java.util.Random;
+
+            public class SeatingPlan {
+                private ArrayList<String> order;
+                private int tables;
+
+                public SeatingPlan(ArrayList<String> guests, int tables, Random random) {
+                    this.order = new ArrayList<>(guests);
+                    Collections.shuffle(this.order, random);
+                    this.tables = tables;
+                }
+
+                public ArrayList<String> table(int number) {
+                    ArrayList<String> seated = new ArrayList<>();
+                    for (int i = 0; i < this.order.size(); i++) {
+                        if (i % this.tables == number - 1) {
+                            seated.add(this.order.get(i));
+                        }
+                    }
+                    return seated;
+                }
+
+                @Override
+                public String toString() {
+                    String plan = "";
+                    for (int number = 1; number <= this.tables; number++) {
+                        if (number > 1) {
+                            plan += "\n";
+                        }
+                        plan += "Table " + number + ": ";
+                        ArrayList<String> seated = this.table(number);
+                        for (int i = 0; i < seated.size(); i++) {
+                            if (i > 0) {
+                                plan += ", ";
+                            }
+                            plan += seated.get(i);
+                        }
+                    }
+                    return plan;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Random;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<String> guests = new ArrayList<>();
+                    guests.add("Noor");
+                    guests.add("Emil");
+                    guests.add("Sade");
+                    guests.add("Luca");
+                    guests.add("Mei");
+                    guests.add("Arjun");
+                    guests.add("Rosa");
+                    SeatingPlan plan = new SeatingPlan(guests, 3, new Random(4));
+                    System.out.println(plan);
+                    System.out.println(plan.table(2).size() + " at table 2");
+                }
+            }
+        hints:
+          - "In the constructor, copy the guests, shuffle the copy with the Random, and keep the copy and the number of tables in instance variables. That shuffled order is all the plan needs."
+          - "Dealing in turn puts the guest at index `i` of the shuffled list at table `i % tables + 1`. So `table(number)` collects the guests whose index gives `i % this.tables == number - 1`, and `toString` adds each table's names in a loop, with `\", \"` before every name except the first, which an index loop can tell by `i > 0` (as in module 39)."
+        tests:
+          - call: |
+              ArrayList<String> guests = new ArrayList<>();
+              guests.add("Noor");
+              guests.add("Emil");
+              guests.add("Sade");
+              guests.add("Luca");
+              guests.add("Mei");
+              guests.add("Arjun");
+              guests.add("Rosa");
+              SeatingPlan plan = new SeatingPlan(guests, 3, new Random(4));
+              System.out.println(plan);
+              System.out.println(plan.table(2).size() + " at table 2");
+          - call: |
+              ArrayList<String> guests = new ArrayList<>();
+              guests.add("Ada");
+              guests.add("Ben");
+              guests.add("Cleo");
+              guests.add("Dev");
+              SeatingPlan plan = new SeatingPlan(guests, 2, new Random(15));
+              System.out.println(plan);
+              System.out.println(plan.table(1));
+              System.out.println(guests);
+            hidden: true
+          - call: |
+              ArrayList<String> guests = new ArrayList<>();
+              for (int i = 1; i <= 11; i++) {
+                  guests.add("Guest" + i);
+              }
+              SeatingPlan plan = new SeatingPlan(guests, 4, new Random());
+              ArrayList<String> everyone = new ArrayList<>();
+              int smallest = 100;
+              int largest = 0;
+              for (int number = 1; number <= 4; number++) {
+                  ArrayList<String> table = plan.table(number);
+                  everyone.addAll(table);
+                  smallest = Math.min(smallest, table.size());
+                  largest = Math.max(largest, table.size());
+              }
+              Collections.sort(everyone);
+              ArrayList<String> sorted = new ArrayList<>(guests);
+              Collections.sort(sorted);
+              System.out.println("everyone seated once: " + everyone.equals(sorted));
+              System.out.println("table sizes " + smallest + " to " + largest);
+            hidden: true

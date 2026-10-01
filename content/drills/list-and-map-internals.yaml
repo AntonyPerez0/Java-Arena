@@ -1,0 +1,470 @@
+topic: list-and-map-internals
+drills:
+  - type: predict
+    after: fixed-size
+    body: |
+      int[] scores = {7, 9, 4};
+      int[] bigger = new int[scores.length * 2];
+      for (int i = 0; i < scores.length; i++) {
+          bigger[i] = scores[i];
+      }
+      scores = bigger;
+      scores[3] = 5;
+      System.out.println(scores.length + " " + scores[3] + " " + scores[4]);
+    why: "`scores = bigger;` makes `scores` refer to the new array of 6. The loop copied 7, 9 and 4 to the indexes 0 to 2, and index 3 then got 5. Nothing was ever put at index 4, so it holds an `int` array's default value, 0."
+
+  - type: predict
+    after: own-list
+    classes: |
+      class PhotoRoll {
+          private String[] photos;
+          private int size;
+
+          public PhotoRoll() {
+              this.photos = new String[2];
+              this.size = 0;
+          }
+
+          public void add(String photo) {
+              if (this.size == this.photos.length) {
+                  String[] bigger = new String[this.photos.length * 2];
+                  for (int i = 0; i < this.size; i++) {
+                      bigger[i] = this.photos[i];
+                  }
+                  this.photos = bigger;
+              }
+              this.photos[this.size] = photo;
+              this.size++;
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public int room() {
+              return this.photos.length;
+          }
+      }
+    body: |
+      PhotoRoll roll = new PhotoRoll();
+      String[] photos = {"beach", "dog", "cake", "bridge", "moon"};
+      for (String photo : photos) {
+          roll.add(photo);
+      }
+      System.out.println(roll.size() + " " + roll.room());
+    why: "The array grows only when a photo arrives and every place is taken. The third photo finds 2 of 2 used, and the array becomes 4 long; the fifth finds 4 of 4 used, and it becomes 8 long. So 5 photos sit in an array of 8."
+
+  - type: predict
+    after: get-and-search
+    classes: |
+      class Names {
+          private String[] names;
+          private int size;
+
+          public Names() {
+              this.names = new String[4];
+              this.size = 0;
+          }
+
+          public void add(String name) {
+              this.names[this.size] = name;
+              this.size++;
+          }
+
+          public String get(int index) {
+              return this.names[index];
+          }
+
+          public int size() {
+              return this.size;
+          }
+      }
+    body: |
+      Names names = new Names();
+      names.add("Ola");
+      names.add("Kai");
+      System.out.println(names.size() + " " + names.get(1) + " " + names.get(2));
+    why: "This `get` doesn't check the index against the size. Index 2 is inside the array of 4, but no name has been put there, so it returns the array's default `null` without a word. That's why the lesson's `get` throws an IndexOutOfBoundsException for any index at the size or above."
+
+  - type: predict
+    after: remove
+    body: |
+      String[] items = {"A", "B", "C", "D", "E"};
+      int size = 5;
+      int index = 1;
+      for (int i = index; i < size - 1; i++) {
+          items[i] = items[i + 1];
+      }
+      items[size - 1] = null;
+      size--;
+      System.out.println(size + " " + Arrays.toString(items));
+    why: "Removing B at index 1: C, D and E each move one place to the left. The last place still held a copy of E, so it's set to `null`, and the size goes down to 4."
+
+  - type: predict
+    after: own-hash-map
+    body: |
+      int buckets = 8;
+      int[] keys = {21, 13, -3, 16};
+      for (int key : keys) {
+          System.out.print(Math.abs(Integer.valueOf(key).hashCode() % buckets) + " ");
+      }
+      System.out.println();
+    why: "An Integer's hash code is its own value. 21 % 8 and 13 % 8 are both 5, so those two keys share a bucket. -3 % 8 is -3, which `Math.abs` makes 3, and 16 % 8 is 0."
+
+  - type: fill
+    after: fixed-size
+    prompt: "Fill in the blank, a word, so that every value is copied into the new array."
+    pre: |
+      public static int[] withRoom(int[] values) {
+          int[] bigger = new int[values.length * 2];
+          for (int i = 0; i < values.[[length]]; i++) {
+              bigger[i] = values[i];
+          }
+          return bigger;
+      }
+    body: |
+      int[] values = {3, 6, 9};
+      values = withRoom(values);
+      System.out.println(values.length + " " + values[2] + " " + values[3]);
+    why: "The loop goes through every index of the old array, `values.length`, and copies each value to the same index of the new one. The new array is twice as long, and its places after the copied values keep the default 0."
+
+  - type: fill
+    after: generic-list
+    prompt: "Fill in the blank, a class name: `new T[3]` doesn't compile."
+    classes: |
+      class Rack<T> {
+          private T[] items;
+
+          @SuppressWarnings("unchecked")
+          public Rack() {
+              this.items = (T[]) new [[Object]][3];
+          }
+
+          public void put(int index, T item) {
+              this.items[index] = item;
+          }
+
+          public T get(int index) {
+              return this.items[index];
+          }
+      }
+    body: |
+      Rack<String> rack = new Rack<>();
+      rack.put(0, "jam");
+      System.out.println(rack.get(0) + " " + rack.get(1));
+    why: "Java can't create an array of a type parameter, since T is gone when the program runs. It creates an array of `Object`, which can hold any object, and casts it to `T[]`. javac warns that it can't check that cast, and `@SuppressWarnings(\"unchecked\")` says that you have."
+
+  - type: bug
+    after: get-and-search
+    prompt: "The program should print `true false`, but it crashes with a NullPointerException. Which line is wrong? (The `if` line is right as it is.)"
+    classes: |
+      class Tags {
+          private String[] tags;
+          private int size;
+
+          public Tags() {
+              this.tags = new String[4];
+              this.size = 0;
+          }
+
+          public void add(String tag) {
+              this.tags[this.size] = tag;
+              this.size++;
+          }
+
+          public boolean contains(String tag) {
+              for (int i = 0; i < this.tags.length; i++) { // BUG
+                  if (this.tags[i].equals(tag)) {
+                      return true;
+                  }
+              }
+              return false;
+          }
+      }
+    body: |
+      Tags tags = new Tags();
+      tags.add("jazz");
+      tags.add("live");
+      System.out.println(tags.contains("live") + " " + tags.contains("rock"));
+    fix: "for (int i = 0; i < this.size; i++) {"
+    why: "The loop goes to the end of the array, but only the first `size` places hold tags. Looking for rock, it reaches index 2, which holds `null`, and calling `equals` on `null` throws. The search must stop at `this.size`."
+
+  - type: bug
+    after: own-hash-map
+    prompt: "This map of desk numbers should print `14 27`, but the second `put` crashes with an ArrayIndexOutOfBoundsException. Which line is wrong? (The `return` line of `bucketFor` is right as it is.)"
+    classes: |
+      class KeyValue<K, V> {
+          private K key;
+          private V value;
+
+          public KeyValue(K key, V value) {
+              this.key = key;
+              this.value = value;
+          }
+
+          public K getKey() {
+              return this.key;
+          }
+
+          public V getValue() {
+              return this.value;
+          }
+      }
+
+      class SimpleMap<K, V> {
+          private ArrayList<KeyValue<K, V>>[] buckets;
+
+          @SuppressWarnings("unchecked")
+          public SimpleMap() {
+              this.buckets = new ArrayList[8];
+              for (int i = 0; i < this.buckets.length; i++) {
+                  this.buckets[i] = new ArrayList<>();
+              }
+          }
+
+          private ArrayList<KeyValue<K, V>> bucketFor(K key) {
+              int index = key.hashCode() % this.buckets.length; // BUG
+              return this.buckets[index];
+          }
+
+          public void put(K key, V value) {
+              bucketFor(key).add(new KeyValue<>(key, value));
+          }
+
+          public V get(K key) {
+              for (KeyValue<K, V> pair : bucketFor(key)) {
+                  if (pair.getKey().equals(key)) {
+                      return pair.getValue();
+                  }
+              }
+              return null;
+          }
+      }
+    body: |
+      SimpleMap<String, Integer> desks = new SimpleMap<>();
+      desks.put("Tuva", 14);
+      desks.put("Hendrik", 27);
+      System.out.println(desks.get("Tuva") + " " + desks.get("Hendrik"));
+    fix: "int index = Math.abs(key.hashCode() % this.buckets.length);"
+    why: "The index must be from 0 to 7, one of the array's places. Tuva's hash code is positive, but Hendrik's is -1822988127, and the remainder of a negative number is negative too: `-1822988127 % 8` is -7, and `this.buckets[-7]` throws. `Math.abs` around the remainder turns -7 to 7 into 0 to 7, as in this step's SimpleMap. (`Math.floorMod(key.hashCode(), this.buckets.length)` works too.)"
+
+  - type: bug
+    after: collisions-and-growing
+    prompt: "Before adding a new pair, `put` looks for the key in its bucket. This search should find Grace, at index 1, but a name typed by the user is never found, and the map gets the key twice. Which line is wrong? (The lines in main are right as they are.)"
+    pre: |
+      public static int indexOfKey(ArrayList<String> bucket, String key) {
+          for (int i = 0; i < bucket.size(); i++) {
+              if (bucket.get(i) == key) { // BUG
+                  return i;
+              }
+          }
+          return -1;
+      }
+    body: |
+      ArrayList<String> bucket = new ArrayList<>();
+      bucket.add("Ada");
+      bucket.add("Grace");
+      String typed = "Gr";
+      System.out.println(indexOfKey(bucket, typed + "ace"));
+    fix: "if (bucket.get(i).equals(key)) {"
+    why: "`typed + \"ace\"` is a new String object, so `==`, which asks whether two variables refer to the same object, says false. Keys are compared with `equals`, which compares the characters."
+
+  - type: compiles
+    after: generic-list
+    classes: |
+      class Hamper<T> {
+          private T[] items;
+
+          @SuppressWarnings("unchecked")
+          public Hamper() {
+              this.items = (T[]) new Object[5];
+          }
+
+          public int room() {
+              return this.items.length;
+          }
+      }
+    body: |
+      Hamper<Integer> hamper = new Hamper<>();
+      System.out.println(hamper.room());
+    why: "Yes. `new T[5]` wouldn't compile, but an array of Object cast to `T[]` does. Without `@SuppressWarnings(\"unchecked\")`, javac would still compile it, with a note about unchecked operations."
+
+  - type: compiles
+    after: own-hash-map
+    body: |
+      ArrayList<String>[] buckets = new ArrayList<String>[4];
+      buckets[0] = new ArrayList<>();
+      System.out.println(buckets.length);
+    why: "No. javac says `generic array creation`. An array of a type with a type argument, such as `ArrayList<String>`, can't be created, for the same reason as `new T[4]`. SimpleMap creates `new ArrayList[8]`, without the angle brackets, and suppresses the unchecked note."
+
+  - type: choice
+    after: collisions-and-growing
+    prompt: "Why does SimpleMap's `grow` put every pair again, instead of copying old bucket 5 into new bucket 5?"
+    choices:
+      - "A key's bucket depends on the number of buckets, so after growing, `get` looks for many keys in another bucket"
+      - "Growing changes the keys' hash codes"
+      - "An ArrayList can't be copied from one array into another"
+      - "The pairs must be sorted by key in the new array"
+    answer: 1
+    why: "The bucket is the hash code's remainder after dividing by the number of buckets. A hash code of 2157 gives bucket 5 out of 8, but bucket 13 out of 16. The hash code itself never changes; the number it's divided by does."
+
+  - type: choice
+    after: why-lookups-are-fast
+    prompt: "A class's `hashCode` returns 42 for every object, and its `equals` works. What happens with 10,000 such keys in your SimpleMap?"
+    choices:
+      - "Only one key is kept, since the hash codes are all equal"
+      - "They all share one bucket, so the map still works, but `get` compares with key after key"
+      - "The program crashes when the second key is put"
+      - "The map grows until each key has a bucket of its own"
+    answer: 2
+    why: "Equal hash codes don't make keys equal: `equals` tells them apart, so all 10,000 are kept. But they all land in one bucket, and growing can't spread them out, since every key picks the same bucket however many there are. A lookup becomes a linear search."
+
+  - type: boss
+    after: get-and-search
+    prompt: |
+      A step counter keeps the steps of each day. In `NumberList.java`, write the class `NumberList`, which keeps whole numbers in an `int` array that starts with room for 2 and becomes twice as long when it's full. No ArrayList. It has:
+
+      - `add(int number)`, which adds a number at the end
+      - `get(int index)`, which returns the number at that index; an index below 0, or at the size or above, throws an IndexOutOfBoundsException with the message `Index 3 out of bounds for size 3` (with the index and the size in it)
+      - `size()`, the number of numbers added
+      - `sum()`, the sum of the numbers added
+
+      The check runs:
+
+      ```java fragment
+      NumberList steps = new NumberList();
+      steps.add(4200);
+      steps.add(8100);
+      steps.add(6400);
+      System.out.println(steps.size() + " " + steps.get(1) + " " + steps.sum());
+      try {
+          steps.get(3);
+      } catch (IndexOutOfBoundsException e) {
+          System.out.println(e.getMessage());
+      }
+      ```
+
+      and expects:
+
+      ```
+      3 8100 18700
+      Index 3 out of bounds for size 3
+      ```
+    seed:
+      NumberList.java: |
+        public class NumberList {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                NumberList steps = new NumberList();
+                steps.add(4200);
+                steps.add(8100);
+                steps.add(6400);
+                System.out.println(steps.size() + " " + steps.get(1) + " " + steps.sum());
+                try {
+                    steps.get(3);
+                } catch (IndexOutOfBoundsException e) {
+                    System.out.println(e.getMessage());
+                }
+            }
+        }
+    solution:
+      NumberList.java: |
+        public class NumberList {
+            private int[] numbers;
+            private int size;
+
+            public NumberList() {
+                this.numbers = new int[2];
+                this.size = 0;
+            }
+
+            public void add(int number) {
+                if (this.size == this.numbers.length) {
+                    int[] bigger = new int[this.numbers.length * 2];
+                    for (int i = 0; i < this.size; i++) {
+                        bigger[i] = this.numbers[i];
+                    }
+                    this.numbers = bigger;
+                }
+                this.numbers[this.size] = number;
+                this.size++;
+            }
+
+            public int get(int index) {
+                if (index < 0 || index >= this.size) {
+                    throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                }
+                return this.numbers[index];
+            }
+
+            public int size() {
+                return this.size;
+            }
+
+            public int sum() {
+                int sum = 0;
+                for (int i = 0; i < this.size; i++) {
+                    sum += this.numbers[i];
+                }
+                return sum;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                NumberList steps = new NumberList();
+                steps.add(4200);
+                steps.add(8100);
+                steps.add(6400);
+                System.out.println(steps.size() + " " + steps.get(1) + " " + steps.sum());
+                try {
+                    steps.get(3);
+                } catch (IndexOutOfBoundsException e) {
+                    System.out.println(e.getMessage());
+                }
+            }
+        }
+    hints:
+      - "Two instance variables, `private int[] numbers;` and `private int size;`, with `this.numbers = new int[2];` in the constructor. `add` grows the array first when `this.size == this.numbers.length`, the way Playlist's `add` does."
+      - "`get` checks `index < 0 || index >= this.size` and throws, before it returns `this.numbers[index]`. `sum` adds up the first `this.size` numbers only."
+    require:
+      - pattern: \bnew\s+int\s*\[
+        message: "Keep the numbers in an `int` array, created with `new int[...]`."
+      - pattern: \bthrow\s+new\s+IndexOutOfBoundsException\s*\(
+        message: "Refuse a bad index with `throw new IndexOutOfBoundsException(...)`."
+    forbid:
+      - pattern: \b(ArrayList|LinkedList|List)\b
+        message: "Keep the numbers in an array of your own, without a list."
+    tests:
+      - call: |
+          NumberList steps = new NumberList();
+          steps.add(4200);
+          steps.add(8100);
+          steps.add(6400);
+          System.out.println(steps.size() + " " + steps.get(1) + " " + steps.sum());
+          try {
+              steps.get(3);
+          } catch (IndexOutOfBoundsException e) {
+              System.out.println(e.getMessage());
+          }
+      - call: |
+          NumberList list = new NumberList();
+          System.out.println(list.size() + " " + list.sum());
+          try {
+              list.get(0);
+          } catch (IndexOutOfBoundsException e) {
+              System.out.println(e.getMessage());
+          }
+          for (int i = 1; i <= 25; i++) {
+              list.add(i * 3);
+          }
+          System.out.println(list.size() + " " + list.get(0) + " " + list.get(24) + " " + list.sum());
+          try {
+              list.get(-1);
+          } catch (IndexOutOfBoundsException e) {
+              System.out.println(e.getMessage());
+          }
+        hidden: true

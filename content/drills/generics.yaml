@@ -1,0 +1,456 @@
+topic: generics
+drills:
+  - type: predict
+    after: why-type-parameters
+    classes: |
+      class Pouch<T> {
+          private T item;
+
+          public Pouch(T item) {
+              this.item = item;
+          }
+
+          public T get() {
+              return this.item;
+          }
+
+          public T swap(T newItem) {
+              T old = this.item;
+              this.item = newItem;
+              return old;
+          }
+      }
+    body: |
+      Pouch<String> pouch = new Pouch<String>("coin");
+      String first = pouch.swap("key");
+      String second = pouch.swap(first);
+      System.out.println(first + " " + second + " " + pouch.get());
+    why: "`swap` puts the new item in and returns the old one. The first swap returns `coin` and leaves `key` in the pouch. The second puts `coin` back and returns `key`. So the pouch holds `coin` again."
+
+  - type: predict
+    after: type-arguments
+    classes: |
+      class Pouch<T> {
+          private T item;
+
+          public Pouch(T item) {
+              this.item = item;
+          }
+
+          public T get() {
+              return this.item;
+          }
+      }
+    body: |
+      Pouch<Integer> whole = new Pouch<>(9);
+      Pouch<Double> decimal = new Pouch<>(9.0);
+      Pouch<String> text = new Pouch<>("9");
+      System.out.println(whole.get() / 2 + " " + decimal.get() / 2 + " " + text.get() + 2);
+    why: "The type argument decides what `get()` returns. An Integer divided by 2 drops the decimals, 4; a Double keeps them, 4.5. The String `\"9\"` followed by `+ 2` is joined with it, `92`."
+
+  - type: predict
+    after: several-type-parameters
+    classes: |
+      class Duo<A, B> {
+          private A first;
+          private B second;
+
+          public Duo(A first, B second) {
+              this.first = first;
+              this.second = second;
+          }
+
+          public A getFirst() {
+              return this.first;
+          }
+
+          public B getSecond() {
+              return this.second;
+          }
+
+          public Duo<B, A> swapped() {
+              return new Duo<>(this.second, this.first);
+          }
+      }
+    body: |
+      Duo<String, Integer> stop = new Duo<>("Oslo", 3);
+      Duo<Integer, String> back = stop.swapped();
+      System.out.println(back.getFirst() + stop.getSecond() + " " + stop.getFirst() + stop.getSecond());
+    why: "`back` is a `Duo<Integer, String>`, so `back.getFirst()` is the Integer 3, and 3 + 3 adds up to 6 before any String comes along. Then `\" \"` makes the rest text: `Oslo` and `3` are joined, `Oslo3`."
+
+  - type: predict
+    after: generic-interfaces
+    classes: |
+      interface Rater<T> {
+          int rate(T item);
+      }
+
+      class LengthRater implements Rater<String> {
+          @Override
+          public int rate(String item) {
+              return item.length();
+          }
+      }
+
+      class Doubler implements Rater<Integer> {
+          @Override
+          public int rate(Integer item) {
+              return item * 2;
+          }
+      }
+    body: |
+      Rater<String> words = new LengthRater();
+      Rater<Integer> numbers = new Doubler();
+      System.out.println(words.rate("12") + numbers.rate(12));
+    why: "LengthRater is a `Rater<String>`: it rates the text `\"12\"` by its length, 2. Doubler is a `Rater<Integer>`: it rates the number 12 as 24. Both return ints, so they add up to 26."
+
+  - type: predict
+    after: putting-it-together
+    classes: |
+      class Bag<T> {
+          private ArrayList<T> items;
+
+          public Bag() {
+              this.items = new ArrayList<>();
+          }
+
+          public void add(T item) {
+              this.items.add(item);
+          }
+
+          public void takeOut(T item) {
+              this.items.remove(item);
+          }
+
+          @Override
+          public String toString() {
+              return this.items.toString();
+          }
+      }
+    body: |
+      Bag<Integer> bag = new Bag<>();
+      bag.add(5);
+      bag.add(0);
+      bag.add(9);
+      bag.takeOut(0);
+      System.out.println(bag);
+    why: "Inside Bag, `item` is a T, an object, never an int. So `remove(item)` is the version of `remove` that takes an object and removes an element equal to it: the 0, not the element at index 0, which History's `remove(0)` would remove. The bag keeps `[5, 9]`."
+
+  - type: fill
+    after: why-type-parameters
+    prompt: "Fill in the blank, a type, so that `getValue` returns what the field holds, whatever its type."
+    classes: |
+      class Field<T> {
+          private String label;
+          private T value;
+
+          public Field(String label, T value) {
+              this.label = label;
+              this.value = value;
+          }
+
+          public [[T]] getValue() {
+              return this.value;
+          }
+      }
+    body: |
+      Field<Integer> price = new Field<Integer>("price", 12);
+      int doubled = price.getValue() * 2;
+      System.out.println(doubled);
+    why: "The value is a T, so `getValue` returns a T. For a `Field<Integer>`, that's an Integer, which can be doubled. With `Object`, the multiplication wouldn't compile, and with `Integer`, the class wouldn't: a T isn't always an Integer."
+
+  - type: fill
+    after: type-arguments
+    prompt: "Fill in the blank, a type argument, so that the pouch holds one letter."
+    classes: |
+      class Pouch<T> {
+          private T item;
+
+          public Pouch(T item) {
+              this.item = item;
+          }
+
+          public T get() {
+              return this.item;
+          }
+      }
+    body: |
+      Pouch<[[Character]]> initial = new Pouch<>('A');
+      char letter = initial.get();
+      System.out.println(letter + "da");
+    why: "`char` is a primitive type, so it can't be a type argument. Its wrapper class is `Character`, and Java converts `'A'` into a Character and back by itself."
+
+  - type: bug
+    after: why-type-parameters
+    prompt: "The program should print `map`. Which line is wrong?"
+    classes: |
+      class Pouch<T> {
+          private T item;
+
+          public Pouch<T>(T item) { // BUG
+              this.item = item;
+          }
+
+          public T get() {
+              return this.item;
+          }
+      }
+    body: |
+      Pouch<String> pouch = new Pouch<String>("map");
+      System.out.println(pouch.get());
+    fix: "public Pouch(T item) {"
+    why: "The type parameter is written once, after the class's name in the class header. A constructor is named after the class alone, `public Pouch(T item)`, and it can use T because it's inside the class."
+
+  - type: bug
+    after: generic-interfaces
+    prompt: "The program should print `true false`. Which line is wrong?"
+    classes: |
+      interface Rule<T> {
+          boolean allows(T value);
+      }
+
+      class Even implements Rule<Integer> {
+          @Override
+          public boolean allows(int value) { // BUG
+              return value % 2 == 0;
+          }
+      }
+    body: |
+      Rule<Integer> even = new Even();
+      System.out.println(even.allows(4) + " " + even.allows(7));
+    fix: "public boolean allows(Integer value) {"
+    why: "With T chosen as Integer, the interface's method is `allows(Integer value)`. A method that takes an `int` is a different method, so `@Override` fails and Even doesn't have the method it promised. Inside, `value % 2` works on an Integer just as well."
+
+  - type: compiles
+    after: type-arguments
+    classes: |
+      class Pouch<T> {
+          private T item;
+
+          public Pouch(T item) {
+              this.item = item;
+          }
+
+          public T get() {
+              return this.item;
+          }
+      }
+    body: |
+      Pouch<Pouch<String>> outer = new Pouch<>(new Pouch<>("ring"));
+      System.out.println(outer.get().get());
+    why: "Yes. A type argument can be any class or interface, a generic one too: `outer` is a pouch whose T is `Pouch<String>`. `outer.get()` returns the inner pouch, and its `get()` returns the String."
+
+  - type: compiles
+    after: putting-it-together
+    classes: |
+      class Caption<T> {
+          private T text;
+
+          public Caption(T text) {
+              this.text = text;
+          }
+
+          public int width() {
+              return this.text.length();
+          }
+      }
+    body: |
+      Caption<String> caption = new Caption<>("Harbor at dawn");
+      System.out.println(caption.width());
+    why: "No. Inside Caption, T could stand for any class or interface, and most have no `length()`: javac says `cannot find symbol` for a variable `of type T`. A value of type T can only use Object's methods, whatever type a Caption is later created with."
+
+  - type: choice
+    after: type-arguments
+    prompt: "Which line compiles?"
+    choices:
+      - "`Pouch<double> weight = new Pouch<>(2.5);`"
+      - "`Pouch<Double> weight = new Pouch<>(2);`"
+      - "`Pouch<Double> weight = new Pouch<>(2.5);`"
+      - "`Pouch<> weight = new Pouch<Double>(2.5);`"
+    answer: 3
+    why: "A type argument must be a reference type (a class, an interface or an array type, never a primitive type), so `double` won't do. Java turns `2.5` into a Double, but it never turns the int `2` into a Double. And the diamond goes after `new`, where Java can work it out from the variable's type; the variable needs the full type."
+
+  - type: choice
+    after: generic-interfaces
+    prompt: "`Rule<T>` is an interface with one method, `boolean allows(T value)`. Which class header gives a class that can be a `Rule<String>` or a `Rule<Integer>`, whichever it's created as?"
+    choices:
+      - "`public class Anything implements Rule<T>`"
+      - "`public class Anything<T> implements Rule<T>`"
+      - "`public class Anything implements Rule<Object>`"
+      - "`public class Anything<T> implements Rule<String>`"
+    answer: 2
+    why: "The class needs a type parameter of its own to hand on to the interface, as `OneOf<T> implements Rule<T>` does. Without `<T>` after the class's name, T is unknown and the first header doesn't compile. The third is a Rule for Objects only, and the fourth a Rule for Strings only, whatever T is."
+
+  - type: boss
+    after: putting-it-together
+    prompt: |
+      In a party game, the players take turns saying an animal, or in another round a number, and whoever says something that was already said is out. In `Callouts.java`, write the class `Callouts<T>`, which keeps what was said, in order, in an `ArrayList<T>` (a `List<T>` variable that holds an ArrayList is fine too), with:
+
+      - a constructor `Callouts()`, which starts with nothing said
+      - `say(T item)`, which records one thing said
+      - `timesSaid(T item)`, which returns how many times that item was said
+      - `firstRepeat()`, which goes through what was said, in order, and returns the first item that had already been said before it. When nothing was said twice, it returns `null`.
+
+      The check runs:
+
+      ```java fragment
+      Callouts<String> animals = new Callouts<>();
+      animals.say("fox");
+      animals.say("owl");
+      animals.say("cat");
+      animals.say("owl");
+      animals.say("fox");
+      System.out.println(animals.timesSaid("fox") + " " + animals.timesSaid("cat") + " " + animals.timesSaid("yak"));
+      System.out.println(animals.firstRepeat());
+      Callouts<Integer> numbers = new Callouts<>();
+      numbers.say(7);
+      numbers.say(13);
+      numbers.say(21);
+      numbers.say(13);
+      int repeated = numbers.firstRepeat();
+      System.out.println("Out on " + repeated);
+      ```
+
+      and expects:
+
+      ```
+      2 1 0
+      owl
+      Out on 13
+      ```
+    seed:
+      Callouts.java: |
+        import java.util.ArrayList;
+
+        public class Callouts {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Callouts<String> animals = new Callouts<>();
+                animals.say("fox");
+                animals.say("owl");
+                animals.say("cat");
+                animals.say("owl");
+                animals.say("fox");
+                System.out.println(animals.timesSaid("fox") + " " + animals.timesSaid("cat") + " " + animals.timesSaid("yak"));
+                System.out.println(animals.firstRepeat());
+                Callouts<Integer> numbers = new Callouts<>();
+                numbers.say(7);
+                numbers.say(13);
+                numbers.say(21);
+                numbers.say(13);
+                int repeated = numbers.firstRepeat();
+                System.out.println("Out on " + repeated);
+            }
+        }
+    solution:
+      Callouts.java: |
+        import java.util.ArrayList;
+
+        public class Callouts<T> {
+            private ArrayList<T> said;
+
+            public Callouts() {
+                this.said = new ArrayList<>();
+            }
+
+            public void say(T item) {
+                this.said.add(item);
+            }
+
+            public int timesSaid(T item) {
+                int count = 0;
+                for (T one : this.said) {
+                    if (one.equals(item)) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+
+            public T firstRepeat() {
+                ArrayList<T> heard = new ArrayList<>();
+                for (T one : this.said) {
+                    if (heard.contains(one)) {
+                        return one;
+                    }
+                    heard.add(one);
+                }
+                return null;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Callouts<String> animals = new Callouts<>();
+                animals.say("fox");
+                animals.say("owl");
+                animals.say("cat");
+                animals.say("owl");
+                animals.say("fox");
+                System.out.println(animals.timesSaid("fox") + " " + animals.timesSaid("cat") + " " + animals.timesSaid("yak"));
+                System.out.println(animals.firstRepeat());
+                Callouts<Integer> numbers = new Callouts<>();
+                numbers.say(7);
+                numbers.say(13);
+                numbers.say(21);
+                numbers.say(13);
+                int repeated = numbers.firstRepeat();
+                System.out.println("Out on " + repeated);
+            }
+        }
+    hints:
+      - "The header is `public class Callouts<T>`, with `private ArrayList<T> said;`. `say` adds to the list, and `timesSaid` counts the elements that are `equals` to the item: T is an object, and every object has `equals`."
+      - "In `firstRepeat`, keep a second `ArrayList<T>` of what you've gone past. Go through `said` in order: an item that's already in that list (`contains` uses `equals`) is the answer; otherwise add it. After the loop, return `null`."
+    require:
+      - pattern: \b(?:Array)?List\s*<\s*\w+\s*>
+        message: "Keep what was said in an `ArrayList<T>`, or in a `List<T>` that holds one."
+    tests:
+      - call: |
+          Callouts<String> animals = new Callouts<>();
+          animals.say("fox");
+          animals.say("owl");
+          animals.say("cat");
+          animals.say("owl");
+          animals.say("fox");
+          System.out.println(animals.timesSaid("fox") + " " + animals.timesSaid("cat") + " " + animals.timesSaid("yak"));
+          System.out.println(animals.firstRepeat());
+          Callouts<Integer> numbers = new Callouts<>();
+          numbers.say(7);
+          numbers.say(13);
+          numbers.say(21);
+          numbers.say(13);
+          int repeated = numbers.firstRepeat();
+          System.out.println("Out on " + repeated);
+      - call: |
+          Callouts<String> fruit = new Callouts<>();
+          System.out.println(fruit.firstRepeat() + " " + fruit.timesSaid("pear"));
+          fruit.say("pear");
+          fruit.say("plum");
+          fruit.say("fig");
+          System.out.println(fruit.firstRepeat());
+          fruit.say("plum");
+          fruit.say("pear");
+          System.out.println(fruit.firstRepeat() + " " + fruit.timesSaid("plum") + " " + fruit.timesSaid("fig"));
+          Callouts<Integer> big = new Callouts<>();
+          big.say(300);
+          big.say(1000);
+          big.say(1000);
+          System.out.println(big.firstRepeat() + " " + big.timesSaid(1000) + " " + big.timesSaid(300));
+        hidden: true
+      - call: |
+          Callouts<String> round = new Callouts<>();
+          round.say("elk");
+          round.say("emu");
+          round.say("elk");
+          round.say("emu");
+          System.out.println(round.firstRepeat());
+          Callouts<Integer> again = new Callouts<>();
+          again.say(5);
+          again.say(8);
+          again.say(8);
+          again.say(5);
+          System.out.println(again.firstRepeat());
+        hidden: true

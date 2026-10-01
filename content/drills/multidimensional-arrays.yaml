@@ -1,0 +1,288 @@
+topic: multidimensional-arrays
+drills:
+  - type: predict
+    after: a-grid-of-values
+    body: |
+      int[][] grid = new int[2][3];
+      grid[1][2] = 4;
+      grid[0][1] = grid[1][2] * 2;
+      grid[1][0] = grid[0][1] - 1;
+      System.out.println(grid[0][1] + grid[1][1] + grid[1][0]);
+    why: "`grid[0][1]` gets 4 * 2, which is 8, and `grid[1][0]` gets 8 - 1, which is 7. `grid[1][1]` was never assigned, so it holds the default 0. All three are ints, so `+` adds them: 8 + 0 + 7 is 15."
+
+  - type: predict
+    after: going-through-a-grid
+    body: |
+      int[][] grid = new int[4][2];
+      int runs = 0;
+      for (int row = 0; row < grid.length; row++) {
+          for (int column = 0; column < grid[row].length; column++) {
+              runs++;
+          }
+      }
+      System.out.println(grid.length + " " + grid[0].length + " " + runs);
+    why: "`new int[4][2]` makes 4 rows of 2 columns. `grid.length` is the number of rows, 4, and `grid[0].length` the length of row 0, 2. The inner loop runs 2 times for each of the 4 rows: once per cell, 8 times."
+
+  - type: predict
+    after: rows-columns-and-totals
+    body: |
+      int[][] sales = {
+          {1, 2},
+          {3, 4},
+          {5, 6}
+      };
+      int total = 0;
+      for (int[] row : sales) {
+          for (int value : row) {
+              total += value;
+          }
+          System.out.println(total);
+      }
+    why: "`total` is created before the outer loop, so it doesn't start from 0 again for each row: it carries on, 3, then 3 + 7, then 10 + 11. For the total of each row on its own, `int total = 0;` goes inside the outer loop, before the inner one."
+
+  - type: predict
+    after: neighbors
+    body: |
+      int[][] grid = new int[3][4];
+      int row = 0;
+      int column = 3;
+      int count = 0;
+      for (int r = row - 1; r <= row + 1; r++) {
+          for (int c = column - 1; c <= column + 1; c++) {
+              if (r >= 0 && r < grid.length && c >= 0 && c < grid[r].length) {
+                  count++;
+              }
+          }
+      }
+      System.out.println(count);
+    why: "The block around row 0, column 3 is rows -1 to 1 and columns 2 to 4. Only rows 0 and 1 and columns 2 and 3 are inside the grid: four cells. Nothing skips the cell itself, so it's counted along with its 3 neighbors."
+
+  - type: predict
+    after: rows-of-different-lengths
+    body: |
+      int[][] rows = {
+          {4, 1},
+          {},
+          {7, 2, 9}
+      };
+      int cells = 0;
+      for (int[] row : rows) {
+          cells += row.length;
+      }
+      System.out.println(rows.length + " " + cells + " " + rows[2][rows[2].length - 1]);
+    why: "The outer array has 3 rows, one of them empty, so `rows.length` is 3. The rows hold 2, 0 and 3 values, 5 in all. `rows[2].length - 1` is 2, the last index of row 2, where the 9 is."
+
+  - type: fill
+    after: going-through-a-grid
+    prompt: "The blank is an expression: where the inner loop stops for the row `row`. Fill it so the program prints every value of the grid, one row per line."
+    body: |
+      int[][] grid = {
+          {1, 2, 3},
+          {4, 5, 6}
+      };
+      for (int row = 0; row < grid.length; row++) {
+          for (int column = 0; column < [[grid[row].length‖grid[0].length‖grid[1].length‖grid[grid.length - 1].length‖3]]; column++) {
+              System.out.print(grid[row][column]);
+          }
+          System.out.println();
+      }
+    why: "The inner loop goes through the columns of a row, so it stops at the length of that row: `grid[row].length`, which is 3. `grid.length` would be the number of rows, 2, and the last column would be left out."
+
+  - type: fill
+    after: rows-columns-and-totals
+    prompt: "The blank is an expression: the number of columns. Fill it so the program prints the total of each column, 9 and then 8."
+    body: |
+      int[][] sales = {
+          {3, 5},
+          {4, 1},
+          {2, 2}
+      };
+      for (int column = 0; column < [[sales[0].length‖sales[1].length‖sales[2].length‖sales[sales.length - 1].length‖2]]; column++) {
+          int total = 0;
+          for (int row = 0; row < sales.length; row++) {
+              total += sales[row][column];
+          }
+          System.out.println(total);
+      }
+    why: "The number of columns is the length of a row, such as `sales[0].length`, which is 2. `sales.length` is the number of rows, 3, and column 2 doesn't exist: that would crash. `sales[column].length` and `sales.length - 1` also give 2 here, but only because of this grid's shape. `sales[column]` picks a row by a column number, so a grid of 1 row and 3 columns would crash on `sales[1]`. `sales.length - 1` is one less than the number of rows, not the number of columns."
+
+  - type: bug
+    after: going-through-a-grid
+    prompt: "The program should count the cells of the grid, but it crashes. The inner loop is right. Which line is wrong?"
+    body: |
+      int[][] grid = new int[3][4];
+      int count = 0;
+      for (int row = 0; row < grid[0].length; row++) { // BUG
+          for (int column = 0; column < grid[row].length; column++) {
+              count++;
+          }
+      }
+      System.out.println(count + " cells");
+    fix: "for (int row = 0; row < grid.length; row++) {"
+    why: "`grid[0].length` is the number of columns, 4, but the grid has only 3 rows. When `row` reaches 3, `grid[row]` throws an ArrayIndexOutOfBoundsException. The loop over the rows stops at `grid.length`."
+
+  - type: bug
+    after: rows-columns-and-totals
+    prompt: "The program should print the warmest temperature in the grid, -3. Which line is wrong?"
+    body: |
+      int[][] temperatures = {
+          {-8, -3, -5},
+          {-12, -4, -9}
+      };
+      int warmest = 0; // BUG
+      for (int[] row : temperatures) {
+          for (int value : row) {
+              if (value > warmest) {
+                  warmest = value;
+              }
+          }
+      }
+      System.out.println("Warmest: " + warmest);
+    fix: "int warmest = temperatures[0][0];"
+    why: "Every temperature is below 0, so none is greater than the starting 0, and the program prints a temperature that isn't in the grid. Starting from a real value, the first cell, gives -3."
+
+  - type: bug
+    after: neighbors
+    prompt: "The program should count the mines around the top left corner, but it crashes. Which line is wrong?"
+    body: |
+      boolean[][] mines = {
+          {false, true},
+          {true, true}
+      };
+      int row = 0;
+      int column = 0;
+      int count = 0;
+      for (int r = row - 1; r <= row + 1; r++) {
+          for (int c = column - 1; c <= column + 1; c++) {
+              if (mines[r][c] && r >= 0 && r < mines.length && c >= 0 && c < mines[r].length) { // BUG
+                  count++;
+              }
+          }
+      }
+      System.out.println(count);
+    fix: "if (r >= 0 && r < mines.length && c >= 0 && c < mines[r].length && mines[r][c]) {"
+    why: "`&&` works from left to right, so `mines[r][c]` is read before the indexes are checked, and `mines[-1]` crashes. With the checks first, `&&` stops at the first false part, and the cell is read only when it's inside the grid."
+
+  - type: compiles
+    after: rows-of-different-lengths
+    body: |
+      int[][] grid = new int[][3];
+      System.out.println(grid.length);
+    why: "No. When you give sizes, the first one, the number of rows, must be there, and javac stops at the empty brackets: `']' expected`. Only the later sizes can be left out, as in `new int[3][]`, which makes 3 places for rows to be created one by one. (With values in braces, as in `new int[][] {{1, 2}, {3}}`, you give no sizes at all, because Java counts them.)"
+
+  - type: compiles
+    after: going-through-a-grid
+    body: |
+      int[][] grid = {
+          {1, 2},
+          {3, 4}
+      };
+      int value = grid[1];
+      System.out.println(value);
+    why: "No. `grid[1]` with one index is a whole row, an `int[]`, and javac says `incompatible types: int[] cannot be converted to int`. One cell takes both indexes, such as `grid[1][0]`."
+
+  - type: choice
+    after: a-grid-of-values
+    prompt: "`int[][] seats = new int[5][8];` makes 5 rows of 8 seats. Which is the last seat of the last row?"
+    choices:
+      - "`seats[5][8]`"
+      - "`seats[7][4]`"
+      - "`seats[4][7]`"
+      - "`seats[8][5]`"
+    answer: 3
+    why: "The row comes first, then the column, and both count from 0. The rows are 0 to 4 and the seats 0 to 7, so the last one is `seats[4][7]`. `seats[5][8]` is past the end in both directions."
+
+  - type: choice
+    after: rows-of-different-lengths
+    prompt: What does this print?
+    body: |
+      String[][] board = new String[2][2];
+      board[0][1] = "X";
+      System.out.println(Arrays.deepToString(board));
+    choices:
+      - "`[[X, null], [null, null]]`"
+      - "`[[null, X], [null, null]]`"
+      - "`[[, X], [, ]]`"
+      - "`[[null, null], [X, null]]`"
+    answer: 2
+    verify: output
+    why: "A new `String[][]` holds `null` in every cell, and `deepToString` writes it as `null`. `board[0][1]` is row 0, column 1: the second place of the first row."
+
+  - type: boss
+    after: rows-of-different-lengths
+    prompt: |
+      Write a method `transposed(int[][] grid)` that returns a **new** grid in which rows and columns trade places: row `r` of the result holds the values of column `r` of `grid`, so a grid of 2 rows and 3 columns becomes one of 3 rows and 2 columns. Every row of `grid` has the same length, and there's at least one row. The check passes the grid `{{1, 2, 3}, {4, 5, 6}}` and prints what your method returns with `Arrays.deepToString`:
+
+      ```
+      [[1, 4], [2, 5], [3, 6]]
+      ```
+    seed: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[][] grid = {
+                  {1, 2, 3},
+                  {4, 5, 6}
+              };
+              System.out.println(Arrays.deepToString(transposed(grid)));
+          }
+
+          // Write the transposed method here.
+      }
+    solution: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[][] grid = {
+                  {1, 2, 3},
+                  {4, 5, 6}
+              };
+              System.out.println(Arrays.deepToString(transposed(grid)));
+          }
+
+          public static int[][] transposed(int[][] grid) {
+              int[][] result = new int[grid[0].length][grid.length];
+              for (int row = 0; row < grid.length; row++) {
+                  for (int column = 0; column < grid[row].length; column++) {
+                      result[column][row] = grid[row][column];
+                  }
+              }
+              return result;
+          }
+      }
+    hints:
+      - "The result has as many rows as `grid` has columns, and as many columns as `grid` has rows: `new int[grid[0].length][grid.length]`."
+      - "Go through every cell of `grid`, and put its value in the result with the two indexes swapped: `result[column][row] = grid[row][column];`"
+    tests:
+      - call: |
+          int[][] grid = {
+              {1, 2, 3},
+              {4, 5, 6}
+          };
+          System.out.println(Arrays.deepToString(transposed(grid)));
+      - call: |
+          int[][] grid = {
+              {7}
+          };
+          System.out.println(Arrays.deepToString(transposed(grid)));
+        hidden: true
+      - call: |
+          int[][] grid = {
+              {1, 2},
+              {3, 4},
+              {5, 6},
+              {7, 8}
+          };
+          System.out.println(Arrays.deepToString(transposed(grid)));
+          System.out.println(Arrays.deepToString(grid));
+        hidden: true
+      - call: |
+          int[][] grid = {
+              {0, 9, 8, 7, 6}
+          };
+          int[][] turned = transposed(grid);
+          System.out.println(turned.length + " " + turned[0].length);
+          System.out.println(Arrays.deepToString(transposed(turned)));
+        hidden: true

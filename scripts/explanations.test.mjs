@@ -1,5 +1,6 @@
 // Tests of the plain-English explanations of part 11 mistakes (src/engine/friendly.ts): exceptions,
-// packages and files. Each diagnostic is javac's own (the same on the JDK and in the browser, as the
+// packages and files; and of part 12: type parameters, lists and hash maps of your own, Random and
+// two-dimensional arrays. Each diagnostic is javac's own (the same on the JDK and in the browser, as the
 // fidelity suite checks), rebuilt here from its code, place and message. Run: npm run test:unit
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -163,9 +164,12 @@ test("crashes: a value the program's own code refuses names the throw and the ca
   const constructor = explainCrash('Exception in thread "main" java.lang.IllegalArgumentException: bad\n\tat Person.<init>(Main.java:16)\n\tat Main.main(Main.java:5)\n');
   assert.equal(constructor.method, "the constructor of Person");
   // Thrown by Java's own code: the program didn't throw it itself.
-  const library = explainCrash('Exception in thread "main" java.lang.IllegalArgumentException: Illegal Capacity: -1\n\tat java.base/java.util.ArrayList.<init>(ArrayList.java:160)\n\tat Main.main(Main.java:5)\n');
+  const library = explainCrash('Exception in thread "main" java.lang.IllegalArgumentException: count is negative: -1\n\tat java.base/java.lang.String.repeat(String.java:4639)\n\tat Main.main(Main.java:5)\n');
   assert.equal(library.placed, undefined);
-  has(library.explanation, "A method of Java's own, called on this line, refused a value it was given: Illegal Capacity: -1.");
+  has(library.explanation, "A method of Java's own, called on this line, refused a value it was given: count is negative: -1.");
+  const capacity = explainCrash('Exception in thread "main" java.lang.IllegalArgumentException: Illegal Capacity: -1\n\tat java.base/java.util.ArrayList.<init>(ArrayList.java:160)\n\tat Main.main(Main.java:5)\n');
+  assert.equal(capacity.placed, undefined);
+  has(capacity.explanation, "The program created a list with the starting capacity -1", "so it can't be negative");
 });
 
 test("crashes: writing into a folder that doesn't exist, reading a file that doesn't, and a cause", () => {
@@ -357,4 +361,354 @@ test("writing a file: a missing folder or options without CREATE, and ./ is no f
     has(e, "there is no such file yet", "leave out StandardOpenOption.CREATE");
     assert.ok(!e.includes("folder"), e);
   }
+});
+
+// ---- Part 12: type parameters, lists and hash maps of your own, Random, two-dimensional arrays ----
+
+const BOX = ["class Box<T> {", "    private T value;", "    public Box(T value) { this.value = value; }", "    public T get() { return this.value; }", "    public void set(T value) { this.value = value; }", "}"];
+
+test("a primitive in angle brackets gets its class, with the type written out", () => {
+  const files = program({ "Main.java": ["import java.util.*;", "", "public class Main {", "    public static void main(String[] args) {", "        List<int> numbers = new ArrayList<>();", "        HashMap<String, double> prices = new HashMap<>();", "    }", "}"] });
+  has(explain(files, "Main.java", 5, "int>", "compiler.err.type.found.req", "unexpected type\n  required: reference\n  found:    int"), "int is a primitive type", "List<int> isn't allowed", "Use its wrapper class Integer instead: List<Integer>");
+  has(explain(files, "Main.java", 6, "double>", "compiler.err.type.found.req", "unexpected type\n  required: reference\n  found:    double"), "HashMap<String, Double>");
+});
+
+test("new T[10] and new T() in a generic class, and a static member that uses T", () => {
+  const files = program({
+    "Main.java": ["class OwnList<T> {", "    private T[] values;", "    private static T last;", "    public OwnList() {", "        this.values = new T[10];", "        T first = new T();", "    }", "    public static T make() {", "        return null;", "    }", "}"],
+  });
+  has(explain(files, "Main.java", 5, "new", "compiler.err.generic.array.creation", "generic array creation"), "new T[10] isn't allowed", "(T[]) new Object[10]", "unchecked or unsafe operations");
+  has(explain(files, "Main.java", 6, "T()", "compiler.err.type.found.req", "unexpected type\n  required: class\n  found:    type parameter T"), "T is a type parameter", "such as String in OwnList<String>", "new T() can't know which class to create");
+  has(explain(files, "Main.java", 3, "T last", "compiler.err.non-static.cant.be.ref", "non-static type variable T cannot be referenced from a static context"), "T belongs to each OwnList object", "Remove static");
+  has(explain(files, "Main.java", 8, "T make", "compiler.err.non-static.cant.be.ref", "non-static type variable T cannot be referenced from a static context"), "public static <T> T make()");
+});
+
+test("a value of the wrong type for a generic class, a class without its type, and Object[] for T[]", () => {
+  const files = program({
+    "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        Box<Integer> box = new Box<>(3);", '        box.set("three");', "        String shown = box.get();", "        Box raw = new Box(5);", "        String text = raw.get();", "    }", "}", ...BOX, "interface Container<T> {", "    void put(T value);", "}", "class Shelf implements Container {", "    public void put(String value) { }", "}", "class Stack<T> {", "    private T[] values;", "    public Stack() {", "        this.values = new Object[4];", "    }", "}"],
+  });
+  has(explain(files, "Main.java", 4, '"three"', "compiler.err.prob.found.req", "incompatible types: String cannot be converted to Integer"), "box is a Box<Integer>, so its T is Integer: set takes an Integer here", "declare it as Box<String>");
+  has(explain(files, "Main.java", 5, "()", "compiler.err.prob.found.req", "incompatible types: Integer cannot be converted to String"), "get() gives an Integer here, not a String");
+  has(explain(files, "Main.java", 7, "()", "compiler.err.prob.found.req", "incompatible types: Object cannot be converted to String"), "raw is declared as Box, without a type in angle brackets", "Box<String>");
+  has(explain(files, "Main.java", 19, "class", "compiler.err.does.not.override.abstract", "Shelf is not abstract and does not override abstract method put(Object) in Container"), "Shelf implements Container without a type in angle brackets", "implements Container<String>", "the put(String) that Shelf already has");
+  has(explain(files, "Main.java", 25, "new", "compiler.err.prob.found.req", "incompatible types: Object[] cannot be converted to T[]"), "(T[]) new Object[4]");
+});
+
+test("two-dimensional arrays: a row for a value, a value for a row, brackets missing, an index too many", () => {
+  const files = program({
+    "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        int[][] grid = new int[3][4];", "        int cell = grid[0];", "        grid[1] = 5;", "        int[] flat = new int[3][4];", "        int deep = grid[1][2][0];", "    }", "}"],
+  });
+  has(explain(files, "Main.java", 4, "[0]", "compiler.err.prob.found.req", "incompatible types: int[] cannot be converted to int"), "grid[0] is a whole row of it", "grid[0][column]");
+  has(explain(files, "Main.java", 5, "5", "compiler.err.prob.found.req", "incompatible types: int cannot be converted to int[]"), "grid[1] is a whole row of grid", "grid[1][column] = ...;");
+  has(explain(files, "Main.java", 6, "new", "compiler.err.prob.found.req", "incompatible types: int[][] cannot be converted to int[]"), "new int[3][4] creates a two-dimensional array", "int[][] flat");
+  has(explain(files, "Main.java", 7, "[0]", "compiler.err.array.req.but.found", "array required, but int found"), "grid[1][2] is already one int value");
+});
+
+test("new Random with text, and javac's note about unchecked operations", () => {
+  const files = program({ "Main.java": ["import java.util.Random;", "", "public class Main {", "    public static void main(String[] args) {", '        Random random = new Random("seed");', "    }", "}"] });
+  const message = "no suitable constructor found for Random(String)\n    constructor Random.Random(Void) is not applicable\n      (argument mismatch; String cannot be converted to Void)\n    constructor Random.Random(long) is not applicable\n      (argument mismatch; String cannot be converted to long)";
+  has(explain(files, "Main.java", 5, "new", "compiler.err.cant.apply.symbols", message), "takes a seed, which must be a whole number", "write the number without quotes", "Random(Void)");
+  has(explainDiagnostic({ kind: "note", code: "compiler.note.unchecked.filename", file: "Main.java", line: -1, column: -1, message: "Main.java uses unchecked or unsafe operations.", formatted: "" }), "This is a note, not an error", "(T[]) new Object[10]");
+});
+
+const crashIn = (lines, stderr) => explainCrash(stderr, program({ "Main.java": lines }));
+
+test("a grid's index error says which index it was, row or column, and the length", () => {
+  const swapped = ["public class Main {", "    public static void main(String[] args) {", "        int[][] grid = new int[3][4];", "        for (int y = 0; y < grid[0].length; y++) {", "            for (int x = 0; x < grid.length; x++) {", "                grid[y][x] = x + y;", "            }", "        }", "    }", "}"];
+  let crash = crashIn(swapped, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 3 out of bounds for length 3\n\tat Main.main(Main.java:6)\n');
+  has(crash.explanation, "In grid[y][x], the first index, y, picks the row, and it was 3: grid has 3 rows", "0 to grid.length - 1, here 0 to 2", "The loops' bounds look swapped");
+  const column = ["public class Main {", "    public static void main(String[] args) {", "        int[][] grid = new int[3][4];", "        for (int row = 0; row < grid.length; row++) {", "            for (int col = 0; col <= grid[row].length; col++) {", "                System.out.print(grid[row][col]);", "            }", "        }", "    }", "}"];
+  crash = crashIn(column, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 4 out of bounds for length 4\n\tat Main.main(Main.java:6)\n');
+  has(crash.explanation, "the second index, col, picks the column", "that row has 4 values", "use < instead of <=");
+  // Without the file's text, the general note.
+  crash = explainCrash('Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 4 out of bounds for length 4\n\tat Main.main(Main.java:6)\n');
+  has(crash.explanation, "The program asked for index 4 of an array of length 4");
+});
+
+test("a list of your own: a full array, its own index error, an Object[] given out, a negative size; Random's bound", () => {
+  const list = ["public class Main {", "    public static void main(String[] args) {", "        OwnList<String> list = new OwnList<>(-1);", "    }", "}", "class OwnList<T> {", "    private T[] values;", "    private int count;", "    public OwnList(int capacity) {", "        this.values = (T[]) new Object[capacity];", "    }", "    public void add(T value) {", "        this.values[this.count] = value;", "        this.count++;", "    }", "    public T value(int index) {", "        if (index < 0 || index >= this.count) {", '            throw new ArrayIndexOutOfBoundsException("Index " + index + " outside of [0, " + this.count + "]");', "        }", "        return this.values[index];", "    }", "}"];
+  let crash = crashIn(list, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 10 out of bounds for length 10\n\tat OwnList.add(Main.java:13)\n\tat Main.main(Main.java:3)\n');
+  has(crash.explanation, "the array is full", "when count reaches values.length, create a bigger array");
+  crash = crashIn(list, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 3 outside of [0, 1]\n\tat OwnList.value(Main.java:18)\n\tat Main.main(Main.java:3)\n');
+  assert.equal(crash.placed, true);
+  has(crash.explanation, "Your own code threw it on purpose, with the throw in value (Main.java, line 18): the call in main (Main.java, line 3) asked for an index that value doesn't accept", "Index 3 outside of [0, 1].");
+  crash = crashIn(list, 'Exception in thread "main" java.lang.NegativeArraySizeException: -1\n\tat OwnList.<init>(Main.java:10)\n\tat Main.main(Main.java:3)\n');
+  has(crash.explanation, "an array of size -1 (new Object[capacity])", "from the call in main (Main.java, line 3)");
+  crash = explainCrash("Exception in thread \"main\" java.lang.ClassCastException: class [Ljava.lang.Object; cannot be cast to class [Ljava.lang.String; ([Ljava.lang.Object; and [Ljava.lang.String; are in module java.base of loader 'bootstrap')\n\tat Main.main(Main.java:5)\n");
+  has(crash.explanation, "an Object[], as a String[]", "(T[]) new Object[...]", "give one value at a time");
+  const random = ["import java.util.*;", "public class Main {", "    public static void main(String[] args) {", "        List<String> names = new ArrayList<>();", "        System.out.println(names.get(new Random(1).nextInt(names.size())));", "    }", "}"];
+  crash = crashIn(random, 'Exception in thread "main" java.lang.IllegalArgumentException: bound must be positive\n\tat java.base/java.util.Random.nextInt(Random.java:557)\n\tat Main.main(Main.java:5)\n');
+  has(crash.explanation, "nextInt(bound) gives a random number from 0 up to bound - 1", "Here the bound is names.size(), so the list was empty");
+});
+
+const lacks = (text, ...parts) => {
+  for (const p of parts) assert.ok(!text?.includes(p), `unexpected ${JSON.stringify(p)} in: ${text}`);
+};
+const GENERIC_ARRAY = ["compiler.err.generic.array.creation", "generic array creation"];
+
+test("generic array creation: a class inside a generic class, type parameters of outer classes and methods, a local class", () => {
+  const files = program({
+    "Main.java": [
+      "class OwnMap<K, V> {",
+      "    class Node {",
+      "        K key;",
+      "        V value;",
+      "        Node next;",
+      "    }",
+      "    private Node[] buckets;",
+      "    public OwnMap() {",
+      "        this.buckets = new Node[16];",
+      "    }",
+      "}",
+      "class OwnList<T> {",
+      "    private T[] values;",
+      "    class Snapshot {",
+      "        T[] copy() {",
+      "            T[] result = new T[values.length];",
+      "            return result;",
+      "        }",
+      "    }",
+      "    <E> OwnList(E first) {",
+      "        E[] firsts = new E[3];",
+      "    }",
+      "    void fill() {",
+      "        class Local {",
+      "            T item;",
+      "        }",
+      "        Local[] locals = new Local[3];",
+      "    }",
+      "}",
+    ],
+  });
+  const node = explain(files, "Main.java", 9, "new", ...GENERIC_ARRAY);
+  has(node, "Node is a class inside the generic class OwnMap<K, V>, and it isn't static, so it's generic too", "new OwnMap.Node[16]", "static class Node<K, V>", "Node<K, V> next", "Node<K, V>[] buckets");
+  lacks(node, "type parameter, and", "new Object");
+  has(explain(files, "Main.java", 16, "new", ...GENERIC_ARRAY), "T is a type parameter", "(T[]) new Object[values.length]");
+  has(explain(files, "Main.java", 21, "new", ...GENERIC_ARRAY), "E is a type parameter", "(E[]) new Object[3]");
+  const local = explain(files, "Main.java", 27, "new", ...GENERIC_ARRAY);
+  has(local, "Local is a class declared inside a method of the generic class OwnList<T>", "ArrayList<Local>");
+  lacks(local, "static class", "new Object");
+});
+
+test("generic array creation keeps every pair of brackets, sizes with brackets of their own, and initializers", () => {
+  const files = program({
+    "Main.java": [
+      "import java.util.ArrayList;",
+      "class Grid<T> {",
+      "    private T[][] cells;",
+      "    Grid(int rows, int cols, T[][] grid) {",
+      "        this.cells = new T[rows][cols];",
+      "        this.cells = new T[grid.length][grid[0].length];",
+      "        this.cells = new T[rows][];",
+      "        T[] none = new T[]{};",
+      "        ArrayList<String>[][] table = new ArrayList<String>[rows][cols];",
+      "    }",
+      "}",
+    ],
+  });
+  has(explain(files, "Main.java", 5, "new", ...GENERIC_ARRAY), "new T[rows][cols] isn't allowed", "(T[][]) new Object[rows][cols]");
+  has(explain(files, "Main.java", 6, "new", ...GENERIC_ARRAY), "new T[grid.length][grid[0].length] isn't allowed", "(T[][]) new Object[grid.length][grid[0].length]");
+  has(explain(files, "Main.java", 7, "new", ...GENERIC_ARRAY), "(T[][]) new Object[rows][]");
+  const init = explain(files, "Main.java", 8, "new", ...GENERIC_ARRAY);
+  has(init, "(T[]) new Object[] { ... }");
+  lacks(init, "new Object[].");
+  has(explain(files, "Main.java", 9, "new", ...GENERIC_ARRAY), "Create it without them, new ArrayList[rows][cols]", "ArrayList<String>[][] can still hold it");
+});
+
+test("a static class inside a generic class doesn't see its type parameter", () => {
+  const STATIC = ["compiler.err.non-static.cant.be.ref"];
+  const message = (t) => `non-static type variable ${t} cannot be referenced from a static context`;
+  const files = program({
+    "Main.java": [
+      "class OwnList<T> {",
+      "    private static class Node {",
+      "        T value;",
+      "        Node next;",
+      "        static void show(T shown) {",
+      "        }",
+      "    }",
+      "    private Node head;",
+      "    public void add(T value) {",
+      "        this.head = new Node();",
+      "    }",
+      "}",
+      "class OwnMap<K, V> {",
+      "    private record Entry(K key, V value) {",
+      "    }",
+      "    private Entry first;",
+      "}",
+    ],
+  });
+  const node = explain(files, "Main.java", 3, "T value", ...STATIC, message("T"));
+  has(node, "T belongs to each OwnList object", "Node is a static class", "remove static from Node's header", "private static class Node<T>", "Node<T> head", "new Node<>(...)");
+  lacks(node, "Node object: it's chosen", "new Node<String>()", "inside a static method");
+  has(explain(files, "Main.java", 5, "T shown", ...STATIC, message("T")), "Node is a static class", "show is static itself", "static <T> void show(T shown)");
+  const entry = explain(files, "Main.java", 14, "K key", ...STATIC, message("K"));
+  has(entry, "K belongs to each OwnMap object", "as in new OwnMap<String, Integer>()", "a record inside a class is always static", "private record Entry<K, V>(K key, V value)", "Entry<K, V> first");
+  lacks(entry, "remove static");
+});
+
+test("a value of the wrong type for a generic class: the type argument of the method's parameter, and Java's own maps", () => {
+  const files = program({
+    "Main.java": [
+      "import java.util.*;",
+      "public class Main {",
+      "    public static void main(String[] args) {",
+      "        Map<String, String> names = new HashMap<>();",
+      '        names.put("a", 5);',
+      "        Pair<Integer, Integer> pair = new Pair<>(1, 2);",
+      '        pair.setSecond("x");',
+      '        Box<String> box = new Box<>("a");',
+      "        box.setLabel(5);",
+      "        Integer shown = box.getLabel();",
+      "    }",
+      "}",
+      "class Pair<K, V> {",
+      "    Pair(K first, V second) { }",
+      "    void setSecond(V second) { }",
+      "}",
+      "class Box<T> {",
+      "    Box(T value) { }",
+      '    String getLabel() { return "box"; }',
+      "    void setLabel(String label) { }",
+      "}",
+    ],
+  });
+  const wrong = (line, at, from, to) => explain(files, "Main.java", line, at, "compiler.err.prob.found.req", `incompatible types: ${from} cannot be converted to ${to}`);
+  has(wrong(5, "5)", "int", "String"), "put takes a String here as the value", "declare it as Map<String, Integer>");
+  has(wrong(7, '"x"', "String", "Integer"), "its V is Integer", "declare it as Pair<Integer, String>");
+  const label = wrong(9, "5)", "int", "String");
+  has(label, "setLabel takes a String here (its parameter is declared as String in Box)");
+  lacks(label, "declare it as", "its T is");
+  lacks(wrong(10, "()", "String", "Integer"), "write Integer in its angle brackets");
+});
+
+test("a variable without its types in angle brackets: maps have keys and values, and a method that gives Object isn't the type parameter", () => {
+  const files = program({
+    "Main.java": [
+      "import java.util.*;",
+      "public class Main {",
+      "    public static void main(String[] args) {",
+      "        HashMap names = new HashMap();",
+      '        String one = names.get("a");',
+      "        for (String key : names.keySet()) {",
+      "        }",
+      '        Pair pair = new Pair("a", 1);',
+      "        String described = pair.describe();",
+      "        Labelled labelled = new Labelled();",
+      "        String label = labelled.label();",
+      "    }",
+      "}",
+      "class Pair<K, V> {",
+      "    Pair(K key, V value) { }",
+      '    Object describe() { return ""; }',
+      "}",
+      "class Base {",
+      '    public Object label() { return "x"; }',
+      "}",
+      "class Labelled<T> extends Base {",
+      "}",
+    ],
+  });
+  const raw = (line, at, to = "String") => explain(files, "Main.java", line, at, "compiler.err.prob.found.req", `incompatible types: Object cannot be converted to ${to}`);
+  has(raw(5, '("a")'), "without types in angle brackets", "HashMap<..., String> (with the type of its keys in place of ...)");
+  const keys = raw(6, "())");
+  has(keys, "its keys are Objects for Java", "HashMap<String, ...> (with the type of its values in place of ...)", "Then its keys are String objects");
+  lacks(keys, "its values are");
+  lacks(raw(9, "()"), "Pair<", "Then describe() gives");
+  lacks(raw(11, "()"), "Labelled<String>");
+  has(raw(11, "()"), "A value of type Object could be any object, so Java won't put it in a String variable");
+});
+
+test("a class that implements a generic interface without a type and lacks its method is told to add it", () => {
+  const files = program({
+    "Main.java": ["interface Container<T> {", "    void put(T value);", "}", "class Drawer implements Container {", "}", "class Shelf implements Container {", "    public void put(String value, int count) { }", "}"],
+  });
+  const missing = (line, cls) => explain(files, "Main.java", line, "class", "compiler.err.does.not.override.abstract", `${cls} is not abstract and does not override abstract method put(Object) in Container`);
+  has(missing(4, "Drawer"), "in place of T in implements Container<T> (such as implements Container<String>)", "Then add put to Drawer", "public void put(String value) { ... }");
+  const shelf = missing(6, "Shelf");
+  has(shelf, "Then add put to Shelf");
+  lacks(shelf, "already has", "....");
+});
+
+test("an Object where a type parameter is wanted: an Object[] field, a raw list, a parameter declared as Object", () => {
+  const files = program({
+    "Main.java": [
+      "import java.util.*;",
+      "class Store<T> {",
+      "    private Object[] values = new Object[10];",
+      "    private ArrayList raw = new ArrayList();",
+      "    public T value(int index) {",
+      "        return this.values[index];",
+      "    }",
+      "    public T first() {",
+      "        return raw.get(0);",
+      "    }",
+      "    public void put(Object value) {",
+      "        T t = value;",
+      "    }",
+      "}",
+    ],
+  });
+  const object = (line, at) => explain(files, "Main.java", line, at, "compiler.err.prob.found.req", "incompatible types: Object cannot be converted to T");
+  has(object(6, "[index]"), "values is an Object[]", "Declare values as a T[] instead", "(T[]) new Object[10]");
+  has(object(9, "(0)"), "raw is declared as ArrayList, without a type in angle brackets", "ArrayList<T>");
+  has(object(12, "value;"), "value is declared as Object", "Declare value as T instead");
+});
+
+test("an index error at the length: a loop with <= is one past the end, a list of your own is full", () => {
+  const whileLoop = ["public class Main {", "    public static void main(String[] args) {", "        int[] squares = new int[5];", "        int i = 0;", "        while (i <= squares.length) {", "            squares[i] = i * i;", "            i++;", "        }", "    }", "}"];
+  let crash = crashIn(whileLoop, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 5 out of bounds for length 5\n\tat Main.main(Main.java:6)\n');
+  has(crash.explanation, "Index 5 is one past the end: a loop with <= length instead of < length");
+  lacks(crash.explanation, "the array is full");
+  const stack = ["public class Main {", "    public static void main(String[] args) {", "        Stack stack = new Stack();", "        int count = 1;", "        while (count <= 12) {", "            stack.put(count);", "            count++;", "        }", "    }", "}", "class Stack {", "    private int[] values = new int[10];", "    private int count;", "    public void put(int value) {", "        this.values[this.count] = value;", "        this.count++;", "    }", "}"];
+  crash = crashIn(stack, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 10 out of bounds for length 10\n\tat Stack.put(Main.java:15)\n\tat Main.main(Main.java:6)\n');
+  has(crash.explanation, "the array is full", "when count reaches values.length");
+});
+
+test("an index error raised inside a throw's message isn't one the code threw on purpose", () => {
+  const limits = ["public class Main {", "    public static void main(String[] args) {", "        check(5, new int[0]);", "    }", "    static void check(int value, int[] limits) {", "        if (value > 3) {", '            throw new IllegalArgumentException("Over the limit " + limits[0]);', "        }", "    }", "}"];
+  let crash = crashIn(limits, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0\n\tat Main.check(Main.java:7)\n\tat Main.main(Main.java:3)\n');
+  assert.equal(crash.placed, undefined);
+  has(crash.explanation, "an empty array");
+  const seat = ["public class Main {", "    static class SeatIndexOutOfBoundsException extends IndexOutOfBoundsException {", "        SeatIndexOutOfBoundsException(String message) {", "            super(message);", "        }", "    }", "    public static void main(String[] args) {", "        seat(12);", "    }", "    static void seat(int number) {", "        if (number > 10) {", '            throw new SeatIndexOutOfBoundsException("No seat " + number);', "        }", "    }", "}"];
+  crash = crashIn(seat, 'Exception in thread "main" Main$SeatIndexOutOfBoundsException: No seat 12\n\tat Main.seat(Main.java:12)\n\tat Main.main(Main.java:8)\n');
+  assert.equal(crash.placed, true);
+  has(crash.explanation, "Your own code threw it on purpose, with the throw in seat (Main.java, line 12)");
+});
+
+test("a negative array size names the caller only when the size is a whole-number parameter", () => {
+  const parse = ["public class Main {", "    public static void main(String[] args) {", '        int[] numbers = parse("-3");', "        int[] more = make(0);", "    }", "    static int[] parse(String text) {", "        return new int[Integer.valueOf(text)];", "    }", "    static int[] make(int count) {", "        return new int[count - 1];", "    }", "}"];
+  let crash = crashIn(parse, 'Exception in thread "main" java.lang.NegativeArraySizeException: -3\n\tat Main.parse(Main.java:7)\n\tat Main.main(Main.java:3)\n');
+  has(crash.explanation, "(new int[Integer.valueOf(text)])", "Check where the size comes from");
+  lacks(crash.explanation, "from the call in main");
+  crash = crashIn(parse, 'Exception in thread "main" java.lang.NegativeArraySizeException: -1\n\tat Main.make(Main.java:10)\n\tat Main.main(Main.java:4)\n');
+  has(crash.explanation, "The size is worked out from count, which came to make (Main.java, line 10) from the call in main (Main.java, line 4)");
+});
+
+test("a grid's index error: another method's array of the same name doesn't decide row or column, and <= is named", () => {
+  const other = ["public class Main {", "    public static void main(String[] args) {", "        int[][] grid = new int[4][2];", "        int[][] other = new int[2][4];", "        System.out.println(get(other, 3, 0));", "    }", "    static int get(int[][] grid, int y, int x) {", "        return grid[y][x];", "    }", "}"];
+  let crash = crashIn(other, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 3 out of bounds for length 2\n\tat Main.get(Main.java:8)\n\tat Main.main(Main.java:5)\n');
+  has(crash.explanation, "grid[y][x] has two indexes");
+  lacks(crash.explanation, "the second index, x, picks the column");
+  const diagonal = ["public class Main {", "    public static void main(String[] args) {", "        int[][] grid = new int[3][3];", "        int sum = 0;", "        for (int i = 0; i <= grid.length; i++) {", "            sum += grid[i][i];", "        }", "    }", "}"];
+  crash = crashIn(diagonal, 'Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 3 out of bounds for length 3\n\tat Main.main(Main.java:6)\n');
+  has(crash.explanation, "Index 3 is one past the end: a loop with <= length instead of < length");
+});
+
+test("a negative capacity names the class that was created, and an array created as Object[] and cast", () => {
+  let crash = explainCrash('Exception in thread "main" java.lang.IllegalArgumentException: Illegal initial capacity: -1\n\tat java.base/java.util.HashMap.<init>(HashMap.java:447)\n\tat java.base/java.util.HashMap.<init>(HashMap.java:470)\n\tat java.base/java.util.HashSet.<init>(HashSet.java:154)\n\tat Main.main(Main.java:5)\n');
+  has(crash.explanation, "The program created a set with the starting capacity -1", "new HashSet<>(...)");
+  crash = explainCrash('Exception in thread "main" java.lang.IllegalArgumentException: Illegal Capacity: -1\n\tat java.base/java.util.Hashtable.<init>(Hashtable.java:188)\n\tat java.base/java.util.Hashtable.<init>(Hashtable.java:209)\n\tat Main.main(Main.java:5)\n');
+  has(crash.explanation, "a map", "new Hashtable<>(...)");
+  const cce = (to) => `Exception in thread "main" java.lang.ClassCastException: class [Ljava.lang.Object; cannot be cast to class ${to} (...)\n`;
+  crash = crashIn(["public class Main {", "    public static void main(String[] args) {", "        String[] names = (String[]) new Object[3];", "    }", "}"], `${cce("[Ljava.lang.String;")}\tat Main.main(Main.java:3)\n`);
+  has(crash.explanation, "An array keeps the type it was created with", "new String[3]");
+  lacks(crash.explanation, "generic class", "give one value at a time");
+  const map = ["public class Main {", "    public static void main(String[] args) {", "        new OwnMap<String, Integer>();", "    }", "}", "class OwnMap<K, V> {", "    class Node {", "        K key;", "    }", "    private Node[] buckets;", "    public OwnMap() {", "        this.buckets = (Node[]) new Object[16];", "    }", "}"];
+  crash = crashIn(map, `${cce("[LOwnMap$Node;")}\tat OwnMap.<init>(Main.java:12)\n\tat Main.main(Main.java:3)\n`);
+  has(crash.explanation, "new OwnMap.Node[16]");
+  const sorted = ["public class Main {", "    public static void main(String[] args) {", "        new Sorted<String>();", "    }", "}", "class Sorted<T extends Comparable<T>> {", "    private T[] items;", "    Sorted() {", "        this.items = (T[]) new Object[4];", "    }", "}"];
+  crash = crashIn(sorted, `${cce("[Ljava.lang.Comparable;")}\tat Sorted.<init>(Main.java:9)\n\tat Main.main(Main.java:3)\n`);
+  has(crash.explanation, "T extends Comparable", "(T[]) new Comparable[4]");
 });

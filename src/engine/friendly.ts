@@ -1,7 +1,7 @@
 // Plain-English explanations for javac errors (keyed by javac's diagnostic code) and for
 // uncaught exceptions (keyed by the exception class).
 
-import { ancestorsOf, classAt, declares, droppedLink, fileName, isRealSubtype, isSubtype, knows, ownClasses, parameterTypes, splitTopLevel, subtypesOf, typeNamed, type HeaderLink, type OwnClass, type OwnClasses, type OwnMember } from "./own-classes";
+import { ancestorsOf, classAt, codeOnly, declares, droppedLink, fileName, isRealSubtype, isSubtype, knows, ownClasses, parameterTypes, splitTopLevel, subtypesOf, typeNamed, type HeaderLink, type OwnClass, type OwnClasses, type OwnMember } from "./own-classes";
 import type { Diagnostic, SourceFile } from "./types";
 import { declaredPackage, folderOf, packageOfPath } from "../grader/files.js";
 
@@ -48,13 +48,16 @@ const RULES: Rule[] = [
   { code: "compiler.err.prob.found.req", when: /^incompatible types: Optional(?:Double|Int|Long)?(?:<.*>)? cannot be converted to /, explain: optionalAsValue },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: (?:no instance\(s\) of type variable\(s\) [\w$, ]+ exist so that )?(?:Stream|IntStream|DoubleStream|LongStream)(?:<.*?>)? (?:conforms to|cannot be converted to) /, explain: streamAsValue },
   { code: "compiler.err.prob.found.req", when: /no instance\(s\) of type variable\(s\) .* exist so that Collector<.*> conforms to Supplier<R>/, explain: numberStreamCollect },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: cannot infer type arguments for [\w$.]+<>\n\s*reason: inference variable/, explain: diamondValue },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: Object(?:\[\])? cannot be converted to [\w$]+(?:\[\])?$/, explain: objectForTypeParameter },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: Object cannot be converted to [\w$.]+$/, explain: rawGeneric },
   { code: "compiler.err.prob.found.req", when: /possible lossy conversion/, explain: () => "This would squeeze a bigger or more precise number type into a smaller one and could lose information, for example a double into an int. Convert it on purpose with a cast such as (int), or use a variable of the bigger type." },
   {
     code: "compiler.err.prob.found.req",
     when: /incompatible types: Object cannot be converted to [A-Z][\w$]*$/m,
     explain: (d) => {
       const t = /Object cannot be converted to ([A-Z][\w$]*)$/m.exec(d.message)?.[1];
-      return `A value of type Object could be any object, so Java won't put it in a ${t} variable by itself. If it comes from a list declared without a type in angle brackets, such as ArrayList list, give the list its type: ArrayList<${t}>. If you know the value is a ${t} (check with instanceof first, as equals does), cast it by putting (${t}) in front of it.`;
+      return `A value of type Object could be any object, so Java won't put it in ${t ? anWord(t) : "a"} variable by itself. If it comes from a list declared without a type in angle brackets, such as ArrayList list, give the list its type: ArrayList<${t}>. If you know the value is ${t ? anWord(t) : "one"} (check with instanceof first, as equals does), cast it by putting (${t}) in front of it.`;
     },
   },
   {
@@ -69,6 +72,9 @@ const RULES: Rule[] = [
   { code: "compiler.err.prob.found.req", when: /cannot be converted to Throwable$/m, explain: notThrowable },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+ cannot be converted to [\w$.]+$/m, explain: ownConversion },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: String cannot be converted to [\w$.]+$/m, explain: textToEnum },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+(?:\[\])* cannot be converted to [\w$.]+(?:\[\])*$/, explain: arrayLevels },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+(?:\[\])* cannot be converted to [\w$.]+(?:\[\])*$/, explain: genericValue },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+<.*> cannot be converted to [\w$.]+<.*>$/, explain: otherTypeArguments },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: void cannot be converted to /, explain: voidValue },
   { code: "compiler.err.prob.found.req", when: /cannot be converted to/, explain: () => "The value on the right has a different type than the variable or parameter expects. For example text in quotes is a String, not an int; Integer.valueOf(...) turns text into a number." },
   { code: "compiler.err.prob.found.req", when: /unexpected return value/, explain: () => "This method is void, so it can't return a value. Change void to the value's type, or remove the value after return." },
@@ -130,9 +136,11 @@ const RULES: Rule[] = [
       return takes.length ? implicitSuper(d, own, `its constructors take ${takes.join(" or ")}`) : null;
     },
   },
+  { code: "compiler.err.cant.apply.symbols", when: /^no suitable constructor found for Random\(/, explain: randomSeed },
   { code: "compiler.err.cant.apply.symbols", when: /^no suitable constructor found for ([\w$]+)/, explain: (d) => `None of the constructors of ${/^no suitable constructor found for ([\w$]+)/.exec(d.message)?.[1]} takes these values. Check the number, order and types of the values in the parentheses.` },
   { code: "compiler.err.cant.apply.symbols", when: /^no suitable method found for sort\([\w$.]+<[\w$.]+>\)[\s\S]*upper bounds: Comparable<\? super/, explain: sortNotComparable },
   { code: "compiler.err.cant.apply.symbols", explain: () => "None of the versions of this method accepts these arguments. Check the number and types of values in the parentheses." },
+  { code: "compiler.err.non-static.cant.be.ref", when: /^non-static type variable /, explain: staticTypeVariable },
   { code: "compiler.err.non-static.cant.be.ref", explain: () => "main is static, so it can't use this object's methods or variables directly. Create an object first (new ...) and call the method on it, or make the method static if it doesn't need an object." },
   { code: "compiler.err.var.might.not.have.been.initialized", explain: () => "This variable is used before it has a value. Give it a starting value where you create it, for example int sum = 0;" },
   { code: "compiler.err.else.without.if", explain: () => "This else has no matching if. A common cause is a semicolon right after if (...), which ends the if before its block, or a missing { }." },
@@ -200,6 +208,14 @@ const RULES: Rule[] = [
   { code: "compiler.err.not.def.public.cant.access", explain: notPublic },
   { code: "compiler.err.cant.access", explain: badSourceFile },
   { code: "compiler.err.duplicate.class", explain: duplicateClass },
+  { code: "compiler.err.type.found.req", when: /required: reference\n\s*found:/, explain: primitiveTypeArgument },
+  { code: "compiler.err.type.found.req", when: /found:\s+type parameter /, explain: newTypeParameter },
+  { code: "compiler.err.type.found.req", explain: (d) => `Java expected another kind of type here: ${/required: (.+)/.exec(d.message)?.[1] ?? "another one"}, and found ${/found:\s+(.+)/.exec(d.message)?.[1] ?? "this"}.` },
+  { code: "compiler.err.generic.array.creation", explain: genericArray },
+  { code: "compiler.err.array.req.but.found", explain: arrayRequired },
+  { code: "compiler.note.unchecked.filename", explain: uncheckedNote },
+  { code: "compiler.note.unchecked.plural", explain: uncheckedNote },
+  { code: "compiler.note.unchecked.recompile", explain: () => "Part of the note about unchecked or unsafe operations. You don't need to do this: the note doesn't stop the program from compiling." },
 ];
 
 /** A name looked up on a variable of type Object, such as equals' parameter used before its cast, or a lambda's parameter. */
@@ -322,6 +338,9 @@ function missingAbstractMethod(d: Diagnostic, own: OwnClasses): string | null {
   // class Person implements Comparable, without <Person>: the method it must have takes Object.
   if (((parent === "Comparable" && method === "compareTo") || (parent === "Comparator" && method === "compare")) && /^Object(,Object)?$/.test(m[3]) && rawIn(own, cls, parent))
     return rawComparison(own, cls, parent);
+  // class Shelf implements Container, without <String>: Java fills in Object for the type parameter.
+  const generic = typeNamed(own, parent, d.file);
+  if (generic?.typeParams.length && /(?:^|,)Object(?:,|$)/.test(m[3]) && rawIn(own, cls, parent)) return rawOwnGeneric(own, cls, generic, method, m[3]);
   if (parent === "Comparable" && method === "compareTo")
     return `${cls} implements Comparable, so it must have the method compareTo, which tells how two ${cls} objects compare. Add it to ${cls}: public int compareTo(${params} other) { ... }, returning a negative number, zero or a positive number. ${same}`;
   if (isInterface(own, parent))
@@ -2676,16 +2695,651 @@ function duplicateClass(d: Diagnostic, own: OwnClasses): string | null {
   return `There are two classes called ${name}${files.length > 1 ? `, in ${list([...new Set(files)])}` : ""}, and each class of a package needs a name of its own. Remove one of them, or rename it.`;
 }
 
+// ---- Type parameters, lists and hash maps of your own, Random, two-dimensional arrays (MOOC part 12) ----
+
+/** A value of each primitive type, for examples: 5 for int. */
+const SAMPLE: Record<string, string> = { int: "5", long: "5L", short: "5", byte: "5", double: "2.5", float: "2.5f", char: "'a'", boolean: "true" };
+
+/** The < that opens the angle brackets around the end of `text` (whose > aren't closed yet), or -1. */
+function openAngle(text: string): number {
+  let depth = 0;
+  for (let k = text.length - 1; k >= 0; k--) {
+    const ch = text[k];
+    if (ch === ">") depth++;
+    else if (ch === "<" && depth-- === 0) return k;
+    else if (/[;(){}=]/.test(ch)) return -1;
+  }
+  return -1;
+}
+
+/** The > that closes the < at `open`, or -1. */
+function closeAngle(text: string, open: number): number {
+  let depth = 0;
+  for (let k = open; k < text.length; k++) {
+    if (text[k] === "<") depth++;
+    else if (text[k] === ">" && --depth === 0) return k;
+    else if (/[;(){}=]/.test(text[k])) return -1;
+  }
+  return -1;
+}
+
+/** "unexpected type, required: reference, found: int": a primitive type where only a class can be, most often in angle brackets, as in List<int>. */
+function primitiveTypeArgument(d: Diagnostic): string | null {
+  const found = /found:\s+(\w+)$/m.exec(d.message)?.[1];
+  const box = found ? BOX[found] : undefined;
+  const c = atCaret(d);
+  if (!found || !box || !c) return null;
+  const before = beforeCaret(c);
+  const open = openAngle(before);
+  if (open < 0) {
+    if (/^[\w$.]+\s+instanceof\b/.test(c.at))
+      return `instanceof checks which class an object belongs to, and this value is ${anWord(found)}, a primitive type, not an object: it's always ${anWord(found)}, so there is nothing to check. Leave the check out.`;
+    return `${found} is a primitive type, and only an object can be used here. Use its class, ${box}, where an object is needed.`;
+  }
+  const name = /([\w$.]+)\s*$/.exec(before.slice(0, open))?.[1];
+  const close = closeAngle(c.line, open);
+  const args = close > 0 ? c.line.slice(open + 1, close) : null;
+  const written = name && args ? `${name}<${args}>` : null;
+  const fixed = written ? `${name}<${args!.replace(/\b(int|long|short|byte|double|float|char|boolean)\b(?!\s*\[)/g, (p) => BOX[p])}>` : null;
+  return `${found} is a primitive type, and a type in angle brackets can't be a primitive type (it must be a reference type, such as a class)${written ? `, so ${written} isn't allowed` : ""}. Use its wrapper class ${box} instead${fixed ? `: ${fixed}` : ""}. Java turns ${found} values into ${box} objects and back by itself, so you can still put in values such as ${SAMPLE[found]} and read them into ${anWord(found)} variable.`;
+}
+
+/** "unexpected type, required: class, found: type parameter T": new T() in a generic class. */
+function newTypeParameter(d: Diagnostic, own: OwnClasses): string | null {
+  const t = /found:\s+type parameter ([\w$]+)/.exec(d.message)?.[1];
+  if (!t) return null;
+  const cls = classAt(own, d.file, d.line);
+  const example = cls?.typeParams.length === 1 && cls.typeParams[0] === t ? `, such as String in ${cls.name}<String>` : "";
+  return `${t} is a type parameter: it stands for the type the class is used with${example}. Java doesn't keep that type when the program runs, so new ${t}() can't know which class to create. Take the object from outside instead, as a parameter of the constructor or of a method (such as public void add(${t} value)), and store that.`;
+}
+
+/** The position just after the bracket that closes the one at `open` ("<" with ">", "[" with "]", "(" with ")"), or -1. */
+function pastClose(text: string, open: number): number {
+  const [o, c] = text[open] === "<" ? ["<", ">"] : text[open] === "(" ? ["(", ")"] : ["[", "]"];
+  let depth = 0;
+  for (let k = open; k < text.length; k++) {
+    if (text[k] === o) depth++;
+    else if (text[k] === c && --depth === 0) return k + 1;
+  }
+  return -1;
+}
+
+/**
+ * The array creation at the start of `text`, as written: new T[rows][cols] gives T, no type
+ * arguments and the sizes rows and cols; new ArrayList<String>[8] gives ArrayList, <String> and 8;
+ * new T[] { ... } gives an empty size and `init`. Sizes may hold brackets of their own (grid[0].length).
+ */
+function newArrayAt(text: string): { type: string; args: string; sizes: string[]; init: boolean; length: number } | null {
+  const m = /^new\s+([\w$.]+)\s*/.exec(text);
+  if (!m) return null;
+  let k = m[0].length;
+  let args = "";
+  if (text[k] === "<") {
+    const end = pastClose(text, k);
+    if (end < 0) return null;
+    args = text.slice(k, end);
+    k = end;
+    while (/\s/.test(text[k] ?? "")) k++;
+  }
+  const sizes: string[] = [];
+  let length = k;
+  while (text[k] === "[") {
+    const end = pastClose(text, k);
+    if (end < 0) return null;
+    sizes.push(text.slice(k + 1, end - 1).trim());
+    k = length = end;
+    while (/\s/.test(text[k] ?? "")) k++;
+  }
+  return sizes.length ? { type: m[1], args, sizes, init: sizes[0] === "" || text[k] === "{", length } : null;
+}
+
+/** An array creation's brackets as written ([rows][cols]), and with { ... } after them for an initializer. */
+const sizesText = (a: { sizes: string[]; init: boolean }) => `${a.sizes.map((s) => `[${s}]`).join("")}${a.init ? " { ... }" : ""}`;
+
+/** The type parameters a generic method's or constructor's header declares: T for "public static <T> T[] make(int n)". */
+function methodTypeParams(header: string): string[] {
+  const at = /^(?:(?:public|protected|private|static|final|abstract|synchronized|native|strictfp|default)\s+)*(?=<)/.exec(header);
+  if (!at) return [];
+  const end = pastClose(header, at[0].length);
+  return end < 0 ? [] : splitTopLevel(header.slice(at[0].length + 1, end - 1)).map((p) => /^\s*([A-Za-z_$][\w$]*)/.exec(p)?.[1] ?? "").filter(Boolean);
+}
+
+/** The program's types whose declarations hold a line of a file, innermost first. */
+const typesAround = (own: OwnClasses, file: string, line: number) =>
+  [...own.types.values()].filter((t) => t.file === file && t.from <= line && line <= t.to).sort((a, b) => b.from - a.from);
+
+/** Whether a type of the program is declared inside a method or constructor (a local class), rather than in a class's body. */
+function isLocalType(own: OwnClasses, t: OwnClass): boolean {
+  const lines = own.code.get(t.file);
+  if (!lines) return false;
+  const k = new RegExp(`\\b(?:class|interface|enum|record)\\s+${escapeRegExp(t.name)}\\b`).exec(lines[t.from - 1] ?? "")?.index;
+  if (k == null) return false;
+  return methodBodyAround(lines.join("\n"), lines.slice(0, t.from - 1).join("\n").length + (t.from > 1 ? 1 : 0) + k) != null;
+}
+
+/**
+ * "generic array creation": new T[10] with a type parameter, new ArrayList<String>[10], or new
+ * Node[16] where Node is a class inside a generic class (and so generic too).
+ */
+function genericArray(d: Diagnostic, own: OwnClasses): string {
+  const made = newArrayAt(atCaret(d)?.at ?? "");
+  const note = "Java then prints a note that the program uses unchecked or unsafe operations: that's expected, and the program compiles and runs.";
+  if (!made) return `Java can't create an array of a type parameter (new T[10]) or of a type with angle brackets (new ArrayList<String>[10]). For T, create an array of Object and cast it: (T[]) new Object[10]. ${note}`;
+  const { type, args } = made;
+  const brackets = sizesText(made);
+  const pairs = "[]".repeat(made.sizes.length);
+  if (args) {
+    const course = /^(?:ArrayList|List)$/.test(simple(type)) && made.sizes.length === 1 ? `, as in the course's own hash map, whose buckets are created with new ArrayList${brackets}` : "";
+    return `Java can't create an array whose type has angle brackets, such as new ${type}${args}${brackets}. Create it without them, new ${type}${brackets}: a variable of type ${type}${args}${pairs} can still hold it${course}. ${note}`;
+  }
+  const written = `new ${type}${brackets}`;
+  // A type parameter of a class around the line (a class inside a generic class sees its parameters too), or of the generic method or constructor around it.
+  const params = [...typesAround(own, d.file, d.line).flatMap((t) => t.typeParams), ...methodTypeParams(methodAround(d, own)?.header ?? "")];
+  if (!type.includes(".") && params.includes(type))
+    return `${type} is a type parameter, and Java doesn't keep the type it stands for when the program runs, so it can't create an array of ${type}: ${written} isn't allowed. Create an array of Object and cast it to ${type}${pairs}, as the course does: (${type}${pairs}) new Object${brackets}. ${note}`;
+  // A class inside a generic class: unless it's static, it uses the outer class's type parameters, so it's generic too.
+  const t = typeNamed(own, simple(type), d.file);
+  const around = t ? typesAround(own, t.file, t.from).filter((x) => x !== t) : [];
+  const outer = around.find((x) => x.typeParams.length);
+  if (t && outer) {
+    const generic = `${outer.name}<${outer.typeParams.join(", ")}>`;
+    const lines = own.code.get(t.file)?.slice(t.from - 1, t.to).join("\n") ?? "";
+    const used = outer.typeParams.filter((p) => new RegExp(`(?<![\\w$.])${escapeRegExp(p)}(?![\\w$])`).test(lines));
+    const typeArgs = used.length ? `<${used.join(", ")}>` : "";
+    const whose = `whose type${outer.typeParams.length > 1 ? "s" : ""} Java doesn't keep when the program runs.`;
+    if (isLocalType(own, t))
+      return `${t.name} is a class declared inside a method of the generic class ${generic}, so it's generic too: it can use ${listed(outer.typeParams)}, ${whose} So Java can't create an array of ${t.name}: ${written} isn't allowed. Keep the objects in a list instead, an ArrayList<${t.name}>, or move ${t.name} out of the method, as a class of its own${typeArgs ? ` with type parameters of its own (class ${t.name}${typeArgs})` : ""}.`;
+    // From the generic class down to Node, without angle brackets: OwnMap.Node.
+    const path = [...around.slice(0, around.indexOf(outer) + 1).reverse().map((x) => x.name), t.name].join(".");
+    const uses = usesOf((own.code.get(t.file) ?? []).slice(outer.from - 1, outer.to).join("\n"), t.name, typeArgs, 3);
+    const statics = used.length
+      ? ` Or make ${t.name} a static class with type parameters of its own, static class ${t.name}${typeArgs}, and then write ${t.name}${typeArgs} wherever ${t.name} is used${uses.length ? `, as in ${listed(uses)}` : ""}: then new ${t.name}${brackets} works.`
+      : ` Or, since ${t.name} doesn't use ${listed(outer.typeParams)}, make it static: static class ${t.name}. Then new ${t.name}${brackets} works.`;
+    return `${t.name} is a class inside the generic class ${generic}, and it isn't static, so it's generic too: each ${t.name} belongs to ${anWord(outer.name)} object and can use its ${listed(outer.typeParams)}, ${whose} So Java can't create an array of ${t.name}: ${written} isn't allowed. Name the generic class in front of it, without angle brackets: new ${path}${brackets}.${statics} ${note}`;
+  }
+  return `Java can't create an array of ${type} here: ${written} isn't allowed, because ${type} depends on a type parameter, whose type Java doesn't keep when the program runs. If ${type} is a type parameter, create an array of Object and cast it: (${type}${pairs}) new Object${brackets}. If it's a class inside a generic class, name that class in front of it: new Outer.${type}${brackets}, with the generic class's name for Outer. ${note}`;
+}
+
+/** Types to write in the angle brackets of an example: String, then Integer, then Double. */
+const SAMPLE_TYPES = ["String", "Integer", "Double", "Boolean"];
+
+/** Where a class of the program is used as a type, with its type arguments written in: "Node<T> next" for "Node next", and "new Node<>(...)". At most `count` of them. */
+function usesOf(code: string, name: string, args: string, count: number): string[] {
+  const n = escapeRegExp(name);
+  const found = [...code.matchAll(new RegExp(`(?<![\\w$.])${n}((?:\\s*\\[\\s*\\])*)\\s+([\\w$]+)\\s*[;=),:]`, "g"))].map((m) => `${name}${args}${m[1].replace(/\s+/g, "")} ${m[2]}`);
+  const made = new RegExp(`\\bnew\\s+${n}\\s*\\(`).test(code) ? [`new ${name}<>(...)`] : [];
+  return [...new Set(found)].slice(0, Math.max(0, count - made.length)).concat(made);
+}
+
+/** "non-static type variable T cannot be referenced from a static context". */
+function staticTypeVariable(d: Diagnostic, own: OwnClasses): string | null {
+  const t = /^non-static type variable ([\w$]+) cannot be referenced from a static context/.exec(d.message)?.[1];
+  if (!t) return null;
+  // The class that declares T: the one around the line, or a class around that (Node inside OwnList<T>).
+  const around = typesAround(own, d.file, d.line);
+  const at = around.findIndex((x) => x.typeParams.includes(t));
+  const owner = at >= 0 ? around[at] : around[0];
+  const cls = owner?.name;
+  const created = cls ? `new ${cls}<${(owner.typeParams.length ? owner.typeParams : [t]).map((_, i) => SAMPLE_TYPES[i] ?? "String").join(", ")}>()` : "";
+  const why = `${t} belongs to each ${cls ? `${cls} ` : ""}object: it's chosen when the object is created${cls ? `, as in ${created}` : ""}, so it can be a different type for each object. Something static belongs to the class itself, not to one object, so it can't use ${t}.`;
+  const line = atCaret(d)?.line.trim() ?? "";
+  const header = /\bstatic\b/.test(line) && METHOD_IN.test(line) ? line.replace(/\s*\{.*$/, "") : null;
+  // A type between the line and the class that declares T that is static: written static, or a record, an enum or an interface (static by themselves), or a class inside an interface.
+  const between = at > 0 ? around.slice(0, at) : [];
+  const isStatic = (x: OwnClass) => x.static || x.kind !== "class" || around[around.indexOf(x) + 1]?.kind === "interface";
+  const nested = between.find(isStatic);
+  if (cls && nested) {
+    const enclosing = around[around.indexOf(nested) + 1];
+    const what = nested.static
+      ? `a static ${nested.kind}`
+      : nested.kind === "class"
+        ? `a class inside the interface ${enclosing.name}, which makes it static`
+        : `${aKind(nested.kind)}, and ${aKind(nested.kind)} inside a class is always static`;
+    const intro = `${why} ${nested.name} is ${what}: it doesn't belong to one ${cls} object, so it can't use ${cls}'s ${t} either.`;
+    if (nested.kind === "enum") return `${intro} An enum can't have type parameters, so ${nested.name} can't use ${t} at all: keep the ${t} value in ${cls} itself, or make ${nested.name} a class.`;
+    // Its own type parameters: those it has, and those of the outer class it uses (Node<K, V>).
+    const code = own.code.get(nested.file) ?? [];
+    const body = code.slice(nested.from - 1, nested.to).join("\n");
+    const used = owner.typeParams.filter((p) => p === t || new RegExp(`(?<![\\w$.])${escapeRegExp(p)}(?![\\w$])`).test(body));
+    const params = [...nested.typeParams, ...used.filter((p) => !nested.typeParams.includes(p))];
+    const args = `<${params.join(", ")}>`;
+    const headerLine = (own.lines.get(nested.file)?.[nested.from - 1] ?? "").replace(/\s*\{.*$/, "").trim();
+    const kindName = new RegExp(`\\b(class|record|interface)\\s+${escapeRegExp(nested.name)}\\b(?:\\s*<[^<>]*>)?`);
+    const newHeader = kindName.test(headerLine) ? headerLine.replace(kindName, `$1 ${nested.name}${args}`) : `${nested.kind} ${nested.name}${args}`;
+    const uses = usesOf(code.slice(owner.from - 1, owner.to).join("\n"), nested.name, args, 3);
+    const ownParams = `give ${nested.name} ${params.length > 1 ? "type parameters" : "a type parameter"} of its own, ${newHeader}`;
+    const everywhere = `, and write ${nested.name}${args} wherever ${cls} uses ${nested.name}${uses.length ? `, as in ${listed(uses)}` : ""} (${anWord(nested.name)} written without ${args} gives Objects, not ${listed(params)} values)`;
+    // static T shared; or static void show(T value) inside the static class: the member is static itself.
+    const member = /\bstatic\b/.test(line) && !/\b(?:class|interface|enum|record)\b/.test(line);
+    if (member && header) return `${intro} ${methodIn(header) ?? "This method"} is static itself, so give it a type parameter of its own, written before its return type: ${header.replace(/\bstatic\s+/, `static <${t}> `)}.`;
+    const removable = nested.static && between.filter(isStatic).length === 1;
+    const remove = removable ? `remove static from ${nested.name}'s header, so that each ${nested.name} belongs to ${anWord(cls)} object and can use its ${t}` : "";
+    if (member) return `${intro} This variable is static too, so remove static from it, and then ${remove ? `${remove}, or ` : ""}${ownParams}${everywhere}.`;
+    return `${intro} To fix it, ${remove ? `${remove}. Or ` : ""}${ownParams}${everywhere}.`;
+  }
+  if (header)
+    return `${why} If the method works on an object's values, remove static. If it should stay static, give it a type parameter of its own, written before its return type: ${header.replace(/\bstatic\s+/, `static <${t}> `)}.`;
+  if (/\bstatic\b/.test(line)) return `${why} Remove static, so that each object has one of its own.`;
+  const m = methodAround(d, own);
+  const method = m && /\bstatic\s+/.test(m.header) ? m : null;
+  const example = method ? method.header.replace(/\bstatic\s+/, `static <${t}> `) : `public static <${t}> void print(${t} value)`;
+  return `${why} This is inside ${method ? `the static method ${method.name}` : "a static method"}: remove static from it if it works on an object's values, or give it a type parameter of its own, written before its return type, as in ${example}.`;
+}
+
+/** "incompatible types: cannot infer type arguments for Box<>": new Box<>(...) with a value of another type than the variable's angle brackets say. */
+function diamondValue(d: Diagnostic): string | null {
+  const m = /^incompatible types: cannot infer type arguments for ([\w$.]+)<>\n\s*reason: inference variable ([\w$]+) has incompatible bounds\n\s*equality constraints: ([\w$.<>\[\]]+)\n\s*lower bounds: ([\w$.<>\[\]]+)$/m.exec(d.message);
+  if (!m) return null;
+  const [, cls, t, want, got] = m;
+  const hint = got === "String" && /^(Integer|Double|Long)$/.test(want) ? ` (${want}.valueOf(text) turns text into a number)` : "";
+  return `The new ${simple(cls)} goes where its ${t} must be ${want} (the angle brackets of the variable say so), so the value for ${t} in new ${simple(cls)}<>(...) must be ${anWord(want)}, and it's ${anWord(got)}. Pass ${anWord(want)}${hint}, or, if it should hold ${got} values, write ${got} in the variable's angle brackets instead.`;
+}
+
+/** A declared type split into its class and its type arguments: Box and [Integer] for "Box<Integer>". */
+function typeArguments(type: string | null): { cls: string; args: string[] } | null {
+  const m = /^([\w$.]+)\s*<(.*)>$/.exec(type?.trim() ?? "");
+  return m ? { cls: simple(m[1]), args: splitTopLevel(m[2]).map((a) => a.trim()) } : null;
+}
+
+/** Classes of Java's own that take a type in angle brackets, as the course uses them. */
+const GENERIC_LIBRARY = /^(?:List|ArrayList|LinkedList|Set|HashSet|TreeSet|Map|HashMap|TreeMap|Collection|Queue|Deque|ArrayDeque|PriorityQueue|Iterator|Optional)$/;
+
+/** A conversion of text to a number or back, for a note about a value of the wrong type. */
+function convertHint(from: string, to: string): string {
+  if (from === "String" && /^(?:Integer|Double|Long|int|double|long)$/.test(to)) return ` (${BOX[to] ?? to}.valueOf(text) turns text into a number)`;
+  if (to === "String" && /^(?:Integer|Double|Long|int|double|long)$/.test(from)) return " (String.valueOf(number) turns a number into text)";
+  return "";
+}
+
+/** Which value in a call's parentheses (opened at `open`) a position is in, 0 for the first, and how many values the call has. Only commas outside other brackets count. */
+function argumentAt(code: string, open: number, at: number): { index: number; count: number } {
+  let depth = 0;
+  let index = 0;
+  let count = 1;
+  for (let k = open + 1; k < code.length; k++) {
+    const ch = code[k];
+    if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch)) {
+      if (depth-- === 0) break;
+    } else if (ch === "," && depth === 0) {
+      count++;
+      if (k < at) index++;
+    }
+  }
+  return { index, count };
+}
+
+/** For Java's own maps: which type argument each value of a method takes (0, the keys' type K; 1, the values' type V; -1, neither), by the number of values the call has. */
+const MAP_SLOTS: Record<string, (count: number) => number[]> = {
+  put: () => [0, 1],
+  putIfAbsent: () => [0, 1],
+  merge: () => [0, 1],
+  getOrDefault: () => [-1, 1],
+  replace: (count) => (count === 3 ? [0, 1, 1] : [0, 1]),
+};
+const JAVA_MAP = /^(?:Map|HashMap|TreeMap)$/;
+
+/**
+ * A value of the wrong type given to, or taken from, a method of an object whose class has a type
+ * parameter: box.set("three") or String s = box.get() with Box<Integer> box; list.add("a") with
+ * List<Integer> list. "incompatible types: String cannot be converted to Integer".
+ */
+function genericValue(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: ([\w$.]+(?:\[\])*) cannot be converted to ([\w$.]+(?:\[\])*)$/.exec(d.message);
+  const p = caretIn(d, own);
+  if (!m || !p) return null;
+  const [from, to] = [simple(m[1]), simple(m[2])];
+  const callOf = (end: number) => /(?<![\w$.])((?:this\s*\.\s*)?[\w$]+)\s*\.\s*([\w$]+)\s*$/.exec(p.code.slice(Math.max(0, end - 120), end));
+  // The methods of a class of the program's own with this name: only one of them tells which type parameter is meant.
+  const only = (t: OwnClass, name: string) => {
+    const ms = t.members.filter((x) => x.method && x.name === name && x.params != null);
+    return ms.length === 1 ? ms[0] : undefined;
+  };
+  // Taken out: the caret is on the ( of recv.method(...).
+  if (p.code[p.at] === "(") {
+    const out = callOf(p.at);
+    const recv = out?.[1].replace(/^this\s*\.\s*/, "");
+    const declared = recv ? typeArguments(changesOf(p.code, recv, p.at).type) : null;
+    const t = declared ? typeNamed(own, declared.cls, d.file) : undefined;
+    // For a class of the program's own, the method must give one of its type parameters (T for public T get()), and that one must be `from` here.
+    const at = t && out ? t.typeParams.indexOf(bareType(only(t, out[2])?.type ?? "")) : -1;
+    const gives = t ? at >= 0 && bareType(declared!.args[at] ?? "") === from : !!declared?.args.some((a) => bareType(a) === from);
+    if (out && recv && declared && gives && (t || GENERIC_LIBRARY.test(declared.cls)))
+      return `${recv} is ${anWord(`${declared.cls}<${declared.args.join(", ")}>`)}, so ${out[2]}() gives ${anWord(from)} here, not ${anWord(to)}${convertHint(from, to)}. Store it in ${anWord(from)} variable, or, if ${recv} should hold ${to} values, write ${BOX[to] ?? to} in its angle brackets.`;
+  }
+  // Put in: the caret is on a value in the parentheses of recv.method(...).
+  let depth = 0;
+  let open = -1;
+  for (let k = p.at - 1; k >= 0 && k > p.at - 400; k--) {
+    const ch = p.code[k];
+    if (")]}".includes(ch)) depth++;
+    else if ("([{".includes(ch)) {
+      if (depth-- > 0) continue;
+      if (ch === "(") open = k;
+      break;
+    } else if (ch === ";") break;
+  }
+  const call = open >= 0 ? callOf(open) : null;
+  if (!call) return null;
+  const recv = call[1].replace(/^this\s*\.\s*/, "");
+  const method = call[2];
+  const declared = typeArguments(changesOf(p.code, recv, p.at).type);
+  if (!declared || !declared.args.some((a) => bareType(a) === to)) return null;
+  const t = typeNamed(own, declared.cls, d.file);
+  if (!t && !GENERIC_LIBRARY.test(declared.cls)) return null;
+  // Which type argument the value is for: from the method's parameter at the value's place (a class of the program's own), or Java's own maps' methods.
+  const arg = argumentAt(p.code, open, p.at);
+  let at = -1;
+  let fixed = false;
+  if (t) {
+    const param = splitTopLevel(only(t, method)?.params ?? "")[arg.index]?.trim();
+    if (param) {
+      at = t.typeParams.indexOf(bareType(param));
+      fixed = at < 0 && bareType(param) === to;
+    }
+  } else if (declared.args.length === 1) at = 0;
+  else if (JAVA_MAP.test(declared.cls)) at = MAP_SLOTS[method]?.(arg.count)[arg.index] ?? -1;
+  // A comma inside angle brackets in an earlier value can throw the count off: the type argument must be `to`.
+  if (at >= 0 && bareType(declared.args[at] ?? "") !== to) at = -1;
+  const type = `${declared.cls}<${declared.args.join(", ")}>`;
+  const example = typeNamed(own, to, d.file)?.kind === "class" ? `, such as new ${to}(...)` : "";
+  const pass = `Pass ${anWord(to)}${example}${convertHint(from, to)}`;
+  // The method's parameter has a type of its own there, not a type parameter: the angle brackets have nothing to do with it.
+  if (fixed) return `${method} takes ${anWord(to)} here (its parameter is declared as ${to} in ${t!.name}), and this value is ${anWord(from)}. ${pass}.`;
+  if (at < 0) return `${recv} is ${anWord(type)}, and ${method} takes ${anWord(to)} here, but this value is ${anWord(from)}. ${pass}.`;
+  const param = t?.typeParams[at];
+  const other = `${declared.cls}<${declared.args.map((a, i) => (i === at ? (BOX[from] ?? from) : a)).join(", ")}>`;
+  const fills = param ? `, so its ${param} is ${to}: ${method} takes ${anWord(to)} here` : `, so ${method} takes ${anWord(to)} here${JAVA_MAP.test(declared.cls) ? ` as the ${at === 0 ? "key" : "value"}` : ""}`;
+  return `${recv} is ${anWord(type)}${fills}, and this value is ${anWord(from)}. ${pass}, or, if ${recv} should ${JAVA_MAP.test(declared.cls) ? `have ${from} ${at === 0 ? "keys" : "values"}` : `hold ${from} values`}, declare it as ${other}.`;
+}
+
+/** "Box<Integer> cannot be converted to Box<String>": the same class with other types in its angle brackets. */
+function otherTypeArguments(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: ([\w$.]+<.*>) cannot be converted to ([\w$.]+<.*>)$/.exec(d.message);
+  const [from, to] = [typeArguments(m?.[1] ?? null), typeArguments(m?.[2] ?? null)];
+  if (!m || !from || !to || from.args.join() === to.args.join()) return null;
+  const pairs: Record<string, string> = { ArrayList: "List|Collection", LinkedList: "List|Collection|Queue|Deque", HashSet: "Set|Collection", TreeSet: "Set|Collection", HashMap: "Map", TreeMap: "Map", List: "Collection", Set: "Collection" };
+  const related = from.cls === to.cls || new RegExp(`^(?:${pairs[from.cls] ?? "-"})$`).test(to.cls) || isSubtype(own, from.cls, to.cls);
+  if (!related) return null;
+  const parent = from.args.length === 1 && to.args.length === 1 && to.args[0] === "Object" ? ` (even though every ${from.args[0]} is an Object)` : "";
+  const diamond = /^new\s/.test(atCaret(d)?.at ?? "") ? ` With new ${from.cls}<>(...), the diamond, Java takes the types from the variable.` : "";
+  return `${anWord(m[1]).replace(/^a/, "A")} isn't ${anWord(m[2])}${parent}: the types in the angle brackets must be the same on both sides. Write the same types in both.${diamond}`;
+}
+
+/** Whether a name is a type parameter of the program's class that holds a line. */
+function typeParamAt(own: OwnClasses, file: string, line: number, name: string): boolean {
+  return !!classAt(own, file, line)?.typeParams.includes(name);
+}
+
+/** "Object[] cannot be converted to T[]" or "Object cannot be converted to T": an Object where the class's type parameter is wanted. */
+function objectForTypeParameter(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: Object(\[\])? cannot be converted to ([\w$]+)(\[\])?$/.exec(d.message);
+  if (!m || !!m[1] !== !!m[3] || !typeParamAt(own, d.file, d.line, m[2])) return null;
+  const t = m[2];
+  const at = atCaret(d)?.at ?? "";
+  const created = /^new\s+Object\s*\[([^\]]*)\]/.exec(at);
+  if (m[1]) return `${created ? `new Object[${created[1]}] creates` : "This is"} an array of Object, and the variable is ${anWord(`${t}[]`)}. Cast it, as the course does: (${t}[]) new Object[${created?.[1] ?? "10"}]. Java then prints a note that the program uses unchecked or unsafe operations: that's expected, and the program compiles and runs.`;
+  if (/^new\s+Object\s*\(/.test(at)) return `${t} stands for the type the class is used with, which isn't known here, so an Object can't go in ${anWord(t)} variable, and new ${t}() isn't possible either. Take the value from outside instead, as a parameter of the constructor or of a method (such as public void add(${t} value)), and store that.`;
+  // What the value is: an element of an array, a value from a list's get, or a variable, by the code at javac's caret.
+  const p = caretIn(d, own);
+  if (!p) return null;
+  const ch = p.code[p.at];
+  const name =
+    ch === "[" || ch === "("
+      ? /(?<![\w$.])(?:this\s*\.\s*)?([\w$]+)\s*(?:\.\s*[\w$]+\s*)?$/.exec(p.code.slice(Math.max(0, p.at - 120), p.at))?.[1]
+      : ch === "."
+        ? /^\.\s*([\w$]+)/.exec(p.code.slice(p.at))?.[1]
+        : /^[\w$]+/.exec(p.code.slice(p.at))?.[0];
+  const method = ch === "(" ? /\.\s*([\w$]+)\s*$/.exec(p.code.slice(Math.max(0, p.at - 120), p.at))?.[1] : undefined;
+  const type = name ? changesOf(p.code, name, p.at).type : null;
+  if (!name || !type) return null;
+  const unchecked = "Java then prints a note that the program uses unchecked or unsafe operations: that's expected, and the program compiles and runs.";
+  // An Object[] whose elements should be T: an element (values[index]) or a loop over it.
+  if (type === "Object[]" && ch !== "(")
+    return `${name} is an Object[], so its values are Objects, and ${t} stands for the type the class is used with, which may be any class, so Java won't put an Object in ${anWord(t)} variable. Declare ${name} as ${anWord(`${t}[]`)} instead, created with a cast as the course does (${name} = (${t}[]) new Object[10])${forEachAt(d, own) ? "" : `, or put (${t}) in front of the value`}. ${unchecked}`;
+  // A List<Object> whose values should be T.
+  const list = typeArguments(type);
+  if (list && /^(?:List|ArrayList|LinkedList)$/.test(list.cls) && list.args.length === 1 && bareType(list.args[0]) === "Object" && method === "get")
+    return `${name} is ${anWord(type)}, so ${name}.get(...) gives an Object, and ${t} stands for the type the class is used with, which may be any class, so Java won't put an Object in ${anWord(t)} variable. Declare ${name} as a List<${t}> instead, and create it with new ArrayList<>(): then get gives ${anWord(t)}.`;
+  // A variable declared as Object (a parameter, say): it should be declared as T.
+  if (type === "Object" && ch !== "(" && ch !== "[" && ch !== ".")
+    return `${name} is declared as Object, and ${t} stands for the type the class is used with, which may be any class, so Java won't put an Object in ${anWord(t)} variable. Declare ${name} as ${t} instead, as in a parameter declared as ${t}.`;
+  return null;
+}
+
+/** For Java's own maps: whether what a method gives (or a loop over what it gives goes through) has the keys' type (0) or the values' type (1). */
+const MAP_GIVES: Record<string, number> = { get: 1, getOrDefault: 1, put: 1, remove: 1, putIfAbsent: 1, replace: 1, values: 1, keySet: 0, firstKey: 0, lastKey: 0, floorKey: 0, ceilingKey: 0, higherKey: 0, lowerKey: 0 };
+
+/** "incompatible types: Object cannot be converted to String" from a variable of a generic class declared without its type in angle brackets. */
+function rawGeneric(d: Diagnostic, own: OwnClasses): string | null {
+  const to = /^incompatible types: Object cannot be converted to ([\w$.]+)$/.exec(d.message)?.[1];
+  const p = caretIn(d, own);
+  if (!to || !p) return null;
+  const wanted = BOX[to] ?? simple(to);
+  const loop = forEachAt(d, own);
+  const call = p.code[p.at] === "(" ? /(?<![\w$.])((?:this\s*\.\s*)?[\w$]+)\s*\.\s*([\w$]+)\s*$/.exec(p.code.slice(Math.max(0, p.at - 120), p.at)) : null;
+  const recv = loop?.collection && /^(?:this\s*\.\s*)?[\w$]+$/.test(loop.collection) ? loop.collection : call?.[1];
+  if (!recv) return null;
+  const name = recv.replace(/^this\s*\.\s*/, "");
+  const type = changesOf(p.code, name, p.at).type;
+  if (!type || type.includes("<")) return null;
+  const t = typeNamed(own, type, d.file);
+  if (!(t?.typeParams.length || GENERIC_LIBRARY.test(type))) return null;
+  // Java's own maps have two types in angle brackets, of the keys and of the values: which one this is depends on the method.
+  if (!t && JAVA_MAP.test(type)) {
+    const slot = call ? MAP_GIVES[call[2]] : undefined;
+    if (slot === undefined) return null;
+    const [part, other] = slot === 0 ? ["keys", "values"] : ["values", "keys"];
+    const what = loop ? `its ${part} are Objects for Java` : `${call![2]}() gives an Object`;
+    return `${name} is declared as ${type}, without types in angle brackets, so ${what}, and an Object can't go in ${anWord(to)} variable. Declare ${name} with the types of its keys and values in angle brackets: ${type}<${slot === 0 ? `${wanted}, ...` : `..., ${wanted}`}> (with the type of its ${other} in place of ...). Then ${loop ? `its ${part} are ${wanted} objects` : `${call![2]}() gives ${anWord(wanted)}`}.`;
+  }
+  const params = t?.typeParams ?? [];
+  // The type parameter that the method gives, for a class of the program's own: K for getKey() in Pair<K, V>.
+  let gives: string | undefined;
+  if (call && t) {
+    const member = t.members.find((x) => x.method && x.name === call[2]);
+    if (member) gives = bareType(member.type);
+    else {
+      // Inherited from another of the program's types: one that gives a type of its own (such as Object) gives it whatever the angle brackets say.
+      const inherited = ancestorsOf(own, t.name)
+        .map((a) => ({ a, m: a.members.find((x) => x.method && x.name === call[2]) }))
+        .find((x) => x.m);
+      if (inherited && !inherited.a.typeParams.includes(bareType(inherited.m!.type))) return null;
+    }
+    if (gives !== undefined && !params.includes(gives)) return null;
+  }
+  const at = gives ? params.indexOf(gives) : params.length === 1 ? 0 : -1;
+  const filled = params.length > 1 ? `${type}<${params.map((_, i) => (i === at ? wanted : "...")).join(", ")}>` : `${type}<${wanted}>`;
+  const what = loop ? `its values are Objects for Java` : `${call![2]}() gives an Object`;
+  const rest = params.filter((_, i) => i !== at);
+  const fill = params.length > 1 ? ` (with the type${rest.length > 1 ? "s" : ""} for ${listed(rest)} in place of ...)` : "";
+  return `${name} is declared as ${type}, without a type in angle brackets, so ${what}, and an Object can't go in ${anWord(to)} variable. Declare ${name} with its type in angle brackets: ${filled}${fill}. Then ${loop ? `its values are ${wanted} objects` : `${call![2]}() gives ${anWord(wanted)}`}.`;
+}
+
+/** A class that implements (or extends) one of the program's generic types without a type in angle brackets, so the method it must have takes Object. */
+function rawOwnGeneric(own: OwnClasses, cls: string, parent: OwnClass, method: string, params: string): string {
+  const keyword = parent.kind === "interface" ? "implements" : "extends";
+  const tp = parent.typeParams;
+  const wanted = splitTopLevel(params).map(bareType);
+  // The parent's own declaration of the method, as written: which of its parameters have a type parameter for a type.
+  const theirs = parent.members.find((x) => x.method && x.name === method && x.params != null && splitTopLevel(x.params).length === wanted.length);
+  // The method the class already has: the same name, as many parameters, and the same types wherever javac's list doesn't say Object.
+  const has = typeNamed(own, cls)?.members.find((x) => {
+    if (!x.method || x.name !== method || x.params == null || x.params === params) return false;
+    const ps = splitTopLevel(x.params).map(bareType);
+    return ps.length === wanted.length && ps.every((q, i) => wanted[i] === "Object" || q === wanted[i]);
+  });
+  const at = theirs && tp.length === 1 ? splitTopLevel(theirs.params!).map(bareType).indexOf(tp[0]) : wanted.indexOf("Object");
+  const guess = has && tp.length === 1 && at >= 0 ? splitTopLevel(has.params!)[at]?.trim() : undefined;
+  const sample = `${keyword} ${parent.name}<${tp.map((_, i) => SAMPLE_TYPES[i] ?? "String").join(", ")}>`;
+  const header = guess ? `: ${keyword} ${parent.name}<${guess}>` : `, in place of ${listed(tp)} in ${keyword} ${parent.name}<${tp.join(", ")}> (such as ${sample})`;
+  let then = "";
+  if (has) then = ` Then the ${method}(${spaced(has.params!)}) that ${cls} already has is the one it needs.`;
+  else {
+    // The parent's header of the method, with the sample types in place of its type parameters: public void put(String value).
+    const code = own.code.get(parent.file)?.slice(parent.from - 1, parent.to).join("\n") ?? "";
+    const written = new RegExp(`(?<![\\w$.])${escapeRegExp(method)}\\s*\\(([^()]*)\\)`).exec(code)?.[1];
+    const sampled = (text: string) => tp.reduce((acc, q, i) => acc.replace(new RegExp(`(?<![\\w$.])${escapeRegExp(q)}(?![\\w$])`, "g"), SAMPLE_TYPES[i] ?? "String"), text);
+    const list = written != null ? declared(written) : [];
+    const example = theirs && written != null && list.length === wanted.length ? `: for ${sample.replace(/^\w+ /, "")}, that's public ${sampled(theirs.type)} ${method}(${list.map((q) => `${sampled(q.type)} ${q.name}`).join(", ")}) { ... }` : "";
+    then = ` Then add ${method} to ${cls}, with the type${tp.length > 1 ? "s" : ""} you wrote in place of ${listed(tp)} wherever ${parent.name}'s ${method} has ${tp.length > 1 ? "them" : "it"}${example}.`;
+  }
+  return `${cls} ${keyword} ${parent.name} without a type in angle brackets, so Java fills in Object for ${listed(tp)}, and expects ${method}(${spaced(params)}). Write the type${tp.length > 1 ? "s" : ""} in ${cls}'s header${header}.${then}`;
+}
+
+/**
+ * The array access javac's caret is on, whose caret can be on one of its [ ]: grid and [0] for
+ * grid[0], also when the caret is on the [.
+ */
+function accessAtCaret(c: { line: string; at: string }): { name: string; groups: string; text: string } | null {
+  const before = /((?:this\s*\.\s*)?[\w$]+)\s*((?:\[[^\]]*\]\s*)*)$/.exec(beforeCaret(c));
+  const fromName = /^((?:this\s*\.\s*)?[\w$]+)\s*((?:\[[^\]]*\]\s*)+)/.exec(c.at);
+  const after = /^((?:\[[^\]]*\]\s*)+)/.exec(c.at);
+  const [name, groups] = after && before ? [before[1], before[2] + after[1]] : fromName ? [fromName[1], fromName[2]] : [null, null];
+  if (!name || !groups) return null;
+  const g = groups.replace(/\s+/g, "");
+  return { name, groups: g, text: `${name}${g}` };
+}
+
+/** Depth and base of an array type: int and 2 for int[][]. */
+const arrayType = (t: string) => ({ base: t.replace(/(\[\])+$/, ""), depth: (t.match(/\[\]/g) ?? []).length });
+/** An array type in words, for a value: "a two-dimensional array (an int[][])". */
+const arrayWords = (t: string) => {
+  const { depth } = arrayType(t);
+  return depth === 0 ? anWord(t) : depth === 1 ? `a one-dimensional array (${anWord(t)})` : `a ${depth === 2 ? "two" : depth === 3 ? "three" : depth}-dimensional array (${anWord(t)})`;
+};
+
+/**
+ * Array types with a different number of brackets: "int[] cannot be converted to int", "int cannot
+ * be converted to int[]", "int[][] cannot be converted to int[]": a row where one value is wanted,
+ * one value put in a row, a pair of brackets missing.
+ */
+function arrayLevels(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: ([\w$.]+(?:\[\])*) cannot be converted to ([\w$.]+(?:\[\])*)$/.exec(d.message);
+  if (!m) return null;
+  const [from, to] = [arrayType(m[1]), arrayType(m[2])];
+  if (from.base !== to.base || from.depth === to.depth) return null;
+  const c = atCaret(d);
+  const p = caretIn(d, own);
+  const levels = `${cap(anWord(`${to.base}[][]`))} is an array of rows: grid[row] is one row, ${anWord(`${to.base}[]`)}, and grid[row][column] is one value, ${anWord(to.base)}.`;
+  // for (int value : grid): each element of a two-dimensional array is a row.
+  const loop = forEachAt(d, own);
+  if (loop && from.depth === to.depth + 1) {
+    const coll = loop.collection ?? "the array";
+    if (from.depth === 1) return `Each element of ${coll} is a row, ${anWord(m[1])}, not one ${to.base}. Go through the rows, and then through each row's values: for (${m[1]} row : ${coll}) { for (${m[2]} ${loop.variable} : row) { ... } }.`;
+    return `Each element of ${coll} is ${arrayWords(m[1])}, not ${anWord(m[2])}. Give the loop variable that type: for (${m[1]} ${loop.variable} : ${coll}).`;
+  }
+  if (!c || !p) return null;
+  const before = p.code.slice(Math.max(0, p.at - 200), p.at);
+  // new int[3][4] for an int[] variable, or new int[3] for an int[][] one.
+  const created = /^new\s+[\w$.]+\s*((?:\[[^\]]*\])+)/.exec(c.at);
+  if (created) {
+    const declared = /([\w$.]+(?:\s*\[\s*\])+)\s+([\w$]+)\s*=\s*$/.exec(before);
+    const v = declared?.[2] ?? /([\w$.]+)\s*=\s*$/.exec(before)?.[1]?.replace(/^this\./, "");
+    const made = `new ${from.base}${created[1].replace(/\s+/g, "")}`;
+    if (from.depth > to.depth)
+      return `${made} creates ${arrayWords(m[1])}, but ${v ?? "the variable"} is ${anWord(m[2])}, with ${to.depth === 1 ? "one pair" : `${to.depth} pairs`} of brackets. Give the variable's type as many pairs of brackets as there are sizes in new: ${m[1]}${v ? ` ${v}` : ""}.`;
+    return `${made} creates ${arrayWords(m[1])}, but ${v ?? "the variable"} is ${anWord(m[2])}. Give new a size for each pair of brackets, as in new ${to.base}[3][4] for 3 rows of 4 values. To create the rows later, leave the last size out: new ${to.base}[3][].`;
+  }
+  // grid[1] = 5: a value put in a row.
+  const target = /(?<![\w$.])((?:this\s*\.\s*)?[\w$]+)\s*((?:\[[^\]]*\])+)\s*=\s*$/.exec(before);
+  if (target && from.depth < to.depth) {
+    const shown = `${target[1]}${target[2]}`.replace(/\s+/g, "");
+    if (to.depth === from.depth + 1 && from.depth === 0)
+      return `${shown} is a whole row of ${target[1]}, ${anWord(m[2])}, so it can't hold one ${from.base}. To set one value, give both indexes, the row and then the column: ${shown}[column] = ...;`;
+    return `${shown} is ${arrayWords(m[2])}, and the value is ${arrayWords(m[1])}. Give as many indexes as it takes to reach one value: ${levels}`;
+  }
+  // int[][] grid = {1, 2, 3}: the rows of a two-dimensional array's initializer need braces of their own.
+  if (from.depth < to.depth && /=\s*\{[^;]*$/.test(before) && !/[)\]]\s*\{[^{}]*$/.test(before))
+    return `A two-dimensional array is an array of rows, so its initializer lists rows, each in braces of its own: {{1, 2, 3}, {4, 5, 6}} is two rows of three values.`;
+  // A row where one value is wanted: grid[0] for grid[0][2], or one value where a row is wanted.
+  const value = accessAtCaret(c);
+  const assigned = !!value && new RegExp(`(?<![=!<>])=\\s*${escapeRegExp(value.name)}\\s*\\[`).test(c.line);
+  const brackets = value?.groups.match(/\[/g)?.length ?? 0;
+  if (value && from.depth > to.depth) {
+    if (from.depth === 1 && to.depth === 0 && brackets === 1)
+      return `${value.name} is a two-dimensional array, so ${value.text} is a whole row of it, ${anWord(m[1])}, not one ${to.base}. For one value, give both indexes, the row and then the column: ${value.text}[column].`;
+    return `${value.text} is ${arrayWords(m[1])}, not ${anWord(m[2])}. Give as many indexes as it takes: ${levels}`;
+  }
+  if (value && from.depth < to.depth && brackets >= 2 && assigned) {
+    const fewer = `${value.name}${value.groups.replace(/\[[^\]]*\]$/, "")}`;
+    return `${value.text} is one value of ${value.name}, ${anWord(m[1])}, and the variable is ${anWord(m[2])}, a whole row. For the row, give one index less: ${fewer}.`;
+  }
+  // A value passed to a method that takes another kind of array.
+  let depth = 0;
+  for (let k = p.at - 1; k >= 0 && k > p.at - 300; k--) {
+    const ch = p.code[k];
+    if (")]}".includes(ch)) depth++;
+    else if ("([{".includes(ch)) {
+      if (depth-- > 0) continue;
+      const method = ch === "(" ? /([\w$]+)\s*$/.exec(p.code.slice(Math.max(0, k - 60), k))?.[1] : undefined;
+      if (!method || NOT_A_METHOD.test(method)) break;
+      const arg = (/^\[/.test(c.at) && value ? value.text : /^[^,()]*(?:\([^()]*\)[^,()]*)*/.exec(c.at)?.[0].trim()) || "the value";
+      const fix =
+        from.depth > to.depth
+          ? `To pass one row, write ${/^[\w$.]+$/.test(arg) ? `${arg}[row]` : "one row"}; to pass the whole array, change the parameter to ${m[1]}.`
+          : `To pass the whole array, pass it without an index; or change the parameter to ${m[1]}.`;
+      return `${method} takes ${arrayWords(m[2])}, and ${arg} is ${arrayWords(m[1])}. ${fix}`;
+    } else if (ch === ";") break;
+  }
+  // The code before the value (javac's caret is on the ( of a method call, as in names.get(0)).
+  const lhs = c.at.startsWith("(") ? before.replace(/(?:[\w$]+\s*\.\s*)*[\w$]+\s*$/, "") : before;
+  const declared = /([\w$.]+(?:\s*\[\s*\])*)\s+([\w$]+)\s*=\s*$/.exec(lhs);
+  const assignedTo = declared?.[2] ?? /(?<![\w$.])(?:this\s*\.\s*)?([\w$]+)\s*=(?!=)\s*$/.exec(lhs)?.[1];
+  const valueName = /^((?:this\s*\.\s*)?[\w$]+)\s*(?=[;),])/.exec(c.at)?.[1];
+  if (from.depth === 1 && to.depth === 0)
+    return `${valueName ? `${valueName} is` : "This is"} an array of ${from.base} values, and ${assignedTo ? `${assignedTo} holds` : `${anWord(to.base)} variable holds`} one ${to.base}. Give the index of the value you want, as in ${valueName ?? "values"}[0].`;
+  if (from.depth === 0 && to.depth === 1) {
+    if (declared && assignedTo) return `${assignedTo} is declared as ${anWord(m[2])}, an array, and this value is one ${from.base}. To keep one value, declare it as ${from.base} ${assignedTo}. To make an array, create it with new ${from.base}[size] and put values in at their indexes.`;
+    if (assignedTo) return `${assignedTo} is ${anWord(m[2])}, an array, and this value is one ${from.base}. To put the value in the array, give the index where it goes: ${assignedTo}[0] = ...;`;
+    return `This is one ${from.base}, and ${anWord(m[2])} is an array of them. To put it in an array, give the index where it goes, as in values[0] = ...;`;
+  }
+  return `${cap(arrayWords(m[1]))} can't go where ${anWord(m[2])} is wanted: each pair of brackets is one level of array. ${levels}`;
+}
+
+/** "array required, but int found": an index on a value that isn't an array (one index too many, or a String or a list). */
+function arrayRequired(d: Diagnostic): string {
+  const found = /^array required, but (.+) found$/.exec(d.message)?.[1] ?? "";
+  const c = atCaret(d);
+  const before = c ? beforeCaret(c) : "";
+  const used = /((?:this\s*\.\s*)?[\w$]+)\s*((?:\[[^\]]*\])*)\s*$/.exec(before);
+  const v = used?.[1] ?? "text";
+  if (found === "String") return `A String isn't an array, so it can't take an index in [ ]. To get one of its characters, use charAt: ${v}.charAt(${/^\[([^\]]*)\]/.exec(c?.at ?? "")?.[1] ?? "0"}).`;
+  const kind = /^(?:List|ArrayList|LinkedList)\b/.test(found) ? "list" : /^(?:Map|HashMap|TreeMap)\b/.test(found) ? "map" : /^[A-Z]/.test(found) ? "object" : null;
+  const index = /^\[([^\]]*)\]/.exec(c?.at ?? "")?.[1] ?? "0";
+  if (kind === "list") return `A list isn't an array, so it can't take an index in [ ]. Use get: ${v}.get(${index}).`;
+  if (kind === "map") return `A map isn't an array, so it can't take a key in [ ]. Use get: ${v}.get(${index}).`;
+  if (kind === "object" || !used?.[2]) return `This value is ${anWord(found)}, not an array, so it can't take an index in [ ].`;
+  const shown = `${used[1]}${used[2]}`.replace(/\s+/g, "");
+  const n = (used[2].match(/\[/g) ?? []).length;
+  return `${shown} is already one ${found} value, so there is nothing for another index to pick. ${used[1]} takes ${n === 1 ? "one index" : `${n} indexes`}${n === 2 ? ", the row and then the column" : ""}: remove the extra one.`;
+}
+
+/** new Random(...) with a value that isn't a whole number: "no suitable constructor found for Random(String)". */
+function randomSeed(d: Diagnostic): string {
+  const given = /^no suitable constructor found for Random\((.*?)\)/.exec(d.message)?.[1] ?? "";
+  const one = given && !given.includes(",");
+  const what = !given ? "" : !one ? ` Here it got ${given.split(",").length} values.` : given === "String" ? " Here it got text: write the number without quotes." : /^(?:double|float|Double|Float)$/.test(given) ? ` Here it got ${anWord(given)}: a seed has no decimals.` : ` Here it got ${anWord(given)}.`;
+  return `new Random(...) takes a seed, which must be a whole number, such as new Random(42): the same seed gives the same numbers on every run. Or leave it out, new Random(), for different numbers each time.${what} (Java also lists a constructor Random(Void), which it keeps for itself: ignore it.)`;
+}
+
+/** javac's note about unchecked or unsafe operations, such as the cast in (T[]) new Object[10]. */
+function uncheckedNote(): string {
+  return "This is a note, not an error. Java says it can't check some types for you, most often because of a cast such as (T[]) new Object[10] in a generic class (the way the course builds its own lists), or a class used without its type in angle brackets, such as ArrayList instead of ArrayList<String>. The cast is fine to keep; @SuppressWarnings(\"unchecked\") above its method or constructor hides the note.";
+}
+
 /**
  * The message of a ClassCastException: "class Dog cannot be cast to class Cat (Dog and Cat are in
  * unnamed module of loader 'app')". `library` is whether it was thrown in Java's own code (its first
  * stack frame isn't in one of the learner's files), such as a TreeSet comparing its elements: then
  * the learner wrote no cast there.
  */
-function explainCast(m: string, library = false): string {
-  const c = /^class ([\w$.]+) cannot be cast to class ([\w$.]+)/.exec(m);
+function explainCast(m: string, library = false, crash?: CrashContext): string {
+  const c = /^class (\S+) cannot be cast to class (\S+)/.exec(m);
   if (!c) return "The program cast an object to a type it isn't.";
-  const [from, to] = [binarySimple(c[1]), binarySimple(c[2])];
+  const [fromArray, toArray] = [arrayTypeName(c[1]), arrayTypeName(c[2])];
+  if (fromArray && toArray) return arrayCast(fromArray, toArray, c[2], library ? undefined : crash);
+  const [from, to] = [fromArray ?? binarySimple(c[1]), toArray ?? binarySimple(c[2])];
   if (library && c[2] === "java.lang.Comparable") {
     // One of Java's own classes (such as Object) can't be changed: only a Comparator helps then.
     const jdk = /^(java|javax|jdk|sun)\./.test(c[1]);
@@ -2843,6 +3497,10 @@ type CrashContext = {
   caller?: string;
   /** When it's the innermost cause ("Caused by:") of the exception that stopped the program: that one's name, and the name of the one it's the cause of. */
   cause?: Wrapped;
+  /** The lines of the learner's files, by path, when their text is known. */
+  texts: Map<string, string[]>;
+  /** The same lines with comments and strings blanked out (see codeOnly). */
+  code: Map<string, string[]>;
 };
 
 type Wrapped = {
@@ -2998,6 +3656,8 @@ function explainIllegal(m: string, c: CrashContext): string {
   }
   if (/^Comparison method violates its general contract/.test(m))
     return "Sorting found that the program's compareTo or Comparator gives answers that contradict each other, such as that a comes before b and also that b comes before a. It must give a negative number when the first comes first, 0 when they're equal and a positive number when the second comes first, the same way every time. For numbers, Integer.compare(first, second) or Double.compare(first, second) does that.";
+  const bound = badBound(m, c);
+  if (bound) return bound;
   // Otherwise the program's own throw, or a method of Java's own that refused a value or its object's state.
   return refused(m, c);
 }
@@ -3044,10 +3704,293 @@ function explainConcurrent(_m: string, _library: boolean, frames: string[]): str
   return "The program added to or removed from a list while a for-each loop was going through it. Loop over the indexes instead (going backwards when removing), or collect the changes and make them after the loop. To remove elements while going through the list, use an Iterator: its remove() removes the element that next() gave last.";
 }
 
+/** The line of the learner's code a frame points at, as written and with comments and strings blanked out (see codeOnly), when its file's text is known. */
+function lineOf(c: CrashContext, f: Frame | undefined): { text: string; code: string } | null {
+  const text = f && c.texts.get(f.file)?.[f.line - 1];
+  const code = f && c.code.get(f.file)?.[f.line - 1];
+  return text != null && code != null ? { text, code } : null;
+}
+
+/** The array accesses on a line of code: each array's name (without this.) and its indexes, such as grid and [y, x] for grid[y][x]. */
+function accessesIn(line: string): { name: string; indexes: string[] }[] {
+  const out: { name: string; indexes: string[] }[] = [];
+  for (const m of line.matchAll(/(?<![\w$.])((?:this\s*\.\s*)?[\w$]+(?:\s*\.\s*[\w$]+)*)\s*\[/g)) {
+    if (/\bnew\s*$/.test(line.slice(0, m.index))) continue;
+    const indexes: string[] = [];
+    let k = m.index + m[0].length - 1;
+    while (line[k] === "[") {
+      let depth = 0;
+      let end = -1;
+      for (let j = k; j < line.length && end < 0; j++) {
+        if (line[j] === "[") depth++;
+        else if (line[j] === "]" && --depth === 0) end = j;
+      }
+      if (end < 0) break;
+      indexes.push(line.slice(k + 1, end).trim());
+      k = end + 1;
+      while (line[k] === " ") k++;
+    }
+    if (indexes.length && indexes.every(Boolean)) out.push({ name: m[1].replace(/^this\s*\.\s*/, "").replace(/\s+/g, ""), indexes: indexes.map((x) => x.replace(/\s+/g, " ")) });
+  }
+  return out;
+}
+
+/** The for loop that counts with the variable `v`, the last one whose header is between `from` and `upTo` in the code: its start value, condition and update, without spaces. */
+function counterOf(code: string, upTo: number, v: string, from = 0): { start: string; cond: string; update: string } | null {
+  const n = escapeRegExp(v);
+  let found: { start: string; cond: string; update: string } | null = null;
+  for (const m of code.slice(from, upTo).matchAll(new RegExp(`\\bfor\\s*\\(\\s*(?:int|long|short|byte)\\s+${n}\\s*=\\s*([^;]+);([^;]*);([^)]*)\\)`, "g")))
+    found = { start: m[1].replace(/\s+/g, ""), cond: m[2].replace(/\s+|this\./g, ""), update: m[3].replace(/\s+/g, "") };
+  return found;
+}
+
+/** Whether a counting loop's variable starts at 0 or more and only grows. */
+const countsUp = (l: { start: string; update: string } | null, v: string) => !!l && /^\d+$/.test(l.start) && new RegExp(`^(?:${escapeRegExp(v)}\\+\\+|\\+\\+${escapeRegExp(v)}|${escapeRegExp(v)}\\+=\\d+)$`).test(l.update);
+
+/** Where a line of a file's code starts, as an offset in its lines joined with line breaks. */
+const lineStart = (lines: string[], line: number) => (line > 1 ? lines.slice(0, line - 1).join("\n").length + 1 : 0);
+
+/** The parameters of the method or constructor whose body opens at `open` in the code, from its header: [{ type: "int", name: "count" }]. */
+function paramsBefore(code: string, open: number): { type: string; name: string }[] {
+  const h = HEADER_END.exec(code.slice(Math.max(0, open - 1000), open));
+  return h && !NOT_A_METHOD.test(h[1]) ? declared(h[2]) : [];
+}
+
+/** Whether the method or constructor whose body is `body` declares its own variable `name` (a parameter, or a local variable before `upTo`). */
+function declaresOwn(code: string, body: [number, number], name: string, upTo: number): boolean {
+  const n = escapeRegExp(name);
+  const local = new RegExp(`(?<![\\w$.])((?:[\\w$]+\\.)*[\\w$]+(?:\\s*<[^;{}()=]*>)?(?:\\s*\\[\\s*\\])*)\\s+${n}(?![\\w$])(?=\\s*[=;:])`, "g");
+  return paramsBefore(code, body[0]).some((p) => p.name === name) || [...code.slice(body[0], upTo).matchAll(local)].some((m) => !/^(?:return|new|throw|else|case|yield|assert|instanceof)$/.test(m[1]));
+}
+
+/** The conditions of the while and for loops in a piece of code (a for's second part), as written. */
+function loopConditions(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/\b(while|for)\s*\(/g)) {
+    const open = m.index + m[0].length - 1;
+    const end = pastClose(text, open);
+    if (end < 0) continue;
+    const inside = text.slice(open + 1, end - 1);
+    const cond = m[1] === "for" ? inside.split(";")[1] : inside;
+    if (cond != null) out.push(cond);
+  }
+  return out;
+}
+
+/**
+ * An index error on a two-dimensional array, grid[y][x]: which index it was (the row, in the first
+ * brackets, or the column, in the second) when the code tells, and the length it went past. Null
+ * when the line holds no such access, or other arrays too.
+ */
+function gridIndex(i: number, n: number, c: CrashContext): string | null {
+  const f = c.frames[0];
+  const line = lineOf(c, f)?.code;
+  const lines = f && c.code.get(f.file);
+  if (c.library || !f || !line || !lines) return null;
+  const distinct = [...new Map(accessesIn(line).map((a) => [`${a.name}[${a.indexes.join("][")}]`, a])).values()];
+  if (!distinct.length || distinct.some((a) => a.indexes.length !== 2) || new Set(distinct.map((a) => a.name)).size !== 1) return null;
+  const name = distinct[0].name;
+  const past = i !== n ? "" : n > 0 ? ` Index ${n} is one past the end: a loop with <= length instead of < length, or one counting down that starts at length, is a common cause.` : ` Index ${n} is one past the end.`;
+  const negative = i < 0 ? " Indexes start at 0, so a negative index never works: at the edge of the grid, check that a neighbor is inside the grid (such as y > 0) before reading it." : "";
+  if (distinct.length > 1)
+    return `The program asked for index ${i} of an array of length ${n}. This line reads ${name} with two indexes, [row][column]: the row index goes from 0 to ${name}.length - 1, and the column index from 0 to ${name}[row].length - 1.${negative || past}`;
+  const [row, col] = distinct[0].indexes;
+  const code = lines.join("\n");
+  const at = lines.slice(0, f.line - 1).join("\n").length;
+  const literal = (x: string) => (/^-?\d+$/.test(x) ? Number(x) : null);
+  // Loops and the array's creation count only in the method the line is in (another method may use the same names for other things).
+  const body = methodBodyAround(code, lineStart(lines, f.line));
+  const [rowLoop, colLoop] = [counterOf(code, at, row, body?.[0]), counterOf(code, at, col, body?.[0])];
+  const nm = escapeRegExp(name);
+  const bound = (l: { cond: string } | null, v: string) => (l ? new RegExp(`^${escapeRegExp(v)}(<=?)(.+)$`).exec(l.cond) : null);
+  const [rb, cb] = [bound(rowLoop, row), bound(colLoop, col)];
+  const rowsBound = new RegExp(`^${nm}\\.length$`);
+  const rowLength = new RegExp(`^${nm}\\[[^\\]]+\\]\\.length$`);
+  let canRow = true;
+  let canCol = true;
+  if (literal(row) != null && literal(row) !== i) canRow = false;
+  if (literal(col) != null && literal(col) !== i) canCol = false;
+  // A counter that starts at 0 or more and stays below the right length can't be the one.
+  if (rb?.[1] === "<" && rowsBound.test(rb[2]) && countsUp(rowLoop, row)) canRow = false;
+  if (cb?.[1] === "<" && cb[2] === `${name}[${row.replace(/\s+/g, "")}].length` && countsUp(colLoop, col)) canCol = false;
+  if (i < 0 && countsUp(rowLoop, row)) canRow = false;
+  if (i < 0 && countsUp(colLoop, col)) canCol = false;
+  // Created with sizes written as numbers, such as new int[3][4] (and no row created on its own): the length tells which.
+  // The creations of this array: in the method, when the method has its own variable of that name (a parameter or a local one); otherwise outside every method that does (a field's).
+  const local = !!body && declaresOwn(code, body, name, at);
+  const sizes = [...code.matchAll(new RegExp(`(?<![\\w$.])${nm}\\s*=\\s*new\\s+[\\w$]+\\s*\\[\\s*(\\d+)\\s*\\]\\s*\\[\\s*(\\d+)\\s*\\]`, "g"))].filter((m) => {
+    if (local && body) return m.index > body[0] && m.index < at;
+    const where = methodBodyAround(code, m.index);
+    return !where || !declaresOwn(code, where, name, m.index);
+  });
+  if (sizes.length === 1 && !new RegExp(`(?<![\\w$.])${nm}\\s*\\[[^\\]]*\\]\\s*=\\s*new\\b`).test(code)) {
+    const [rows, cols] = [Number(sizes[0][1]), Number(sizes[0][2])];
+    if (rows !== cols && (n === rows) !== (n === cols) && canRow && canCol) [canRow, canCol] = [n === rows, n === cols];
+  }
+  const swapped = rb && cb && rowLength.test(rb[2]) && rowsBound.test(cb[2]) ? ` The loops' bounds look swapped: ${row}, the row index, counts up to ${rb[2]}, the length of a row, and ${col}, the column index, counts up to ${cb[2]}, the number of rows. Swap them.` : "";
+  const access = `${name}[${row}][${col}]`;
+  const lessThan = (b: RegExpExecArray | null, v: string) => (b?.[1] === "<=" && i === n ? ` Its loop runs while ${v} <= ${b[2]}: use < instead of <=, since index ${n} is one past the end.` : "");
+  const named = (x: string) => (literal(x) != null ? "" : `, ${x},`);
+  if (canRow && !canCol) {
+    const has = n === 0 ? `${name} has no rows` : `${name} has ${plural(n, "row", "rows")}, so the row index must be from 0 to ${name}.length - 1, here 0 to ${n - 1}`;
+    return `In ${access}, the first index${named(row)} picks the row, and it was ${i}: ${has}.${swapped || lessThan(rb, row) || negative || past}`;
+  }
+  if (canCol && !canRow) {
+    const has = n === 0 ? "that row is empty" : `that row has ${plural(n, "value", "values")}, so the column index must be from 0 to ${name}[${row}].length - 1, here 0 to ${n - 1}`;
+    return `In ${access}, the second index${named(col)} picks the column (a value in the row), and it was ${i}: ${has}.${swapped || lessThan(cb, col) || negative || past}`;
+  }
+  return `${access} has two indexes: the first, ${row}, picks a row, from 0 to ${name}.length - 1, and the second, ${col}, picks a value in that row, from 0 to ${name}[${row}].length - 1. One of them was ${i}, and the array it went into has length ${n}.${swapped || negative || past}`;
+}
+
+/** An index error on a one-dimensional array that the line puts a value in at a count, as a list of your own does: the array is full. Also a negative index from hashCode(). */
+function arrayIndexHint(i: number, n: number, c: CrashContext): string | null {
+  const f = c.frames[0];
+  const line = lineOf(c, f)?.code;
+  if (c.library || !f || !line) return null;
+  const all = [...new Map(accessesIn(line).map((a) => [`${a.name}[${a.indexes.join("][")}]`, a])).values()];
+  if (all.length !== 1 || all[0].indexes.length !== 1) return null;
+  const [{ name, indexes: [index] }] = all;
+  const lines = c.code.get(f.file) ?? [];
+  if (i < 0 && lines.slice(Math.max(0, f.line - 6), f.line).some((l) => /\bhashCode\s*\(\s*\)/.test(l)))
+    return `The program asked for index ${i} of an array of length ${n}, and indexes start at 0. hashCode() can be negative, and so is the remainder % of a negative number: use Math.abs(key.hashCode() % ${name}.length) as the index, as the course's hash map does.`;
+  const assigned = new RegExp(`^\\s*(?:this\\s*\\.\\s*)?${escapeRegExp(name)}\\s*\\[[^\\]]*\\]\\s*=(?!=)`).test(line);
+  const counter = /^(?:this\s*\.\s*)?([\w$]+)(?:\s*\+\+)?$/.exec(index)?.[1];
+  const code = lines.join("\n");
+  const body = methodBodyAround(code, lineStart(lines, f.line));
+  if (i !== n || n === 0 || !assigned || !counter || counterOf(code, lines.slice(0, f.line - 1).join("\n").length, counter, body?.[0])) return null;
+  // A loop in the method that runs while the count is <= something, or up to <= the array's length: one step too far, not a full array (outOfBounds says so).
+  const tooFar = new RegExp(`(?<![\\w$.])(?:this\\s*\\.\\s*)?${escapeRegExp(counter)}\\s*<=|<=\\s*(?:this\\s*\\.\\s*)?${escapeRegExp(name)}\\s*\\.\\s*length\\b`);
+  if (body && loopConditions(code.slice(body[0], body[1] + 1)).some((cond) => tooFar.test(cond))) return null;
+  return `The program put a value at index ${n} of the array ${name}, whose length is ${n} (indexes 0 to ${n - 1}): the array is full. If it keeps the values of a list of your own, make room first: when ${counter} reaches ${name}.length, create a bigger array, copy the values into it, and keep that one, as the course's grow method does.`;
+}
+
+function explainArrayIndex(m: string, c: CrashContext): string {
+  const b = /^Index (-?\d+) out of bounds for length (\d+)$/.exec(m);
+  const [i, n] = b ? [Number(b[1]), Number(b[2])] : [NaN, NaN];
+  return (b && (gridIndex(i, n, c) ?? arrayIndexHint(i, n, c))) || (outOfBounds(m, "array") ?? `The program used an array index that doesn't exist. ${m}. Indexes go from 0 to length - 1.`);
+}
+
+/** An index error that the learner's code threw itself, as a list of their own does when asked for an index it doesn't have. */
+function indexThrown(m: string, c: CrashContext): string {
+  const [thrower] = c.frames;
+  const who = methodLabel(thrower);
+  const caller = c.frames.slice(1).find((f) => !(thrower.method.startsWith("lambda$") && f.method === who));
+  const intro = `Your own code threw it on purpose, with the throw in ${who} (${placeOf(thrower)})`;
+  const why = m ? ` Its message says why: ${sentence(m)}` : "";
+  if (c.cause) return `${intro}.${why}${wrappedIn(c)}`;
+  if (!caller) return `${intro}, and nothing caught it, so the program stopped.${why}`;
+  return `${intro}: the call in ${methodLabel(caller)} (${placeOf(caller)}) asked for an index that ${who} doesn't accept.${why} Check the index before that call: it must be 0 or more, and less than the number of values.`;
+}
+
+/** NegativeArraySizeException, whose message is the size: "-3". */
+function negativeSize(m: string, c: CrashContext): string {
+  const size = /^-\d+$/.test(m.trim()) ? ` of size ${m.trim()}` : " with a negative size";
+  const [thrower, caller] = c.frames;
+  const line = lineOf(c, thrower);
+  const made = line ? [...line.code.matchAll(/\bnew\s+[\w$.]+\s*\[/g)].map((x) => ({ index: x.index, array: newArrayAt(line.code.slice(x.index)) })).filter((x) => x.array) : [];
+  const what = made.length === 1 && line ? ` (${line.text.slice(made[0].index, made[0].index + made[0].array!.length).trim()})` : "";
+  let from = " Check where the size comes from: a calculation such as count - 1, or a number read from the input, can be negative.";
+  // The size names a whole-number parameter of the method: then it came from the call.
+  const lines = thrower && c.code.get(thrower.file);
+  if (thrower && caller && lines && !c.library && thrower.method !== "main" && made.length === 1) {
+    const code = lines.join("\n");
+    const body = methodBodyAround(code, lineStart(lines, thrower.line) + made[0].index);
+    const numbers = body ? paramsBefore(code, body[0]).filter((p) => /^(?:int|long|short|byte|char|Integer|Long|Short|Byte|Character)$/.test(p.type.trim())) : [];
+    const sizes = made[0].array!.sizes;
+    const param = numbers.find((p) => sizes.some((x) => new RegExp(`(?<![\\w$.])${escapeRegExp(p.name)}(?![\\w$])`).test(x)));
+    const via = `${methodLabel(thrower)} (${placeOf(thrower)}) from the call in ${methodLabel(caller)} (${placeOf(caller)})`;
+    if (param)
+      from = sizes.includes(param.name)
+        ? ` The size came to ${via}: check the value it passes.`
+        : ` The size is worked out from ${param.name}, which came to ${via}: check the value it passes, and the calculation.`;
+  }
+  return `The program tried to create an array${size}${what}, and an array's size must be 0 or more.${from}`;
+}
+
+/** Arguments of the first call of a method on a line, as written: "list.size()" for random.nextInt(list.size()). */
+function argumentsOn(line: { text: string; code: string } | null, method: RegExp): { method: string; args: string } | null {
+  if (!line) return null;
+  const m = new RegExp(`\\.\\s*(${method.source})\\s*\\(`).exec(line.code);
+  if (!m) return null;
+  const open = m.index + m[0].length - 1;
+  let depth = 0;
+  for (let k = open; k < line.code.length; k++) {
+    if (line.code[k] === "(") depth++;
+    else if (line.code[k] === ")" && --depth === 0) return { method: m[1], args: line.text.slice(open + 1, k).trim() };
+  }
+  return null;
+}
+
+/** IllegalArgumentException from Random (a bound of 0 or less) or from a list or a map created with a negative capacity. */
+function badBound(m: string, c: CrashContext): string | null {
+  if (!c.library) return null;
+  const line = lineOf(c, c.frames[0]);
+  const call = argumentsOn(line, /nextInt|nextLong|nextDouble|ints|longs|doubles/);
+  const given = call?.args ? ` Here it was ${call.args}` : "";
+  if (m === "bound must be positive") {
+    const empty = !call?.args ? "" : /\.size\(\)\s*$/.test(call.args) ? ` Here the bound is ${call.args}, so the list was empty: check that it isn't before picking from it.` : /\.length\s*$/.test(call.args) ? ` Here the bound is ${call.args}, so the array was empty: check that it isn't before picking from it.` : ` Here the bound is ${call.args}, which was 0 or less.`;
+    return `${call?.method ?? "nextInt"}(bound) gives a random number from 0 up to bound - 1, so the bound must be 1 or more.${empty || " Check the value the program gives it."}`;
+  }
+  if (m === "bound must be greater than origin") return `${call?.method ?? "nextInt"}(origin, bound) gives a random number from origin up to bound - 1, so bound must be larger than origin.${call?.args ? ` Here the call is ${call.method}(${call.args}), and the bound wasn't larger.` : ""}`;
+  if (m === "bound must be finite and positive") return `nextDouble(bound) gives a random number from 0 up to bound (not bound itself), so the bound must be above 0.${given ? `${given}.` : ""}`;
+  if (m === "size must be non-negative") return `${call?.method ?? "ints"}(count) gives a stream of count random numbers, so the count can't be negative.${given ? `${given}.` : ""}`;
+  const capacity = /^Illegal (?:Capacity|initial capacity): (-\d+)$/.exec(m);
+  if (capacity) {
+    // The class the program created: the outermost of Java's own constructors before its code (a HashSet makes a HashMap inside, and a Hashtable says "Capacity" as an ArrayList does).
+    const made = /^java\.util\.(\w+)\.<init>$/.exec(c.javaFrames.at(-1) ?? "")?.[1];
+    const cls = made ?? (/initial/.test(m) ? "HashMap" : "ArrayList");
+    const what = /Set$/.test(cls) ? "a set" : /Map$|^Hashtable$/.test(cls) ? "a map" : "a list";
+    return `The program created ${what} with the starting capacity ${capacity[1]}. The number in the parentheses of new ${cls}<>(...) is how many values it has room for at first (it grows by itself), so it can't be negative. Leave it out, as in new ${cls}<>(), or check the number.`;
+  }
+  return null;
+}
+
+/** An array type as Java writes it in a ClassCastException, [Ljava.lang.String; or [[I, as code writes it: String[], int[][]. */
+function arrayTypeName(descriptor: string): string | null {
+  const m = /^(\[+)(?:L([\w$.]+);|([ZBCSIJFD]))$/.exec(descriptor);
+  if (!m) return null;
+  const primitive: Record<string, string> = { Z: "boolean", B: "byte", C: "char", S: "short", I: "int", J: "long", F: "float", D: "double" };
+  return `${m[2] ? binarySimple(m[2]) : primitive[m[3]]}${"[]".repeat(m[1].length)}`;
+}
+
+/**
+ * A ClassCastException between array types, such as an Object[] (from (T[]) new Object[10]) used as a
+ * String[]. `descriptor` is the type it was cast to as Java writes it ([LOwnMap$Node;), and `c` the
+ * crash, when the line that threw is known: a cast on that line such as (String[]) new Object[3] failed there.
+ */
+function arrayCast(from: string, to: string, descriptor: string, c?: CrashContext): string {
+  const base = to.replace(/(\[\])+$/, "");
+  const line = c ? lineOf(c, c.frames[0]) : null;
+  const cast = line && /^Object(\[\])+$/.test(from) ? /\(\s*([\w$.]+)\s*((?:\[\s*\]\s*)+)\)\s*(new\s+Object\s*\[)/.exec(line.code) : null;
+  if (line && cast) {
+    const x = simple(cast[1]);
+    const pairs = cast[2].replace(/\s+/g, "");
+    const created = newArrayAt(line.text.slice(cast.index + cast[0].length - cast[3].length));
+    const sizes = created ? sizesText(created) : "[...]";
+    const all = [...c!.code.values()].map((l) => l.join("\n")).join("\n");
+    const intro = `The program created an array of Objects, new Object${sizes}, and cast it to ${x}${pairs}.`;
+    if (x === base) {
+      // A class inside a generic class: new Node[16] isn't allowed there, but new OwnMap.Node[16] is.
+      const outer = /^\[+L(?:[\w$]+\.)*([\w]+)\$[\w$]+;$/.exec(descriptor)?.[1];
+      const generic = !!outer && new RegExp(`\\b(?:class|interface|record)\\s+${escapeRegExp(outer)}\\s*<`).test(all) && !new RegExp(`\\bstatic\\b[^;{}()]*\\bclass\\s+${escapeRegExp(x)}\\b`).test(all);
+      const create = generic
+        ? `new ${outer}.${x}${sizes} (${x} is a class inside the generic class ${outer}, so new ${x}${sizes} on its own isn't allowed: the outer class's name goes in front, and Java then prints a note about unchecked operations, which is fine)`
+        : `new ${x}${sizes}`;
+      return `${intro} An array keeps the type it was created with, so this one is an Object[], and it can't be used as ${anWord(to)}: Java checks the cast and stops. Create it as ${anWord(to)} from the start: ${create}.`;
+    }
+    // (T[]) new Object[10] where T has a bound, such as T extends Comparable<T>: T[] is a Comparable[] when the program runs.
+    if (new RegExp(`[<,]\\s*${escapeRegExp(x)}\\s+extends\\s+(?:[\\w$]+\\.)*${escapeRegExp(base)}\\b`).test(all))
+      return `${intro} ${x} has a bound, ${x} extends ${base}, so when the program runs ${x}${pairs} is ${anWord(to)}, and an array keeps the type it was created with: an Object[] can't be used as ${anWord(to)}, so Java checks the cast and stops. Create an array of ${base} instead: (${x}${pairs}) new ${base}${sizes}.`;
+  }
+  if (/^Object(\[\])+$/.test(from))
+    return `The program used an array of Objects, ${anWord(from)}, as ${anWord(to)}. An array created with (T[]) new Object[...] in a generic class is an Object[], whatever T is: inside the class that works, but when a method gives the array out and the code that called it wants ${anWord(to)}, Java checks and stops. Don't give the array itself out of the class: give one value at a time, as get(index) does, or copy the values into a new ${base}[...] and give that.`;
+  return `The program cast ${anWord(from)} to ${anWord(to)}, but an array cast works only when the array really is of that type. Create a new ${to.replace(/\[\]/, "[...]")} and copy the values into it instead.`;
+}
+
 /** Each exception's explanation, from its message and what else is known about it (see CrashContext). */
 const EXCEPTIONS: [RegExp, (message: string, c: CrashContext) => string][] = [
   [/ArithmeticException$/, (m) => (/by zero/.test(m) ? "The program divided a whole number by zero (or took % 0)." : "A calculation failed.")],
-  [/ArrayIndexOutOfBoundsException$/, (m) => outOfBounds(m, "array") ?? `The program used an array index that doesn't exist. ${m}. Indexes go from 0 to length - 1.`],
+  [/ArrayIndexOutOfBoundsException$/, explainArrayIndex],
   [/StringIndexOutOfBoundsException$/, (m, c) => explainStringIndex(m, c.library, c.javaFrames)],
   [
     /IndexOutOfBoundsException$/,
@@ -3061,7 +4004,7 @@ const EXCEPTIONS: [RegExp, (message: string, c: CrashContext) => string][] = [
   [/NumberFormatException$/, explainNumber],
   [/InputMismatchException$/, () => "The program asked the Scanner for a number, but the next input wasn't one."],
   [/NoSuchElementException$/, (m, c) => explainNoSuchElement(m, c.library, c.javaFrames)],
-  [/ClassCastException$/, (m, c) => explainCast(m, c.library)],
+  [/ClassCastException$/, (m, c) => explainCast(m, c.library, c)],
   [/ConcurrentModificationException$/, (m, c) => explainConcurrent(m, c.library, c.javaFrames)],
   [/PatternSyntaxException$/, (m, c) => explainRegex(m, c.library, c.javaFrames, c.more)],
   [/StackOverflowError$/, () => "A method kept calling itself (or methods kept calling each other) without stopping, until the call stack ran out of room. Check the stopping condition of the recursion."],
@@ -3075,7 +4018,7 @@ const EXCEPTIONS: [RegExp, (message: string, c: CrashContext) => string][] = [
         ? `The program tried to create the folder ${m}, but it exists already, and Files.createDirectory fails then. Use Files.createDirectories instead: it creates the folder only when it's missing.`
         : `The program tried to create ${m}, but it exists already. Check with Files.exists(...) first, or write the file with Files.writeString, which replaces a file that exists.`,
   ],
-  [/NegativeArraySizeException$/, () => "The program tried to create an array with a negative size."],
+  [/NegativeArraySizeException$/, negativeSize],
   [/ArrayStoreException$/, () => "The program put an object of the wrong type into an array."],
   [/ExceptionInInitializerError$/, () => "Setting up a class failed: code in a static field or static block threw an exception."],
   [/IllegalArgumentException$|IllegalStateException$/, explainIllegal],
@@ -3108,12 +4051,21 @@ const LAUNCHER: [RegExp, (m: RegExpExecArray) => Crash][] = [
 
 /**
  * Reads an uncaught exception (or a launcher error, such as a missing main method) from a Java
- * program's stderr and explains it, or null if there is none. `sourceFiles` are the learner's
- * files ("Main.java", "library/domain/Book.java"): the reported line is the first stack frame in
- * one of them, and `file` is its path. When the exception has a cause ("Caused by:"), the
+ * program's stderr and explains it, or null if there is none. `files` are the learner's files,
+ * by path ("Main.java", "library/domain/Book.java") or with their text: the reported line is the
+ * first stack frame in one of them, and `file` is its path. With the text, an explanation can
+ * look at the line, such as which index of grid[y][x] was out of bounds. When the exception has a cause ("Caused by:"), the
  * innermost cause is explained.
  */
-export function explainCrash(stderr: string, sourceFiles: string[] = ["Main.java"]): Crash | null {
+export function explainCrash(stderr: string, files: (string | SourceFile)[] = ["Main.java"]): Crash | null {
+  const sourceFiles = files.map((f) => (typeof f === "string" ? f : f.path));
+  const texts = new Map<string, string[]>();
+  const code = new Map<string, string[]>();
+  for (const f of files) {
+    if (typeof f === "string" || f.text.length > 100_000) continue;
+    texts.set(f.path, f.text.split("\n"));
+    code.set(f.path, codeOnly(f.text).split("\n"));
+  }
   const lines = stderr.split("\n");
   for (const [re, make] of LAUNCHER) {
     const m = re.exec(lines[0] ?? "");
@@ -3198,10 +4150,15 @@ export function explainCrash(stderr: string, sourceFiles: string[] = ["Main.java
     const nameAt = (k: number) => lines[k].replace(/^Exception in thread "main" |^Caused by: /, "").split(": ")[0].trim().split(".").pop()!;
     cause = { wrapper: nameAt(w), ownWrapper: !!fileOf(lines[w + 1] ?? ""), outer: nameAt(start) };
   }
-  const c: CrashContext = { exception, library, frames, stack, javaFrames, more, caller, ...(cause ? { cause } : {}) };
-  const rule = EXCEPTIONS.find(([re]) => re.test(exception));
+  const c: CrashContext = { exception, library, frames, stack, javaFrames, more, caller, ...(cause ? { cause } : {}), texts, code };
+  // An index error the learner's code threw with throw, as a list of their own does when asked for an index it doesn't have.
+  // The line must throw this exception with throw new (not merely contain a throw whose message reads an array, as in throw new IllegalArgumentException("..." + limits[0])). A throw at the end of the line goes on on the next one.
+  const throwLine = lineOf(c, first)?.code ?? "";
+  const throwCode = /\bthrow\s*$/.test(throwLine) ? `${throwLine} ${lineOf(c, first && { ...first, line: first.line + 1 })?.code ?? ""}` : throwLine;
+  const thrownIndex = !library && !!first && /IndexOutOfBoundsException$/.test(exception) && new RegExp(`\\bthrow\\s+new\\s+(?:[\\w$.]+\\.)?${escapeRegExp(binarySimple(exception))}\\b`).test(throwCode);
+  const rule = thrownIndex ? ([/./, indexThrown] as const) : EXCEPTIONS.find(([re]) => re.test(exception));
   const explanation = rule ? rule[1](message, c) : uncaught(short, message, c);
   // An exception the learner's code threw itself: its explanation names the throw's file, line and method.
-  const placed = !library && !!first && (!rule || rule[1] === explainIllegal);
+  const placed = !library && !!first && (!rule || rule[1] === explainIllegal || rule[1] === indexThrown);
   return { exception: short, message, file: first?.file, line: first ? first.line : null, method: first ? methodLabel(first) : null, explanation, ...(placed ? { placed } : {}) };
 }

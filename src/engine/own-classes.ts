@@ -35,6 +35,8 @@ export type OwnClass = {
   abstract: boolean;
   /** Declared public (public class Book): code in other packages can use it. */
   public: boolean;
+  /** Declared with the word static (static class Node inside another class). A record, an enum or an interface inside a class is static without it. */
+  static: boolean;
   /** The simple names after extends in its header. */
   extends: string[];
   /** The simple names after implements in its header. */
@@ -47,6 +49,8 @@ export type OwnClass = {
   constructors: string[];
   /** An enum's constants, in order. */
   constants: string[];
+  /** Its type parameters, in order: T for class Box<T>, K and V for class Pair<K, V> (none for a class that isn't generic). */
+  typeParams: string[];
   /** Its file's path, with the folders (library/domain/Book.java). */
   file: string;
   /** The lines its declaration spans, from its header to its closing brace. */
@@ -176,6 +180,21 @@ function withoutTypeArguments(s: string): string {
   return out.join("");
 }
 
+/** The type parameters at the start of a header (the text after a type's name): K and V for "<K, V extends Comparable<V>> implements ...". */
+function typeParamsOf(header: string): string[] {
+  const s = header.trimStart();
+  if (!s.startsWith("<")) return [];
+  let depth = 0;
+  for (let k = 0; k < s.length; k++) {
+    if (s[k] === "<") depth++;
+    else if (s[k] === ">" && --depth === 0)
+      return splitTopLevel(s.slice(1, k))
+        .map((p) => /^\s*(?:@[\w$.]+\s+)*([A-Za-z_$][\w$]*)/.exec(p)?.[1] ?? "")
+        .filter(Boolean);
+  }
+  return [];
+}
+
 /** The simple names in a header after a word (extends, implements), up to the next such word. */
 function listAfter(plain: string, word: string): string[] {
   const parts = plain.split(/\b(extends|implements|permits)\b/);
@@ -297,12 +316,14 @@ function readFile(file: SourceFile, code: string, types: Map<string, OwnClass>, 
       kind: kind as OwnClass["kind"],
       abstract: kind === "interface" || /\babstract\b/.test(before),
       public: /\bpublic\b/.test(before),
+      static: /\bstatic\b/.test(before),
       extends: ext,
       implements: impl,
       supers: [...ext, ...impl],
       members,
       constructors,
       constants,
+      typeParams: typeParamsOf(header),
       file: file.path,
       from: lineAt(m.index),
       to: lineAt(close),

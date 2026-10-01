@@ -63,8 +63,8 @@ export function friendlyDiagnostics(list: Diagnostic[], sources: SourceFile[] = 
 }
 
 /** A sentence about what went wrong in a run, or undefined when it ended normally. `sources` are
- * the learner's file names, where the crash's line is looked for. */
-export function describeRun(r: RunResult | undefined, sources: string[] = ["Main.java"], limitMs = DEFAULT_TIME_LIMIT_MS): string | undefined {
+ * the learner's files (or their names), where the crash's line is looked for. */
+export function describeRun(r: RunResult | undefined, sources: (string | SourceFile)[] = ["Main.java"], limitMs = DEFAULT_TIME_LIMIT_MS): string | undefined {
   if (!r) return "This test didn't run.";
   if (r.internalError) return `The Java engine couldn't run the program (${r.internalError}). Try again; if it keeps happening, reload the page.`;
   if (r.timedOut) return `Time limit: the program ran for more than ${limitMs / 1000} seconds and was stopped. Look for a loop that never ends. What it printed until then is shown.`;
@@ -91,7 +91,6 @@ const JUNIT_TIME_LIMIT_MS = 30_000;
 
 export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   const own = splitFiles(code) as { path: string; text: string }[];
-  const sources = own.map((f) => f.path);
   const ruleProblems = checkRules(code, ex.require, ex.forbid) as string[];
   const style = indentProblems(own);
   const styleProblems = ex.style === "indent" ? style : [];
@@ -122,7 +121,7 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
     // The files the test wants written, once the run has ended by itself (a stopped run keeps none).
     const writes: WrittenFileCheck[] | undefined = t.writes && r && !r.internalError && !r.timedOut ? compareWrites(t.writes, r.files) : undefined;
     const pass = !!r && !r.internalError && !r.timedOut && r.exitCode === 0 && got === t.expect && (!t.writes || !!writes?.every((f) => f.pass));
-    const note = pass ? undefined : (describeRun(r, sources) ?? (writes && writesNote(writes, t.hidden)));
+    const note = pass ? undefined : (describeRun(r, own) ?? (writes && writesNote(writes, t.hidden)));
     const stderr = r?.stderr ? withoutCheckFrames(r.stderr) : "";
     return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, call: t.call, files: t.files, writes, expected: t.expect, got, note, stderr: !pass && stderr ? stderr : undefined };
   });
@@ -136,7 +135,6 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
  * least one to fail.
  */
 async function gradeJUnit(ex: Exercise, own: { path: string; text: string }[], rest: { ruleProblems: string[]; styleProblems: string[]; styleNotes: string[] }): Promise<GradeResult> {
-  const sources = own.map((f) => f.path);
   const libraries = [JUNIT_LIBRARY];
   // Files the challenge gives ready (the same in the starter code and the solution) are checked as
   // given: otherwise a learner could change the class under test to suit a wrong test.
@@ -176,7 +174,7 @@ async function gradeJUnit(ex: Exercise, own: { path: string; text: string }[], r
           ? `JUnit couldn't run the tests: ${report.problems[0]}. A test method needs @Test in front of it, and must be public void with no parameters.`
           : report.complete && report.run === 0
             ? "No test ran: a test method needs @Test in front of it, and must be public void with no parameters."
-            : describeRun(r, sources, JUNIT_TIME_LIMIT_MS) ?? "The tests stopped before the end."
+            : describeRun(r, own, JUNIT_TIME_LIMIT_MS) ?? "The tests stopped before the end."
         : t.outcome === "fail"
           ? "Every test passed, but this version has a bug your tests should catch. Add a test that fails on it."
           : `${failed} of ${report.run} ${report.run === 1 ? "test" : "tests"} failed on this version, which should pass every test. Check what those tests expect.`;
@@ -225,7 +223,7 @@ export async function runOnly(code: string, stdin: string, files?: Record<string
     ? await runClasses(c.classes, TEST_RUNNER_CLASS, [{ args: testClasses }], JUNIT_TIME_LIMIT_MS, { libraries })
     : await runClasses(c.classes, "Main", [{ stdin, ...(files ? { files } : {}) }], libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS, { libraries });
   if (run?.internalError) return { ...base, status: "internal-error", internalError: run.internalError };
-  return { ...base, status: "ran", run, written: changedFiles(files, run?.files), note: describeRun(run, own.map((f) => f.path), libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS) };
+  return { ...base, status: "ran", run, written: changedFiles(files, run?.files), note: describeRun(run, own, libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS) };
 }
 
 export type PredictResult = { pass: boolean; lines: { pass: boolean; got: string }[] };

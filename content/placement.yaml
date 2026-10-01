@@ -787,3 +787,96 @@ questions:
           System.out.println("Error");
       }
     why: "A new PrintWriter empties the file, so `zero` is gone before `one` is written. A FileWriter with `true` appends after `one`, and `print` doesn't end the line, so `two` and `three` make one line: `[one, twothree]`."
+  - module: generics
+    type: choice
+    classes: |
+      class Duo<A, B> {
+          private A first;
+          private B second;
+
+          public Duo(A first, B second) {
+              this.first = first;
+              this.second = second;
+          }
+
+          public A getFirst() {
+              return this.first;
+          }
+
+          public B getSecond() {
+              return this.second;
+          }
+
+          public Duo<B, A> swapped() {
+              return new Duo<>(this.second, this.first);
+          }
+      }
+    body: |
+      Duo<String, Integer> seat = new Duo<>("12", 7);
+    prompt: "Which line, added after this code, compiles?"
+    choices:
+      - "`Duo<String, Integer> back = seat.swapped();`"
+      - "`Duo<Integer, String> back = seat.swapped();`"
+      - "`String code = seat.swapped().getFirst();`"
+      - "`Integer row = seat.swapped().getSecond();`"
+    answer: 2
+    why: "`swapped()` returns a `Duo<B, A>`. For `seat`, A is String and B is Integer, so `seat.swapped()` is a `Duo<Integer, String>`: it fits a `Duo<Integer, String>` variable, but a `Duo<String, Integer>` variable can't hold it. In the swapped Duo, `getFirst()` returns an Integer (the 7) and `getSecond()` a String (the `\"12\"`), so an Integer can't go into the String `code`, and a String can't go into the Integer `row`."
+
+  - module: list-and-map-internals
+    type: predict
+    body: |
+      String[] trees = new String[2];
+      int size = 0;
+      String[] planted = {"ash", "elm", "oak"};
+      for (String tree : planted) {
+          if (size == trees.length) {
+              String[] bigger = new String[trees.length * 2];
+              for (int i = 0; i < size; i++) {
+                  bigger[i] = trees[i];
+              }
+              trees = bigger;
+          }
+          trees[size] = tree;
+          size++;
+      }
+      for (int i = 0; i < size - 1; i++) {
+          trees[i] = trees[i + 1];
+      }
+      trees[size - 1] = null;
+      size--;
+      System.out.println(size + " " + trees.length + " " + trees[0] + " " + trees[2]);
+    why: "The array starts with room for 2. The third tree finds it full, so a new array twice as long gets ash and elm copied in, and oak goes to index 2. Removing the first tree moves elm and oak one place to the left and clears the old last place: the size is 2, the array is still 4 long, `trees[0]` is elm and `trees[2]` is `null`."
+
+  - module: randomness
+    type: predict
+    body: |
+      Random random = new Random(7);
+      int smallest = 100;
+      int largest = -100;
+      for (int i = 0; i < 1000; i++) {
+          int roll = random.nextInt(6);
+          if (roll < smallest) {
+              smallest = roll;
+          }
+          if (roll > largest) {
+              largest = roll;
+          }
+      }
+      System.out.println(smallest + " " + largest);
+    why: "`nextInt(6)` returns a whole number from 0 to 5: the bound 6 itself never comes up. In 1000 draws each of the six values appears, so the smallest is 0 and the largest 5, whatever the seed. A die roll from 1 to 6 needs `random.nextInt(6) + 1`."
+
+  - module: multidimensional-arrays
+    type: predict
+    body: |
+      int[][] grid = new int[2][3];
+      for (int row = 0; row < grid.length; row++) {
+          for (int column = 0; column < grid[row].length; column++) {
+              grid[row][column] = row + 2 * column;
+          }
+      }
+      int sum = 0;
+      for (int[] line : grid) {
+          sum += line[line.length - 1];
+      }
+      System.out.println(grid.length + " " + grid[1][2] + " " + sum);
+    why: "`new int[2][3]` is 2 rows of 3 columns, so `grid.length` is 2 and each row is an `int[]` of length 3. Each cell holds its row plus twice its column, so `grid[1][2]` is 1 + 4 = 5. The last loop adds the last value of each row, 4 and 5, which is 9."

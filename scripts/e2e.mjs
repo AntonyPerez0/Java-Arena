@@ -973,6 +973,26 @@ await test('part 11 mistakes are explained: an unreported exception names its me
   await ctx.close();
 });
 
+await test('part 12 mistakes are explained: a primitive in angle brackets, and a grid index past the rows; a list of your own runs with only javac\'s note', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  // List<int>: the note names the class to use and writes the type out with it.
+  await setCode(page, 'import java.util.ArrayList;\nimport java.util.List;\n\n' + MAIN('        List<int> numbers = new ArrayList<>();\n        numbers.add(5);\n        System.out.println(numbers);'));
+  let out = await check(page);
+  expect(/line 6/i.test(out) && out.includes('int is a primitive type') && out.includes("List<int> isn't allowed") && out.includes('Use its wrapper class Integer instead: List<Integer>'), out);
+  // A grid whose loops have swapped bounds: the note says which index it was (the row), the length, and why.
+  await setCode(page, MAIN('        int[][] grid = new int[3][4];\n        for (int y = 0; y < grid[0].length; y++) {\n            for (int x = 0; x < grid.length; x++) {\n                grid[y][x] = x + y;\n            }\n        }'));
+  out = await check(page);
+  expect(/ArrayIndexOutOfBoundsException \(line 6\)/.test(out) && out.includes('In grid[y][x], the first index, y, picks the row, and it was 3: grid has 3 rows') && out.includes("The loops' bounds look swapped"), out);
+  // (T[]) new Object[4] in a generic class: javac prints a note about unchecked operations, and the program just runs.
+  await setCode(page, MAIN('        Stack<String> stack = new Stack<>();\n        stack.push("top");\n        System.out.println(stack.peek());') + '\nclass Stack<T> {\n    private T[] values = (T[]) new Object[4];\n    private int count;\n\n    public void push(T value) {\n        this.values[this.count] = value;\n        this.count++;\n    }\n\n    public T peek() {\n        return this.values[this.count - 1];\n    }\n}\n');
+  out = await check(page);
+  expect(/Output\s+top\s+Exit code 0/i.test(out) && !out.includes("didn't compile") && !/unchecked|crashed/i.test(out), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('playground: run a program with input, share it, open the link elsewhere', async () => {
   const { ctx, page, errors } = await newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);

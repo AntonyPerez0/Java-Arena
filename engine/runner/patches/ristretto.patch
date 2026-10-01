@@ -3206,15 +3206,16 @@ index 60f9aea..1cef40d 100644
  
 diff --git a/web/runner/src/arena.rs b/web/runner/src/arena.rs
 new file mode 100644
-index 0000000..23a7679
+index 0000000..d2b3e7a
 --- /dev/null
 +++ b/web/runner/src/arena.rs
-@@ -0,0 +1,426 @@
+@@ -0,0 +1,462 @@
 +//! Java Arena runner: execute precompiled class files with stdin and arguments supplied up front.
 +//!
-+//! Java stdout and stderr go to the component's WASI stdout and stderr as raw bytes, capped at
-+//! `outputLimit` bytes in total. The returned JSON reports the exit code and whether output was
-+//! truncated. Program files live in the host's in-memory file system under the working directory.
++//! Java stdout and stderr go to the component's WASI stdout and stderr as raw bytes, in the order
++//! the program wrote them, capped at `outputLimit` bytes in total. The returned JSON reports the
++//! exit code and whether output was truncated. Program files live in the host's in-memory file
++//! system under the working directory.
 +//!
 +//! The run follows the `java` launcher: the JDK's `LauncherHelper` reports a missing main class or
 +//! method, the program ends when `Runtime.halt` runs on any thread, and after `main` returns the
@@ -3230,7 +3231,7 @@ index 0000000..23a7679
 +use std::path::PathBuf;
 +use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 +use std::future::poll_fn;
-+use std::sync::{Arc, Mutex as StdMutex, Once};
++use std::sync::{Arc, Mutex as StdMutex, Once, PoisonError, TryLockError};
 +use std::task::{Poll, Waker};
 +use std::time::{Duration, Instant};
 +use tokio::sync::Mutex;
@@ -3258,6 +3259,44 @@ index 0000000..23a7679
 +    /// Set when a writer starts buffering output; [`drain_periodically`] waits for it.
 +    waiting: AtomicBool,
 +    waker: StdMutex<Option<Waker>>,
++    /// Output on its way to the host, shared by both writers (see [`Pending`]).
++    pending: StdMutex<Pending>,
++}
++
++/// Output waiting to go to the host. Both streams share one buffer, so the host gets stdout and
++/// stderr in the order the program wrote them: output for one stream first sends what the other
++/// has waiting.
++#[derive(Debug)]
++struct Pending {
++    stderr: bool,
++    bytes: Vec<u8>,
++    last_drain: Instant,
++}
++
++impl Default for Pending {
++    fn default() -> Self {
++        Self { stderr: false, bytes: Vec::new(), last_drain: Instant::now() }
++    }
++}
++
++impl Pending {
++    fn drain(&mut self) -> io::Result<()> {
++        if self.bytes.is_empty() {
++            return Ok(());
++        }
++        if self.stderr {
++            let mut sink = io::stderr().lock();
++            sink.write_all(&self.bytes)?;
++            sink.flush()?;
++        } else {
++            let mut sink = io::stdout().lock();
++            sink.write_all(&self.bytes)?;
++            sink.flush()?;
++        }
++        self.bytes.clear();
++        self.last_drain = Instant::now();
++        Ok(())
++    }
 +}
 +
 +impl OutputBudget {
@@ -3311,13 +3350,12 @@ index 0000000..23a7679
 +
 +/// Writes Java output to the component's stdout or stderr. Output is buffered because every
 +/// host call is expensive in the browser. The buffer is drained when it fills, on a newline once
-+/// `DRAIN_INTERVAL` has passed since the last drain, by [`drain_periodically`], after the run, and
-+/// by the panic hook, so the host sees output while the program runs and keeps it after a trap.
++/// `DRAIN_INTERVAL` has passed since the last drain, when the program writes to the other stream,
++/// by [`drain_periodically`], after the run, and by the panic hook, so the host sees output while
++/// the program runs, in the order it was written, and keeps it after a trap.
 +struct CappedWriter {
 +    budget: Arc<OutputBudget>,
 +    stderr: bool,
-+    buffer: Vec<u8>,
-+    last_drain: Instant,
 +}
 +
 +const FLUSH_THRESHOLD: usize = 16 * 1024;
@@ -3325,35 +3363,33 @@ index 0000000..23a7679
 +
 +impl CappedWriter {
 +    fn new(budget: Arc<OutputBudget>, stderr: bool) -> Self {
-+        Self { budget, stderr, buffer: Vec::new(), last_drain: Instant::now() }
++        Self { budget, stderr }
 +    }
 +
++    /// Send what waits in the shared buffer. It uses `try_lock`: the panic hook calls this too,
++    /// and the panic may have come while the buffer was locked.
 +    fn drain(&mut self) -> io::Result<()> {
-+        if self.buffer.is_empty() {
-+            return Ok(());
++        match self.budget.pending.try_lock() {
++            Ok(mut pending) => pending.drain(),
++            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner().drain(),
++            Err(TryLockError::WouldBlock) => Ok(()),
 +        }
-+        if self.stderr {
-+            let mut sink = io::stderr().lock();
-+            sink.write_all(&self.buffer)?;
-+            sink.flush()?;
-+        } else {
-+            let mut sink = io::stdout().lock();
-+            sink.write_all(&self.buffer)?;
-+            sink.flush()?;
-+        }
-+        self.buffer.clear();
-+        self.last_drain = Instant::now();
-+        Ok(())
 +    }
 +
 +    fn accept(&mut self, bytes: &[u8]) -> io::Result<()> {
-+        let was_empty = self.buffer.is_empty();
-+        self.buffer.extend_from_slice(bytes);
-+        if self.buffer.len() >= FLUSH_THRESHOLD
-+            || (bytes.contains(&b'\n') && self.last_drain.elapsed() >= DRAIN_INTERVAL)
++        let mut pending = self.budget.pending.lock().unwrap_or_else(PoisonError::into_inner);
++        if pending.stderr != self.stderr {
++            pending.drain()?;
++            pending.stderr = self.stderr;
++        }
++        let was_empty = pending.bytes.is_empty();
++        pending.bytes.extend_from_slice(bytes);
++        if pending.bytes.len() >= FLUSH_THRESHOLD
++            || (bytes.contains(&b'\n') && pending.last_drain.elapsed() >= DRAIN_INTERVAL)
 +        {
-+            self.drain()?;
-+        } else if was_empty && !self.buffer.is_empty() {
++            pending.drain()?;
++        } else if was_empty && !pending.bytes.is_empty() {
++            drop(pending);
 +            self.budget.signal_waiting();
 +        }
 +        Ok(())

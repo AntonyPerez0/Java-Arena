@@ -7,7 +7,7 @@ import type { ChallengeProgress } from "../state/store";
 import type { ReportInfo } from "../lib/site";
 import FilesEditor from "./FilesEditor";
 import FillCode from "./FillCode";
-import Results, { DiagnosticList } from "./Results";
+import Results, { DiagnosticList, WrittenFiles } from "./Results";
 import { CodeView } from "./highlight";
 import SymbolBar from "./SymbolBar";
 import HintsPanel from "./HintsPanel";
@@ -38,7 +38,8 @@ function announce(r: GradeResult): string {
 function announceRun(r: FreeRun): string {
   if (r.status === "compile-error") return "It didn't compile. The errors are listed below the input box.";
   if (r.status === "internal-error") return "The Java engine couldn't run this. Try again.";
-  return r.note ? "The program ran and stopped with a problem. The output and an explanation are below the input box." : "The program finished. Its output is below the input box.";
+  const files = r.written?.length ? ` and the ${r.written.length === 1 ? "file" : "files"} it wrote` : "";
+  return r.note ? `The program ran and stopped with a problem. The output${files} and an explanation are below the input box.` : `The program finished. Its output${files} ${files ? "are" : "is"} below the input box.`;
 }
 
 /** The editor (or the fill-in code), Check, Run with my input, results, hints and the solution. */
@@ -201,10 +202,12 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
               ) : (
                 <>
                   <span className="lbl">Output</span>
+                  {/* What the program printed and its error messages, in the order it wrote them. */}
                   <pre tabIndex={0} className="console">
-                    {(freeRun.run?.stdout ?? "") + (freeRun.run?.stderr ?? "") || "(no output)"}
+                    {freeRun.run?.output || "(no output)"}
                   </pre>
                   {freeRun.note && <div className="t-note">{freeRun.note}</div>}
+                  <WrittenFiles files={freeRun.written} />
                 </>
               )}
             </div>

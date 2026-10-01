@@ -33,6 +33,8 @@ export type RunInput = { stdin?: string; args?: string[]; files?: Record<string,
 export type RunResult = {
   stdout: string;
   stderr: string;
+  /** stdout and stderr together, in the order the program wrote them (as a terminal shows them). */
+  output: string;
   exitCode: number | null;
   timedOut: boolean;
   truncated: boolean;

@@ -2,8 +2,9 @@
 // source: the file under programs/ (default `${main}.java`); main: the class to run.
 // check: 'exact' (stdout, stderr first line, user stack frames, exit code, files), 'truncated'
 // (runner must stop at the output limit with HotSpot's first 64 KB), 'runner-only' (no HotSpot run)
-// 'streaming' (onOutput must deliver `expectOutput` within `withinMs` while the program loops) or
-// 'trap' (the WebAssembly instance traps; stdout must still start with `expectOutput`).
+// 'streaming' (onOutput must deliver `expectOutput` within `withinMs` while the program loops),
+// 'trap' (the WebAssembly instance traps; stdout must still start with `expectOutput`) or 'order'
+// (as 'exact', and `output`, stdout and stderr together, must be what HotSpot writes with 2>&1).
 // exactStderr: the whole of stderr must equal HotSpot's, not only its first line and user frames.
 export const cases = [
   { name: 'hello', main: 'Hello' },
@@ -46,6 +47,7 @@ export const cases = [
   { name: 'output-limit-endless', main: 'InfiniteOutput', check: 'runner-only' },
   { name: 'output-limit-utf8', main: 'Utf8Cap', check: 'truncated' },
   { name: 'streaming-output', main: 'OutputThenLoop', check: 'streaming', expectOutput: 'first line\nsecond line ä\n', withinMs: 1000 },
+  { name: 'output-order', main: 'Interleaved', check: 'order', exactStderr: true },
   { name: 'sleep', main: 'SleepTimes' },
   { name: 'exit-code-minus-1', main: 'ExitArg', args: ['-1'] },
   { name: 'exit-code-256', main: 'ExitArg', args: ['256'] },

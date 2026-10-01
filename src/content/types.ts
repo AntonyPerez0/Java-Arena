@@ -5,13 +5,15 @@
  * One test: the program's input, or `call`, code the check runs to call the learner's methods, or
  * `junit`, a test class of the program to run (on the program as written, or with the files in
  * `replace` swapped for other versions), which must give `outcome`: every test passes, or at least
- * one fails.
+ * one fails. `files` are files in the program's folder it can read; `writes` are files it must
+ * leave there, with their text as the reference solution wrote them (compared like output).
  */
 export type TestCase = {
   name: string;
   stdin: string;
   call?: string;
   files?: Record<string, string>;
+  writes?: Record<string, string>;
   expect: string;
   hidden?: boolean;
   junit?: string;

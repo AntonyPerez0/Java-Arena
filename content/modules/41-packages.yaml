@@ -1,0 +1,4430 @@
+id: packages
+summary: Packages, the named groups and folders that Java keeps its classes in. The package line and the folders that match it, the default package, full names, import lines (one class, or a whole package with *), public against package-private across packages and protected seen again, and a program split into domain, logic and ui packages. Last, how real projects lay out their packages. MOOC section 11.2.
+steps:
+  - id: packages-package-line
+    slug: package-line
+    title: "Packages: classes in folders"
+    text: |
+      Every program so far kept its files side by side: `Main.java`, `Heater.java`, `BankAccount.java`, all at the top. That's fine for five classes. A real program can have hundreds, and Java sorts them into **packages**: named groups of classes that belong together, each package in a folder of its own.
+
+      You've used packages since module 2. `import java.util.Scanner;` names the class `Scanner` of the package `java.util`, which holds Scanner, the lists, the maps and many other tools of Java's library. This module puts your own classes in packages.
+
+      ### The package line
+
+      A quiz app has questions, and each question checks the player's reply. Here's the start of the class `Question`, in the package `quiz.domain`:
+
+      ```java fragment
+      package quiz.domain;
+
+      public class Question {
+          ...
+      }
+      ```
+
+      - The first line of code says which package the class is in: `package quiz.domain;`. Only comments may come before it.
+      - The file's folders match the package. Each part of the name is a folder, and the dot goes one folder deeper: `Question.java` is in the folder `domain`, which is in the folder `quiz`. The file's path in the program is `quiz/domain/Question.java`.
+      - Package names are written in small letters, by custom everywhere, and this site requires it. On this site, a folder name is a Java name that starts with a small letter, followed by small letters, digits or `_`, and it can't be a word Java reserves, such as `class` or `new`.
+      - The word *domain* is often used for the classes of the things a program is about, here the questions. Step 4 comes back to it.
+
+      ### A class's full name
+
+      Here's the whole program. `Main.java` stays where it has always been, at the top, with no package line:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              quiz.domain.Question question = new quiz.domain.Question("Which planet is the largest?", "Jupiter", 2);
+              System.out.println(question);
+              System.out.println(question.isRight(" jupiter"));
+              System.out.println(question.isRight("Saturn"));
+              System.out.println(question.getClass().getName());
+          }
+      }
+      // ==== quiz/domain/Question.java ====
+      package quiz.domain;
+
+      public class Question {
+          private String prompt;
+          private String answer;
+          private int points;
+
+          public Question(String prompt, String answer, int points) {
+              this.prompt = prompt;
+              this.answer = answer;
+              this.points = points;
+          }
+
+          public boolean isRight(String reply) {
+              return reply.trim().equalsIgnoreCase(this.answer);
+          }
+
+          public int getPoints() {
+              return this.points;
+          }
+
+          @Override
+          public String toString() {
+              return this.prompt + " (" + this.points + " points)";
+          }
+      }
+      ```
+
+      ```output
+      Which planet is the largest? (2 points)
+      true
+      false
+      quiz.domain.Question
+      ```
+
+      - A class's **full name** is its package, a dot and its own name: `quiz.domain.Question`. Main is in another package, so here it writes the full name, both as the variable's type and after `new`. Step 2 shows a shorter way.
+      - `getClass().getName()` (module 34) gives the object's class by its full name.
+      - Inside its package, Question is written like every class you've written: instance variables, a constructor and methods. Only the first line is new.
+      - `isRight` removes spaces around the reply with `trim()` and ignores capital letters, so ` jupiter` counts.
+      - Question, its constructor and its methods are `public`, so Main, in another package, can use them. Step 3 explains why that matters.
+
+      A full name tells apart classes that share a simple name. A survey app could have its own class `Question` in a package `survey`: `survey.Question` and `quiz.domain.Question` are two different classes, and one program can use both. Java's own library has two types called `List`, for example: the interface `java.util.List` of module 35, and the class `java.awt.List`, a list shown in a window.
+
+      ### The default package
+
+      Every class you wrote before this module had no package line. A class without one is in the **default package**, a package without a name, and its full name is just its own name: `Heater`, `Main`. On this site, `Main` always stays there, at the top of the program, because the site starts every program from the class `Main`.
+
+      Classes of the same package use each other by their simple names, with nothing more. That's why your classes could always use each other: they were all in the default package. Inside `quiz.domain` it's the same: a class `Round` in that package could simply write `Question`.
+
+      ### Files in folders on this site
+
+      In a challenge, each file has a tab of its own, and a file in a folder shows its folders above its name, in small letters: `quiz/domain/` over `Question.java`. javac's messages name a file by its path, such as `quiz/domain/Question.java`.
+
+      **Your turn:** a shoe store's program keeps its classes in the package `shoestore.domain`. `Main.java` is ready: it uses the class `Shoe` by its full name. In `shoestore/domain/Shoe.java`, start with the package line, and then write the class `Shoe`, with:
+
+      - a constructor `Shoe(String model, int size)`
+      - `getSize()`, which returns the size
+      - `toString()`, which returns the model and the size, like `Trail runner, size 42`
+
+      The program prints:
+
+      ```
+      Trail runner, size 42
+      42
+      shoestore.domain.Shoe
+      ```
+    seed:
+      shoestore/domain/Shoe.java: |
+        // Write the package line first, then the class Shoe.
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                shoestore.domain.Shoe shoe = new shoestore.domain.Shoe("Trail runner", 42);
+                System.out.println(shoe);
+                System.out.println(shoe.getSize());
+                System.out.println(shoe.getClass().getName());
+            }
+        }
+    solution:
+      shoestore/domain/Shoe.java: |
+        package shoestore.domain;
+
+        public class Shoe {
+            private String model;
+            private int size;
+
+            public Shoe(String model, int size) {
+                this.model = model;
+                this.size = size;
+            }
+
+            public int getSize() {
+                return this.size;
+            }
+
+            @Override
+            public String toString() {
+                return this.model + ", size " + this.size;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                shoestore.domain.Shoe shoe = new shoestore.domain.Shoe("Trail runner", 42);
+                System.out.println(shoe);
+                System.out.println(shoe.getSize());
+                System.out.println(shoe.getClass().getName());
+            }
+        }
+    hints:
+      - "The file is in the folder `shoestore/domain/`, so its first line is `package shoestore.domain;`. After it comes the class, written as always: `public class Shoe {`."
+      - "Give Shoe two instance variables, the model and the size, and set them in the constructor. `toString` returns `this.model + \", size \" + this.size`."
+    require:
+      - pattern: \bpackage\s+shoestore\.domain\s*;
+        message: "Start `Shoe.java` with the line `package shoestore.domain;`: the file is in the folder `shoestore/domain/`."
+    tests:
+      - name: The program's output
+      - call: |
+          Shoe boot = new Shoe("Winter boot", 39);
+          System.out.println(boot);
+          System.out.println(boot.getSize() + 1);
+        hidden: true
+      - call: |
+          shoestore.domain.Shoe sandal = new shoestore.domain.Shoe("Sandal", 37);
+          System.out.println(sandal.getClass().getName() + ": " + sandal);
+        hidden: true
+    more:
+      - task: |
+          A school has lockers in its halls and in its gym, and its program has two classes called `Locker`: one in the default package, next to `Main`, and one in the package `school.gym`. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  school.gym.Locker gymLocker = new school.gym.Locker(14);
+                  Locker hallLocker = new Locker(14);
+                  gymLocker.lock();
+                  System.out.println(gymLocker);
+                  System.out.println(hallLocker);
+                  System.out.println(gymLocker.getClass().getName());
+                  System.out.println(hallLocker.getClass().getName());
+              }
+          }
+          // ==== Locker.java ====
+          public class Locker {
+              private int number;
+
+              public Locker(int number) {
+                  this.number = number;
+              }
+
+              @Override
+              public String toString() {
+                  return "Hall locker " + this.number;
+              }
+          }
+          // ==== school/gym/Locker.java ====
+          package school.gym;
+
+          public class Locker {
+              private int number;
+              private boolean locked;
+
+              public Locker(int number) {
+                  this.number = number;
+                  this.locked = false;
+              }
+
+              public void lock() {
+                  this.locked = true;
+              }
+
+              @Override
+              public String toString() {
+                  if (this.locked) {
+                      return "Gym locker " + this.number + ", locked";
+                  }
+                  return "Gym locker " + this.number + ", open";
+              }
+          }
+        hints:
+          - "`Locker` on its own, with no package, means the Locker of Main's own package: the default one, in `Locker.java` at the top. The full name `school.gym.Locker` means the other class."
+          - "`getName()` gives the full name of the object's class: with its package for the gym's locker, and just `Locker` for the class in the default package."
+      - task: |
+          A beekeeper's program keeps its classes in the folder `apiary/domain/`, for the package `apiary.domain`, but it doesn't compile: the package lines of both files are wrong. `Hive.java` has none, and `Harvest.java` names only part of the package. javac prints many messages for this. The telling one is `file does not contain class apiary.domain.Hive`: javac looked for the class in the folder of its package, and found a file whose package line is missing or says something else.
+
+          Fix the first line of code of each file so that it matches the file's folder. In `Hive.java`, the package line comes first, before the import. Don't change `Main.java`. The program should print:
+
+          ```
+          Linden: 2 harvests, 7300 grams
+          apiary.domain.Hive
+          ```
+        seed:
+          apiary/domain/Hive.java: |
+            import java.util.ArrayList;
+
+            public class Hive {
+                private String name;
+                private ArrayList<Harvest> harvests;
+
+                public Hive(String name) {
+                    this.name = name;
+                    this.harvests = new ArrayList<>();
+                }
+
+                public void add(Harvest harvest) {
+                    this.harvests.add(harvest);
+                }
+
+                public int totalGrams() {
+                    int total = 0;
+                    for (Harvest harvest : this.harvests) {
+                        total += harvest.getGrams();
+                    }
+                    return total;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + ": " + this.harvests.size() + " harvests, " + this.totalGrams() + " grams";
+                }
+            }
+          apiary/domain/Harvest.java: |
+            package apiary;
+
+            public class Harvest {
+                private String month;
+                private int grams;
+
+                public Harvest(String month, int grams) {
+                    this.month = month;
+                    this.grams = grams;
+                }
+
+                public int getGrams() {
+                    return this.grams;
+                }
+
+                @Override
+                public String toString() {
+                    return this.month + ": " + this.grams + " grams";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    apiary.domain.Hive hive = new apiary.domain.Hive("Linden");
+                    hive.add(new apiary.domain.Harvest("June", 4200));
+                    hive.add(new apiary.domain.Harvest("August", 3100));
+                    System.out.println(hive);
+                    System.out.println(hive.getClass().getName());
+                }
+            }
+        solution:
+          apiary/domain/Hive.java: |
+            package apiary.domain;
+
+            import java.util.ArrayList;
+
+            public class Hive {
+                private String name;
+                private ArrayList<Harvest> harvests;
+
+                public Hive(String name) {
+                    this.name = name;
+                    this.harvests = new ArrayList<>();
+                }
+
+                public void add(Harvest harvest) {
+                    this.harvests.add(harvest);
+                }
+
+                public int totalGrams() {
+                    int total = 0;
+                    for (Harvest harvest : this.harvests) {
+                        total += harvest.getGrams();
+                    }
+                    return total;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + ": " + this.harvests.size() + " harvests, " + this.totalGrams() + " grams";
+                }
+            }
+          apiary/domain/Harvest.java: |
+            package apiary.domain;
+
+            public class Harvest {
+                private String month;
+                private int grams;
+
+                public Harvest(String month, int grams) {
+                    this.month = month;
+                    this.grams = grams;
+                }
+
+                public int getGrams() {
+                    return this.grams;
+                }
+
+                @Override
+                public String toString() {
+                    return this.month + ": " + this.grams + " grams";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    apiary.domain.Hive hive = new apiary.domain.Hive("Linden");
+                    hive.add(new apiary.domain.Harvest("June", 4200));
+                    hive.add(new apiary.domain.Harvest("August", 3100));
+                    System.out.println(hive);
+                    System.out.println(hive.getClass().getName());
+                }
+            }
+        hints:
+          - "Both files are in the folder `apiary/domain/`, so both start with the same line: `package apiary.domain;`. `package apiary;` would be right only for a file in the folder `apiary/` itself."
+          - "In `Hive.java`, put `package apiary.domain;` on the very first line, above `import java.util.ArrayList;`. Hive uses Harvest without an import: once both are in `apiary.domain`, they're in the same package."
+        require:
+          - pattern: \bpackage\s+apiary\.domain\s*;
+            min: 2
+            message: "Both files are in the folder `apiary/domain/`, so each starts with `package apiary.domain;`."
+        tests:
+          - name: The program's output
+          - call: |
+              Hive clover = new Hive("Clover");
+              System.out.println(clover);
+              clover.add(new Harvest("May", 950));
+              System.out.println(clover + " / " + new Harvest("July", 2800));
+            hidden: true
+
+  - id: packages-import
+    slug: import
+    title: "import: short names for classes of other packages"
+    text: |
+      Writing `quiz.domain.Question` every time gets long. An **import** line at the top of a file lets the file's code use a class of another package by its simple name.
+
+      ### import
+
+      The quiz gets a second package, `quiz.logic`, with a class `Scorer` that adds up the points of the right answers. Main uses both classes, and imports both:
+
+      ```java run
+      import quiz.domain.Question;
+      import quiz.logic.Scorer;
+
+      public class Main {
+          public static void main(String[] args) {
+              Question planet = new Question("Which planet is the largest?", "Jupiter", 2);
+              Question gold = new Question("What is the chemical symbol for gold?", "Au", 3);
+              Scorer scorer = new Scorer();
+              System.out.println(scorer.answer(planet, "Jupiter"));
+              System.out.println(scorer.answer(gold, "Ag"));
+              System.out.println("Score: " + scorer.getScore());
+          }
+      }
+      // ==== quiz/domain/Question.java ====
+      package quiz.domain;
+
+      public class Question {
+          private String prompt;
+          private String answer;
+          private int points;
+
+          public Question(String prompt, String answer, int points) {
+              this.prompt = prompt;
+              this.answer = answer;
+              this.points = points;
+          }
+
+          public boolean isRight(String reply) {
+              return reply.trim().equalsIgnoreCase(this.answer);
+          }
+
+          public int getPoints() {
+              return this.points;
+          }
+
+          @Override
+          public String toString() {
+              return this.prompt + " (" + this.points + " points)";
+          }
+      }
+      // ==== quiz/logic/Scorer.java ====
+      package quiz.logic;
+
+      import quiz.domain.Question;
+
+      public class Scorer {
+          private int score;
+
+          public boolean answer(Question question, String reply) {
+              if (question.isRight(reply)) {
+                  this.score += question.getPoints();
+                  return true;
+              }
+              return false;
+          }
+
+          public int getScore() {
+              return this.score;
+          }
+      }
+      ```
+
+      ```output
+      true
+      false
+      Score: 2
+      ```
+
+      - `import quiz.domain.Question;` names a class by its full name. From then on, the file's code says just `Question`.
+      - An import counts only in its own file. Main imports Question for itself, and `Scorer.java` imports it again, since Scorer uses it too. Each file lists what it uses from other packages.
+      - In a file with a package line, the order is fixed: the package line, then the imports, then the class.
+      - An import copies nothing into the program and makes it no bigger. It only tells javac which class a simple name means.
+      - A class of the file's own package needs no import.
+
+      ### A forgotten import
+
+      Without `import quiz.logic.Scorer;`, javac looks for a Scorer in Main's own package and in the imports, and finds none:
+
+      ```java error
+      import quiz.domain.Question;
+
+      public class Main {
+          public static void main(String[] args) {
+              Question planet = new Question("Which planet is the largest?", "Jupiter", 2);
+              Scorer scorer = new Scorer();
+              System.out.println(scorer.answer(planet, "Jupiter"));
+          }
+      }
+      // ==== quiz/domain/Question.java ====
+      package quiz.domain;
+
+      public class Question {
+          private String prompt;
+          private String answer;
+          private int points;
+
+          public Question(String prompt, String answer, int points) {
+              this.prompt = prompt;
+              this.answer = answer;
+              this.points = points;
+          }
+
+          public boolean isRight(String reply) {
+              return reply.trim().equalsIgnoreCase(this.answer);
+          }
+
+          public int getPoints() {
+              return this.points;
+          }
+      }
+      // ==== quiz/logic/Scorer.java ====
+      package quiz.logic;
+
+      import quiz.domain.Question;
+
+      public class Scorer {
+          private int score;
+
+          public boolean answer(Question question, String reply) {
+              if (question.isRight(reply)) {
+                  this.score += question.getPoints();
+                  return true;
+              }
+              return false;
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:6: error: cannot find symbol
+              Scorer scorer = new Scorer();
+              ^
+        symbol:   class Scorer
+        location: class Main
+      Main.java:6: error: cannot find symbol
+              Scorer scorer = new Scorer();
+                                  ^
+        symbol:   class Scorer
+        location: class Main
+      2 errors
+      ```
+
+      `cannot find symbol` with `symbol: class Scorer` is the message for a class that javac doesn't know by that name. For a class of your own program, the fix is usually an import (or the full name).
+
+      ### A whole package with *
+
+      `import quiz.domain.*;` imports every class of the package `quiz.domain` at once: the file can then use any of them by its simple name. Two things to know:
+
+      - The `*` covers the classes of that one package, not the packages in its folders. `import quiz.*;` doesn't import `quiz.domain.Question`. The quiz has no classes in the package `quiz` itself, so javac even says `package quiz does not exist`.
+      - Many programmers prefer one import per class, so that the top of a file lists exactly what the file uses. Programming editors write these lines for you. Both ways work the same.
+
+      ### java.util was a package all along
+
+      `import java.util.Scanner;` and `import java.util.ArrayList;` are imports of classes of Java's package `java.util`, just like the imports above. `import java.util.*;` works too. And the classes you've used without any import, such as `String`, `Math`, `Integer` and `System`, are in the package `java.lang`, which every Java file imports automatically.
+
+      ### Full names instead of an import
+
+      A full name works without any import, for Java's classes too:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              java.util.ArrayList<String> planets = new java.util.ArrayList<>();
+              planets.add("Saturn");
+              planets.add("Jupiter");
+              planets.add("Mars");
+              java.util.Collections.sort(planets);
+              System.out.println(planets);
+          }
+      }
+      ```
+
+      ```output
+      [Jupiter, Mars, Saturn]
+      ```
+
+      With imports this is easier to read, so full names are mostly used when two classes share a simple name. One file can't import both: after `import quiz.domain.Question;`, the name `Question` is taken, and `import survey.Question;` doesn't compile. javac says `a type with the same simple name is already defined by the single-type-import of Question`. The fix is to import one of them and write the other one's full name:
+
+      ```java fragment
+      import quiz.domain.Question;
+
+      ...
+      Question planet = new Question("Which planet is the largest?", "Jupiter", 2);
+      survey.Question opinion = new survey.Question("Did you like the quiz?");
+      ```
+
+      **Your turn:** the shoe store's program has grown a second package, `shoestore.logic`, with a class `Stock`, which uses `Shoe` from `shoestore.domain`. `Shoe.java` and `Stock.java` are ready, but `Main.java` doesn't compile: it uses both classes by their simple names without importing them. Add the import lines at the top of `Main.java`, one for each class (or one for each package with `*`), and don't change the rest. The program prints:
+
+      ```
+      3 pairs
+      2 pairs in size 42
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Stock stock = new Stock();
+                stock.add(new Shoe("Trail runner", 42));
+                stock.add(new Shoe("Winter boot", 39));
+                stock.add(new Shoe("Loafer", 42));
+                System.out.println(stock.count() + " pairs");
+                System.out.println(stock.countSize(42) + " pairs in size 42");
+            }
+        }
+      shoestore/logic/Stock.java: |
+        package shoestore.logic;
+
+        import java.util.ArrayList;
+        import shoestore.domain.Shoe;
+
+        public class Stock {
+            private ArrayList<Shoe> shoes;
+
+            public Stock() {
+                this.shoes = new ArrayList<>();
+            }
+
+            public void add(Shoe shoe) {
+                this.shoes.add(shoe);
+            }
+
+            public int count() {
+                return this.shoes.size();
+            }
+
+            public int countSize(int size) {
+                int count = 0;
+                for (Shoe shoe : this.shoes) {
+                    if (shoe.getSize() == size) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
+      shoestore/domain/Shoe.java: |
+        package shoestore.domain;
+
+        public class Shoe {
+            private String model;
+            private int size;
+
+            public Shoe(String model, int size) {
+                this.model = model;
+                this.size = size;
+            }
+
+            public int getSize() {
+                return this.size;
+            }
+
+            @Override
+            public String toString() {
+                return this.model + ", size " + this.size;
+            }
+        }
+    solution:
+      Main.java: |
+        import shoestore.domain.Shoe;
+        import shoestore.logic.Stock;
+
+        public class Main {
+            public static void main(String[] args) {
+                Stock stock = new Stock();
+                stock.add(new Shoe("Trail runner", 42));
+                stock.add(new Shoe("Winter boot", 39));
+                stock.add(new Shoe("Loafer", 42));
+                System.out.println(stock.count() + " pairs");
+                System.out.println(stock.countSize(42) + " pairs in size 42");
+            }
+        }
+      shoestore/logic/Stock.java: |
+        package shoestore.logic;
+
+        import java.util.ArrayList;
+        import shoestore.domain.Shoe;
+
+        public class Stock {
+            private ArrayList<Shoe> shoes;
+
+            public Stock() {
+                this.shoes = new ArrayList<>();
+            }
+
+            public void add(Shoe shoe) {
+                this.shoes.add(shoe);
+            }
+
+            public int count() {
+                return this.shoes.size();
+            }
+
+            public int countSize(int size) {
+                int count = 0;
+                for (Shoe shoe : this.shoes) {
+                    if (shoe.getSize() == size) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
+      shoestore/domain/Shoe.java: |
+        package shoestore.domain;
+
+        public class Shoe {
+            private String model;
+            private int size;
+
+            public Shoe(String model, int size) {
+                this.model = model;
+                this.size = size;
+            }
+
+            public int getSize() {
+                return this.size;
+            }
+
+            @Override
+            public String toString() {
+                return this.model + ", size " + this.size;
+            }
+        }
+    hints:
+      - "javac says `cannot find symbol` for `Stock` and `Shoe`: Main is in the default package, and the two classes are in other packages."
+      - "The first lines of `Main.java` become `import shoestore.domain.Shoe;` and `import shoestore.logic.Stock;`, above `public class Main`."
+    require:
+      - pattern: "==== Main\\.java ====(?:(?!// ====)[\\s\\S])*(?:^|;)[ \\t]*import\\s+shoestore\\.domain\\.(?:Shoe|\\*)\\s*;"
+        flags: m
+        raw: true
+        message: "Import Shoe at the top of `Main.java`: `import shoestore.domain.Shoe;`."
+      - pattern: "==== Main\\.java ====(?:(?!// ====)[\\s\\S])*(?:^|;)[ \\t]*import\\s+shoestore\\.logic\\.(?:Stock|\\*)\\s*;"
+        flags: m
+        raw: true
+        message: "Import Stock at the top of `Main.java`: `import shoestore.logic.Stock;`."
+    tests:
+      - name: The program's output
+      - call: |
+          Stock stock = new Stock();
+          stock.add(new Shoe("Sandal", 37));
+          stock.add(new Shoe("Sneaker", 37));
+          System.out.println(stock.count() + " " + stock.countSize(37) + " " + stock.countSize(42));
+        hidden: true
+    more:
+      - task: |
+          A school's timetable program has two classes in the package `school.domain`: `Period`, a lesson of the day with its subject and its number, and `Teacher`. Main imports the whole package. What does this program print?
+        predict: |
+          import school.domain.*;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Teacher teacher = new Teacher("Ms. Ito");
+                  teacher.teach(new Period("Math", 1));
+                  teacher.teach(new Period("Art", 3));
+                  java.util.ArrayList<String> subjects = teacher.subjects();
+                  subjects.add("Music");
+                  System.out.println(teacher + " " + subjects);
+                  System.out.println(subjects.getClass().getName());
+                  System.out.println(teacher.getClass().getName());
+              }
+          }
+          // ==== school/domain/Period.java ====
+          package school.domain;
+
+          public class Period {
+              private String subject;
+              private int number;
+
+              public Period(String subject, int number) {
+                  this.subject = subject;
+                  this.number = number;
+              }
+
+              public String getSubject() {
+                  return this.subject;
+              }
+
+              public int getNumber() {
+                  return this.number;
+              }
+          }
+          // ==== school/domain/Teacher.java ====
+          package school.domain;
+
+          import java.util.ArrayList;
+
+          public class Teacher {
+              private String name;
+              private ArrayList<Period> periods;
+
+              public Teacher(String name) {
+                  this.name = name;
+                  this.periods = new ArrayList<>();
+              }
+
+              public void teach(Period period) {
+                  this.periods.add(period);
+              }
+
+              public ArrayList<String> subjects() {
+                  ArrayList<String> subjects = new ArrayList<>();
+                  for (Period period : this.periods) {
+                      subjects.add(period.getSubject());
+                  }
+                  return subjects;
+              }
+
+              @Override
+              public String toString() {
+                  return this.name + " teaches " + this.periods.size() + " periods";
+              }
+          }
+        hints:
+          - "`import school.domain.*;` lets Main use both Teacher and Period by their simple names. Teacher uses Period without an import, since they're in the same package."
+          - "`subjects()` builds a new list each time it's called, so adding Music to that list doesn't give the teacher a third period. `java.util.ArrayList` is the list's full name, and Teacher's full name starts with its package."
+      - task: |
+          `Period.java` from the previous task is ready in `school/domain/`. In `school/logic/SchoolDay.java`, write the class `SchoolDay` in the package `school.logic`, with the import lines it needs, and:
+
+          - a constructor `SchoolDay()`, which makes a day with no periods yet
+          - `add(Period period)`, which adds a period to the day
+          - `subjectAt(int number)`, which returns the subject of the period with that number, or `free` if the day has no period with that number
+          - `count(String subject)`, which returns how many periods of that subject the day has
+
+          The check runs:
+
+          ```java fragment
+          SchoolDay monday = new SchoolDay();
+          monday.add(new Period("Math", 1));
+          monday.add(new Period("Biology", 2));
+          monday.add(new Period("Math", 4));
+          System.out.println(monday.subjectAt(2));
+          System.out.println(monday.subjectAt(3));
+          System.out.println(monday.count("Math"));
+          ```
+
+          and expects:
+
+          ```
+          Biology
+          free
+          2
+          ```
+        seed:
+          school/logic/SchoolDay.java: |
+            // Write the package line, the imports and the class SchoolDay here.
+          school/domain/Period.java: |
+            package school.domain;
+
+            public class Period {
+                private String subject;
+                private int number;
+
+                public Period(String subject, int number) {
+                    this.subject = subject;
+                    this.number = number;
+                }
+
+                public String getSubject() {
+                    return this.subject;
+                }
+
+                public int getNumber() {
+                    return this.number;
+                }
+            }
+          Main.java: |
+            import school.domain.Period;
+            import school.logic.SchoolDay;
+
+            public class Main {
+                public static void main(String[] args) {
+                    SchoolDay monday = new SchoolDay();
+                    monday.add(new Period("Math", 1));
+                    monday.add(new Period("Biology", 2));
+                    monday.add(new Period("Math", 4));
+                    System.out.println(monday.subjectAt(2));
+                    System.out.println(monday.subjectAt(3));
+                    System.out.println(monday.count("Math"));
+                }
+            }
+        solution:
+          school/logic/SchoolDay.java: |
+            package school.logic;
+
+            import java.util.ArrayList;
+            import school.domain.Period;
+
+            public class SchoolDay {
+                private ArrayList<Period> periods;
+
+                public SchoolDay() {
+                    this.periods = new ArrayList<>();
+                }
+
+                public void add(Period period) {
+                    this.periods.add(period);
+                }
+
+                public String subjectAt(int number) {
+                    for (Period period : this.periods) {
+                        if (period.getNumber() == number) {
+                            return period.getSubject();
+                        }
+                    }
+                    return "free";
+                }
+
+                public int count(String subject) {
+                    int count = 0;
+                    for (Period period : this.periods) {
+                        if (period.getSubject().equals(subject)) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+            }
+          school/domain/Period.java: |
+            package school.domain;
+
+            public class Period {
+                private String subject;
+                private int number;
+
+                public Period(String subject, int number) {
+                    this.subject = subject;
+                    this.number = number;
+                }
+
+                public String getSubject() {
+                    return this.subject;
+                }
+
+                public int getNumber() {
+                    return this.number;
+                }
+            }
+          Main.java: |
+            import school.domain.Period;
+            import school.logic.SchoolDay;
+
+            public class Main {
+                public static void main(String[] args) {
+                    SchoolDay monday = new SchoolDay();
+                    monday.add(new Period("Math", 1));
+                    monday.add(new Period("Biology", 2));
+                    monday.add(new Period("Math", 4));
+                    System.out.println(monday.subjectAt(2));
+                    System.out.println(monday.subjectAt(3));
+                    System.out.println(monday.count("Math"));
+                }
+            }
+        hints:
+          - "The file starts with `package school.logic;`, then two imports: `java.util.ArrayList` for the list, and `school.domain.Period`, which is in another package. Then comes `public class SchoolDay {`."
+          - "Keep the periods in an `ArrayList<Period>`. `subjectAt` goes through them and returns the subject of the one whose `getNumber()` is the number; after the loop, it returns `\"free\"`. `count` compares subjects with `equals`."
+        require:
+          - pattern: "==== school/logic/SchoolDay\\.java ====(?:(?!// ====)[\\s\\S])*import\\s+school\\.domain\\.(?:Period|\\*)\\s*;"
+            raw: true
+            message: "SchoolDay uses Period from another package: import it in `SchoolDay.java` with `import school.domain.Period;`."
+        tests:
+          - call: |
+              SchoolDay monday = new SchoolDay();
+              monday.add(new Period("Math", 1));
+              monday.add(new Period("Biology", 2));
+              monday.add(new Period("Math", 4));
+              System.out.println(monday.subjectAt(2));
+              System.out.println(monday.subjectAt(3));
+              System.out.println(monday.count("Math"));
+          - call: |
+              SchoolDay friday = new SchoolDay();
+              System.out.println(friday.subjectAt(1) + " " + friday.count("Art"));
+              friday.add(new Period("Art", 5));
+              friday.add(new Period("History", 6));
+              friday.add(new Period("Art", 7));
+              friday.add(new Period("Art", 8));
+              System.out.println(friday.subjectAt(6) + " " + friday.subjectAt(8) + " " + friday.subjectAt(1));
+              System.out.println(friday.count("Art") + " " + friday.count("art") + " " + friday.count("History"));
+            hidden: true
+
+  - id: packages-access
+    slug: access
+    title: Access across packages
+    text: |
+      Module 34 listed four levels of access: `private`, nothing, `protected` and `public`. While every class was in the default package, only `private` made a difference. Writing nothing, or `protected`, let in the whole package, and the whole program was one package. With packages, the other levels start to matter.
+
+      ### public and package-private
+
+      A class, or a class's constructor, method or variable, with no word in front of it is **package-private**: only the classes of its own package can use it. From another package, only what's `public` can be used. A constructor without `public` is an easy mistake to make, since until now it changed nothing:
+
+      ```java error
+      import quiz.domain.Question;
+
+      public class Main {
+          public static void main(String[] args) {
+              Question planet = new Question("Which planet is the largest?", "Jupiter", 2);
+              System.out.println(planet);
+          }
+      }
+      // ==== quiz/domain/Question.java ====
+      package quiz.domain;
+
+      public class Question {
+          private String prompt;
+          private String answer;
+          private int points;
+
+          Question(String prompt, String answer, int points) {
+              this.prompt = prompt;
+              this.answer = answer;
+              this.points = points;
+          }
+
+          @Override
+          public String toString() {
+              return this.prompt + " (" + this.points + " points)";
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:5: error: Question(String,String,int) is not public in Question; cannot be accessed from outside package
+              Question planet = new Question("Which planet is the largest?", "Jupiter", 2);
+                                ^
+      1 error
+      ```
+
+      The message names the constructor by its parameter types, and the fix is `public Question(...)`. The same rule holds for the rest of a class:
+
+      - A method without `public` gives `getPoints() is not public in Question; cannot be accessed from outside package`.
+      - A class written `class Question`, without `public`, can't be used outside its package at all, not even named in an import: `Question is not public in quiz.domain; cannot be accessed from outside package`.
+
+      So a class that other packages use is `public`, and so are the constructors and methods they call. Instance variables stay `private`, as always.
+
+      ### Package-private on purpose
+
+      Sometimes a class is meant only for its own package. The quiz's Scorer now also finds the best streak, the most right answers in a row. It leaves the counting to a small helper class, `Streak`, which has no `public` anywhere:
+
+      ```java run
+      import quiz.domain.Question;
+      import quiz.logic.Scorer;
+
+      public class Main {
+          public static void main(String[] args) {
+              Question planet = new Question("Which planet is the largest?", "Jupiter", 2);
+              Question gold = new Question("What is the chemical symbol for gold?", "Au", 3);
+              Question spider = new Question("How many legs does a spider have?", "8", 2);
+              Scorer scorer = new Scorer();
+              scorer.answer(planet, "Jupiter");
+              scorer.answer(gold, "Au");
+              scorer.answer(spider, "6");
+              scorer.answer(planet, "jupiter");
+              System.out.println("Score: " + scorer.getScore());
+              System.out.println("Best streak: " + scorer.getBestStreak());
+          }
+      }
+      // ==== quiz/domain/Question.java ====
+      package quiz.domain;
+
+      public class Question {
+          private String prompt;
+          private String answer;
+          private int points;
+
+          public Question(String prompt, String answer, int points) {
+              this.prompt = prompt;
+              this.answer = answer;
+              this.points = points;
+          }
+
+          public boolean isRight(String reply) {
+              return reply.trim().equalsIgnoreCase(this.answer);
+          }
+
+          public int getPoints() {
+              return this.points;
+          }
+      }
+      // ==== quiz/logic/Scorer.java ====
+      package quiz.logic;
+
+      import quiz.domain.Question;
+
+      public class Scorer {
+          private int score;
+          private Streak streak;
+
+          public Scorer() {
+              this.score = 0;
+              this.streak = new Streak();
+          }
+
+          public boolean answer(Question question, String reply) {
+              if (question.isRight(reply)) {
+                  this.score += question.getPoints();
+                  this.streak.right();
+                  return true;
+              }
+              this.streak.wrong();
+              return false;
+          }
+
+          public int getScore() {
+              return this.score;
+          }
+
+          public int getBestStreak() {
+              return this.streak.getBest();
+          }
+      }
+      // ==== quiz/logic/Streak.java ====
+      package quiz.logic;
+
+      class Streak {
+          private int current;
+          private int best;
+
+          void right() {
+              this.current++;
+              if (this.current > this.best) {
+                  this.best = this.current;
+              }
+          }
+
+          void wrong() {
+              this.current = 0;
+          }
+
+          int getBest() {
+              return this.best;
+          }
+      }
+      ```
+
+      ```output
+      Score: 7
+      Best streak: 2
+      ```
+
+      - Scorer and Streak are in the same package, `quiz.logic`, so Scorer uses everything Streak has.
+      - Main can't import Streak or write `quiz.logic.Streak`: javac would say `Streak is not public in quiz.logic; cannot be accessed from outside package`. Main works through Scorer's public methods.
+      - A package's public classes are what the rest of the program uses. Its package-private classes are details: the package can change or remove them, and nothing outside can break, since nothing outside can use them. It's the idea of `private`, one level up: from a class to a package.
+
+      ### protected across packages
+
+      `protected` lets in the classes of its package, and also the subclasses, even those in other packages. Say a question's `getAnswer()` is `protected`: most classes shouldn't peek at the answer, but a subclass may need it. A question with a hint, in a package `quiz.hints` of its own, gives the answer's first letter:
+
+      ```java run
+      import quiz.hints.HintedQuestion;
+
+      public class Main {
+          public static void main(String[] args) {
+              HintedQuestion planet = new HintedQuestion("Which planet is the largest?", "Jupiter", 2);
+              System.out.println(planet.hint());
+              System.out.println(planet.isRight("jupiter"));
+          }
+      }
+      // ==== quiz/domain/Question.java ====
+      package quiz.domain;
+
+      public class Question {
+          private String prompt;
+          private String answer;
+          private int points;
+
+          public Question(String prompt, String answer, int points) {
+              this.prompt = prompt;
+              this.answer = answer;
+              this.points = points;
+          }
+
+          public boolean isRight(String reply) {
+              return reply.trim().equalsIgnoreCase(this.answer);
+          }
+
+          protected String getAnswer() {
+              return this.answer;
+          }
+      }
+      // ==== quiz/hints/HintedQuestion.java ====
+      package quiz.hints;
+
+      import quiz.domain.Question;
+
+      public class HintedQuestion extends Question {
+          public HintedQuestion(String prompt, String answer, int points) {
+              super(prompt, answer, points);
+          }
+
+          public String hint() {
+              return "It starts with " + this.getAnswer().charAt(0);
+          }
+      }
+      ```
+
+      ```output
+      It starts with J
+      true
+      ```
+
+      HintedQuestion is in another package, but it's a subclass of Question, so it may call `getAnswer()`. Main is neither in `quiz.domain` nor a subclass: if it called `planet.getAnswer()`, javac would say `getAnswer() has protected access in Question`. Subclasses in other packages are common: a class of your own that extends a class of a library is one.
+
+      There's one limit. From another package, a subclass may use an object's protected method or variable only through its own type: for example on `this`, or on a variable whose type is `HintedQuestion` (or a class that extends it). On a variable of type `Question`, such as a parameter `Question other`, javac gives the same `getAnswer() has protected access in Question` that Main gets, even when the object in it is a HintedQuestion.
+
+      ### The four levels, with packages
+
+      | Written in front | Its own class | Its package | Subclasses in other packages | Everyone else |
+      | --- | --- | --- | --- | --- |
+      | `private` | yes | no | no | no |
+      | nothing | yes | yes | no | no |
+      | `protected` | yes | yes | yes, through their own type | no |
+      | `public` | yes | yes | yes | yes |
+
+      The table is for classes and their members. A method an interface lists is public even with nothing written in front (module 35).
+
+      One more thing: `quiz` and `quiz.domain` are two separate packages. The folder `domain` is inside the folder `quiz`, but for access that means nothing: a class of the package `quiz` can't use what `quiz.domain` keeps package-private.
+
+      **Your turn:** a vending machine's program keeps its snacks in the package `vending.domain`, but `Main.java` doesn't compile: Snack keeps too much to its own package. Make public exactly what Main uses, and nothing more. `refill` is only for the machine's service classes in `vending.domain`, so it stays package-private. Don't change `Main.java`. The program should print:
+
+      ```
+      true
+      false
+      Pretzels: 0 left, 150 cents
+      ```
+    seed:
+      vending/domain/Snack.java: |
+        package vending.domain;
+
+        class Snack {
+            private String name;
+            private int price;
+            private int count;
+
+            Snack(String name, int price, int count) {
+                this.name = name;
+                this.price = price;
+                this.count = count;
+            }
+
+            String getName() {
+                return this.name;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+
+            public int getCount() {
+                return this.count;
+            }
+
+            public boolean sell() {
+                if (this.count == 0) {
+                    return false;
+                }
+                this.count--;
+                return true;
+            }
+
+            void refill(int count) {
+                this.count += count;
+            }
+        }
+      Main.java: |
+        import vending.domain.Snack;
+
+        public class Main {
+            public static void main(String[] args) {
+                Snack pretzels = new Snack("Pretzels", 150, 1);
+                System.out.println(pretzels.sell());
+                System.out.println(pretzels.sell());
+                System.out.println(pretzels.getName() + ": " + pretzels.getCount() + " left, " + pretzels.getPrice() + " cents");
+            }
+        }
+    solution:
+      vending/domain/Snack.java: |
+        package vending.domain;
+
+        public class Snack {
+            private String name;
+            private int price;
+            private int count;
+
+            public Snack(String name, int price, int count) {
+                this.name = name;
+                this.price = price;
+                this.count = count;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+
+            public int getCount() {
+                return this.count;
+            }
+
+            public boolean sell() {
+                if (this.count == 0) {
+                    return false;
+                }
+                this.count--;
+                return true;
+            }
+
+            void refill(int count) {
+                this.count += count;
+            }
+        }
+      Main.java: |
+        import vending.domain.Snack;
+
+        public class Main {
+            public static void main(String[] args) {
+                Snack pretzels = new Snack("Pretzels", 150, 1);
+                System.out.println(pretzels.sell());
+                System.out.println(pretzels.sell());
+                System.out.println(pretzels.getName() + ": " + pretzels.getCount() + " left, " + pretzels.getPrice() + " cents");
+            }
+        }
+    hints:
+      - "javac's first messages are about the class itself: `Snack is not public in vending.domain`. Write `public class Snack`, and run again: then javac gets to the constructor and to `getName`."
+      - "Put `public` in front of the constructor and of `getName`. Leave `refill` as it is: Main doesn't call it."
+    forbid:
+      - pattern: \b(?:public|protected|private)\s+void\s+refill\b
+        message: "Leave `refill` package-private, with nothing in front: only the classes of `vending.domain` should refill snacks, and Main doesn't call it."
+    tests:
+      - name: The program's output
+      - call: |
+          Snack gum = new Snack("Gum", 90, 3);
+          gum.sell();
+          System.out.println(gum.getName() + " " + gum.getCount() + " " + gum.getPrice());
+          Snack chips = new Snack("Chips", 120, 0);
+          System.out.println(chips.sell() + " " + chips.getName());
+        hidden: true
+    more:
+      - task: |
+          The vending company's machines get screens that scroll ads, and the ad screens get a package of their own, `vending.ads`. `Screen`, in `vending.domain`, is ready: it keeps the text it shows in `text`, which is protected, for its subclasses. A new Screen shows an empty text, `getText()` returns the text, and `clear()` empties it.
+
+          In `vending/ads/AdScreen.java`, write the class `AdScreen`, which extends `Screen` (import it). It has:
+
+          - a constructor `AdScreen(String text)`, which puts the text on the screen
+          - `public String scroll()`, which moves the text's first character to its end and returns the new text. An empty text stays empty.
+
+          The check runs:
+
+          ```java fragment
+          AdScreen screen = new AdScreen("Cold drinks! ");
+          System.out.println(screen.scroll());
+          System.out.println(screen.scroll());
+          System.out.println("Screen: " + screen.getText());
+          ```
+
+          and expects:
+
+          ```
+          old drinks! C
+          ld drinks! Co
+          Screen: ld drinks! Co
+          ```
+        seed:
+          vending/ads/AdScreen.java: |
+            package vending.ads;
+
+            // Import Screen, and write the class AdScreen here.
+          vending/domain/Screen.java: |
+            package vending.domain;
+
+            public class Screen {
+                protected String text;
+
+                public Screen() {
+                    this.text = "";
+                }
+
+                public String getText() {
+                    return this.text;
+                }
+
+                public void clear() {
+                    this.text = "";
+                }
+            }
+          Main.java: |
+            import vending.ads.AdScreen;
+
+            public class Main {
+                public static void main(String[] args) {
+                    AdScreen screen = new AdScreen("Cold drinks! ");
+                    System.out.println(screen.scroll());
+                    System.out.println(screen.scroll());
+                    System.out.println("Screen: " + screen.getText());
+                }
+            }
+        solution:
+          vending/ads/AdScreen.java: |
+            package vending.ads;
+
+            import vending.domain.Screen;
+
+            public class AdScreen extends Screen {
+                public AdScreen(String text) {
+                    this.text = text;
+                }
+
+                public String scroll() {
+                    if (this.text.isEmpty()) {
+                        return this.text;
+                    }
+                    this.text = this.text.substring(1) + this.text.charAt(0);
+                    return this.text;
+                }
+            }
+          vending/domain/Screen.java: |
+            package vending.domain;
+
+            public class Screen {
+                protected String text;
+
+                public Screen() {
+                    this.text = "";
+                }
+
+                public String getText() {
+                    return this.text;
+                }
+
+                public void clear() {
+                    this.text = "";
+                }
+            }
+          Main.java: |
+            import vending.ads.AdScreen;
+
+            public class Main {
+                public static void main(String[] args) {
+                    AdScreen screen = new AdScreen("Cold drinks! ");
+                    System.out.println(screen.scroll());
+                    System.out.println(screen.scroll());
+                    System.out.println("Screen: " + screen.getText());
+                }
+            }
+        hints:
+          - "After the package line comes `import vending.domain.Screen;`, and then `public class AdScreen extends Screen {`. `text` is Screen's protected variable: AdScreen may read and change it although it's in another package, because it's a subclass. The constructor puts the text there."
+          - "In `scroll()`, `this.text.substring(1)` is the text without its first character, and `this.text.charAt(0)` is that character. Join them in the other order, keep the result in `this.text` and return it. Check `this.text.isEmpty()` first: an empty text has no first character."
+        require:
+          - pattern: \bclass\s+AdScreen\s+extends\s+Screen\b
+            message: "Write the header as `public class AdScreen extends Screen`, after importing Screen."
+        tests:
+          - call: |
+              AdScreen screen = new AdScreen("Cold drinks! ");
+              System.out.println(screen.scroll());
+              System.out.println(screen.scroll());
+              System.out.println("Screen: " + screen.getText());
+          - call: |
+              AdScreen screen = new AdScreen("abc");
+              System.out.println(screen.getText() + " " + screen.scroll() + " " + screen.scroll() + " " + screen.scroll() + " " + screen.getText());
+              screen.clear();
+              System.out.println("[" + screen.scroll() + "] [" + screen.getText() + "]");
+              AdScreen blank = new AdScreen("");
+              System.out.println("[" + blank.scroll() + "]");
+              AdScreen one = new AdScreen("X");
+              System.out.println(one.scroll() + one.scroll() + one.getText());
+            hidden: true
+      - task: |
+          A laundromat's program has three classes that use `Machine`, which is in the package `laundromat.domain`:
+
+          - `Technician`, in the same package, calls `stopNow()`, to stop a machine in the middle of a cycle
+          - `Dryer`, a subclass of Machine in the package `laundromat.dryers`, changes `minutesLeft` directly, to add time to a running cycle
+          - `Main`, in the default package, creates machines and calls `start` and `pass`
+
+          In `Machine.java`, only the class and `toString` have a word in front of them yet, so the program doesn't compile. Give each variable, the constructor and each method the most restricted access that still works: `private` for what only Machine itself uses, nothing for what only its own package uses, `protected` for what a subclass in another package needs, and `public` for what Main uses. Change only `Machine.java`. The program should print:
+
+          ```
+          Machine 4: 25 minutes left
+          Machine 9: 25 minutes left
+          Machine 4: free
+          ```
+        seed:
+          laundromat/domain/Machine.java: |
+            package laundromat.domain;
+
+            public class Machine {
+                int number;
+                int minutesLeft;
+
+                Machine(int number) {
+                    this.number = number;
+                    this.minutesLeft = 0;
+                }
+
+                void start(int minutes) {
+                    this.minutesLeft = minutes;
+                }
+
+                void pass(int minutes) {
+                    this.minutesLeft -= minutes;
+                    if (this.minutesLeft < 0) {
+                        this.minutesLeft = 0;
+                    }
+                }
+
+                void stopNow() {
+                    this.minutesLeft = 0;
+                }
+
+                @Override
+                public String toString() {
+                    if (this.minutesLeft == 0) {
+                        return "Machine " + this.number + ": free";
+                    }
+                    return "Machine " + this.number + ": " + this.minutesLeft + " minutes left";
+                }
+            }
+          laundromat/domain/Technician.java: |
+            package laundromat.domain;
+
+            public class Technician {
+                public void stop(Machine machine) {
+                    machine.stopNow();
+                }
+            }
+          laundromat/dryers/Dryer.java: |
+            package laundromat.dryers;
+
+            import laundromat.domain.Machine;
+
+            public class Dryer extends Machine {
+                public Dryer(int number) {
+                    super(number);
+                }
+
+                public void addTime(int minutes) {
+                    if (this.minutesLeft > 0) {
+                        this.minutesLeft += minutes;
+                    }
+                }
+            }
+          Main.java: |
+            import laundromat.domain.Machine;
+            import laundromat.domain.Technician;
+            import laundromat.dryers.Dryer;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Machine washer = new Machine(4);
+                    Dryer dryer = new Dryer(9);
+                    washer.start(45);
+                    dryer.start(30);
+                    dryer.addTime(15);
+                    washer.pass(20);
+                    dryer.pass(20);
+                    System.out.println(washer);
+                    System.out.println(dryer);
+                    new Technician().stop(washer);
+                    System.out.println(washer);
+                }
+            }
+        solution:
+          laundromat/domain/Machine.java: |
+            package laundromat.domain;
+
+            public class Machine {
+                private int number;
+                protected int minutesLeft;
+
+                public Machine(int number) {
+                    this.number = number;
+                    this.minutesLeft = 0;
+                }
+
+                public void start(int minutes) {
+                    this.minutesLeft = minutes;
+                }
+
+                public void pass(int minutes) {
+                    this.minutesLeft -= minutes;
+                    if (this.minutesLeft < 0) {
+                        this.minutesLeft = 0;
+                    }
+                }
+
+                void stopNow() {
+                    this.minutesLeft = 0;
+                }
+
+                @Override
+                public String toString() {
+                    if (this.minutesLeft == 0) {
+                        return "Machine " + this.number + ": free";
+                    }
+                    return "Machine " + this.number + ": " + this.minutesLeft + " minutes left";
+                }
+            }
+          laundromat/domain/Technician.java: |
+            package laundromat.domain;
+
+            public class Technician {
+                public void stop(Machine machine) {
+                    machine.stopNow();
+                }
+            }
+          laundromat/dryers/Dryer.java: |
+            package laundromat.dryers;
+
+            import laundromat.domain.Machine;
+
+            public class Dryer extends Machine {
+                public Dryer(int number) {
+                    super(number);
+                }
+
+                public void addTime(int minutes) {
+                    if (this.minutesLeft > 0) {
+                        this.minutesLeft += minutes;
+                    }
+                }
+            }
+          Main.java: |
+            import laundromat.domain.Machine;
+            import laundromat.domain.Technician;
+            import laundromat.dryers.Dryer;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Machine washer = new Machine(4);
+                    Dryer dryer = new Dryer(9);
+                    washer.start(45);
+                    dryer.start(30);
+                    dryer.addTime(15);
+                    washer.pass(20);
+                    dryer.pass(20);
+                    System.out.println(washer);
+                    System.out.println(dryer);
+                    new Technician().stop(washer);
+                    System.out.println(washer);
+                }
+            }
+        hints:
+          - "Go through Machine's parts one by one and ask who uses each. `number` appears only in Machine's own code. `minutesLeft` is also used by Dryer, a subclass in another package. Main calls the constructor, `start` and `pass`. Only Technician, in Machine's package, calls `stopNow`."
+          - "So: `private int number;`, `protected int minutesLeft;`, `public Machine(int number)`, `public void start(...)` and `public void pass(...)`, and `stopNow()` stays as it is, with nothing in front."
+        require:
+          - pattern: \bprivate\s+int\s+number\b
+            message: "Only Machine's own code uses `number`, so it can be `private`."
+          - pattern: \bprotected\s+int\s+minutesLeft\b
+            message: "Dryer, a subclass in another package, changes `minutesLeft` directly, and no other class outside the package does: make it `protected`, not `public`."
+        forbid:
+          - pattern: \b(?:public|protected|private)\s+void\s+stopNow\b
+            message: "Only Technician, in Machine's own package, calls `stopNow`: leave it package-private, with nothing in front."
+        tests:
+          - name: The program's output
+          - call: |
+              Dryer dryer = new Dryer(2);
+              dryer.addTime(10);
+              System.out.println(dryer);
+              dryer.start(15);
+              dryer.addTime(10);
+              dryer.pass(5);
+              System.out.println(dryer);
+              Machine washer = new Machine(7);
+              washer.start(60);
+              new Technician().stop(washer);
+              System.out.println(washer);
+            hidden: true
+
+  - id: packages-layers
+    slug: layers
+    title: Packages by responsibility
+    text: |
+      Module 25 split a program into a user interface and its logic, each in a class of its own. Packages make that split visible in the folders. A common layout has three packages, each with one responsibility, inside a package named after the program:
+
+      - `quiz.domain`: the classes of the things the program is about, such as a question. They hold their data and the rules about themselves, such as whether a reply is right.
+      - `quiz.logic`: what the program does with them. Here, a class `Quiz` keeps the questions, checks the answers and counts the score. The logic doesn't read input and doesn't print.
+      - `quiz.ui`: the user interface. `TextUI` reads what the user types, asks the logic to do the work, and prints the results.
+
+      `Main` stays at the top and puts the pieces together:
+
+      ```java run
+      import java.util.Scanner;
+      import quiz.domain.Question;
+      import quiz.logic.Quiz;
+      import quiz.ui.TextUI;
+
+      public class Main {
+          public static void main(String[] args) {
+              Quiz quiz = new Quiz();
+              quiz.add(new Question("Which planet is the largest?", "Jupiter", 2));
+              quiz.add(new Question("What is the chemical symbol for gold?", "Au", 3));
+              quiz.add(new Question("How many legs does a spider have?", "8", 2));
+              TextUI ui = new TextUI(new Scanner(System.in), quiz);
+              ui.start();
+          }
+      }
+      // ==== quiz/domain/Question.java ====
+      package quiz.domain;
+
+      public class Question {
+          private String prompt;
+          private String answer;
+          private int points;
+
+          public Question(String prompt, String answer, int points) {
+              this.prompt = prompt;
+              this.answer = answer;
+              this.points = points;
+          }
+
+          public boolean isRight(String reply) {
+              return reply.trim().equalsIgnoreCase(this.answer);
+          }
+
+          public int getPoints() {
+              return this.points;
+          }
+
+          @Override
+          public String toString() {
+              return this.prompt + " (" + this.points + " points)";
+          }
+      }
+      // ==== quiz/logic/Quiz.java ====
+      package quiz.logic;
+
+      import java.util.ArrayList;
+      import quiz.domain.Question;
+
+      public class Quiz {
+          private ArrayList<Question> questions;
+          private int score;
+
+          public Quiz() {
+              this.questions = new ArrayList<>();
+              this.score = 0;
+          }
+
+          public void add(Question question) {
+              this.questions.add(question);
+          }
+
+          public ArrayList<Question> getQuestions() {
+              return this.questions;
+          }
+
+          public boolean answer(Question question, String reply) {
+              if (question.isRight(reply)) {
+                  this.score += question.getPoints();
+                  return true;
+              }
+              return false;
+          }
+
+          public int getScore() {
+              return this.score;
+          }
+      }
+      // ==== quiz/ui/TextUI.java ====
+      package quiz.ui;
+
+      import java.util.Scanner;
+      import quiz.domain.Question;
+      import quiz.logic.Quiz;
+
+      public class TextUI {
+          private Scanner scanner;
+          private Quiz quiz;
+
+          public TextUI(Scanner scanner, Quiz quiz) {
+              this.scanner = scanner;
+              this.quiz = quiz;
+          }
+
+          public void start() {
+              for (Question question : this.quiz.getQuestions()) {
+                  System.out.println(question);
+                  System.out.print("> ");
+                  String reply = this.scanner.nextLine();
+                  if (this.quiz.answer(question, reply)) {
+                      System.out.println("Right!");
+                  } else {
+                      System.out.println("Not quite.");
+                  }
+              }
+              System.out.println("Your score: " + this.quiz.getScore());
+          }
+      }
+      ```
+
+      ```input
+      jupiter
+      Ag
+      8
+      ```
+
+      ```output
+      Which planet is the largest? (2 points)
+      > Right!
+      What is the chemical symbol for gold? (3 points)
+      > Not quite.
+      How many legs does a spider have? (2 points)
+      > Right!
+      Your score: 4
+      ```
+
+      Quiz never prints: `answer` returns `true` or `false`, and TextUI decides what to show. TextUI never counts points: it asks Quiz. And Question knows nothing of either of them.
+
+      ### Which may use which
+
+      The three packages use each other in one direction only:
+
+      - `ui` uses `logic`, and `domain` too: TextUI shows the questions.
+      - `logic` uses `domain`.
+      - `domain` uses neither of the others.
+
+      The imports at the top of each file show this at a glance. TextUI imports from `quiz.logic` and `quiz.domain`, Quiz from `quiz.domain`, and Question from nothing of the program. An import of `quiz.ui` in a file of `quiz.logic` or `quiz.domain` would mean that the direction is wrong.
+
+      Why one direction?
+
+      - The logic and the domain work with any user interface. The same Quiz could get a graphical one, like the programs with windows later in this course, or be run by tests, without a change to its code.
+      - A change in how the program looks touches only `ui`, and a change in its rules touches only `logic` or `domain`.
+      - Each package is small enough to read on its own. To see how the score is counted, open `logic`.
+
+      ### Where does a change go?
+
+      | The change | The package, and where in it |
+      | --- | --- |
+      | A question gets a category, such as Science | `domain`: an instance variable and a getter in Question |
+      | A wrong answer costs one point | `logic`: the `answer` method of Quiz |
+      | The score is shown after every question | `ui`: the loop in TextUI's `start` |
+
+      **Your turn:** a food truck's program has the package `foodtruck.domain`, with the class `Dish`, ready: a dish has a name and a price in whole dollars, with `getName()`, `getPrice()` and a `toString()` like `Taco (4 dollars)`. In `foodtruck/logic/Order.java`, write the logic class `Order`, in the package `foodtruck.logic`:
+
+      - a constructor `Order()`, which makes an empty order
+      - `add(Dish dish)`, which adds a dish to the order (the same dish can be ordered several times)
+      - `count()`, which returns the number of dishes in the order
+      - `total()`, which returns the total price of the order
+      - `mostExpensive()`, which returns the most expensive dish of the order (the first one ordered, if several cost the most), or `null` for an empty order
+
+      Order is logic: it returns values and prints nothing. The check runs:
+
+      ```java fragment
+      Order order = new Order();
+      order.add(new Dish("Taco", 4));
+      order.add(new Dish("Burrito", 9));
+      order.add(new Dish("Taco", 4));
+      System.out.println(order.count() + " dishes, " + order.total() + " dollars");
+      System.out.println("Most expensive: " + order.mostExpensive());
+      ```
+
+      and expects:
+
+      ```
+      3 dishes, 17 dollars
+      Most expensive: Burrito (9 dollars)
+      ```
+    seed:
+      foodtruck/logic/Order.java: |
+        // Write the package line, the imports and the class Order here.
+      foodtruck/domain/Dish.java: |
+        package foodtruck.domain;
+
+        public class Dish {
+            private String name;
+            private int price;
+
+            public Dish(String name, int price) {
+                this.name = name;
+                this.price = price;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.price + " dollars)";
+            }
+        }
+      Main.java: |
+        import foodtruck.domain.Dish;
+        import foodtruck.logic.Order;
+
+        public class Main {
+            public static void main(String[] args) {
+                Order order = new Order();
+                order.add(new Dish("Taco", 4));
+                order.add(new Dish("Burrito", 9));
+                order.add(new Dish("Taco", 4));
+                System.out.println(order.count() + " dishes, " + order.total() + " dollars");
+                System.out.println("Most expensive: " + order.mostExpensive());
+            }
+        }
+    solution:
+      foodtruck/logic/Order.java: |
+        package foodtruck.logic;
+
+        import java.util.ArrayList;
+        import foodtruck.domain.Dish;
+
+        public class Order {
+            private ArrayList<Dish> dishes;
+
+            public Order() {
+                this.dishes = new ArrayList<>();
+            }
+
+            public void add(Dish dish) {
+                this.dishes.add(dish);
+            }
+
+            public int count() {
+                return this.dishes.size();
+            }
+
+            public int total() {
+                int total = 0;
+                for (Dish dish : this.dishes) {
+                    total += dish.getPrice();
+                }
+                return total;
+            }
+
+            public Dish mostExpensive() {
+                Dish most = null;
+                for (Dish dish : this.dishes) {
+                    if (most == null || dish.getPrice() > most.getPrice()) {
+                        most = dish;
+                    }
+                }
+                return most;
+            }
+        }
+      foodtruck/domain/Dish.java: |
+        package foodtruck.domain;
+
+        public class Dish {
+            private String name;
+            private int price;
+
+            public Dish(String name, int price) {
+                this.name = name;
+                this.price = price;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getPrice() {
+                return this.price;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.price + " dollars)";
+            }
+        }
+      Main.java: |
+        import foodtruck.domain.Dish;
+        import foodtruck.logic.Order;
+
+        public class Main {
+            public static void main(String[] args) {
+                Order order = new Order();
+                order.add(new Dish("Taco", 4));
+                order.add(new Dish("Burrito", 9));
+                order.add(new Dish("Taco", 4));
+                System.out.println(order.count() + " dishes, " + order.total() + " dollars");
+                System.out.println("Most expensive: " + order.mostExpensive());
+            }
+        }
+    hints:
+      - "The file starts with `package foodtruck.logic;` and imports `java.util.ArrayList` and `foodtruck.domain.Dish`. The order keeps its dishes in an `ArrayList<Dish>`, made in the constructor."
+      - "For `mostExpensive`, start with `Dish most = null;` and go through the dishes: a dish replaces `most` when `most` is still `null` or the dish costs more. Use `>`, not `>=`, so that the first of two equal prices stays."
+    forbid:
+      - pattern: "==== foodtruck/logic/Order\\.java ====(?:(?!// ====)[\\s\\S])*System\\.out"
+        raw: true
+        message: "Order is logic: its methods return values and print nothing. The class that uses them decides what to print."
+    tests:
+      - call: |
+          Order order = new Order();
+          order.add(new Dish("Taco", 4));
+          order.add(new Dish("Burrito", 9));
+          order.add(new Dish("Taco", 4));
+          System.out.println(order.count() + " dishes, " + order.total() + " dollars");
+          System.out.println("Most expensive: " + order.mostExpensive());
+      - call: |
+          Order order = new Order();
+          System.out.println(order.count() + " " + order.total() + " " + order.mostExpensive());
+          order.add(new Dish("Nachos", 6));
+          order.add(new Dish("Quesadilla", 7));
+          order.add(new Dish("Churros", 7));
+          order.add(new Dish("Lemonade", 3));
+          System.out.println(order.count() + " " + order.total() + " " + order.mostExpensive());
+        hidden: true
+    more:
+      - task: |
+          A cattery's program works, but its logic prints: `checkIn` and `checkOut` in `Cattery` print their own messages. No other user interface could use them, and nothing can ask them whether they worked.
+
+          Change the two methods in `Cattery.java` so that they print nothing and return a `boolean`: `checkIn` returns whether the cat got a pen, and `checkOut` whether a cat of that name was there to go home. Then make `TextUI.java` print the messages, which stay exactly as they are. For the input shown, the program prints:
+
+          ```
+          > Mochi checked in
+          > Bella checked in
+          > No free pen for Max
+          > Cats: 2
+          > No cat called Max
+          > Mochi went home
+          > Cats: 1
+          > Bye!
+          ```
+        seed:
+          cattery/logic/Cattery.java: |
+            package cattery.logic;
+
+            import java.util.ArrayList;
+            import cattery.domain.Cat;
+
+            public class Cattery {
+                private int pens;
+                private ArrayList<Cat> cats;
+
+                public Cattery(int pens) {
+                    this.pens = pens;
+                    this.cats = new ArrayList<>();
+                }
+
+                public void checkIn(Cat cat) {
+                    if (this.cats.size() >= this.pens) {
+                        System.out.println("No free pen for " + cat.getName());
+                        return;
+                    }
+                    this.cats.add(cat);
+                    System.out.println(cat.getName() + " checked in");
+                }
+
+                public void checkOut(String name) {
+                    for (Cat cat : this.cats) {
+                        if (cat.getName().equals(name)) {
+                            this.cats.remove(cat);
+                            System.out.println(name + " went home");
+                            return;
+                        }
+                    }
+                    System.out.println("No cat called " + name);
+                }
+
+                public int count() {
+                    return this.cats.size();
+                }
+            }
+          cattery/ui/TextUI.java: |
+            package cattery.ui;
+
+            import java.util.Scanner;
+            import cattery.domain.Cat;
+            import cattery.logic.Cattery;
+
+            public class TextUI {
+                private Scanner scanner;
+                private Cattery cattery;
+
+                public TextUI(Scanner scanner, Cattery cattery) {
+                    this.scanner = scanner;
+                    this.cattery = cattery;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye!");
+                            break;
+                        }
+                        if (command.equals("in")) {
+                            String name = this.scanner.nextLine();
+                            this.cattery.checkIn(new Cat(name));
+                        } else if (command.equals("out")) {
+                            String name = this.scanner.nextLine();
+                            this.cattery.checkOut(name);
+                        } else if (command.equals("count")) {
+                            System.out.println("Cats: " + this.cattery.count());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          cattery/domain/Cat.java: |
+            package cattery.domain;
+
+            public class Cat {
+                private String name;
+
+                public Cat(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+            import cattery.logic.Cattery;
+            import cattery.ui.TextUI;
+
+            public class Main {
+                public static void main(String[] args) {
+                    TextUI ui = new TextUI(new Scanner(System.in), new Cattery(2));
+                    ui.start();
+                }
+            }
+        solution:
+          cattery/logic/Cattery.java: |
+            package cattery.logic;
+
+            import java.util.ArrayList;
+            import cattery.domain.Cat;
+
+            public class Cattery {
+                private int pens;
+                private ArrayList<Cat> cats;
+
+                public Cattery(int pens) {
+                    this.pens = pens;
+                    this.cats = new ArrayList<>();
+                }
+
+                public boolean checkIn(Cat cat) {
+                    if (this.cats.size() >= this.pens) {
+                        return false;
+                    }
+                    this.cats.add(cat);
+                    return true;
+                }
+
+                public boolean checkOut(String name) {
+                    for (Cat cat : this.cats) {
+                        if (cat.getName().equals(name)) {
+                            this.cats.remove(cat);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                public int count() {
+                    return this.cats.size();
+                }
+            }
+          cattery/ui/TextUI.java: |
+            package cattery.ui;
+
+            import java.util.Scanner;
+            import cattery.domain.Cat;
+            import cattery.logic.Cattery;
+
+            public class TextUI {
+                private Scanner scanner;
+                private Cattery cattery;
+
+                public TextUI(Scanner scanner, Cattery cattery) {
+                    this.scanner = scanner;
+                    this.cattery = cattery;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye!");
+                            break;
+                        }
+                        if (command.equals("in")) {
+                            String name = this.scanner.nextLine();
+                            if (this.cattery.checkIn(new Cat(name))) {
+                                System.out.println(name + " checked in");
+                            } else {
+                                System.out.println("No free pen for " + name);
+                            }
+                        } else if (command.equals("out")) {
+                            String name = this.scanner.nextLine();
+                            if (this.cattery.checkOut(name)) {
+                                System.out.println(name + " went home");
+                            } else {
+                                System.out.println("No cat called " + name);
+                            }
+                        } else if (command.equals("count")) {
+                            System.out.println("Cats: " + this.cattery.count());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          cattery/domain/Cat.java: |
+            package cattery.domain;
+
+            public class Cat {
+                private String name;
+
+                public Cat(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+            import cattery.logic.Cattery;
+            import cattery.ui.TextUI;
+
+            public class Main {
+                public static void main(String[] args) {
+                    TextUI ui = new TextUI(new Scanner(System.in), new Cattery(2));
+                    ui.start();
+                }
+            }
+        hints:
+          - "In Cattery, the headers become `public boolean checkIn(Cat cat)` and `public boolean checkOut(String name)`. Each `System.out.println` turns into `return true;` or `return false;`: the cat got a pen or didn't, the cat was found or wasn't."
+          - "In TextUI, use what the method returns: `if (this.cattery.checkIn(new Cat(name))) {` prints `name + \" checked in\"`, and its `else` prints the message about the full cattery. `out` works the same way."
+        forbid:
+          - pattern: "==== cattery/logic/Cattery\\.java ====(?:(?!// ====)[\\s\\S])*System\\.out"
+            raw: true
+            message: "Cattery is logic: it returns `true` or `false`, and TextUI prints the messages."
+        tests:
+          - stdin: |
+              in
+              Mochi
+              in
+              Bella
+              in
+              Max
+              count
+              out
+              Max
+              out
+              Mochi
+              count
+              quit
+          - stdin: |
+              out
+              Mochi
+              in
+              Luna
+              cattery
+              out
+              luna
+              out
+              Luna
+              in
+              Otto
+              in
+              Pip
+              in
+              Nala
+              count
+              quit
+            hidden: true
+          - call: |
+              Cattery cattery = new Cattery(1);
+              System.out.println(cattery.checkIn(new Cat("Mochi")));
+              System.out.println(cattery.checkIn(new Cat("Bo")));
+              System.out.println(cattery.checkOut("Bo") + " " + cattery.checkOut("Mochi") + " " + cattery.count());
+            hidden: true
+      - task: |
+          The food truck gets its user interface. `Dish.java` and `Order.java` are the ones from the first task, and `Menu.java`, in `foodtruck.logic`, is ready: `add(Dish dish)` puts a dish on the menu, and `find(String name)` returns the dish of that name, with capital letters or not, or `null` if the menu has none. `Main.java` is ready too.
+
+          In `foodtruck/ui/TextUI.java`, write the class `TextUI`, in the package `foodtruck.ui`, with the imports it needs. Its constructor takes a `Scanner`, a `Menu` and an `Order`, and its method `start()` reads commands, with the prompt `> ` before each one:
+
+          - `order`: the next line is the name of a dish. If the menu has it, add it to the order and print `Added ` and the dish, like `Added Taco (4 dollars)`. Otherwise print `Not on the menu: ` and the name.
+          - `total`: print the number of dishes and the total, like `3 dishes, 17 dollars`.
+          - `done`: print `Thank you! You pay ` and the total and ` dollars`, and return.
+          - Anything else: print `Unknown command: ` and the command.
+
+          For the input shown, the program prints:
+
+          ```
+          > Added Taco (4 dollars)
+          > Added Burrito (9 dollars)
+          > Not on the menu: Pizza
+          > Added Taco (4 dollars)
+          > 3 dishes, 17 dollars
+          > Thank you! You pay 17 dollars
+          ```
+        seed:
+          foodtruck/ui/TextUI.java: |
+            package foodtruck.ui;
+
+            // Write the imports and the class TextUI here.
+          foodtruck/logic/Menu.java: |
+            package foodtruck.logic;
+
+            import java.util.ArrayList;
+            import foodtruck.domain.Dish;
+
+            public class Menu {
+                private ArrayList<Dish> dishes;
+
+                public Menu() {
+                    this.dishes = new ArrayList<>();
+                }
+
+                public void add(Dish dish) {
+                    this.dishes.add(dish);
+                }
+
+                public Dish find(String name) {
+                    for (Dish dish : this.dishes) {
+                        if (dish.getName().equalsIgnoreCase(name)) {
+                            return dish;
+                        }
+                    }
+                    return null;
+                }
+            }
+          foodtruck/logic/Order.java: |
+            package foodtruck.logic;
+
+            import java.util.ArrayList;
+            import foodtruck.domain.Dish;
+
+            public class Order {
+                private ArrayList<Dish> dishes;
+
+                public Order() {
+                    this.dishes = new ArrayList<>();
+                }
+
+                public void add(Dish dish) {
+                    this.dishes.add(dish);
+                }
+
+                public int count() {
+                    return this.dishes.size();
+                }
+
+                public int total() {
+                    int total = 0;
+                    for (Dish dish : this.dishes) {
+                        total += dish.getPrice();
+                    }
+                    return total;
+                }
+
+                public Dish mostExpensive() {
+                    Dish most = null;
+                    for (Dish dish : this.dishes) {
+                        if (most == null || dish.getPrice() > most.getPrice()) {
+                            most = dish;
+                        }
+                    }
+                    return most;
+                }
+            }
+          foodtruck/domain/Dish.java: |
+            package foodtruck.domain;
+
+            public class Dish {
+                private String name;
+                private int price;
+
+                public Dish(String name, int price) {
+                    this.name = name;
+                    this.price = price;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getPrice() {
+                    return this.price;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.price + " dollars)";
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+            import foodtruck.domain.Dish;
+            import foodtruck.logic.Menu;
+            import foodtruck.logic.Order;
+            import foodtruck.ui.TextUI;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Menu menu = new Menu();
+                    menu.add(new Dish("Taco", 4));
+                    menu.add(new Dish("Burrito", 9));
+                    menu.add(new Dish("Nachos", 6));
+                    TextUI ui = new TextUI(new Scanner(System.in), menu, new Order());
+                    ui.start();
+                }
+            }
+        solution:
+          foodtruck/ui/TextUI.java: |
+            package foodtruck.ui;
+
+            import java.util.Scanner;
+            import foodtruck.domain.Dish;
+            import foodtruck.logic.Menu;
+            import foodtruck.logic.Order;
+
+            public class TextUI {
+                private Scanner scanner;
+                private Menu menu;
+                private Order order;
+
+                public TextUI(Scanner scanner, Menu menu, Order order) {
+                    this.scanner = scanner;
+                    this.menu = menu;
+                    this.order = order;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("done")) {
+                            System.out.println("Thank you! You pay " + this.order.total() + " dollars");
+                            break;
+                        }
+                        if (command.equals("order")) {
+                            String name = this.scanner.nextLine();
+                            Dish dish = this.menu.find(name);
+                            if (dish == null) {
+                                System.out.println("Not on the menu: " + name);
+                            } else {
+                                this.order.add(dish);
+                                System.out.println("Added " + dish);
+                            }
+                        } else if (command.equals("total")) {
+                            System.out.println(this.order.count() + " dishes, " + this.order.total() + " dollars");
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          foodtruck/logic/Menu.java: |
+            package foodtruck.logic;
+
+            import java.util.ArrayList;
+            import foodtruck.domain.Dish;
+
+            public class Menu {
+                private ArrayList<Dish> dishes;
+
+                public Menu() {
+                    this.dishes = new ArrayList<>();
+                }
+
+                public void add(Dish dish) {
+                    this.dishes.add(dish);
+                }
+
+                public Dish find(String name) {
+                    for (Dish dish : this.dishes) {
+                        if (dish.getName().equalsIgnoreCase(name)) {
+                            return dish;
+                        }
+                    }
+                    return null;
+                }
+            }
+          foodtruck/logic/Order.java: |
+            package foodtruck.logic;
+
+            import java.util.ArrayList;
+            import foodtruck.domain.Dish;
+
+            public class Order {
+                private ArrayList<Dish> dishes;
+
+                public Order() {
+                    this.dishes = new ArrayList<>();
+                }
+
+                public void add(Dish dish) {
+                    this.dishes.add(dish);
+                }
+
+                public int count() {
+                    return this.dishes.size();
+                }
+
+                public int total() {
+                    int total = 0;
+                    for (Dish dish : this.dishes) {
+                        total += dish.getPrice();
+                    }
+                    return total;
+                }
+
+                public Dish mostExpensive() {
+                    Dish most = null;
+                    for (Dish dish : this.dishes) {
+                        if (most == null || dish.getPrice() > most.getPrice()) {
+                            most = dish;
+                        }
+                    }
+                    return most;
+                }
+            }
+          foodtruck/domain/Dish.java: |
+            package foodtruck.domain;
+
+            public class Dish {
+                private String name;
+                private int price;
+
+                public Dish(String name, int price) {
+                    this.name = name;
+                    this.price = price;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getPrice() {
+                    return this.price;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.price + " dollars)";
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+            import foodtruck.domain.Dish;
+            import foodtruck.logic.Menu;
+            import foodtruck.logic.Order;
+            import foodtruck.ui.TextUI;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Menu menu = new Menu();
+                    menu.add(new Dish("Taco", 4));
+                    menu.add(new Dish("Burrito", 9));
+                    menu.add(new Dish("Nachos", 6));
+                    TextUI ui = new TextUI(new Scanner(System.in), menu, new Order());
+                    ui.start();
+                }
+            }
+        hints:
+          - "TextUI uses four classes from other packages: `java.util.Scanner`, `foodtruck.domain.Dish`, `foodtruck.logic.Menu` and `foodtruck.logic.Order`. Import each, then keep the three constructor parameters in instance variables."
+          - "For `order`, ask the menu first: `Dish dish = this.menu.find(name);`. If `dish` is `null`, print the message about the menu; otherwise add it with `this.order.add(dish)` and print `\"Added \" + dish`."
+        tests:
+          - stdin: |
+              order
+              Taco
+              order
+              burrito
+              order
+              Pizza
+              order
+              TACO
+              total
+              done
+          - stdin: |
+              total
+              menu
+              order
+              nachos
+              order
+              Salad
+              order
+              Taco
+              total
+              done
+            hidden: true
+          - call: |
+              Menu menu = new Menu();
+              menu.add(new Dish("Soup", 5));
+              Order order = new Order();
+              TextUI ui = new TextUI(new Scanner("order\nsoup\norder\nSoup\ndone\n"), menu, order);
+              ui.start();
+              System.out.println(order.count());
+            hidden: true
+
+  - id: packages-larger-program
+    slug: larger-program
+    title: A larger program across packages
+    text: |
+      Step 4's quiz asked a fixed set of questions once. This step's quiz is a whole small application: the user adds questions, players take turns, and the program remembers who did best. It has four classes in three packages, and Main:
+
+      - `quiz.domain`: Question, as before, and a new class Player, with a name and points.
+      - `quiz.logic`: Quiz, which keeps the questions and the players, checks the answers and finds the best player.
+      - `quiz.ui`: TextUI, which reads the commands.
+
+      The commands, each on a line of its own:
+
+      - `add`, then three lines: the question, its answer and its points; it prints how many questions there are
+      - `play`, then the player's name, then a reply to each question in turn
+      - `best`, for the player with the most points so far
+      - `quit`
+
+      ```java run
+      import java.util.Scanner;
+      import quiz.logic.Quiz;
+      import quiz.ui.TextUI;
+
+      public class Main {
+          public static void main(String[] args) {
+              TextUI ui = new TextUI(new Scanner(System.in), new Quiz());
+              ui.start();
+          }
+      }
+      // ==== quiz/ui/TextUI.java ====
+      package quiz.ui;
+
+      import java.util.Scanner;
+      import quiz.domain.Player;
+      import quiz.domain.Question;
+      import quiz.logic.Quiz;
+
+      public class TextUI {
+          private Scanner scanner;
+          private Quiz quiz;
+
+          public TextUI(Scanner scanner, Quiz quiz) {
+              this.scanner = scanner;
+              this.quiz = quiz;
+          }
+
+          public void start() {
+              while (true) {
+                  System.out.print("> ");
+                  String command = this.scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Bye!");
+                      break;
+                  }
+                  if (command.equals("add")) {
+                      this.addQuestion();
+                  } else if (command.equals("play")) {
+                      this.play();
+                  } else if (command.equals("best")) {
+                      this.printBest();
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+
+          private void addQuestion() {
+              String prompt = this.scanner.nextLine();
+              String answer = this.scanner.nextLine();
+              int points = Integer.valueOf(this.scanner.nextLine());
+              this.quiz.addQuestion(new Question(prompt, answer, points));
+              System.out.println("Questions: " + this.quiz.getQuestions().size());
+          }
+
+          private void play() {
+              String name = this.scanner.nextLine();
+              Player player = this.quiz.newPlayer(name);
+              for (Question question : this.quiz.getQuestions()) {
+                  System.out.println(question);
+                  String reply = this.scanner.nextLine();
+                  if (this.quiz.answer(player, question, reply)) {
+                      System.out.println("Right!");
+                  } else {
+                      System.out.println("Not quite.");
+                  }
+              }
+              System.out.println(player);
+          }
+
+          private void printBest() {
+              Player best = this.quiz.best();
+              if (best == null) {
+                  System.out.println("No one has played yet");
+              } else {
+                  System.out.println("Best: " + best);
+              }
+          }
+      }
+      // ==== quiz/logic/Quiz.java ====
+      package quiz.logic;
+
+      import java.util.ArrayList;
+      import quiz.domain.Player;
+      import quiz.domain.Question;
+
+      public class Quiz {
+          private ArrayList<Question> questions;
+          private ArrayList<Player> players;
+
+          public Quiz() {
+              this.questions = new ArrayList<>();
+              this.players = new ArrayList<>();
+          }
+
+          public void addQuestion(Question question) {
+              this.questions.add(question);
+          }
+
+          public ArrayList<Question> getQuestions() {
+              return this.questions;
+          }
+
+          public Player newPlayer(String name) {
+              Player player = new Player(name);
+              this.players.add(player);
+              return player;
+          }
+
+          public boolean answer(Player player, Question question, String reply) {
+              if (question.isRight(reply)) {
+                  player.addPoints(question.getPoints());
+                  return true;
+              }
+              return false;
+          }
+
+          public Player best() {
+              Player best = null;
+              for (Player player : this.players) {
+                  if (best == null || player.getPoints() > best.getPoints()) {
+                      best = player;
+                  }
+              }
+              return best;
+          }
+      }
+      // ==== quiz/domain/Question.java ====
+      package quiz.domain;
+
+      public class Question {
+          private String prompt;
+          private String answer;
+          private int points;
+
+          public Question(String prompt, String answer, int points) {
+              this.prompt = prompt;
+              this.answer = answer;
+              this.points = points;
+          }
+
+          public boolean isRight(String reply) {
+              return reply.trim().equalsIgnoreCase(this.answer);
+          }
+
+          public int getPoints() {
+              return this.points;
+          }
+
+          @Override
+          public String toString() {
+              return this.prompt + " (" + this.points + " points)";
+          }
+      }
+      // ==== quiz/domain/Player.java ====
+      package quiz.domain;
+
+      public class Player {
+          private String name;
+          private int points;
+
+          public Player(String name) {
+              this.name = name;
+              this.points = 0;
+          }
+
+          public void addPoints(int points) {
+              this.points += points;
+          }
+
+          public int getPoints() {
+              return this.points;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + ", " + this.points + " points";
+          }
+      }
+      ```
+
+      ```input
+      best
+      add
+      Which planet is the largest?
+      Jupiter
+      2
+      add
+      What is the chemical symbol for gold?
+      Au
+      3
+      play
+      Ada
+      jupiter
+      Au
+      play
+      Ben
+      Saturn
+      au
+      best
+      quit
+      ```
+
+      ```output
+      > No one has played yet
+      > Questions: 1
+      > Questions: 2
+      > Which planet is the largest? (2 points)
+      Right!
+      What is the chemical symbol for gold? (3 points)
+      Right!
+      Ada, 5 points
+      > Which planet is the largest? (2 points)
+      Not quite.
+      What is the chemical symbol for gold? (3 points)
+      Right!
+      Ben, 3 points
+      > Best: Ada, 5 points
+      > Bye!
+      ```
+
+      ### Following a command through the packages
+
+      Here's what happens for `play`, package by package:
+
+      1. TextUI reads the name and asks the logic for a new player: `this.quiz.newPlayer(name)`. Quiz creates the Player, a domain object, keeps it in its list of players, and returns it.
+      2. For each question, TextUI prints the question and reads the reply. `this.quiz.answer(player, question, reply)` decides: Quiz asks the Question whether the reply is right, and if it is, gives the Player the points.
+      3. TextUI prints `Right!` or `Not quite.`, and at the end the player.
+
+      Each package does its own part. The ui talks with the user, the logic decides, and the domain holds the data and knows its own rules. TextUI uses the domain objects only to show them and to pass them on: it never adds points itself.
+
+      Main is short again. It only makes the objects that the others need and starts the user interface. It imports only what it names itself: Scanner, Quiz and TextUI. Question and Player appear nowhere in `Main.java`, so they need no import there.
+
+      ### Private helper methods
+
+      In TextUI, `start()` only reads a command and picks what to do. The work of each command is in a method of its own: `addQuestion()`, `play()` and `printBest()`. They're `private`, because nothing outside TextUI needs them, and they keep `start()` short enough to read at a glance, however many commands the program gets.
+
+      ### Growing the program: find the package first
+
+      Before writing a new feature, decide where each part of it belongs. Say the quiz should list every player. The players are already kept by Quiz, so giving them out is the logic's part. Printing them is the user interface's part. That's your task.
+
+      **Your turn:** add the command `players` to the quiz. It prints each player who has played, in the order they played, one per line, like `Ada, 5 points`, or `No one has played yet` if no one has. Split the work between the packages:
+
+      - in `Quiz.java`, the method `getPlayers()`, which returns the list of players
+      - in `TextUI.java`, the command, which uses `getPlayers()` and prints
+
+      For the input shown, the program prints:
+
+      ```
+      > No one has played yet
+      > Questions: 1
+      > How many legs does a spider have? (2 points)
+      Right!
+      Ada, 2 points
+      > How many legs does a spider have? (2 points)
+      Not quite.
+      Ben, 0 points
+      > Ada, 2 points
+      Ben, 0 points
+      > Bye!
+      ```
+    seed:
+      quiz/ui/TextUI.java: |
+        package quiz.ui;
+
+        import java.util.Scanner;
+        import quiz.domain.Player;
+        import quiz.domain.Question;
+        import quiz.logic.Quiz;
+
+        public class TextUI {
+            private Scanner scanner;
+            private Quiz quiz;
+
+            public TextUI(Scanner scanner, Quiz quiz) {
+                this.scanner = scanner;
+                this.quiz = quiz;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Bye!");
+                        break;
+                    }
+                    if (command.equals("add")) {
+                        this.addQuestion();
+                    } else if (command.equals("play")) {
+                        this.play();
+                    } else if (command.equals("best")) {
+                        this.printBest();
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+
+            private void addQuestion() {
+                String prompt = this.scanner.nextLine();
+                String answer = this.scanner.nextLine();
+                int points = Integer.valueOf(this.scanner.nextLine());
+                this.quiz.addQuestion(new Question(prompt, answer, points));
+                System.out.println("Questions: " + this.quiz.getQuestions().size());
+            }
+
+            private void play() {
+                String name = this.scanner.nextLine();
+                Player player = this.quiz.newPlayer(name);
+                for (Question question : this.quiz.getQuestions()) {
+                    System.out.println(question);
+                    String reply = this.scanner.nextLine();
+                    if (this.quiz.answer(player, question, reply)) {
+                        System.out.println("Right!");
+                    } else {
+                        System.out.println("Not quite.");
+                    }
+                }
+                System.out.println(player);
+            }
+
+            private void printBest() {
+                Player best = this.quiz.best();
+                if (best == null) {
+                    System.out.println("No one has played yet");
+                } else {
+                    System.out.println("Best: " + best);
+                }
+            }
+        }
+      quiz/logic/Quiz.java: |
+        package quiz.logic;
+
+        import java.util.ArrayList;
+        import quiz.domain.Player;
+        import quiz.domain.Question;
+
+        public class Quiz {
+            private ArrayList<Question> questions;
+            private ArrayList<Player> players;
+
+            public Quiz() {
+                this.questions = new ArrayList<>();
+                this.players = new ArrayList<>();
+            }
+
+            public void addQuestion(Question question) {
+                this.questions.add(question);
+            }
+
+            public ArrayList<Question> getQuestions() {
+                return this.questions;
+            }
+
+            public Player newPlayer(String name) {
+                Player player = new Player(name);
+                this.players.add(player);
+                return player;
+            }
+
+            public boolean answer(Player player, Question question, String reply) {
+                if (question.isRight(reply)) {
+                    player.addPoints(question.getPoints());
+                    return true;
+                }
+                return false;
+            }
+
+            public Player best() {
+                Player best = null;
+                for (Player player : this.players) {
+                    if (best == null || player.getPoints() > best.getPoints()) {
+                        best = player;
+                    }
+                }
+                return best;
+            }
+        }
+      quiz/domain/Question.java: |
+        package quiz.domain;
+
+        public class Question {
+            private String prompt;
+            private String answer;
+            private int points;
+
+            public Question(String prompt, String answer, int points) {
+                this.prompt = prompt;
+                this.answer = answer;
+                this.points = points;
+            }
+
+            public boolean isRight(String reply) {
+                return reply.trim().equalsIgnoreCase(this.answer);
+            }
+
+            public int getPoints() {
+                return this.points;
+            }
+
+            @Override
+            public String toString() {
+                return this.prompt + " (" + this.points + " points)";
+            }
+        }
+      quiz/domain/Player.java: |
+        package quiz.domain;
+
+        public class Player {
+            private String name;
+            private int points;
+
+            public Player(String name) {
+                this.name = name;
+                this.points = 0;
+            }
+
+            public void addPoints(int points) {
+                this.points += points;
+            }
+
+            public int getPoints() {
+                return this.points;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + ", " + this.points + " points";
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+        import quiz.logic.Quiz;
+        import quiz.ui.TextUI;
+
+        public class Main {
+            public static void main(String[] args) {
+                TextUI ui = new TextUI(new Scanner(System.in), new Quiz());
+                ui.start();
+            }
+        }
+    solution:
+      quiz/ui/TextUI.java: |
+        package quiz.ui;
+
+        import java.util.Scanner;
+        import quiz.domain.Player;
+        import quiz.domain.Question;
+        import quiz.logic.Quiz;
+
+        public class TextUI {
+            private Scanner scanner;
+            private Quiz quiz;
+
+            public TextUI(Scanner scanner, Quiz quiz) {
+                this.scanner = scanner;
+                this.quiz = quiz;
+            }
+
+            public void start() {
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Bye!");
+                        break;
+                    }
+                    if (command.equals("add")) {
+                        this.addQuestion();
+                    } else if (command.equals("play")) {
+                        this.play();
+                    } else if (command.equals("best")) {
+                        this.printBest();
+                    } else if (command.equals("players")) {
+                        this.printPlayers();
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+
+            private void addQuestion() {
+                String prompt = this.scanner.nextLine();
+                String answer = this.scanner.nextLine();
+                int points = Integer.valueOf(this.scanner.nextLine());
+                this.quiz.addQuestion(new Question(prompt, answer, points));
+                System.out.println("Questions: " + this.quiz.getQuestions().size());
+            }
+
+            private void play() {
+                String name = this.scanner.nextLine();
+                Player player = this.quiz.newPlayer(name);
+                for (Question question : this.quiz.getQuestions()) {
+                    System.out.println(question);
+                    String reply = this.scanner.nextLine();
+                    if (this.quiz.answer(player, question, reply)) {
+                        System.out.println("Right!");
+                    } else {
+                        System.out.println("Not quite.");
+                    }
+                }
+                System.out.println(player);
+            }
+
+            private void printBest() {
+                Player best = this.quiz.best();
+                if (best == null) {
+                    System.out.println("No one has played yet");
+                } else {
+                    System.out.println("Best: " + best);
+                }
+            }
+
+            private void printPlayers() {
+                if (this.quiz.getPlayers().isEmpty()) {
+                    System.out.println("No one has played yet");
+                    return;
+                }
+                for (Player player : this.quiz.getPlayers()) {
+                    System.out.println(player);
+                }
+            }
+        }
+      quiz/logic/Quiz.java: |
+        package quiz.logic;
+
+        import java.util.ArrayList;
+        import quiz.domain.Player;
+        import quiz.domain.Question;
+
+        public class Quiz {
+            private ArrayList<Question> questions;
+            private ArrayList<Player> players;
+
+            public Quiz() {
+                this.questions = new ArrayList<>();
+                this.players = new ArrayList<>();
+            }
+
+            public void addQuestion(Question question) {
+                this.questions.add(question);
+            }
+
+            public ArrayList<Question> getQuestions() {
+                return this.questions;
+            }
+
+            public ArrayList<Player> getPlayers() {
+                return this.players;
+            }
+
+            public Player newPlayer(String name) {
+                Player player = new Player(name);
+                this.players.add(player);
+                return player;
+            }
+
+            public boolean answer(Player player, Question question, String reply) {
+                if (question.isRight(reply)) {
+                    player.addPoints(question.getPoints());
+                    return true;
+                }
+                return false;
+            }
+
+            public Player best() {
+                Player best = null;
+                for (Player player : this.players) {
+                    if (best == null || player.getPoints() > best.getPoints()) {
+                        best = player;
+                    }
+                }
+                return best;
+            }
+        }
+      quiz/domain/Question.java: |
+        package quiz.domain;
+
+        public class Question {
+            private String prompt;
+            private String answer;
+            private int points;
+
+            public Question(String prompt, String answer, int points) {
+                this.prompt = prompt;
+                this.answer = answer;
+                this.points = points;
+            }
+
+            public boolean isRight(String reply) {
+                return reply.trim().equalsIgnoreCase(this.answer);
+            }
+
+            public int getPoints() {
+                return this.points;
+            }
+
+            @Override
+            public String toString() {
+                return this.prompt + " (" + this.points + " points)";
+            }
+        }
+      quiz/domain/Player.java: |
+        package quiz.domain;
+
+        public class Player {
+            private String name;
+            private int points;
+
+            public Player(String name) {
+                this.name = name;
+                this.points = 0;
+            }
+
+            public void addPoints(int points) {
+                this.points += points;
+            }
+
+            public int getPoints() {
+                return this.points;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + ", " + this.points + " points";
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+        import quiz.logic.Quiz;
+        import quiz.ui.TextUI;
+
+        public class Main {
+            public static void main(String[] args) {
+                TextUI ui = new TextUI(new Scanner(System.in), new Quiz());
+                ui.start();
+            }
+        }
+    hints:
+      - "In Quiz, `getPlayers()` returns `this.players`, an `ArrayList<Player>`, like `getQuestions()` returns the questions."
+      - "In TextUI, add `else if (command.equals(\"players\"))` to the chain in `start()`, and put the work in a private method like `printBest()`. If `this.quiz.getPlayers().isEmpty()`, print the message; otherwise print each player with a for-each loop."
+    forbid:
+      - pattern: "==== quiz/logic/Quiz\\.java ====(?:(?!// ====)[\\s\\S])*System\\.out"
+        raw: true
+        message: "Quiz is logic: `getPlayers()` returns the list, and TextUI prints it."
+    tests:
+      - stdin: |
+          players
+          add
+          How many legs does a spider have?
+          8
+          2
+          play
+          Ada
+          8
+          play
+          Ben
+          six
+          players
+          quit
+      - stdin: |
+          add
+          Which planet is the largest?
+          Jupiter
+          2
+          add
+          What is the chemical symbol for gold?
+          Au
+          3
+          play
+          Cleo
+          Mars
+          Au
+          play
+          Dev
+          jupiter
+          au
+          play
+          Eli
+          no
+          no
+          players
+          best
+          quit
+        hidden: true
+      - call: |
+          Quiz quiz = new Quiz();
+          System.out.println(quiz.getPlayers().size());
+          quiz.newPlayer("Ada");
+          quiz.newPlayer("Ben");
+          System.out.println(quiz.getPlayers().size() + " " + quiz.getPlayers().get(1));
+        hidden: true
+    more:
+      - task: |
+          A tailor's shop takes in clothes to alter, and its program is in three packages: `tailor.domain` with the class Garment, `tailor.logic` with the class Workroom, and `tailor.ui` with a TextUI. Main gives the user interface a Scanner that reads a String, as in module 25, so the program runs without anyone typing. What does it print?
+        predict: |
+          import java.util.Scanner;
+          import tailor.logic.Workroom;
+          import tailor.ui.TextUI;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner input = new Scanner("drop\nNadia\ntrousers\ndrop\nHugo\njacket\npickup\n1\npickup\n1\ndrop\nGreta\nskirt\nquit\n");
+                  TextUI ui = new TextUI(input, new Workroom());
+                  ui.start();
+              }
+          }
+          // ==== tailor/ui/TextUI.java ====
+          package tailor.ui;
+
+          import java.util.Scanner;
+          import tailor.domain.Garment;
+          import tailor.logic.Workroom;
+
+          public class TextUI {
+              private Scanner scanner;
+              private Workroom workroom;
+
+              public TextUI(Scanner scanner, Workroom workroom) {
+                  this.scanner = scanner;
+                  this.workroom = workroom;
+              }
+
+              public void start() {
+                  while (true) {
+                      String command = this.scanner.nextLine();
+                      if (command.equals("quit")) {
+                          System.out.println(this.workroom.count() + " garments waiting");
+                          break;
+                      }
+                      if (command.equals("drop")) {
+                          String customer = this.scanner.nextLine();
+                          String item = this.scanner.nextLine();
+                          System.out.println("Order " + this.workroom.drop(customer, item));
+                      } else if (command.equals("pickup")) {
+                          int number = Integer.valueOf(this.scanner.nextLine());
+                          Garment garment = this.workroom.pickUp(number);
+                          if (garment == null) {
+                              System.out.println("Nothing for order " + number);
+                          } else {
+                              System.out.println(garment.getItem() + " for " + garment.getCustomer());
+                          }
+                      }
+                  }
+              }
+          }
+          // ==== tailor/logic/Workroom.java ====
+          package tailor.logic;
+
+          import java.util.ArrayList;
+          import tailor.domain.Garment;
+
+          public class Workroom {
+              private ArrayList<Garment> garments;
+              private int nextNumber;
+
+              public Workroom() {
+                  this.garments = new ArrayList<>();
+                  this.nextNumber = 1;
+              }
+
+              public int drop(String customer, String item) {
+                  Garment garment = new Garment(customer, item, this.nextNumber);
+                  this.garments.add(garment);
+                  this.nextNumber++;
+                  return garment.getNumber();
+              }
+
+              public Garment pickUp(int number) {
+                  for (Garment garment : this.garments) {
+                      if (garment.getNumber() == number) {
+                          this.garments.remove(garment);
+                          return garment;
+                      }
+                  }
+                  return null;
+              }
+
+              public int count() {
+                  return this.garments.size();
+              }
+          }
+          // ==== tailor/domain/Garment.java ====
+          package tailor.domain;
+
+          public class Garment {
+              private String customer;
+              private String item;
+              private int number;
+
+              public Garment(String customer, String item, int number) {
+                  this.customer = customer;
+                  this.item = item;
+                  this.number = number;
+              }
+
+              public String getCustomer() {
+                  return this.customer;
+              }
+
+              public String getItem() {
+                  return this.item;
+              }
+
+              public int getNumber() {
+                  return this.number;
+              }
+          }
+        hints:
+          - "Follow the input line by line: `drop` reads a name and a garment and prints the order number that Workroom returns, and `pickup` reads an order number. `nextNumber` only grows: a garment that is picked up doesn't give its number back."
+          - "The second `pickup` of order 1 finds nothing, since Nadia's trousers left the list the first time. At `quit`, Hugo's jacket and Greta's skirt are still waiting."
+      - task: |
+          The shoe store's program gets its user interface. `Shoe.java` now also has `getModel()`, and `Stock.java` is the one from step 2. `Main.java` is ready. Two parts are yours:
+
+          - In `Stock.java`, add `sell(String model, int size)`: if the stock has a pair of that model (exactly as written) and size, it removes one such pair and returns `true`; otherwise it returns `false`. Stock prints nothing.
+          - In `shoestore/ui/TextUI.java`, write the class `TextUI`, in the package `shoestore.ui`. Its constructor takes a `Scanner` and a `Stock`, and `start()` reads commands, with the prompt `> ` before each one:
+            - `add`: the next two lines are a model and a size. Add the pair to the stock, and print `Added ` and the shoe, like `Added Loafer, size 42`.
+            - `sell`: the next two lines are a model and a size. Sell a pair and print `Sold Loafer, size 42`, or print `Not in stock: Loafer, size 42` if the stock has none.
+            - `size`: the next line is a size. Print `Pairs in size 42: ` and the number of pairs of that size.
+            - `quit`: print `Pairs left: ` and the number of pairs in the stock, and return.
+            - Anything else: print `Unknown command: ` and the command.
+
+          For the input shown, the program prints:
+
+          ```
+          > Added Trail runner, size 42
+          > Added Loafer, size 42
+          > Added Trail runner, size 39
+          > Pairs in size 42: 2
+          > Not in stock: Loafer, size 40
+          > Sold Loafer, size 42
+          > Pairs in size 42: 1
+          > Pairs left: 2
+          ```
+        seed:
+          shoestore/ui/TextUI.java: |
+            package shoestore.ui;
+
+            // Write the imports and the class TextUI here.
+          shoestore/logic/Stock.java: |
+            package shoestore.logic;
+
+            import java.util.ArrayList;
+            import shoestore.domain.Shoe;
+
+            public class Stock {
+                private ArrayList<Shoe> shoes;
+
+                public Stock() {
+                    this.shoes = new ArrayList<>();
+                }
+
+                public void add(Shoe shoe) {
+                    this.shoes.add(shoe);
+                }
+
+                public int count() {
+                    return this.shoes.size();
+                }
+
+                public int countSize(int size) {
+                    int count = 0;
+                    for (Shoe shoe : this.shoes) {
+                        if (shoe.getSize() == size) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+
+                // Write the method sell here.
+            }
+          shoestore/domain/Shoe.java: |
+            package shoestore.domain;
+
+            public class Shoe {
+                private String model;
+                private int size;
+
+                public Shoe(String model, int size) {
+                    this.model = model;
+                    this.size = size;
+                }
+
+                public String getModel() {
+                    return this.model;
+                }
+
+                public int getSize() {
+                    return this.size;
+                }
+
+                @Override
+                public String toString() {
+                    return this.model + ", size " + this.size;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+            import shoestore.logic.Stock;
+            import shoestore.ui.TextUI;
+
+            public class Main {
+                public static void main(String[] args) {
+                    TextUI ui = new TextUI(new Scanner(System.in), new Stock());
+                    ui.start();
+                }
+            }
+        solution:
+          shoestore/ui/TextUI.java: |
+            package shoestore.ui;
+
+            import java.util.Scanner;
+            import shoestore.domain.Shoe;
+            import shoestore.logic.Stock;
+
+            public class TextUI {
+                private Scanner scanner;
+                private Stock stock;
+
+                public TextUI(Scanner scanner, Stock stock) {
+                    this.scanner = scanner;
+                    this.stock = stock;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Pairs left: " + this.stock.count());
+                            break;
+                        }
+                        if (command.equals("add")) {
+                            this.add();
+                        } else if (command.equals("sell")) {
+                            this.sell();
+                        } else if (command.equals("size")) {
+                            int size = Integer.valueOf(this.scanner.nextLine());
+                            System.out.println("Pairs in size " + size + ": " + this.stock.countSize(size));
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+
+                private void add() {
+                    String model = this.scanner.nextLine();
+                    int size = Integer.valueOf(this.scanner.nextLine());
+                    Shoe shoe = new Shoe(model, size);
+                    this.stock.add(shoe);
+                    System.out.println("Added " + shoe);
+                }
+
+                private void sell() {
+                    String model = this.scanner.nextLine();
+                    int size = Integer.valueOf(this.scanner.nextLine());
+                    if (this.stock.sell(model, size)) {
+                        System.out.println("Sold " + model + ", size " + size);
+                    } else {
+                        System.out.println("Not in stock: " + model + ", size " + size);
+                    }
+                }
+            }
+          shoestore/logic/Stock.java: |
+            package shoestore.logic;
+
+            import java.util.ArrayList;
+            import shoestore.domain.Shoe;
+
+            public class Stock {
+                private ArrayList<Shoe> shoes;
+
+                public Stock() {
+                    this.shoes = new ArrayList<>();
+                }
+
+                public void add(Shoe shoe) {
+                    this.shoes.add(shoe);
+                }
+
+                public int count() {
+                    return this.shoes.size();
+                }
+
+                public int countSize(int size) {
+                    int count = 0;
+                    for (Shoe shoe : this.shoes) {
+                        if (shoe.getSize() == size) {
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+
+                public boolean sell(String model, int size) {
+                    for (Shoe shoe : this.shoes) {
+                        if (shoe.getModel().equals(model) && shoe.getSize() == size) {
+                            this.shoes.remove(shoe);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            }
+          shoestore/domain/Shoe.java: |
+            package shoestore.domain;
+
+            public class Shoe {
+                private String model;
+                private int size;
+
+                public Shoe(String model, int size) {
+                    this.model = model;
+                    this.size = size;
+                }
+
+                public String getModel() {
+                    return this.model;
+                }
+
+                public int getSize() {
+                    return this.size;
+                }
+
+                @Override
+                public String toString() {
+                    return this.model + ", size " + this.size;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+            import shoestore.logic.Stock;
+            import shoestore.ui.TextUI;
+
+            public class Main {
+                public static void main(String[] args) {
+                    TextUI ui = new TextUI(new Scanner(System.in), new Stock());
+                    ui.start();
+                }
+            }
+        hints:
+          - "`sell` goes through the shoes and compares both the model, with `equals`, and the size. At the first match it removes that shoe with `this.shoes.remove(shoe)` and returns `true` right away; after the loop, it returns `false`."
+          - "TextUI imports `java.util.Scanner`, `shoestore.domain.Shoe` and `shoestore.logic.Stock`. Read a size with `Integer.valueOf(this.scanner.nextLine())`. Private methods such as `add()` and `sell()` keep `start()` short, as in the lesson's quiz."
+        forbid:
+          - pattern: "==== shoestore/logic/Stock\\.java ====(?:(?!// ====)[\\s\\S])*System\\.out"
+            raw: true
+            message: "Stock is logic: `sell` returns `true` or `false`, and TextUI prints the messages."
+        tests:
+          - stdin: |
+              add
+              Trail runner
+              42
+              add
+              Loafer
+              42
+              add
+              Trail runner
+              39
+              size
+              42
+              sell
+              Loafer
+              40
+              sell
+              Loafer
+              42
+              size
+              42
+              quit
+          - stdin: |
+              size
+              38
+              sell
+              Sandal
+              38
+              add
+              Sandal
+              38
+              add
+              Sandal
+              38
+              restock
+              sell
+              sandal
+              38
+              sell
+              Sandal
+              38
+              size
+              38
+              quit
+            hidden: true
+          - call: |
+              Stock stock = new Stock();
+              stock.add(new Shoe("Boot", 40));
+              stock.add(new Shoe("Boot", 41));
+              stock.add(new Shoe("Boot", 40));
+              System.out.println(stock.sell("Boot", 42) + " " + stock.sell("Boot", 40) + " " + stock.countSize(40) + " " + stock.count());
+            hidden: true
+          - call: |
+              Stock stock = new Stock();
+              TextUI ui = new TextUI(new Scanner("add\nClog\n44\nsell\nClog\n44\nsell\nClog\n44\nquit\n"), stock);
+              ui.start();
+              System.out.println(stock.count());
+            hidden: true
+
+  - id: packages-in-practice
+    slug: in-practice
+    title: Packages in practice
+    text: |
+      This last step looks at packages outside this site: how real projects arrange their folders, how packages are named, and the messages javac gives when something about packages goes wrong.
+
+      ### The folders of a real project
+
+      On this site, a program's package folders start at the top, next to `Main.java`. A project on your own computer has a few more folders around them. Many Java projects are built with a build tool such as Maven or Gradle (a later module of this course sets up Maven), and both expect this layout:
+
+      - `src/main/java/quiz/domain/Question.java`
+      - `src/main/java/quiz/logic/Quiz.java`
+      - `src/main/java/quiz/ui/TextUI.java`
+      - `src/test/java/quiz/logic/QuizTest.java`
+
+      What the layout says:
+
+      - `src/main/java` holds the program's own classes, and the package folders start inside it. `Question.java` is still in `quiz/domain/`, and its package line is still `package quiz.domain;`.
+      - `src/test/java` holds the tests, in a folder tree of its own. A test class is in the same package as the class it tests: QuizTest is in `quiz.logic` too, so it can test Quiz's package-private parts as well.
+      - In a real program every class is in a package, `Main` too, often in the program's top package: `quiz.Main`. A class in a named package can't use a class of the default package at all, since no import can name it. The default package suits small programs, like the ones on this site, where nothing needs to use Main.
+      - A programming editor, such as NetBeans, IntelliJ IDEA or VS Code, shows the packages as a tree, and creates the folders and the package line when you make a class in a package.
+
+      ### Naming packages
+
+      - Package names are all small letters, one short word for each part: `quiz.logic`, not `Quiz.Logic` or `quiz.gameLogic`.
+      - Many start with the internet domain of the organization that writes the code, turned around, so that the packages of two organizations never share a name. JUnit's classes, which module 26 imported, are in `org.junit`, and a company with the domain `example.com` would use packages like `com.example.quiz.logic`. Names that start with `java` belong to Java's own library.
+      - A package is named for what its classes do together. A small program splits into `domain`, `logic` and `ui`, as in this module. Bigger programs often have a package for each feature instead, such as `quiz.players` and `quiz.questions`. Either way, each package has one clear job.
+
+      ### Messages you'll meet
+
+      | javac says | It usually means |
+      | --- | --- |
+      | `package quiz.domian does not exist` | a typo in an import or a full name |
+      | `cannot find symbol`, with `symbol: class Question` | an import is missing |
+      | `Question is not public in quiz.domain; cannot be accessed from outside package` | the class needs `public` |
+      | `getPoints() is not public in Question; cannot be accessed from outside package` | the method or constructor needs `public`, unless it's meant only for its own package |
+      | `getAnswer() has protected access in Question` | only its package and its subclasses may use it (a subclass only through its own type) |
+      | `file does not contain class quiz.domain.Question` | the file's package line doesn't match its folders |
+
+      The last one comes with more messages around it, such as `duplicate class` and `bad source file`. They all go away when the package line is right.
+
+      ### This module in short
+
+      - A package line puts a class in a package, and the file's folders match it. A class's full name is its package and its own name. A class without a package line is in the default package.
+      - An import lets a file use a class of another package by its simple name, and `*` imports a whole package. `java.lang` is imported into every file.
+      - From another package, only public classes, constructors and methods can be used, and `protected` also lets in subclasses. What has no word in front in a class stays inside its package.
+      - A program splits into packages by responsibility, such as `domain`, `logic` and `ui`, which use each other in one direction.
+
+      **Your turn:** a planetarium's program has its classes in two packages, `planetarium.domain` and `planetarium.logic`, but it has four mistakes about packages: a wrong package line, a missing import and two missing `public`s. Read javac's messages, fix one mistake at a time, and run again after each fix. Don't change what the program does. It should print:
+
+      ```
+      100 minutes of shows
+      Longest: Black Holes (40 minutes)
+      ```
+    seed:
+      Main.java: |
+        import planetarium.logic.Schedule;
+
+        public class Main {
+            public static void main(String[] args) {
+                Schedule saturday = new Schedule();
+                saturday.add(new Show("Journey to Mars", 35));
+                saturday.add(new Show("The Night Sky", 25));
+                saturday.add(new Show("Black Holes", 40));
+                System.out.println(saturday.totalMinutes() + " minutes of shows");
+                System.out.println("Longest: " + saturday.longest());
+            }
+        }
+      planetarium/logic/Schedule.java: |
+        package planetarium.logic;
+
+        import java.util.ArrayList;
+        import planetarium.domain.Show;
+
+        public class Schedule {
+            private ArrayList<Show> shows;
+
+            Schedule() {
+                this.shows = new ArrayList<>();
+            }
+
+            public void add(Show show) {
+                this.shows.add(show);
+            }
+
+            public int totalMinutes() {
+                int total = 0;
+                for (Show show : this.shows) {
+                    total += show.getMinutes();
+                }
+                return total;
+            }
+
+            public Show longest() {
+                Show longest = null;
+                for (Show show : this.shows) {
+                    if (longest == null || show.getMinutes() > longest.getMinutes()) {
+                        longest = show;
+                    }
+                }
+                return longest;
+            }
+        }
+      planetarium/domain/Show.java: |
+        package planetarium;
+
+        public class Show {
+            private String title;
+            private int minutes;
+
+            public Show(String title, int minutes) {
+                this.title = title;
+                this.minutes = minutes;
+            }
+
+            int getMinutes() {
+                return this.minutes;
+            }
+
+            @Override
+            public String toString() {
+                return this.title + " (" + this.minutes + " minutes)";
+            }
+        }
+    solution:
+      Main.java: |
+        import planetarium.domain.Show;
+        import planetarium.logic.Schedule;
+
+        public class Main {
+            public static void main(String[] args) {
+                Schedule saturday = new Schedule();
+                saturday.add(new Show("Journey to Mars", 35));
+                saturday.add(new Show("The Night Sky", 25));
+                saturday.add(new Show("Black Holes", 40));
+                System.out.println(saturday.totalMinutes() + " minutes of shows");
+                System.out.println("Longest: " + saturday.longest());
+            }
+        }
+      planetarium/logic/Schedule.java: |
+        package planetarium.logic;
+
+        import java.util.ArrayList;
+        import planetarium.domain.Show;
+
+        public class Schedule {
+            private ArrayList<Show> shows;
+
+            public Schedule() {
+                this.shows = new ArrayList<>();
+            }
+
+            public void add(Show show) {
+                this.shows.add(show);
+            }
+
+            public int totalMinutes() {
+                int total = 0;
+                for (Show show : this.shows) {
+                    total += show.getMinutes();
+                }
+                return total;
+            }
+
+            public Show longest() {
+                Show longest = null;
+                for (Show show : this.shows) {
+                    if (longest == null || show.getMinutes() > longest.getMinutes()) {
+                        longest = show;
+                    }
+                }
+                return longest;
+            }
+        }
+      planetarium/domain/Show.java: |
+        package planetarium.domain;
+
+        public class Show {
+            private String title;
+            private int minutes;
+
+            public Show(String title, int minutes) {
+                this.title = title;
+                this.minutes = minutes;
+            }
+
+            public int getMinutes() {
+                return this.minutes;
+            }
+
+            @Override
+            public String toString() {
+                return this.title + " (" + this.minutes + " minutes)";
+            }
+        }
+    hints:
+      - "Start with `Show.java`: it's in the folder `planetarium/domain/`, so its package line is `package planetarium.domain;`. Many of javac's messages go away with that fix."
+      - "Then: Main uses `Show` without importing it (`import planetarium.domain.Show;`), Main calls Schedule's constructor, which isn't public, and Schedule, in another package, calls Show's `getMinutes()`, which isn't public either."
+    require:
+      - pattern: \bpackage\s+planetarium\.domain\s*;
+        message: "`Show.java` is in the folder `planetarium/domain/`, so its first line is `package planetarium.domain;`."
+    tests:
+      - name: The program's output
+      - call: |
+          Schedule sunday = new Schedule();
+          System.out.println(sunday.totalMinutes() + " " + sunday.longest());
+          sunday.add(new Show("Comets", 30));
+          sunday.add(new Show("Aurora", 30));
+          System.out.println(sunday.totalMinutes() + " " + sunday.longest() + " " + new Show("Moon", 20).getMinutes());
+        hidden: true
+    more:
+      - task: |
+          In a real project, a class's tests are in the same package as the class, so they can test its package-private methods too. Here the test class is simply one more file in the package's folder.
+
+          `DeskFee.java`, in the package `cowork.logic`, works out what a desk in a coworking space costs. `price(int minutes)` is public, and it uses the package-private helper `startedHours(int minutes)`, which counts every hour that has started: 1 to 60 minutes is 1 hour, 61 to 120 minutes are 2 hours, and so on. The price is the started hours times the price of an hour, but never more than the daily maximum.
+
+          `DeskFeeTest.java` is in the same package and has one test. Add two more, with `assertEquals`:
+
+          - a test of `startedHours`: 1 minute is 1 hour, 60 minutes are 1 hour, and 61 minutes are 2 hours
+          - a test of the daily maximum: with 4 dollars an hour and a maximum of 25 dollars, 600 minutes cost 25 dollars
+
+          The checks run your tests on the DeskFee as it is, where every test should pass, and on versions of DeskFee with a bug, where at least one of your tests should fail.
+        seed:
+          cowork/logic/DeskFeeTest.java: |
+            package cowork.logic;
+
+            import static org.junit.Assert.assertEquals;
+
+            import org.junit.Test;
+
+            public class DeskFeeTest {
+                @Test
+                public void priceIsPerStartedHour() {
+                    DeskFee fee = new DeskFee(4, 25);
+                    assertEquals(8, fee.price(90));
+                }
+
+                // Write the tests of startedHours and of the daily maximum here.
+            }
+          cowork/logic/DeskFee.java: |
+            package cowork.logic;
+
+            public class DeskFee {
+                private int perHour;
+                private int dailyMax;
+
+                public DeskFee(int perHour, int dailyMax) {
+                    this.perHour = perHour;
+                    this.dailyMax = dailyMax;
+                }
+
+                public int price(int minutes) {
+                    int price = this.startedHours(minutes) * this.perHour;
+                    if (price > this.dailyMax) {
+                        return this.dailyMax;
+                    }
+                    return price;
+                }
+
+                int startedHours(int minutes) {
+                    return (minutes + 59) / 60;
+                }
+            }
+        solution:
+          cowork/logic/DeskFeeTest.java: |
+            package cowork.logic;
+
+            import static org.junit.Assert.assertEquals;
+
+            import org.junit.Test;
+
+            public class DeskFeeTest {
+                @Test
+                public void priceIsPerStartedHour() {
+                    DeskFee fee = new DeskFee(4, 25);
+                    assertEquals(8, fee.price(90));
+                }
+
+                @Test
+                public void startedHoursCountsEveryStartedHour() {
+                    DeskFee fee = new DeskFee(4, 25);
+                    assertEquals(1, fee.startedHours(1));
+                    assertEquals(1, fee.startedHours(60));
+                    assertEquals(2, fee.startedHours(61));
+                }
+
+                @Test
+                public void priceStopsAtTheDailyMaximum() {
+                    DeskFee fee = new DeskFee(4, 25);
+                    assertEquals(25, fee.price(600));
+                }
+            }
+          cowork/logic/DeskFee.java: |
+            package cowork.logic;
+
+            public class DeskFee {
+                private int perHour;
+                private int dailyMax;
+
+                public DeskFee(int perHour, int dailyMax) {
+                    this.perHour = perHour;
+                    this.dailyMax = dailyMax;
+                }
+
+                public int price(int minutes) {
+                    int price = this.startedHours(minutes) * this.perHour;
+                    if (price > this.dailyMax) {
+                        return this.dailyMax;
+                    }
+                    return price;
+                }
+
+                int startedHours(int minutes) {
+                    return (minutes + 59) / 60;
+                }
+            }
+        hints:
+          - "Copy the shape of `priceIsPerStartedHour`: `@Test`, then `public void` and a name that says what the test checks. DeskFeeTest is in `cowork.logic` too, so it may call `fee.startedHours(61)` although the method isn't public."
+          - "One test has three lines like `assertEquals(2, fee.startedHours(61));`, with the expected value first. The other makes `new DeskFee(4, 25)` and checks `assertEquals(25, fee.price(600));`."
+        require:
+          - pattern: "==== cowork/logic/DeskFeeTest\\.java ====(?:(?!// ====)[\\s\\S])*\\.startedHours\\s*\\("
+            raw: true
+            message: "Test the package-private method itself: call `fee.startedHours(...)` in DeskFeeTest, which is in the same package."
+        tests:
+          - name: The DeskFee as it is
+            junit: cowork.logic.DeskFeeTest
+          - name: A DeskFee whose startedHours misses an hour's first minute
+            junit: cowork.logic.DeskFeeTest
+            outcome: fail
+            replace:
+              cowork/logic/DeskFee.java: |
+                package cowork.logic;
+
+                public class DeskFee {
+                    private int perHour;
+                    private int dailyMax;
+
+                    public DeskFee(int perHour, int dailyMax) {
+                        this.perHour = perHour;
+                        this.dailyMax = dailyMax;
+                    }
+
+                    public int price(int minutes) {
+                        int price = this.startedHours(minutes) * this.perHour;
+                        if (price > this.dailyMax) {
+                            return this.dailyMax;
+                        }
+                        return price;
+                    }
+
+                    int startedHours(int minutes) {
+                        return (minutes + 58) / 60;
+                    }
+                }
+          - name: A DeskFee without a daily maximum
+            junit: cowork.logic.DeskFeeTest
+            outcome: fail
+            replace:
+              cowork/logic/DeskFee.java: |
+                package cowork.logic;
+
+                public class DeskFee {
+                    private int perHour;
+                    private int dailyMax;
+
+                    public DeskFee(int perHour, int dailyMax) {
+                        this.perHour = perHour;
+                        this.dailyMax = dailyMax;
+                    }
+
+                    public int price(int minutes) {
+                        return this.startedHours(minutes) * this.perHour;
+                    }
+
+                    int startedHours(int minutes) {
+                        return (minutes + 59) / 60;
+                    }
+                }
+          - name: A DeskFee whose startedHours counts one hour too many
+            junit: cowork.logic.DeskFeeTest
+            outcome: fail
+            hidden: true
+            replace:
+              cowork/logic/DeskFee.java: |
+                package cowork.logic;
+
+                public class DeskFee {
+                    private int perHour;
+                    private int dailyMax;
+
+                    public DeskFee(int perHour, int dailyMax) {
+                        this.perHour = perHour;
+                        this.dailyMax = dailyMax;
+                    }
+
+                    public int price(int minutes) {
+                        int price = this.startedHours(minutes) * this.perHour;
+                        if (price > this.dailyMax) {
+                            return this.dailyMax;
+                        }
+                        return price;
+                    }
+
+                    int startedHours(int minutes) {
+                        return minutes / 60 + 1;
+                    }
+                }
+      - task: |
+          To close the module, a whole program goes into packages. A kayak rental's program works, but it's all in `Main.java`: after Main come three more classes without `public`. (A file may hold several classes, but only one public one, named after the file.) Split it into packages:
+
+          - `Kayak` goes into `kayak/domain/Kayak.java`, in the package `kayak.domain`
+          - `Dock` goes into `kayak/logic/Dock.java`, in the package `kayak.logic`
+          - `TextUI` goes into `kayak/ui/TextUI.java`, in the package `kayak.ui`
+
+          `Main.java` then holds only Main. Each file needs its package line and the imports of what it uses, and what other packages use must be public. The program keeps printing exactly what it prints now. For the input shown:
+
+          ```
+          > Take kayak 1
+          > Take kayak 2
+          > Free kayaks: 1
+          > Kayak 1 is back
+          > Kayak 1 isn't out
+          > Take kayak 1
+          > Take kayak 3
+          > All kayaks are out
+          > Free kayaks: 0
+          > Bye!
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    TextUI ui = new TextUI(new Scanner(System.in), new Dock(3));
+                    ui.start();
+                }
+            }
+
+            class Kayak {
+                private int number;
+                private boolean out;
+
+                Kayak(int number) {
+                    this.number = number;
+                    this.out = false;
+                }
+
+                int getNumber() {
+                    return this.number;
+                }
+
+                boolean isOut() {
+                    return this.out;
+                }
+
+                void setOut(boolean out) {
+                    this.out = out;
+                }
+            }
+
+            class Dock {
+                private ArrayList<Kayak> kayaks;
+
+                Dock(int count) {
+                    this.kayaks = new ArrayList<>();
+                    for (int i = 1; i <= count; i++) {
+                        this.kayaks.add(new Kayak(i));
+                    }
+                }
+
+                Kayak rent() {
+                    for (Kayak kayak : this.kayaks) {
+                        if (!kayak.isOut()) {
+                            kayak.setOut(true);
+                            return kayak;
+                        }
+                    }
+                    return null;
+                }
+
+                boolean giveBack(int number) {
+                    for (Kayak kayak : this.kayaks) {
+                        if (kayak.getNumber() == number && kayak.isOut()) {
+                            kayak.setOut(false);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                int freeCount() {
+                    int free = 0;
+                    for (Kayak kayak : this.kayaks) {
+                        if (!kayak.isOut()) {
+                            free++;
+                        }
+                    }
+                    return free;
+                }
+            }
+
+            class TextUI {
+                private Scanner scanner;
+                private Dock dock;
+
+                TextUI(Scanner scanner, Dock dock) {
+                    this.scanner = scanner;
+                    this.dock = dock;
+                }
+
+                void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye!");
+                            break;
+                        }
+                        if (command.equals("rent")) {
+                            Kayak kayak = this.dock.rent();
+                            if (kayak == null) {
+                                System.out.println("All kayaks are out");
+                            } else {
+                                System.out.println("Take kayak " + kayak.getNumber());
+                            }
+                        } else if (command.equals("return")) {
+                            int number = Integer.valueOf(this.scanner.nextLine());
+                            if (this.dock.giveBack(number)) {
+                                System.out.println("Kayak " + number + " is back");
+                            } else {
+                                System.out.println("Kayak " + number + " isn't out");
+                            }
+                        } else if (command.equals("free")) {
+                            System.out.println("Free kayaks: " + this.dock.freeCount());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+          kayak/domain/Kayak.java: |
+            // Move the class Kayak here.
+          kayak/logic/Dock.java: |
+            // Move the class Dock here.
+          kayak/ui/TextUI.java: |
+            // Move the class TextUI here.
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+            import kayak.logic.Dock;
+            import kayak.ui.TextUI;
+
+            public class Main {
+                public static void main(String[] args) {
+                    TextUI ui = new TextUI(new Scanner(System.in), new Dock(3));
+                    ui.start();
+                }
+            }
+          kayak/domain/Kayak.java: |
+            package kayak.domain;
+
+            public class Kayak {
+                private int number;
+                private boolean out;
+
+                public Kayak(int number) {
+                    this.number = number;
+                    this.out = false;
+                }
+
+                public int getNumber() {
+                    return this.number;
+                }
+
+                public boolean isOut() {
+                    return this.out;
+                }
+
+                public void setOut(boolean out) {
+                    this.out = out;
+                }
+            }
+          kayak/logic/Dock.java: |
+            package kayak.logic;
+
+            import java.util.ArrayList;
+            import kayak.domain.Kayak;
+
+            public class Dock {
+                private ArrayList<Kayak> kayaks;
+
+                public Dock(int count) {
+                    this.kayaks = new ArrayList<>();
+                    for (int i = 1; i <= count; i++) {
+                        this.kayaks.add(new Kayak(i));
+                    }
+                }
+
+                public Kayak rent() {
+                    for (Kayak kayak : this.kayaks) {
+                        if (!kayak.isOut()) {
+                            kayak.setOut(true);
+                            return kayak;
+                        }
+                    }
+                    return null;
+                }
+
+                public boolean giveBack(int number) {
+                    for (Kayak kayak : this.kayaks) {
+                        if (kayak.getNumber() == number && kayak.isOut()) {
+                            kayak.setOut(false);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                public int freeCount() {
+                    int free = 0;
+                    for (Kayak kayak : this.kayaks) {
+                        if (!kayak.isOut()) {
+                            free++;
+                        }
+                    }
+                    return free;
+                }
+            }
+          kayak/ui/TextUI.java: |
+            package kayak.ui;
+
+            import java.util.Scanner;
+            import kayak.domain.Kayak;
+            import kayak.logic.Dock;
+
+            public class TextUI {
+                private Scanner scanner;
+                private Dock dock;
+
+                public TextUI(Scanner scanner, Dock dock) {
+                    this.scanner = scanner;
+                    this.dock = dock;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye!");
+                            break;
+                        }
+                        if (command.equals("rent")) {
+                            Kayak kayak = this.dock.rent();
+                            if (kayak == null) {
+                                System.out.println("All kayaks are out");
+                            } else {
+                                System.out.println("Take kayak " + kayak.getNumber());
+                            }
+                        } else if (command.equals("return")) {
+                            int number = Integer.valueOf(this.scanner.nextLine());
+                            if (this.dock.giveBack(number)) {
+                                System.out.println("Kayak " + number + " is back");
+                            } else {
+                                System.out.println("Kayak " + number + " isn't out");
+                            }
+                        } else if (command.equals("free")) {
+                            System.out.println("Free kayaks: " + this.dock.freeCount());
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+            }
+        hints:
+          - "Start with Kayak: `package kayak.domain;` on the first line, then the class, with `public` in front of the class, its constructor and its methods, since Dock, in another package, uses them all. Then Dock, which imports `java.util.ArrayList` and `kayak.domain.Kayak`, and TextUI, which imports Scanner, Kayak and Dock."
+          - "When javac says `... is not public in ...; cannot be accessed from outside package`, add `public` where the message points. In the end, `Main.java` holds only Main, with the imports `java.util.Scanner`, `kayak.logic.Dock` and `kayak.ui.TextUI`."
+        require:
+          - pattern: \bpackage\s+kayak\.domain\s*;
+            message: "`Kayak.java` is in the folder `kayak/domain/`: start it with `package kayak.domain;`."
+          - pattern: \bpackage\s+kayak\.logic\s*;
+            message: "`Dock.java` is in the folder `kayak/logic/`: start it with `package kayak.logic;`."
+          - pattern: \bpackage\s+kayak\.ui\s*;
+            message: "`TextUI.java` is in the folder `kayak/ui/`: start it with `package kayak.ui;`."
+        forbid:
+          - pattern: "==== Main\\.java ====(?:(?!// ====)[\\s\\S])*\\bclass\\s+(?:Kayak|Dock|TextUI)\\b"
+            raw: true
+            message: "Move Kayak, Dock and TextUI out of `Main.java`, each into the file of its package, so that `Main.java` holds only Main."
+        tests:
+          - stdin: |
+              rent
+              rent
+              free
+              return
+              1
+              return
+              1
+              rent
+              rent
+              rent
+              free
+              quit
+          - stdin: |
+              free
+              return
+              2
+              rent
+              paddle
+              return
+              1
+              rent
+              rent
+              free
+              quit
+            hidden: true
+          - call: |
+              Dock dock = new Dock(2);
+              Kayak first = dock.rent();
+              System.out.println(first.getNumber() + " " + first.isOut() + " " + dock.freeCount());
+              System.out.println(dock.giveBack(2) + " " + dock.giveBack(1) + " " + dock.freeCount());
+            hidden: true

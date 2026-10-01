@@ -1,0 +1,377 @@
+topic: writing-files
+drills:
+  - type: predict
+    after: printwriter
+    prompt: "What does this print? (Drills have no import lines, so the classes are written with their full names, such as `java.io.PrintWriter`.)"
+    pre: |
+      public static List<String> lines(String fileName) throws Exception {
+          return java.nio.file.Files.readAllLines(java.nio.file.Paths.get(fileName));
+      }
+    body: |
+      try {
+          java.io.PrintWriter writer = new java.io.PrintWriter("door.txt");
+          writer.print("Back ");
+          writer.println("at 2");
+          writer.print("Ring");
+          writer.println(" twice");
+          writer.close();
+          System.out.println(lines("door.txt"));
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    why: "`print` doesn't end the line, so `Back ` and `at 2` make one line of the file, and `Ring` and ` twice` another. `lines` returns the file's two lines in a list."
+
+  - type: predict
+    after: printwriter
+    prompt: "What does this print? (Drills have no import lines, so the classes are written with their full names.)"
+    pre: |
+      public static List<String> lines(String fileName) throws Exception {
+          return java.nio.file.Files.readAllLines(java.nio.file.Paths.get(fileName));
+      }
+    body: |
+      try {
+          java.io.PrintWriter writer = new java.io.PrintWriter("memo.txt");
+          writer.println("Buy stamps");
+          System.out.print(lines("memo.txt").size() + " ");
+          writer.close();
+          System.out.println(lines("memo.txt").size());
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    why: "The PrintWriter keeps the text in memory, and `close()` writes it into the file. The file exists from the moment the writer is created, but it has no lines until the writer is closed."
+
+  - type: compiles
+    after: printwriter
+    prompt: "Does this compile? (`java.io.PrintWriter` is `PrintWriter` written with its full name, so it needs no import here. These lines are the whole of `main`, whose header has no `throws`.)"
+    body: |
+      java.io.PrintWriter writer = new java.io.PrintWriter("plan.txt");
+      writer.println("Pack the tent");
+      writer.close();
+    why: "No. PrintWriter's constructor can throw a FileNotFoundException, which is a checked exception, and `main` neither catches it nor declares it. javac says `unreported exception FileNotFoundException; must be caught or declared to be thrown`."
+
+  - type: choice
+    after: printwriter
+    prompt: "The file `notes.txt` holds three lines. A program creates `new PrintWriter(\"notes.txt\")` and closes it right away, without writing anything. What does `notes.txt` hold afterwards?"
+    choices:
+      - "Nothing: the file is empty"
+      - "The same three lines"
+      - "The three lines and an empty line after them"
+      - "The program crashes, because the file already exists"
+    answer: 1
+    why: "Creating a PrintWriter empties a file that already exists, before anything is written. Nothing was written, so the file stays empty. To keep the old lines, a program appends with `new FileWriter(\"notes.txt\", true)`."
+
+  - type: fill
+    after: adding-to-a-file
+    prompt: "Fill in the blank, so that Tuesday's line is added after Monday's."
+    pre: |
+      public static List<String> lines(String fileName) throws Exception {
+          return java.nio.file.Files.readAllLines(java.nio.file.Paths.get(fileName));
+      }
+    body: |
+      try {
+          java.io.PrintWriter monday = new java.io.PrintWriter("laps.txt");
+          monday.println("Mon 20 laps");
+          monday.close();
+          java.io.PrintWriter tuesday = new java.io.PrintWriter(new java.io.FileWriter("laps.txt", [[true]]));
+          tuesday.println("Tue 24 laps");
+          tuesday.close();
+          System.out.println(lines("laps.txt"));
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    why: "FileWriter's second parameter says whether to append. With `true`, the file keeps what it holds and the new line goes after it. With `false`, the file would be emptied first, and only Tuesday's line would be left."
+
+  - type: compiles
+    after: adding-to-a-file
+    prompt: "Does this compile? (The classes are written with their full names, so they need no imports here.)"
+    body: |
+      try {
+          java.io.FileWriter writer = new java.io.FileWriter("log.txt", true);
+          writer.println("Started");
+          writer.close();
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    why: "No. A FileWriter has `write` methods, but no `println`, so javac says `cannot find symbol`. Give the FileWriter to a PrintWriter, `new PrintWriter(new FileWriter(\"log.txt\", true))`, to get `println` and `print`."
+
+  - type: predict
+    after: lists-of-objects
+    classes: |
+      class Entrant {
+          private String name;
+          private int points;
+
+          public Entrant(String name, int points) {
+              this.name = name;
+              this.points = points;
+          }
+
+          public String toCsv() {
+              return this.name + "," + this.points;
+          }
+      }
+    body: |
+      Entrant rosa = new Entrant("Rosa", 12);
+      Entrant lee = new Entrant("Lee, Jr.", 9);
+      System.out.println(rosa.toCsv().split(",").length + " " + lee.toCsv().split(",").length);
+    why: "Rosa's line `Rosa,12` splits into the name and the points. Lee's name has a comma of its own, so `Lee, Jr.,9` splits into three parts, and a program that reads the file back would take ` Jr.` for the points. A separator must not occur in the data."
+
+  - type: predict
+    after: lists-of-objects
+    prompt: "What does this print? (Drills have no import lines, so the classes are written with their full names.)"
+    pre: |
+      public static List<String> lines(String fileName) throws Exception {
+          return java.nio.file.Files.readAllLines(java.nio.file.Paths.get(fileName));
+      }
+    body: |
+      try (java.io.PrintWriter writer = new java.io.PrintWriter("times.txt")) {
+          for (String time : "41,39,DNF,40".split(",")) {
+              writer.println(Integer.parseInt(time));
+          }
+      } catch (Exception e) {
+          System.out.print("stopped ");
+      }
+      try {
+          System.out.println(lines("times.txt"));
+      } catch (Exception e) {
+          System.out.println("no file");
+      }
+    why: "`parseInt(\"DNF\")` throws in the third round, so 40 is never written. The try-with-resources closes the writer on the way out, before the `catch` block runs, so the two lines written before the problem reach the file."
+
+  - type: bug
+    after: lists-of-objects
+    prompt: "The file should hold lines that `split(\",\")` can take apart again, so the program prints `[Mia,40, Leo,25]`. Which line is wrong? (`toString` is right as it is: it's for the screen.)"
+    classes: |
+      class GameScore {
+          private String player;
+          private int points;
+
+          public GameScore(String player, int points) {
+              this.player = player;
+              this.points = points;
+          }
+
+          public String toCsv() {
+              return this.player + "," + this.points;
+          }
+
+          @Override
+          public String toString() {
+              return this.player + ": " + this.points;
+          }
+      }
+    pre: |
+      public static void save(ArrayList<GameScore> scores, String fileName) throws Exception {
+          try (java.io.PrintWriter writer = new java.io.PrintWriter(fileName)) {
+              for (GameScore score : scores) {
+                  writer.println(score); // BUG
+              }
+          }
+      }
+    body: |
+      ArrayList<GameScore> scores = new ArrayList<>();
+      scores.add(new GameScore("Mia", 40));
+      scores.add(new GameScore("Leo", 25));
+      try {
+          save(scores, "scores.csv");
+          System.out.println(java.nio.file.Files.readAllLines(java.nio.file.Paths.get("scores.csv")));
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    fix: writer.println(score.toCsv());
+    why: "`println(score)` writes what `toString` returns, `Mia: 40`, which is meant for people. The file needs the line that `toCsv()` returns, with the comma that reading splits at."
+
+  - type: predict
+    after: saving-and-loading
+    classes: |
+      class Larder {
+          private ArrayList<String> jars;
+
+          public Larder() {
+              this.jars = new ArrayList<>();
+          }
+
+          public void add(String jar) {
+              this.jars.add(jar);
+          }
+
+          public int size() {
+              return this.jars.size();
+          }
+
+          public void save(String fileName) throws Exception {
+              try (java.io.PrintWriter writer = new java.io.PrintWriter(fileName)) {
+                  for (String jar : this.jars) {
+                      writer.println(jar);
+                  }
+              }
+          }
+
+          public void load(String fileName) throws Exception {
+              for (String line : java.nio.file.Files.readAllLines(java.nio.file.Paths.get(fileName))) {
+                  this.jars.add(line);
+              }
+          }
+      }
+    body: |
+      Larder larder = new Larder();
+      larder.add("jam");
+      larder.add("honey");
+      try {
+          larder.save("larder.txt");
+          larder.load("larder.txt");
+          Larder other = new Larder();
+          other.load("larder.txt");
+          System.out.println(larder.size() + " " + other.size());
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    why: "`load` adds the file's lines to what the list already holds. `larder` still had its two jars, and loading adds the same two again, so it has 4. `other` starts empty, so it gets exactly the file's two lines."
+
+  - type: fill
+    after: saving-and-loading
+    prompt: "Fill in the blank with a method name, so that the points read back from the file are added up."
+    pre: |
+      public static List<String> lines(String fileName) throws Exception {
+          return java.nio.file.Files.readAllLines(java.nio.file.Paths.get(fileName));
+      }
+    body: |
+      try {
+          java.io.PrintWriter writer = new java.io.PrintWriter("scores.csv");
+          writer.println("Mia,40");
+          writer.println("Leo,25");
+          writer.close();
+          int total = 0;
+          for (String line : lines("scores.csv")) {
+              String[] parts = line.split(",");
+              total += Integer.[[valueOf‖parseInt]](parts[1]);
+          }
+          System.out.println(total);
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    why: "A file holds text, so the points come back as Strings such as `\"40\"`. `Integer.valueOf` (or `Integer.parseInt`) turns each one into a number again, which can be added up."
+
+  - type: bug
+    after: saving-and-loading
+    prompt: "`save` should write the whole list, replacing what the file held, so that the program prints `[jam, honey, figs]`. Which line is wrong?"
+    classes: |
+      class Cupboard {
+          private ArrayList<String> jars;
+
+          public Cupboard() {
+              this.jars = new ArrayList<>();
+          }
+
+          public void add(String jar) {
+              this.jars.add(jar);
+          }
+
+          public void save(String fileName) throws Exception {
+              try (java.io.PrintWriter writer = new java.io.PrintWriter(new java.io.FileWriter(fileName, true))) { // BUG
+                  for (String jar : this.jars) {
+                      writer.println(jar);
+                  }
+              }
+          }
+      }
+    body: |
+      Cupboard cupboard = new Cupboard();
+      cupboard.add("jam");
+      cupboard.add("honey");
+      try {
+          cupboard.save("cupboard.txt");
+          cupboard.add("figs");
+          cupboard.save("cupboard.txt");
+          System.out.println(java.nio.file.Files.readAllLines(java.nio.file.Paths.get("cupboard.txt")));
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    fix: "try (java.io.PrintWriter writer = new java.io.PrintWriter(fileName)) {"
+    why: "`save` writes the whole list every time. Appending with `true` keeps the first save's lines too, so the file ends up as `[jam, honey, jam, honey, figs]`. A file that holds all of the data is replaced instead: `new PrintWriter(fileName)`."
+
+  - type: choice
+    after: saving-and-loading
+    prompt: "A to-do app loads its whole list of tasks when it starts, and saves it at the end of every run. Which writer should its `save` method use?"
+    choices:
+      - "`new PrintWriter(fileName)`, which replaces what the file held"
+      - "`new PrintWriter(new FileWriter(fileName, true))`, which appends"
+      - "Either one: both give the same file"
+    answer: 1
+    why: "`save` writes every task, the ones that were loaded from the file included. Appending would put them into the file once more on every run. Appending fits a log, where each run adds only what's new."
+
+  - type: boss
+    after: end-of-part-11
+    prompt: |
+      A swimming pool counts its swimmers. The file `swimmers.txt` has one day per line: the day's name and the number of swimmers, separated by a comma, like `Mon,180`. Write `main` so that it writes the file `busy.txt`: the days with 200 swimmers or more, one per line as `Tue: 240`, in the file's order, and as the last line `Busy days: ` and how many there were. The program prints nothing. When `swimmers.txt` holds these lines:
+
+      ```text
+      Mon,180
+      Tue,240
+      Wed,150
+      Sat,310
+      ```
+
+      then `busy.txt` should hold:
+
+      ```text
+      Tue: 240
+      Sat: 310
+      Busy days: 2
+      ```
+    seed: |
+      import java.io.PrintWriter;
+      import java.nio.file.Paths;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+
+          }
+      }
+    solution: |
+      import java.io.PrintWriter;
+      import java.nio.file.Paths;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              int busy = 0;
+              try (Scanner reader = new Scanner(Paths.get("swimmers.txt")); PrintWriter writer = new PrintWriter("busy.txt")) {
+                  while (reader.hasNextLine()) {
+                      String[] parts = reader.nextLine().split(",");
+                      int swimmers = Integer.valueOf(parts[1]);
+                      if (swimmers >= 200) {
+                          writer.println(parts[0] + ": " + swimmers);
+                          busy++;
+                      }
+                  }
+                  writer.println("Busy days: " + busy);
+              }
+          }
+      }
+    hints:
+      - "Read `swimmers.txt` with a Scanner and write `busy.txt` with a PrintWriter, both in one try-with-resources, separated by a semicolon. Split each line with `split(\",\")`, and turn the second part into a number."
+      - "Write a day's line and count it when its number is 200 or more. After the loop, still inside the `try` block, write the `Busy days: ` line."
+    tests:
+      - files:
+          swimmers.txt: |
+            Mon,180
+            Tue,240
+            Wed,150
+            Sat,310
+        writes: [busy.txt]
+      - files:
+          swimmers.txt: |
+            Mon,20
+            Tue,35
+        writes: [busy.txt]
+        hidden: true
+      - files:
+          swimmers.txt: |
+            Thu,200
+            Fri,199
+            Sat,450
+            Sun,380
+        writes: [busy.txt]
+        hidden: true

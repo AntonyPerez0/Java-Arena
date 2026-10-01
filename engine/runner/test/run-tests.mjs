@@ -8,13 +8,14 @@
 // Compared: stdout byte for byte, stderr first line, stderr user stack frames (frames outside
 // java.base/), exit code and the files left in the working directory. Full stderr equality is
 // required for cases marked exactStderr and reported as a note for the others. Some cases have
-// special checks (see cases.mjs). --timing adds start-up and per-run measurements.
+// special checks (see cases.mjs), such as the order of stdout and stderr together ('order').
+// --timing adds start-up and per-run measurements.
 
 import { spawnSync } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -92,7 +93,24 @@ function runHotSpot(testCase, classDir) {
   return {
     stdout: utf8(result.stdout), stderr: utf8(result.stderr), stdoutBytes: result.stdout, exitCode: result.status,
     files: listFiles(cwd), durationMs: performance.now() - begin,
+    ...(testCase.check === 'order' ? { output: runHotSpotTogether(testCase, classDir) } : {}),
   };
+}
+
+/** What HotSpot writes with stdout and stderr going to one file (java ... > out.txt 2>&1). */
+function runHotSpotTogether(testCase, classDir) {
+  const cwd = join(work, 'hotspot-together', testCase.name);
+  mkdirSync(cwd, { recursive: true });
+  const file = join(work, `${testCase.name}-together.txt`);
+  const fd = openSync(file, 'w');
+  try {
+    spawnSync(join(JAVA_HOME, 'bin/java'), [...REFERENCE_FLAGS, '-cp', classDir, testCase.main, ...(testCase.args ?? [])], {
+      cwd, env: javaEnv, input: testCase.stdin ?? '', stdio: ['pipe', fd, fd], timeout: 60_000,
+    });
+  } finally {
+    closeSync(fd);
+  }
+  return readFileSync(file, 'utf8');
 }
 
 const request = (testCase, compiled) => ({
@@ -148,6 +166,7 @@ function compare(testCase, reference, got) {
     return { problems, notes };
   }
   if (got.stdout !== reference.stdout) problems.push(`stdout differs:\n${firstDifference(reference.stdout, got.stdout)}`);
+  if (testCase.check === 'order' && got.output !== reference.output) problems.push(`stdout and stderr together (output) differ from HotSpot's with 2>&1:\n${firstDifference(reference.output, got.output)}`);
   const refFirst = reference.stderr.split('\n')[0];
   const gotFirst = got.stderr.split('\n')[0];
   if (refFirst !== gotFirst) problems.push(`stderr first line differs:\n  hotspot: ${JSON.stringify(refFirst)}\n  runner:  ${JSON.stringify(gotFirst)}`);

@@ -1,0 +1,3529 @@
+id: class-diagrams
+summary: UML class diagrams, the boxes and lines that show a program's classes at a glance. A class's box with its fields, constructors and methods, visibility with - and +, types and return types, writing a class from its box and drawing the box of a class, arrows for references with multiplicities such as 1, 0..1 and *, connections one way and both ways, inheritance and abstract classes, interfaces, and a whole program built from one diagram. MOOC section 11.1.
+steps:
+  - id: class-diagrams-boxes
+    slug: boxes
+    title: A class as a box
+    text: |
+      A program of two or three classes fits in your head. A program of ten classes, each with its instance variables, constructors and methods, doesn't, and neither does a program that a team is about to write together. So programmers draw their classes: a box for each class, and lines between the boxes for how the classes are connected. Such a drawing is a **class diagram**.
+
+      Class diagrams have a standard form, part of **UML**, the Unified Modeling Language, so that a diagram drawn by one programmer can be read by anyone who knows UML. This module teaches you to read them, to turn them into classes, and to draw the classes you write.
+
+      ### A box with fields
+
+      A recycling center has a bin for each material: glass, paper, metal and so on. Its program keeps each bin in an object of this class:
+
+      ```java fragment
+      public class Bin {
+          private String material;
+          private int capacity;
+          private int load;
+      }
+      ```
+
+      In a class diagram, the class is a box:
+
+      ```classes
+      class Bin
+      - material: String
+      - capacity: int
+      - load: int
+      ```
+
+      - The class's name is at the top, in bold.
+      - Under a line come the class's instance variables, one per line. Diagrams call them **fields** (or attributes).
+      - Each field is written as its name, a colon and its type: `capacity: int`. That's the other way around from Java, where the type comes first (`int capacity`).
+      - The sign in front is the field's **visibility**: `-` for `private` and `+` for `public`. Since this course keeps instance variables private, nearly every field you'll see starts with `-`. (You may also meet `#` for `protected`, from module 34.)
+
+      Under each drawing, "The diagram as text" says the same in words, which is handy when you want to check what a sign means.
+
+      A diagram is a plan, not a program: it doesn't run, and it may leave things out. This step's boxes show only fields. The next step adds constructors and methods.
+
+      ### From a box to a class
+
+      A box tells you what to write. Here's the box of a pickup: a load that the center's truck collects from an address.
+
+      ```classes
+      class Pickup
+      - address: String
+      - kilos: double
+      - done: boolean
+      ```
+
+      Each line becomes one instance variable, in the same order:
+
+      - `-address: String` is `private String address;`
+      - `-kilos: double` is `private double kilos;`
+      - `-done: boolean` is `private boolean done;`
+
+      With a constructor and a `toString`, which this box doesn't show, the class can be used:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Pickup pickup = new Pickup("12 Mill Road", 35.5);
+              System.out.println(pickup);
+          }
+      }
+      // ==== Pickup.java ====
+      public class Pickup {
+          private String address;
+          private double kilos;
+          private boolean done;
+
+          public Pickup(String address, double kilos) {
+              this.address = address;
+              this.kilos = kilos;
+              this.done = false;
+          }
+
+          @Override
+          public String toString() {
+              return this.address + ": " + this.kilos + " kg";
+          }
+      }
+      ```
+
+      ```output
+      12 Mill Road: 35.5 kg
+      ```
+
+      The types in a box are Java's own: `int`, `double`, `boolean`, `String`, or `ArrayList<String>` for a field that holds a list of Strings. Write them exactly as the box says. A class with an `int` where its box says `double`, or a public field where the box says `-`, no longer matches the plan, and code that others wrote from the same plan may not work with it.
+
+      **Your turn:** a hospital ward keeps track of its patients. Here's the box of a patient:
+
+      ```classes
+      class Patient
+      - name: String
+      - room: int
+      - temperature: double
+      ```
+
+      Fill in the blanks in `Patient.java`, so that its instance variables match the box. The constructor and `toString` are ready.
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              Patient patient = new Patient("Ines Moreau", 12, 38.4);
+              System.out.println(patient);
+          }
+      }
+      // ==== Patient.java ====
+      public class Patient {
+          [[private]] String name;
+          private [[int]] room;
+          private [[double]] [[temperature]];
+
+          public Patient(String name, int room, double temperature) {
+              this.name = name;
+              this.room = room;
+              this.temperature = temperature;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + ", room " + this.room + ", " + this.temperature + " degrees";
+          }
+      }
+    hints:
+      - "Each line of the box is one instance variable, with the name first in the box and the type first in Java: `-room: int` is `private int room;`."
+      - "`-` stands for `private`. The blanks are `private`, `int`, `double` and `temperature`."
+    require:
+      - pattern: \bprivate\s+String\s+name\s*;
+        message: "The `-` in front of `name: String` means private: `private String name;`."
+    more:
+      - task: |
+          The ward's nurses have a class too. `Nurse.java` has a constructor and two methods, but its instance variables are missing, so it doesn't compile. Add them, as this box shows:
+
+          ```classes
+          class Nurse
+          - name: String
+          - nightShift: boolean
+          - patients: int
+          ```
+
+          Leave the constructor and the methods as they are. The program should print:
+
+          ```
+          Tomas Berg (night shift): 2 patients
+          ```
+        seed:
+          Nurse.java: |
+            public class Nurse {
+
+                public Nurse(String name, boolean nightShift) {
+                    this.name = name;
+                    this.nightShift = nightShift;
+                    this.patients = 0;
+                }
+
+                public void takePatient() {
+                    this.patients++;
+                }
+
+                @Override
+                public String toString() {
+                    String shift = "day";
+                    if (this.nightShift) {
+                        shift = "night";
+                    }
+                    return this.name + " (" + shift + " shift): " + this.patients + " patients";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Nurse nurse = new Nurse("Tomas Berg", true);
+                    nurse.takePatient();
+                    nurse.takePatient();
+                    System.out.println(nurse);
+                }
+            }
+        solution:
+          Nurse.java: |
+            public class Nurse {
+                private String name;
+                private boolean nightShift;
+                private int patients;
+
+                public Nurse(String name, boolean nightShift) {
+                    this.name = name;
+                    this.nightShift = nightShift;
+                    this.patients = 0;
+                }
+
+                public void takePatient() {
+                    this.patients++;
+                }
+
+                @Override
+                public String toString() {
+                    String shift = "day";
+                    if (this.nightShift) {
+                        shift = "night";
+                    }
+                    return this.name + " (" + shift + " shift): " + this.patients + " patients";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Nurse nurse = new Nurse("Tomas Berg", true);
+                    nurse.takePatient();
+                    nurse.takePatient();
+                    System.out.println(nurse);
+                }
+            }
+        hints:
+          - "Put the three instance variables at the top of the class, one for each line of the box, in the same order."
+          - "`-nightShift: boolean` is `private boolean nightShift;`. Do the same for `name` and `patients`."
+        require:
+          - pattern: \bprivate\s+String\s+name\s*;
+            message: "The box's first line, `-name: String`, is `private String name;`."
+          - pattern: \bprivate\s+boolean\s+nightShift\s*;
+            message: "The box's line `-nightShift: boolean` is `private boolean nightShift;`."
+          - pattern: \bprivate\s+int\s+patients\s*;
+            message: "The box's line `-patients: int` is `private int patients;`."
+        tests:
+          - name: The program's output
+          - call: |
+              Nurse day = new Nurse("Sara Lind", false);
+              System.out.println(day);
+              day.takePatient();
+              System.out.println(day);
+            hidden: true
+      - task: |
+          A garden center planned its shrubs with this box:
+
+          ```classes
+          class Shrub
+          - species: String
+          - height: double
+          - potLiters: int
+          ```
+
+          In `Shrub.java`, two instance variables don't match the box, and the program prints `Lilac: 19 cm, pot 10 liters`: half centimeters get lost along the way. Fix those two lines, and leave the constructor and the methods as they are. The program should print:
+
+          ```
+          Lilac: 20.0 cm, pot 10 liters
+          ```
+        seed:
+          Shrub.java: |
+            public class Shrub {
+                public String species;
+                private int height;
+                private int potLiters;
+
+                public Shrub(String species, int potLiters) {
+                    this.species = species;
+                    this.height = 0;
+                    this.potLiters = potLiters;
+                }
+
+                public void grow(double centimeters) {
+                    this.height += centimeters;
+                }
+
+                @Override
+                public String toString() {
+                    return this.species + ": " + this.height + " cm, pot " + this.potLiters + " liters";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Shrub lilac = new Shrub("Lilac", 10);
+                    lilac.grow(12.5);
+                    lilac.grow(7.5);
+                    System.out.println(lilac);
+                }
+            }
+        solution:
+          Shrub.java: |
+            public class Shrub {
+                private String species;
+                private double height;
+                private int potLiters;
+
+                public Shrub(String species, int potLiters) {
+                    this.species = species;
+                    this.height = 0;
+                    this.potLiters = potLiters;
+                }
+
+                public void grow(double centimeters) {
+                    this.height += centimeters;
+                }
+
+                @Override
+                public String toString() {
+                    return this.species + ": " + this.height + " cm, pot " + this.potLiters + " liters";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Shrub lilac = new Shrub("Lilac", 10);
+                    lilac.grow(12.5);
+                    lilac.grow(7.5);
+                    System.out.println(lilac);
+                }
+            }
+        hints:
+          - "Compare each line of the box with its instance variable: the sign (`-` is private), the name and the type."
+          - "`species` should be `private`, and `height` should be a `double`. With an `int`, `+=` drops the half centimeter of each `grow`."
+        require:
+          - pattern: \bprivate\s+String\s+species\s*;
+            message: "The `-` in front of `species: String` means private: `private String species;`."
+          - pattern: \bprivate\s+double\s+height\s*;
+            message: "The box says `-height: double`, so the instance variable is `private double height;`."
+        tests:
+          - name: The program's output
+          - call: |
+              Shrub box = new Shrub("Boxwood", 3);
+              box.grow(0.5);
+              box.grow(0.25);
+              System.out.println(box);
+            hidden: true
+
+  - id: class-diagrams-methods
+    slug: methods
+    title: Constructors and methods in a box
+    text: |
+      A box has room for more than fields. Under a second line come the class's constructors and methods. Here's the recycling center's bin with them:
+
+      ```classes
+      class Bin
+      - material: String
+      - capacity: int
+      - load: int
+      + Bin(material: String, capacity: int)
+      + getMaterial(): String
+      + add(kilos: int): boolean
+      + empty(): void
+      + toString(): String
+      ```
+
+      - A **constructor** is the class's name with its parameters in parentheses, and nothing after them: a constructor has no return type, in a diagram as in Java.
+      - A **method** is its name, its parameters in parentheses, a colon and its **return type**: `getMaterial(): String` returns a String. A method that returns nothing has `void`.
+      - Each **parameter** is written like a field, name first: `add(kilos: int)` takes an int called `kilos`. Parameters are separated by commas, and a method without parameters has empty parentheses.
+      - The sign in front is the visibility again. Constructors and methods that other classes call are public, `+`. A private helper method gets a `-`.
+      - Constructors come first, then methods.
+
+      So each line gives you a header:
+
+      | In the box | In Java |
+      |---|---|
+      | `+Bin(material: String, capacity: int)` | `public Bin(String material, int capacity)` |
+      | `+getMaterial(): String` | `public String getMaterial()` |
+      | `+add(kilos: int): boolean` | `public boolean add(int kilos)` |
+      | `+empty(): void` | `public void empty()` |
+
+      `toString` is one of Bin's methods, so it has a line too. `@Override` isn't shown: a box shows headers, and nothing above them or inside them.
+
+      ### What a box doesn't say
+
+      The box gives every header, but not what the methods do. Does `add` refuse a load that doesn't fit? What does `toString` return? A diagram leaves that to the code, or, before the code exists, to words. The team that drew this box agreed that a new bin is empty, that `add` puts the load in and returns `true` only if the bin's load stays within its capacity (otherwise it changes nothing and returns `false`), and that `empty` sets the load back to 0. With those words and the box, the class almost writes itself:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Bin glass = new Bin("glass", 500);
+              System.out.println(glass.add(300));
+              System.out.println(glass.add(250));
+              System.out.println(glass);
+              glass.empty();
+              System.out.println(glass.add(250) + " " + glass.getMaterial());
+          }
+      }
+      // ==== Bin.java ====
+      public class Bin {
+          private String material;
+          private int capacity;
+          private int load;
+
+          public Bin(String material, int capacity) {
+              this.material = material;
+              this.capacity = capacity;
+              this.load = 0;
+          }
+
+          public String getMaterial() {
+              return this.material;
+          }
+
+          public boolean add(int kilos) {
+              if (this.load + kilos > this.capacity) {
+                  return false;
+              }
+              this.load += kilos;
+              return true;
+          }
+
+          public void empty() {
+              this.load = 0;
+          }
+
+          @Override
+          public String toString() {
+              return this.material + ": " + this.load + "/" + this.capacity + " kg";
+          }
+      }
+      ```
+
+      ```output
+      true
+      false
+      glass: 300/500 kg
+      true glass
+      ```
+
+      The challenges in this module work the same way: a box, and words that say what the methods do. Follow the box's headers exactly. Other classes call the methods by those names, with those types, and a header that's different can make their calls fail to compile, or quietly change what they compute.
+
+      **Your turn:** the ward gives each of its beds an object. Write the class `Bed` in `Bed.java`, as this box shows:
+
+      ```classes
+      class Bed
+      - number: int
+      - patient: String
+      + Bed(number: int)
+      + isFree(): boolean
+      + assign(name: String): void
+      + release(): void
+      + toString(): String
+      ```
+
+      - A new bed is free: its patient is `null`.
+      - `assign` puts the patient's name in the bed, and `release` makes the bed free again.
+      - `isFree` says whether the bed is free.
+      - `toString` returns `Bed 4: free` for a free bed and `Bed 4: Ines Moreau` for a bed with a patient, with the bed's own number and patient.
+
+      The check runs:
+
+      ```java fragment
+      Bed bed = new Bed(4);
+      System.out.println(bed + " " + bed.isFree());
+      bed.assign("Ines Moreau");
+      System.out.println(bed + " " + bed.isFree());
+      bed.release();
+      System.out.println(bed);
+      ```
+
+      and expects:
+
+      ```
+      Bed 4: free true
+      Bed 4: Ines Moreau false
+      Bed 4: free
+      ```
+    seed:
+      Bed.java: |
+        public class Bed {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Bed bed = new Bed(4);
+                System.out.println(bed + " " + bed.isFree());
+                bed.assign("Ines Moreau");
+                System.out.println(bed + " " + bed.isFree());
+                bed.release();
+                System.out.println(bed);
+            }
+        }
+    solution:
+      Bed.java: |
+        public class Bed {
+            private int number;
+            private String patient;
+
+            public Bed(int number) {
+                this.number = number;
+                this.patient = null;
+            }
+
+            public boolean isFree() {
+                return this.patient == null;
+            }
+
+            public void assign(String name) {
+                this.patient = name;
+            }
+
+            public void release() {
+                this.patient = null;
+            }
+
+            @Override
+            public String toString() {
+                if (this.isFree()) {
+                    return "Bed " + this.number + ": free";
+                }
+                return "Bed " + this.number + ": " + this.patient;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Bed bed = new Bed(4);
+                System.out.println(bed + " " + bed.isFree());
+                bed.assign("Ines Moreau");
+                System.out.println(bed + " " + bed.isFree());
+                bed.release();
+                System.out.println(bed);
+            }
+        }
+    hints:
+      - "Start with the two instance variables from the box's fields, then the constructor `public Bed(int number)`. Each method line becomes a header: `+assign(name: String): void` is `public void assign(String name)`."
+      - "`isFree` returns `this.patient == null`, and `release` sets the patient back to `null`. `toString` checks `isFree()` and returns one text or the other."
+    require:
+      - pattern: \bprivate\s+String\s+patient\s*;
+        message: "The box's field `-patient: String` is `private String patient;`."
+      - pattern: \bpublic\s+void\s+assign\s*\(\s*String\s+\w+\s*\)
+        message: "The box's line `+assign(name: String): void` is the header `public void assign(String name)`."
+    tests:
+      - call: |
+          Bed bed = new Bed(4);
+          System.out.println(bed + " " + bed.isFree());
+          bed.assign("Ines Moreau");
+          System.out.println(bed + " " + bed.isFree());
+          bed.release();
+          System.out.println(bed);
+      - call: |
+          Bed first = new Bed(1);
+          Bed second = new Bed(2);
+          second.assign("Oskar Lund");
+          System.out.println(first.isFree() + " " + second.isFree());
+          System.out.println(first + " / " + second);
+          second.release();
+          first.assign("Mei Tan");
+          System.out.println(first + " / " + second);
+        hidden: true
+    more:
+      - task: |
+          A garden center's greenhouses open their vents when it gets warm. The team drew this box, and `Main.java` was written from it:
+
+          ```classes
+          class Greenhouse
+          - name: String
+          - degrees: double
+          - open: boolean
+          + Greenhouse(name: String, degrees: double)
+          + getName(): String
+          + getDegrees(): double
+          + isOpen(): boolean
+          + warm(by: double): void
+          + openVents(): void
+          ```
+
+          In `Greenhouse.java`, three method headers don't match the box, so the program doesn't compile. Fix them (and anything inside those methods that has to change with them), so that the class matches the box. Leave `Main.java` as it is. The program should print:
+
+          ```
+          Palm house: true, 26.0 degrees
+          ```
+        seed:
+          Greenhouse.java: |
+            public class Greenhouse {
+                private String name;
+                private double degrees;
+                private boolean open;
+
+                public Greenhouse(String name, double degrees) {
+                    this.name = name;
+                    this.degrees = degrees;
+                    this.open = false;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getDegrees() {
+                    return this.degrees;
+                }
+
+                public boolean isOpen() {
+                    return this.open;
+                }
+
+                public void warm(int by) {
+                    this.degrees += by;
+                }
+
+                private void openVents() {
+                    this.open = true;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Greenhouse palm = new Greenhouse("Palm house", 24.5);
+                    palm.warm(1.5);
+                    if (palm.getDegrees() > 25) {
+                        palm.openVents();
+                    }
+                    System.out.println(palm.getName() + ": " + palm.isOpen() + ", " + palm.getDegrees() + " degrees");
+                }
+            }
+        solution:
+          Greenhouse.java: |
+            public class Greenhouse {
+                private String name;
+                private double degrees;
+                private boolean open;
+
+                public Greenhouse(String name, double degrees) {
+                    this.name = name;
+                    this.degrees = degrees;
+                    this.open = false;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public double getDegrees() {
+                    return this.degrees;
+                }
+
+                public boolean isOpen() {
+                    return this.open;
+                }
+
+                public void warm(double by) {
+                    this.degrees += by;
+                }
+
+                public void openVents() {
+                    this.open = true;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Greenhouse palm = new Greenhouse("Palm house", 24.5);
+                    palm.warm(1.5);
+                    if (palm.getDegrees() > 25) {
+                        palm.openVents();
+                    }
+                    System.out.println(palm.getName() + ": " + palm.isOpen() + ", " + palm.getDegrees() + " degrees");
+                }
+            }
+        hints:
+          - "Read javac's messages, then compare each method's header with its line in the box: the sign in front, the parameter's type, and the return type after the colon."
+          - "`getDegrees(): double` returns a `double`, `warm(by: double)` takes a `double`, and the `+` in front of `openVents` makes it public."
+        require:
+          - pattern: \bpublic\s+double\s+getDegrees\s*\(\s*\)
+            message: "The box's line `+getDegrees(): double` is the header `public double getDegrees()`."
+          - pattern: \bpublic\s+void\s+warm\s*\(\s*double\s+\w+\s*\)
+            message: "The box's line `+warm(by: double): void` is the header `public void warm(double by)`."
+          - pattern: \bpublic\s+void\s+openVents\s*\(\s*\)
+            message: "The `+` in front of `openVents(): void` means public: `public void openVents()`."
+        tests:
+          - name: The program's output
+          - call: |
+              Greenhouse cactus = new Greenhouse("Cactus house", 30.0);
+              System.out.println(cactus.isOpen() + " " + cactus.getDegrees());
+              cactus.warm(0.5);
+              cactus.openVents();
+              System.out.println(cactus.getName() + " " + cactus.isOpen() + " " + cactus.getDegrees());
+            hidden: true
+      - task: |
+          A board-game café lends games to its guests, and pieces go missing. Write the class `GameBox` in `GameBox.java`, as this box shows:
+
+          ```classes
+          class GameBox
+          - title: String
+          - pieces: int
+          - missing: int
+          + GameBox(title: String, pieces: int)
+          + lose(count: int): void
+          + find(count: int): void
+          + isComplete(): boolean
+          + toString(): String
+          - present(): int
+          ```
+
+          - A new box has all its pieces: none are missing.
+          - `lose` adds to the missing pieces. `find` takes found pieces off them, but never below 0.
+          - `isComplete` says whether no pieces are missing.
+          - `present` is a private helper that returns how many pieces are in the box. `toString` uses it, and returns `Harbor Lights: 80 of 84 pieces`, with the box's own title and numbers.
+
+          The check runs:
+
+          ```java fragment
+          GameBox box = new GameBox("Harbor Lights", 84);
+          box.lose(5);
+          box.find(1);
+          System.out.println(box + " " + box.isComplete());
+          box.find(10);
+          System.out.println(box + " " + box.isComplete());
+          ```
+
+          and expects:
+
+          ```
+          Harbor Lights: 80 of 84 pieces false
+          Harbor Lights: 84 of 84 pieces true
+          ```
+        seed:
+          GameBox.java: |
+            public class GameBox {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    GameBox box = new GameBox("Harbor Lights", 84);
+                    box.lose(5);
+                    box.find(1);
+                    System.out.println(box + " " + box.isComplete());
+                    box.find(10);
+                    System.out.println(box + " " + box.isComplete());
+                }
+            }
+        solution:
+          GameBox.java: |
+            public class GameBox {
+                private String title;
+                private int pieces;
+                private int missing;
+
+                public GameBox(String title, int pieces) {
+                    this.title = title;
+                    this.pieces = pieces;
+                    this.missing = 0;
+                }
+
+                public void lose(int count) {
+                    this.missing += count;
+                }
+
+                public void find(int count) {
+                    this.missing -= count;
+                    if (this.missing < 0) {
+                        this.missing = 0;
+                    }
+                }
+
+                public boolean isComplete() {
+                    return this.missing == 0;
+                }
+
+                @Override
+                public String toString() {
+                    return this.title + ": " + this.present() + " of " + this.pieces + " pieces";
+                }
+
+                private int present() {
+                    return this.pieces - this.missing;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    GameBox box = new GameBox("Harbor Lights", 84);
+                    box.lose(5);
+                    box.find(1);
+                    System.out.println(box + " " + box.isComplete());
+                    box.find(10);
+                    System.out.println(box + " " + box.isComplete());
+                }
+            }
+        hints:
+          - "Three instance variables, a constructor that sets `missing` to 0, and a method for each line of the box. The `-` in front of `present` makes it `private int present()`."
+          - "`find` subtracts, then sets `missing` back to 0 if it went below. `present()` returns the pieces minus the missing ones, and `toString` calls `this.present()`."
+        require:
+          - pattern: \bprivate\s+int\s+present\s*\(\s*\)
+            message: "The box's line `-present(): int` is a private method: `private int present()`."
+          - pattern: \bpresent\s*\(\s*\)
+            min: 2
+            message: "Call the helper `present()` in `toString`."
+        tests:
+          - call: |
+              GameBox box = new GameBox("Harbor Lights", 84);
+              box.lose(5);
+              box.find(1);
+              System.out.println(box + " " + box.isComplete());
+              box.find(10);
+              System.out.println(box + " " + box.isComplete());
+          - call: |
+              GameBox tiles = new GameBox("Word Tiles", 100);
+              System.out.println(tiles + " " + tiles.isComplete());
+              tiles.lose(3);
+              tiles.lose(4);
+              System.out.println(tiles);
+              tiles.find(7);
+              System.out.println(tiles.isComplete());
+            hidden: true
+
+  - id: class-diagrams-from-code
+    slug: from-code
+    title: From code to a box
+    text: |
+      The last two steps went from a box to code. The other way is just as useful: when you join a project, or come back to your own program after a month, a box shows a class at a glance, without the method bodies in the way.
+
+      ### Drawing a class's box
+
+      Here's another class of the recycling center's program. A compactor presses cans into blocks: it takes loads of cans, and each time it runs, it presses as many full blocks as it can and keeps the rest of the cans for the next run.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Compactor compactor = new Compactor(50);
+              compactor.load(120);
+              System.out.println(compactor.press());
+              compactor.load(35);
+              System.out.println(compactor.press());
+              System.out.println(compactor);
+          }
+      }
+      // ==== Compactor.java ====
+      public class Compactor {
+          private int cansPerBlock;
+          private int cans;
+          private int blocks;
+
+          public Compactor() {
+              this(50);
+          }
+
+          public Compactor(int cansPerBlock) {
+              this.cansPerBlock = cansPerBlock;
+              this.cans = 0;
+              this.blocks = 0;
+          }
+
+          public void load(int cans) {
+              if (cans > 0) {
+                  this.cans += cans;
+              }
+          }
+
+          public int press() {
+              int made = this.blocksReady();
+              this.blocks += made;
+              this.cans -= made * this.cansPerBlock;
+              return made;
+          }
+
+          public int getBlocks() {
+              return this.blocks;
+          }
+
+          @Override
+          public String toString() {
+              return this.blocks + " blocks, " + this.cans + " cans waiting";
+          }
+
+          private int blocksReady() {
+              return this.cans / this.cansPerBlock;
+          }
+      }
+      ```
+
+      ```output
+      2
+      1
+      3 blocks, 5 cans waiting
+      ```
+
+      Go through the class from the top, and write a line for each part of it:
+
+      ```classes
+      class Compactor
+      - cansPerBlock: int
+      - cans: int
+      - blocks: int
+      + Compactor()
+      + Compactor(cansPerBlock: int)
+      + load(cans: int): void
+      + press(): int
+      + getBlocks(): int
+      + toString(): String
+      - blocksReady(): int
+      ```
+
+      - Each instance variable is a field line: sign, name, colon, type. The values it gets at the start (`this.cans = 0`) aren't shown.
+      - Each constructor has a line of its own, so the two constructors are two lines. The one without parameters has empty parentheses.
+      - Each method has a line: `public int press()` becomes `+press(): int`. `toString` is one of the class's methods, so it's there too.
+      - The private helper `blocksReady` gets a `-`.
+      - Nothing between the curly braces of a constructor or method is shown: no code, no `this`, no `if`. Neither is `@Override`.
+      - This course's diagrams show the classes that the program makes objects of, and leave `Main` out.
+
+      ### What a box doesn't tell
+
+      From the box, you know that `press()` returns an int. You don't know what the int means: the blocks it made, the cans it pressed, or the cans left over. You don't know that 50 cans make a block unless someone tells you, or that `load` ignores a negative number. Two classes with the same box can behave in completely different ways. A box shows a class's structure: what its objects hold and what they can be asked. What they do is in the code, and in the words that come with a diagram.
+
+      ### Using a class through its box
+
+      A box is still all you need to write code that *uses* the class, once you know what its methods do. It gives each method's name, what to pass it and what comes back, so it tells you what type of variable can hold each answer:
+
+      ```java fragment
+      Compactor compactor = new Compactor();
+      compactor.load(80);
+      int made = compactor.press();
+      int total = compactor.getBlocks();
+      ```
+
+      - `+Compactor()` says that `new Compactor()` works without parameters.
+      - `+load(cans: int): void` takes an int and gives nothing back, so the call is a statement of its own.
+      - `+press(): int` gives back an int, which can go into an `int` variable.
+      - `-blocksReady(): int` is private, so this code can't call it. Only Compactor's own methods can.
+
+      **Your turn:** the pickups of step 1 have grown methods. Here's their box now:
+
+      ```classes
+      class Pickup
+      - address: String
+      - kilos: double
+      - done: boolean
+      + Pickup(address: String, kilos: double)
+      + getAddress(): String
+      + getKilos(): double
+      + isDone(): boolean
+      + markDone(): void
+      + toString(): String
+      ```
+
+      Fill in the blanks in `main` from the box: the types of the two variables, and the name of the method that marks a pickup as done. The program should print:
+
+      ```
+      35.5 true
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              Pickup pickup = new Pickup("12 Mill Road", 35.5);
+              [[double]] kilos = pickup.getKilos();
+              pickup.[[markDone]]();
+              [[boolean]] done = pickup.isDone();
+              System.out.println(kilos + " " + done);
+          }
+      }
+      // ==== Pickup.java ====
+      public class Pickup {
+          private String address;
+          private double kilos;
+          private boolean done;
+
+          public Pickup(String address, double kilos) {
+              this.address = address;
+              this.kilos = kilos;
+              this.done = false;
+          }
+
+          public String getAddress() {
+              return this.address;
+          }
+
+          public double getKilos() {
+              return this.kilos;
+          }
+
+          public boolean isDone() {
+              return this.done;
+          }
+
+          public void markDone() {
+              this.done = true;
+          }
+
+          @Override
+          public String toString() {
+              return this.address + ": " + this.kilos + " kg";
+          }
+      }
+    hints:
+      - "The type after the colon is what a method gives back: `getKilos(): double` gives a double, so the variable that holds it is a `double`."
+      - "`isDone(): boolean` gives a `boolean`, and the method that marks the pickup is `markDone`, which returns nothing (`void`)."
+    tests:
+      - expect: 35.5 true
+    more:
+      - task: |
+          Another team wrote a compactor too. Its box is exactly the same as the one in the lesson, but it's a different class: this `load` refuses a load that would take the compactor over 150 cans, and this `press` makes at most one block per call and returns the number of cans it pressed. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Compactor compactor = new Compactor(40);
+                  compactor.load(90);
+                  compactor.load(90);
+                  System.out.println(compactor.press());
+                  System.out.println(compactor.press());
+                  System.out.println(compactor);
+              }
+          }
+          // ==== Compactor.java ====
+          public class Compactor {
+              private int cansPerBlock;
+              private int cans;
+              private int blocks;
+
+              public Compactor() {
+                  this(50);
+              }
+
+              public Compactor(int cansPerBlock) {
+                  this.cansPerBlock = cansPerBlock;
+                  this.cans = 0;
+                  this.blocks = 0;
+              }
+
+              public void load(int cans) {
+                  if (this.cans + cans <= 150) {
+                      this.cans += cans;
+                  }
+              }
+
+              public int press() {
+                  if (this.blocksReady() == 0) {
+                      return 0;
+                  }
+                  this.blocks++;
+                  this.cans -= this.cansPerBlock;
+                  return this.cansPerBlock;
+              }
+
+              public int getBlocks() {
+                  return this.blocks;
+              }
+
+              @Override
+              public String toString() {
+                  return this.blocks + " blocks, " + this.cans + " cans waiting";
+              }
+
+              private int blocksReady() {
+                  return this.cans / this.cansPerBlock;
+              }
+          }
+        hints:
+          - "The first load of 90 fits. The second would make 180 cans, over 150, so `load` refuses it and the compactor keeps 90."
+          - "Each `press` makes one block of 40 cans and returns 40: 90 cans become 50, then 10. The same box as the lesson's class, and different answers."
+      - task: |
+          The recycling center's truck driver wants to know how many kilos are still to be collected on a route. `Pickup.java` is ready, and you don't need to read it: its box says all you need.
+
+          ```classes
+          class Pickup
+          - address: String
+          - kilos: double
+          - done: boolean
+          + Pickup(address: String, kilos: double)
+          + getAddress(): String
+          + getKilos(): double
+          + isDone(): boolean
+          + markDone(): void
+          + toString(): String
+          ```
+
+          In `Main.java`, write the method `public static double kilosLeft(ArrayList<Pickup> pickups)`, which returns the kilos of the pickups that aren't done yet, added up. The check runs:
+
+          ```java fragment
+          ArrayList<Pickup> route = new ArrayList<>();
+          route.add(new Pickup("12 Mill Road", 35.5));
+          route.add(new Pickup("4 Elm Street", 20.0));
+          route.add(new Pickup("9 Quay Lane", 12.25));
+          route.get(1).markDone();
+          System.out.println(kilosLeft(route));
+          ```
+
+          and expects:
+
+          ```
+          47.75
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Pickup> route = new ArrayList<>();
+                    route.add(new Pickup("12 Mill Road", 35.5));
+                    route.add(new Pickup("4 Elm Street", 20.0));
+                    route.add(new Pickup("9 Quay Lane", 12.25));
+                    route.get(1).markDone();
+                    System.out.println(kilosLeft(route));
+                }
+
+                // Write the method kilosLeft here.
+            }
+          Pickup.java: |
+            public class Pickup {
+                private String address;
+                private double kilos;
+                private boolean done;
+
+                public Pickup(String address, double kilos) {
+                    this.address = address;
+                    this.kilos = kilos;
+                    this.done = false;
+                }
+
+                public String getAddress() {
+                    return this.address;
+                }
+
+                public double getKilos() {
+                    return this.kilos;
+                }
+
+                public boolean isDone() {
+                    return this.done;
+                }
+
+                public void markDone() {
+                    this.done = true;
+                }
+
+                @Override
+                public String toString() {
+                    return this.address + ": " + this.kilos + " kg";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Pickup> route = new ArrayList<>();
+                    route.add(new Pickup("12 Mill Road", 35.5));
+                    route.add(new Pickup("4 Elm Street", 20.0));
+                    route.add(new Pickup("9 Quay Lane", 12.25));
+                    route.get(1).markDone();
+                    System.out.println(kilosLeft(route));
+                }
+
+                public static double kilosLeft(ArrayList<Pickup> pickups) {
+                    double total = 0;
+                    for (Pickup pickup : pickups) {
+                        if (!pickup.isDone()) {
+                            total += pickup.getKilos();
+                        }
+                    }
+                    return total;
+                }
+            }
+          Pickup.java: |
+            public class Pickup {
+                private String address;
+                private double kilos;
+                private boolean done;
+
+                public Pickup(String address, double kilos) {
+                    this.address = address;
+                    this.kilos = kilos;
+                    this.done = false;
+                }
+
+                public String getAddress() {
+                    return this.address;
+                }
+
+                public double getKilos() {
+                    return this.kilos;
+                }
+
+                public boolean isDone() {
+                    return this.done;
+                }
+
+                public void markDone() {
+                    this.done = true;
+                }
+
+                @Override
+                public String toString() {
+                    return this.address + ": " + this.kilos + " kg";
+                }
+            }
+        hints:
+          - "The box tells you what to call: `isDone()` gives a boolean and `getKilos()` a double. Start from `double total = 0;` and go through the list with a for-each loop."
+          - "Add a pickup's `getKilos()` to the total only `if (!pickup.isDone())`, and return the total after the loop."
+        require:
+          - pattern: \bpublic\s+static\s+double\s+kilosLeft\s*\(\s*ArrayList<Pickup>\s+\w+\s*\)
+            message: "Write the method as `public static double kilosLeft(ArrayList<Pickup> pickups)`."
+        tests:
+          - call: |
+              ArrayList<Pickup> route = new ArrayList<>();
+              route.add(new Pickup("12 Mill Road", 35.5));
+              route.add(new Pickup("4 Elm Street", 20.0));
+              route.add(new Pickup("9 Quay Lane", 12.25));
+              route.get(1).markDone();
+              System.out.println(kilosLeft(route));
+          - call: |
+              ArrayList<Pickup> route = new ArrayList<>();
+              System.out.println(kilosLeft(route));
+              route.add(new Pickup("1 Dock Road", 8.5));
+              route.add(new Pickup("2 Dock Road", 0.25));
+              System.out.println(kilosLeft(route));
+              route.get(0).markDone();
+              route.get(1).markDone();
+              System.out.println(kilosLeft(route));
+            hidden: true
+
+  - id: class-diagrams-connections
+    slug: connections
+    title: Arrows between classes
+    text: |
+      So far each box stood alone. In a program, objects hold references to other objects, and a class diagram shows that with lines between the boxes.
+
+      ### A field that refers to another class
+
+      A theater stages plays, and each play gets many performances. The program has a class for each, and a Performance holds a reference to its Play:
+
+      ```java fragment
+      public class Performance {
+          private Play play;
+          private String date;
+          private int seatsSold;
+
+          // the constructor and methods
+      }
+      ```
+
+      In a diagram, a field whose type is another class of the diagram isn't written in the box. It's drawn as an arrow, from the box of the class that has the field to the box of the class it refers to:
+
+      ```classes
+      class Play
+      - title: String
+      - minutes: int
+      + Play(title: String, minutes: int)
+      + getTitle(): String
+      + getMinutes(): int
+
+      class Performance
+      - date: String
+      - seatsSold: int
+      + Performance(play: Play, date: String)
+      + sell(seats: int): void
+      + toString(): String
+
+      Performance --> 1 Play : play
+      ```
+
+      - The arrow goes **from** Performance **to** Play: a Performance knows its Play. It has a field of type Play, so its methods can call the play's methods.
+      - A Play doesn't know its performances. It has no field for them, and the arrow doesn't point back: given a Play object, there's no way to reach its performances.
+      - The `1` at the arrowhead is the **multiplicity**: each Performance has exactly one Play. An arrow without a number at its head means one, too.
+      - The name by the arrow, `play`, is the field's name. It's optional, and handy when a class has two fields of the same type.
+      - `play: Play` in the constructor is a parameter, so it stays in the box. Only the field turns into an arrow.
+      - `date: String` stays in the box, though String is a class too. Arrows connect the program's own classes, the ones drawn in the diagram. Java's classes, such as String and ArrayList, are written as types.
+
+      Here's the code:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Play hamlet = new Play("Hamlet", 190);
+              Performance friday = new Performance(hamlet, "May 9");
+              Performance saturday = new Performance(hamlet, "May 10");
+              friday.sell(120);
+              saturday.sell(95);
+              friday.sell(30);
+              System.out.println(friday);
+              System.out.println(saturday);
+          }
+      }
+      // ==== Play.java ====
+      public class Play {
+          private String title;
+          private int minutes;
+
+          public Play(String title, int minutes) {
+              this.title = title;
+              this.minutes = minutes;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+
+          public int getMinutes() {
+              return this.minutes;
+          }
+      }
+      // ==== Performance.java ====
+      public class Performance {
+          private Play play;
+          private String date;
+          private int seatsSold;
+
+          public Performance(Play play, String date) {
+              this.play = play;
+              this.date = date;
+              this.seatsSold = 0;
+          }
+
+          public void sell(int seats) {
+              this.seatsSold += seats;
+          }
+
+          @Override
+          public String toString() {
+              return this.play.getTitle() + " (" + this.play.getMinutes() + " min), " + this.date + ": " + this.seatsSold + " seats sold";
+          }
+      }
+      ```
+
+      ```output
+      Hamlet (190 min), May 9: 150 seats sold
+      Hamlet (190 min), May 10: 95 seats sold
+      ```
+
+      Both performances refer to the same Play object. "Each Performance has one Play" says how many plays a performance has, not that their plays are different objects: many performances can share one play, as `friday` and `saturday` do.
+
+      ### One, or none
+
+      A reference can also be `null`. A multiplicity of `0..1` at the arrowhead means at most one: zero or one. Say a critic may review a performance, or not:
+
+      ```classes
+      class Performance
+      - date: String
+      - seatsSold: int
+
+      class Review
+      - critic: String
+      - stars: int
+
+      Performance --> 0..1 Review : review
+      ```
+
+      Performance's field `review` is `null` until a review comes in, so code that uses it has to check for `null` first. With `1`, the code can count on the field always referring to an object.
+
+      **Your turn:** the theater's costume department sews each costume for one actor, who wears it as one character. `Actor.java` is ready. Write the class `Costume` in `Costume.java`, as the diagram shows:
+
+      ```classes
+      class Actor
+      - name: String
+      - height: int
+      + Actor(name: String, height: int)
+      + getName(): String
+      + getHeight(): int
+
+      class Costume
+      - character: String
+      + Costume(character: String, actor: Actor)
+      + getActor(): Actor
+      + toString(): String
+
+      Costume --> 1 Actor : actor
+      ```
+
+      `getActor` returns the costume's actor, and `toString` returns `Puck, for Noor Haddad (172 cm)`, with the costume's own character and its actor's name and height. The check runs:
+
+      ```java fragment
+      Actor noor = new Actor("Noor Haddad", 172);
+      Costume puck = new Costume("Puck", noor);
+      Costume moth = new Costume("Moth", noor);
+      System.out.println(puck);
+      System.out.println(moth.getActor().getName());
+      ```
+
+      and expects:
+
+      ```
+      Puck, for Noor Haddad (172 cm)
+      Noor Haddad
+      ```
+    seed:
+      Costume.java: |
+        public class Costume {
+
+        }
+      Actor.java: |
+        public class Actor {
+            private String name;
+            private int height;
+
+            public Actor(String name, int height) {
+                this.name = name;
+                this.height = height;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getHeight() {
+                return this.height;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Actor noor = new Actor("Noor Haddad", 172);
+                Costume puck = new Costume("Puck", noor);
+                Costume moth = new Costume("Moth", noor);
+                System.out.println(puck);
+                System.out.println(moth.getActor().getName());
+            }
+        }
+    solution:
+      Costume.java: |
+        public class Costume {
+            private String character;
+            private Actor actor;
+
+            public Costume(String character, Actor actor) {
+                this.character = character;
+                this.actor = actor;
+            }
+
+            public Actor getActor() {
+                return this.actor;
+            }
+
+            @Override
+            public String toString() {
+                return this.character + ", for " + this.actor.getName() + " (" + this.actor.getHeight() + " cm)";
+            }
+        }
+      Actor.java: |
+        public class Actor {
+            private String name;
+            private int height;
+
+            public Actor(String name, int height) {
+                this.name = name;
+                this.height = height;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getHeight() {
+                return this.height;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Actor noor = new Actor("Noor Haddad", 172);
+                Costume puck = new Costume("Puck", noor);
+                Costume moth = new Costume("Moth", noor);
+                System.out.println(puck);
+                System.out.println(moth.getActor().getName());
+            }
+        }
+    hints:
+      - "Costume has two instance variables: `character` from its box, and `actor` from the arrow, of type Actor. The constructor stores both."
+      - "`getActor` returns the actor. `toString` asks the actor for its name and height: `this.actor.getName()` and `this.actor.getHeight()`."
+    require:
+      - pattern: \bprivate\s+Actor\s+actor\s*;
+        message: "The arrow from Costume to Actor, named `actor`, is a field: `private Actor actor;`."
+      - pattern: \bpublic\s+Actor\s+getActor\s*\(\s*\)
+        message: "The box's line `+getActor(): Actor` is the header `public Actor getActor()`."
+    tests:
+      - call: |
+          Actor noor = new Actor("Noor Haddad", 172);
+          Costume puck = new Costume("Puck", noor);
+          Costume moth = new Costume("Moth", noor);
+          System.out.println(puck);
+          System.out.println(moth.getActor().getName());
+      - call: |
+          Actor sam = new Actor("Sam Okafor", 185);
+          Costume oberon = new Costume("Oberon", sam);
+          System.out.println(oberon);
+          System.out.println(oberon.getActor() == sam);
+        hidden: true
+    more:
+      - task: |
+          The theater's director cuts some scenes, and the play gets shorter. Here are the Play and Performance of the lesson, with one more method in Play:
+
+          ```classes
+          class Play
+          - title: String
+          - minutes: int
+          + Play(title: String, minutes: int)
+          + getTitle(): String
+          + getMinutes(): int
+          + cut(minutes: int): void
+
+          class Performance
+          - date: String
+          - seatsSold: int
+          + Performance(play: Play, date: String)
+          + sell(seats: int): void
+          + toString(): String
+
+          Performance --> 1 Play : play
+          ```
+
+          What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Play macbeth = new Play("Macbeth", 150);
+                  Performance opening = new Performance(macbeth, "June 1");
+                  Performance second = new Performance(macbeth, "June 2");
+                  Performance tour = new Performance(new Play("Macbeth", 150), "June 3");
+                  opening.sell(80);
+                  macbeth.cut(15);
+                  second.sell(200);
+                  System.out.println(opening);
+                  System.out.println(second);
+                  System.out.println(tour);
+              }
+          }
+          // ==== Play.java ====
+          public class Play {
+              private String title;
+              private int minutes;
+
+              public Play(String title, int minutes) {
+                  this.title = title;
+                  this.minutes = minutes;
+              }
+
+              public String getTitle() {
+                  return this.title;
+              }
+
+              public int getMinutes() {
+                  return this.minutes;
+              }
+
+              public void cut(int minutes) {
+                  this.minutes -= minutes;
+              }
+          }
+          // ==== Performance.java ====
+          public class Performance {
+              private Play play;
+              private String date;
+              private int seatsSold;
+
+              public Performance(Play play, String date) {
+                  this.play = play;
+                  this.date = date;
+                  this.seatsSold = 0;
+              }
+
+              public void sell(int seats) {
+                  this.seatsSold += seats;
+              }
+
+              @Override
+              public String toString() {
+                  return this.play.getTitle() + " (" + this.play.getMinutes() + " min), " + this.date + ": " + this.seatsSold + " seats sold";
+              }
+          }
+        hints:
+          - "`opening` and `second` get the same Play object, `macbeth`: the arrow is a reference, not a copy. `cut` changes that one object, and both performances see it, whenever they print."
+          - "`tour` has a Play object of its own, made with `new`, which `cut` never touches."
+      - task: |
+          The ward's program has grown: a bed now holds a `Patient` object instead of a name, and a free bed holds none.
+
+          ```classes
+          class Patient
+          - name: String
+          - room: int
+          - temperature: double
+          + Patient(name: String, room: int, temperature: double)
+          + getName(): String
+          + toString(): String
+
+          class Bed
+          - number: int
+          + Bed(number: int)
+          + getPatient(): Patient
+          + assign(patient: Patient): boolean
+          + release(): void
+          + toString(): String
+
+          Bed --> 0..1 Patient : patient
+          ```
+
+          `Patient.java` is ready. Write the class `Bed` in `Bed.java`:
+
+          - A new bed is free: its patient is `null`.
+          - `assign` puts the patient in the bed and returns `true`, but only if the bed is free. A bed that has a patient keeps them, and `assign` returns `false`.
+          - `release` makes the bed free, and `getPatient` returns the bed's patient, or `null` for a free bed.
+          - `toString` returns `Bed 3: free`, or `Bed 3: Ines Moreau` with the patient's name.
+
+          The check runs:
+
+          ```java fragment
+          Bed bed = new Bed(3);
+          Patient ines = new Patient("Ines Moreau", 12, 38.4);
+          Patient oskar = new Patient("Oskar Lund", 12, 36.9);
+          System.out.println(bed);
+          System.out.println(bed.assign(ines) + " " + bed.assign(oskar));
+          System.out.println(bed);
+          bed.release();
+          System.out.println(bed.getPatient() == null);
+          ```
+
+          and expects:
+
+          ```
+          Bed 3: free
+          true false
+          Bed 3: Ines Moreau
+          true
+          ```
+        seed:
+          Bed.java: |
+            public class Bed {
+
+            }
+          Patient.java: |
+            public class Patient {
+                private String name;
+                private int room;
+                private double temperature;
+
+                public Patient(String name, int room, double temperature) {
+                    this.name = name;
+                    this.room = room;
+                    this.temperature = temperature;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + ", room " + this.room + ", " + this.temperature + " degrees";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Bed bed = new Bed(3);
+                    Patient ines = new Patient("Ines Moreau", 12, 38.4);
+                    Patient oskar = new Patient("Oskar Lund", 12, 36.9);
+                    System.out.println(bed);
+                    System.out.println(bed.assign(ines) + " " + bed.assign(oskar));
+                    System.out.println(bed);
+                    bed.release();
+                    System.out.println(bed.getPatient() == null);
+                }
+            }
+        solution:
+          Bed.java: |
+            public class Bed {
+                private int number;
+                private Patient patient;
+
+                public Bed(int number) {
+                    this.number = number;
+                    this.patient = null;
+                }
+
+                public Patient getPatient() {
+                    return this.patient;
+                }
+
+                public boolean assign(Patient patient) {
+                    if (this.patient != null) {
+                        return false;
+                    }
+                    this.patient = patient;
+                    return true;
+                }
+
+                public void release() {
+                    this.patient = null;
+                }
+
+                @Override
+                public String toString() {
+                    if (this.patient == null) {
+                        return "Bed " + this.number + ": free";
+                    }
+                    return "Bed " + this.number + ": " + this.patient.getName();
+                }
+            }
+          Patient.java: |
+            public class Patient {
+                private String name;
+                private int room;
+                private double temperature;
+
+                public Patient(String name, int room, double temperature) {
+                    this.name = name;
+                    this.room = room;
+                    this.temperature = temperature;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + ", room " + this.room + ", " + this.temperature + " degrees";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Bed bed = new Bed(3);
+                    Patient ines = new Patient("Ines Moreau", 12, 38.4);
+                    Patient oskar = new Patient("Oskar Lund", 12, 36.9);
+                    System.out.println(bed);
+                    System.out.println(bed.assign(ines) + " " + bed.assign(oskar));
+                    System.out.println(bed);
+                    bed.release();
+                    System.out.println(bed.getPatient() == null);
+                }
+            }
+        hints:
+          - "The arrow with `0..1` is a field that may be `null`: `private Patient patient;`, set to `null` in the constructor."
+          - "`assign` checks `this.patient != null` first and returns `false` if the bed is taken. `toString` must check for `null` too, before it calls `this.patient.getName()`."
+        require:
+          - pattern: \bprivate\s+Patient\s+patient\s*;
+            message: "The arrow from Bed to Patient, named `patient`, is a field: `private Patient patient;`."
+        tests:
+          - call: |
+              Bed bed = new Bed(3);
+              Patient ines = new Patient("Ines Moreau", 12, 38.4);
+              Patient oskar = new Patient("Oskar Lund", 12, 36.9);
+              System.out.println(bed);
+              System.out.println(bed.assign(ines) + " " + bed.assign(oskar));
+              System.out.println(bed);
+              bed.release();
+              System.out.println(bed.getPatient() == null);
+          - call: |
+              Bed a = new Bed(1);
+              Bed b = new Bed(2);
+              Patient mei = new Patient("Mei Tan", 4, 37.2);
+              Patient leo = new Patient("Leo Park", 5, 36.5);
+              System.out.println(b.assign(leo));
+              a.release();
+              System.out.println(a + " / " + b);
+              System.out.println(a.assign(mei) + " " + a.getPatient().getName() + " " + b.getPatient().getName());
+            hidden: true
+
+  - id: class-diagrams-many
+    slug: many
+    title: Many objects, and arrows both ways
+    text: |
+      ### A star for a list
+
+      At a music festival, each stage has a lineup of acts. `Stage` keeps them in a list:
+
+      ```java fragment
+      public class Stage {
+          private String name;
+          private ArrayList<Act> acts;
+
+          // the constructor and methods
+      }
+      ```
+
+      The list holds Act objects, so it's drawn as an arrow to Act, like a field of type Act would be. A star at the arrowhead says that a Stage has any number of them:
+
+      ```classes
+      class Act
+      - name: String
+      - minutes: int
+      + Act(name: String, minutes: int)
+      + getMinutes(): int
+      + toString(): String
+
+      class Stage
+      - name: String
+      + Stage(name: String)
+      + add(act: Act): void
+      + totalMinutes(): int
+      + getActs(): ArrayList<Act>
+
+      Stage --> * Act : acts
+      ```
+
+      - `*` means any number, zero included: a new stage has an empty lineup.
+      - The list isn't in Stage's box, just as a single Act field wouldn't be. The arrow and its star stand for `private ArrayList<Act> acts;`, which the constructor creates.
+      - The methods that work with the list are in the box as usual. A list type is written as in Java: `getActs(): ArrayList<Act>`.
+      - Other multiplicities you may meet: `1..*` for one or more, and a range such as `2..4`.
+      - A list of Strings or of numbers stays in the box as a field, such as `-tags: ArrayList<String>`. Arrows are for the diagram's own classes.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Stage tent = new Stage("Blue Tent");
+              tent.add(new Act("The Low Tides", 45));
+              tent.add(new Act("Mira Solen", 30));
+              System.out.println(tent.getActs());
+              System.out.println(tent.totalMinutes());
+          }
+      }
+      // ==== Act.java ====
+      public class Act {
+          private String name;
+          private int minutes;
+
+          public Act(String name, int minutes) {
+              this.name = name;
+              this.minutes = minutes;
+          }
+
+          public int getMinutes() {
+              return this.minutes;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + " (" + this.minutes + " min)";
+          }
+      }
+      // ==== Stage.java ====
+      import java.util.ArrayList;
+
+      public class Stage {
+          private String name;
+          private ArrayList<Act> acts;
+
+          public Stage(String name) {
+              this.name = name;
+              this.acts = new ArrayList<>();
+          }
+
+          public void add(Act act) {
+              this.acts.add(act);
+          }
+
+          public int totalMinutes() {
+              int total = 0;
+              for (Act act : this.acts) {
+                  total += act.getMinutes();
+              }
+              return total;
+          }
+
+          public ArrayList<Act> getActs() {
+              return this.acts;
+          }
+      }
+      ```
+
+      ```output
+      [The Low Tides (45 min), Mira Solen (30 min)]
+      75
+      ```
+
+      You'll also see the list created right where the field is declared, instead of in the constructor:
+
+      ```java fragment
+      public class Stage {
+          private String name;
+          private ArrayList<Act> acts = new ArrayList<>();
+
+          public Stage(String name) {
+              this.name = name;
+          }
+
+          // the methods as before
+      }
+      ```
+
+      It does the same thing: each new Stage gets an empty list of its own, and the diagram is the same. Any instance variable can get its first value this way, for example an array: `private int[] scores = new int[5];`.
+
+      A multiplicity can also sit at the start of an arrow. It then says how many objects of the first class can share one object at the head. Step 4's performances, drawn with both numbers:
+
+      ```classes
+      class Play
+      - title: String
+
+      class Performance
+      - date: String
+
+      Performance * --> 1 Play
+      ```
+
+      Each Performance has one Play, and a Play can have any number of performances, even though a Play doesn't know them: the arrow still points one way.
+
+      ### Both ways
+
+      The acts above don't know which stage they're on. If the program needs that, say to print each act with its stage, Act gets a field of type Stage, and then the two classes know each other. The diagram draws that as a line **without an arrowhead**, with a multiplicity at each end:
+
+      ```classes
+      class Stage
+      - name: String
+      + Stage(name: String)
+      + add(act: Act): void
+      + getName(): String
+
+      class Act
+      - name: String
+      - minutes: int
+      + Act(name: String, minutes: int)
+      + setStage(stage: Stage): void
+      + toString(): String
+
+      Stage 0..1 -- * Act
+      ```
+
+      Read each end's number as "how many of these": each Stage has any number of Acts (the `*` at Act's end), and each Act is on at most one Stage (the `0..1` at Stage's end: none until it's added).
+
+      In code, a connection both ways is two fields: Stage's list of acts, and Act's `stage`. They have to agree: when an act goes on a stage, the act must learn its stage too. The usual way is to let one method do both. Inside a method, `this` is the object the method was called on, so `act.setStage(this)` gives the act this very stage:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Stage tent = new Stage("Blue Tent");
+              Act tides = new Act("The Low Tides", 45);
+              System.out.println(tides);
+              tent.add(tides);
+              System.out.println(tides);
+          }
+      }
+      // ==== Stage.java ====
+      import java.util.ArrayList;
+
+      public class Stage {
+          private String name;
+          private ArrayList<Act> acts;
+
+          public Stage(String name) {
+              this.name = name;
+              this.acts = new ArrayList<>();
+          }
+
+          public void add(Act act) {
+              this.acts.add(act);
+              act.setStage(this);
+          }
+
+          public String getName() {
+              return this.name;
+          }
+      }
+      // ==== Act.java ====
+      public class Act {
+          private String name;
+          private int minutes;
+          private Stage stage;
+
+          public Act(String name, int minutes) {
+              this.name = name;
+              this.minutes = minutes;
+              this.stage = null;
+          }
+
+          public void setStage(Stage stage) {
+              this.stage = stage;
+          }
+
+          @Override
+          public String toString() {
+              if (this.stage == null) {
+                  return this.name + ", " + this.minutes + " min, no stage yet";
+              }
+              return this.name + ", " + this.minutes + " min, " + this.stage.getName();
+          }
+      }
+      ```
+
+      ```output
+      The Low Tides, 45 min, no stage yet
+      The Low Tides, 45 min, Blue Tent
+      ```
+
+      A connection both ways costs more than an arrow: two fields to keep in step, and a change that updates one side and forgets the other leaves them disagreeing. So draw, and write, a one-way arrow unless the program really needs both directions.
+
+      **Your turn:** the ward keeps its patients in a list. `Patient.java` is ready. Write the class `Ward` in `Ward.java`, as the diagram shows:
+
+      ```classes
+      class Patient
+      - name: String
+      - room: int
+      - temperature: double
+      + Patient(name: String, room: int, temperature: double)
+      + getName(): String
+      + getTemperature(): double
+      + toString(): String
+
+      class Ward
+      - name: String
+      + Ward(name: String)
+      + admit(patient: Patient): void
+      + withFever(): ArrayList<Patient>
+      + toString(): String
+
+      Ward --> * Patient : patients
+      ```
+
+      - A new ward has no patients. `admit` adds a patient to the ward.
+      - `withFever` returns a new list of the patients whose temperature is 38.0 or more, in the order they were admitted.
+      - `toString` returns `Ward 5B: 3 patients`, with the ward's own name and number of patients.
+
+      The check runs:
+
+      ```java fragment
+      Ward ward = new Ward("Ward 5B");
+      ward.admit(new Patient("Ines Moreau", 12, 38.4));
+      ward.admit(new Patient("Oskar Lund", 12, 36.9));
+      ward.admit(new Patient("Mei Tan", 14, 38.0));
+      System.out.println(ward);
+      for (Patient patient : ward.withFever()) {
+          System.out.println(patient.getName());
+      }
+      ```
+
+      and expects:
+
+      ```
+      Ward 5B: 3 patients
+      Ines Moreau
+      Mei Tan
+      ```
+    seed:
+      Ward.java: |
+        public class Ward {
+
+        }
+      Patient.java: |
+        public class Patient {
+            private String name;
+            private int room;
+            private double temperature;
+
+            public Patient(String name, int room, double temperature) {
+                this.name = name;
+                this.room = room;
+                this.temperature = temperature;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public double getTemperature() {
+                return this.temperature;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + ", room " + this.room + ", " + this.temperature + " degrees";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Ward ward = new Ward("Ward 5B");
+                ward.admit(new Patient("Ines Moreau", 12, 38.4));
+                ward.admit(new Patient("Oskar Lund", 12, 36.9));
+                ward.admit(new Patient("Mei Tan", 14, 38.0));
+                System.out.println(ward);
+                for (Patient patient : ward.withFever()) {
+                    System.out.println(patient.getName());
+                }
+            }
+        }
+    solution:
+      Ward.java: |
+        import java.util.ArrayList;
+
+        public class Ward {
+            private String name;
+            private ArrayList<Patient> patients;
+
+            public Ward(String name) {
+                this.name = name;
+                this.patients = new ArrayList<>();
+            }
+
+            public void admit(Patient patient) {
+                this.patients.add(patient);
+            }
+
+            public ArrayList<Patient> withFever() {
+                ArrayList<Patient> fever = new ArrayList<>();
+                for (Patient patient : this.patients) {
+                    if (patient.getTemperature() >= 38.0) {
+                        fever.add(patient);
+                    }
+                }
+                return fever;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + ": " + this.patients.size() + " patients";
+            }
+        }
+      Patient.java: |
+        public class Patient {
+            private String name;
+            private int room;
+            private double temperature;
+
+            public Patient(String name, int room, double temperature) {
+                this.name = name;
+                this.room = room;
+                this.temperature = temperature;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public double getTemperature() {
+                return this.temperature;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + ", room " + this.room + ", " + this.temperature + " degrees";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Ward ward = new Ward("Ward 5B");
+                ward.admit(new Patient("Ines Moreau", 12, 38.4));
+                ward.admit(new Patient("Oskar Lund", 12, 36.9));
+                ward.admit(new Patient("Mei Tan", 14, 38.0));
+                System.out.println(ward);
+                for (Patient patient : ward.withFever()) {
+                    System.out.println(patient.getName());
+                }
+            }
+        }
+    hints:
+      - "Ward's instance variables are its `name` and, for the arrow with the star, `private ArrayList<Patient> patients;`, created in the constructor with `new ArrayList<>()`. `Ward.java` needs `import java.util.ArrayList;` at the top."
+      - "`withFever` makes a new list, adds each patient whose `getTemperature()` is at least 38.0, and returns it. `toString` uses the size of the ward's list."
+    require:
+      - pattern: \bprivate\s+ArrayList<Patient>\s+\w+\s*[;=]
+        message: "The arrow with the star is a list: `private ArrayList<Patient> patients;`."
+      - pattern: \bpublic\s+ArrayList<Patient>\s+withFever\s*\(\s*\)
+        message: "The box's line `+withFever(): ArrayList<Patient>` is the header `public ArrayList<Patient> withFever()`."
+    tests:
+      - call: |
+          Ward ward = new Ward("Ward 5B");
+          ward.admit(new Patient("Ines Moreau", 12, 38.4));
+          ward.admit(new Patient("Oskar Lund", 12, 36.9));
+          ward.admit(new Patient("Mei Tan", 14, 38.0));
+          System.out.println(ward);
+          for (Patient patient : ward.withFever()) {
+              System.out.println(patient.getName());
+          }
+      - call: |
+          Ward ward = new Ward("Ward 2A");
+          System.out.println(ward + " " + ward.withFever());
+          ward.admit(new Patient("Leo Park", 3, 39.1));
+          ward.admit(new Patient("Ana Ruiz", 3, 37.9));
+          ArrayList<Patient> fever = ward.withFever();
+          System.out.println(fever.size() + " " + fever.get(0).getName());
+          fever.clear();
+          System.out.println(ward);
+        hidden: true
+    more:
+      - task: |
+          The festival moves The Low Tides from the Blue Tent to the Main Field. Stage and Act are the classes of the lesson's connection both ways, and Stage has one more method, `count()`, which returns the number of acts in its list:
+
+          ```classes
+          class Stage
+          - name: String
+          + Stage(name: String)
+          + add(act: Act): void
+          + getName(): String
+          + count(): int
+
+          class Act
+          - name: String
+          - minutes: int
+          + Act(name: String, minutes: int)
+          + setStage(stage: Stage): void
+          + toString(): String
+
+          Stage 0..1 -- * Act
+          ```
+
+          What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Stage tent = new Stage("Blue Tent");
+                  Stage field = new Stage("Main Field");
+                  Act tides = new Act("The Low Tides", 45);
+                  tent.add(tides);
+                  field.add(tides);
+                  System.out.println(tent.count() + " " + field.count());
+                  System.out.println(tides);
+              }
+          }
+          // ==== Stage.java ====
+          import java.util.ArrayList;
+
+          public class Stage {
+              private String name;
+              private ArrayList<Act> acts;
+
+              public Stage(String name) {
+                  this.name = name;
+                  this.acts = new ArrayList<>();
+              }
+
+              public void add(Act act) {
+                  this.acts.add(act);
+                  act.setStage(this);
+              }
+
+              public String getName() {
+                  return this.name;
+              }
+
+              public int count() {
+                  return this.acts.size();
+              }
+          }
+          // ==== Act.java ====
+          public class Act {
+              private String name;
+              private int minutes;
+              private Stage stage;
+
+              public Act(String name, int minutes) {
+                  this.name = name;
+                  this.minutes = minutes;
+                  this.stage = null;
+              }
+
+              public void setStage(Stage stage) {
+                  this.stage = stage;
+              }
+
+              @Override
+              public String toString() {
+                  if (this.stage == null) {
+                      return this.name + ", " + this.minutes + " min, no stage yet";
+                  }
+                  return this.name + ", " + this.minutes + " min, " + this.stage.getName();
+              }
+          }
+        hints:
+          - "`add` does two things: it puts the act in the stage's list, and it tells the act its stage with `setStage(this)`."
+          - "The second `add` sets the act's stage to the Main Field, but nothing takes the act out of the Blue Tent's list. Both lists have it, while the act knows only its last stage: the two sides disagree."
+      - task: |
+          A garden center sells seedlings in trays, and a tray has room for at most 6 of them. Write both classes of this diagram, `Seedling` in `Seedling.java` and `Tray` in `Tray.java`:
+
+          ```classes
+          class Seedling
+          - name: String
+          - price: int
+          + Seedling(name: String, price: int)
+          + getPrice(): int
+          + toString(): String
+
+          class Tray
+          + Tray()
+          + add(seedling: Seedling): boolean
+          + total(): int
+          + toString(): String
+
+          Tray --> 0..6 Seedling : seedlings
+          ```
+
+          - A seedling's `toString` returns `Basil (3 dollars)`, with its own name and price.
+          - A new tray is empty. `add` puts the seedling in the tray and returns `true`, unless the tray already has 6 seedlings: then it returns `false` and adds nothing.
+          - `total` returns the prices of the tray's seedlings added up.
+          - A tray's `toString` returns `3 seedlings, 11 dollars`.
+
+          The check runs:
+
+          ```java fragment
+          Tray tray = new Tray();
+          tray.add(new Seedling("Basil", 3));
+          tray.add(new Seedling("Tomato", 4));
+          tray.add(new Seedling("Mint", 4));
+          System.out.println(tray);
+          System.out.println(new Seedling("Thyme", 2));
+          ```
+
+          and expects:
+
+          ```
+          3 seedlings, 11 dollars
+          Thyme (2 dollars)
+          ```
+        seed:
+          Seedling.java: |
+            public class Seedling {
+
+            }
+          Tray.java: |
+            public class Tray {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Tray tray = new Tray();
+                    tray.add(new Seedling("Basil", 3));
+                    tray.add(new Seedling("Tomato", 4));
+                    tray.add(new Seedling("Mint", 4));
+                    System.out.println(tray);
+                    System.out.println(new Seedling("Thyme", 2));
+                }
+            }
+        solution:
+          Seedling.java: |
+            public class Seedling {
+                private String name;
+                private int price;
+
+                public Seedling(String name, int price) {
+                    this.name = name;
+                    this.price = price;
+                }
+
+                public int getPrice() {
+                    return this.price;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.price + " dollars)";
+                }
+            }
+          Tray.java: |
+            import java.util.ArrayList;
+
+            public class Tray {
+                private ArrayList<Seedling> seedlings;
+
+                public Tray() {
+                    this.seedlings = new ArrayList<>();
+                }
+
+                public boolean add(Seedling seedling) {
+                    if (this.seedlings.size() >= 6) {
+                        return false;
+                    }
+                    this.seedlings.add(seedling);
+                    return true;
+                }
+
+                public int total() {
+                    int sum = 0;
+                    for (Seedling seedling : this.seedlings) {
+                        sum += seedling.getPrice();
+                    }
+                    return sum;
+                }
+
+                @Override
+                public String toString() {
+                    return this.seedlings.size() + " seedlings, " + this.total() + " dollars";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Tray tray = new Tray();
+                    tray.add(new Seedling("Basil", 3));
+                    tray.add(new Seedling("Tomato", 4));
+                    tray.add(new Seedling("Mint", 4));
+                    System.out.println(tray);
+                    System.out.println(new Seedling("Thyme", 2));
+                }
+            }
+        hints:
+          - "Seedling is a class like the lesson's first Act, the one with `getMinutes()`: two instance variables, a constructor, a getter and `toString`. Tray's box has no fields: its only instance variable is the list that the arrow stands for, `private ArrayList<Seedling> seedlings;`."
+          - "`0..6` means at most 6, so `add` returns `false` without adding when the list's size is already 6. `total` adds up `getPrice()` over the list, and `toString` uses the list's size and `total()`."
+        require:
+          - pattern: \bprivate\s+ArrayList<Seedling>\s+\w+\s*[;=]
+            message: "The arrow from Tray to Seedling stands for a list: `private ArrayList<Seedling> seedlings;`."
+        tests:
+          - call: |
+              Tray tray = new Tray();
+              tray.add(new Seedling("Basil", 3));
+              tray.add(new Seedling("Tomato", 4));
+              tray.add(new Seedling("Mint", 4));
+              System.out.println(tray);
+              System.out.println(new Seedling("Thyme", 2));
+          - call: |
+              Tray tray = new Tray();
+              System.out.println(tray);
+              int added = 0;
+              for (int price = 1; price <= 8; price++) {
+                  if (tray.add(new Seedling("Chive", price))) {
+                      added++;
+                  }
+              }
+              System.out.println(added + " " + tray.total());
+              System.out.println(tray);
+            hidden: true
+
+  - id: class-diagrams-inheritance
+    slug: inheritance
+    title: Inheritance and abstract classes
+    text: |
+      ### A triangle points to the parent
+
+      Inheritance (module 34) has a line of its own in a class diagram. The recycling center's glass bins are sorted by color, so a `GlassBin` extends `Bin` with a color:
+
+      ```classes
+      class Bin
+      - material: String
+      - capacity: int
+      - load: int
+      + Bin(material: String, capacity: int)
+      + add(kilos: int): boolean
+      + toString(): String
+
+      class GlassBin extends Bin
+      - color: String
+      + GlassBin(color: String, capacity: int)
+      + toString(): String
+      ```
+
+      - The subclass's box is below its parent's, joined to it by a line with a **hollow triangle** at the parent's end. The triangle points to the class that is extended: GlassBin extends Bin.
+      - The subclass's box shows only what GlassBin itself writes: its own field, its constructor, and the `toString` it overrides. It inherits `add`, but `add` is drawn once, in Bin's box.
+      - Bin's private fields aren't repeated in GlassBin's box either. They're declared in Bin, even though every GlassBin object has them.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              GlassBin green = new GlassBin("green", 400);
+              green.add(120);
+              System.out.println(green);
+          }
+      }
+      // ==== Bin.java ====
+      public class Bin {
+          private String material;
+          private int capacity;
+          private int load;
+
+          public Bin(String material, int capacity) {
+              this.material = material;
+              this.capacity = capacity;
+              this.load = 0;
+          }
+
+          public boolean add(int kilos) {
+              if (this.load + kilos > this.capacity) {
+                  return false;
+              }
+              this.load += kilos;
+              return true;
+          }
+
+          @Override
+          public String toString() {
+              return this.material + ": " + this.load + "/" + this.capacity + " kg";
+          }
+      }
+      // ==== GlassBin.java ====
+      public class GlassBin extends Bin {
+          private String color;
+
+          public GlassBin(String color, int capacity) {
+              super("glass", capacity);
+              this.color = color;
+          }
+
+          @Override
+          public String toString() {
+              return this.color + " " + super.toString();
+          }
+      }
+      ```
+
+      ```output
+      green glass: 120/400 kg
+      ```
+
+      When several classes extend one parent, the children sit side by side under it, and their lines meet at the parent's one triangle.
+
+      ### Abstract classes
+
+      An abstract class (module 34) is drawn like any other class, with two marks: «abstract» above its name, which is in italics, and its abstract methods in italics too.
+
+      People also bring the recycling center things that don't go in a bin, and pay a fee that depends on what they bring:
+
+      ```classes
+      abstract class DropOff
+      - kilos: int
+      + DropOff(kilos: int)
+      + getKilos(): int
+      + fee(): int {abstract}
+      + toString(): String
+
+      class Furniture extends DropOff
+      + Furniture(kilos: int)
+      + fee(): int
+
+      class Electronics extends DropOff
+      - screen: boolean
+      + Electronics(kilos: int, screen: boolean)
+      + fee(): int
+      ```
+
+      - DropOff's name is in italics under «abstract»: there are no objects of DropOff itself, only Furniture and Electronics objects.
+      - `fee()` is in italics in DropOff's box: it's abstract there, a header without a body. Each subclass writes it, so it's in their boxes again, in plain letters.
+      - A subclass can have no fields of its own, like Furniture, whose field part is empty.
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<DropOff> today = new ArrayList<>();
+              today.add(new Furniture(30));
+              today.add(new Electronics(8, true));
+              today.add(new Electronics(2, false));
+              int total = 0;
+              for (DropOff item : today) {
+                  System.out.println(item);
+                  total += item.fee();
+              }
+              System.out.println("Total " + total);
+          }
+      }
+      // ==== DropOff.java ====
+      public abstract class DropOff {
+          private int kilos;
+
+          public DropOff(int kilos) {
+              this.kilos = kilos;
+          }
+
+          public int getKilos() {
+              return this.kilos;
+          }
+
+          public abstract int fee();
+
+          @Override
+          public String toString() {
+              return this.kilos + " kg, fee " + this.fee();
+          }
+      }
+      // ==== Furniture.java ====
+      public class Furniture extends DropOff {
+          public Furniture(int kilos) {
+              super(kilos);
+          }
+
+          @Override
+          public int fee() {
+              return 2 * this.getKilos();
+          }
+      }
+      // ==== Electronics.java ====
+      public class Electronics extends DropOff {
+          private boolean screen;
+
+          public Electronics(int kilos, boolean screen) {
+              super(kilos);
+              this.screen = screen;
+          }
+
+          @Override
+          public int fee() {
+              if (this.screen) {
+                  return 20;
+              }
+              return 5;
+          }
+      }
+      ```
+
+      ```output
+      30 kg, fee 60
+      8 kg, fee 20
+      2 kg, fee 5
+      Total 85
+      ```
+
+      **Your turn:** old tires are a drop-off too. `DropOff.java` is ready. Write the class `Tires` in `Tires.java`, as the diagram shows. Tires cost 4 dollars each.
+
+      ```classes
+      abstract class DropOff
+      - kilos: int
+      + DropOff(kilos: int)
+      + getKilos(): int
+      + fee(): int {abstract}
+      + toString(): String
+
+      class Tires extends DropOff
+      - count: int
+      + Tires(kilos: int, count: int)
+      + fee(): int
+      ```
+
+      The check runs:
+
+      ```java fragment
+      DropOff tires = new Tires(36, 4);
+      System.out.println(tires);
+      System.out.println(tires.getKilos() + " " + tires.fee());
+      ```
+
+      and expects:
+
+      ```
+      36 kg, fee 16
+      36 16
+      ```
+    seed:
+      Tires.java: |
+        public class Tires {
+
+        }
+      DropOff.java: |
+        public abstract class DropOff {
+            private int kilos;
+
+            public DropOff(int kilos) {
+                this.kilos = kilos;
+            }
+
+            public int getKilos() {
+                return this.kilos;
+            }
+
+            public abstract int fee();
+
+            @Override
+            public String toString() {
+                return this.kilos + " kg, fee " + this.fee();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                DropOff tires = new Tires(36, 4);
+                System.out.println(tires);
+                System.out.println(tires.getKilos() + " " + tires.fee());
+            }
+        }
+    solution:
+      Tires.java: |
+        public class Tires extends DropOff {
+            private int count;
+
+            public Tires(int kilos, int count) {
+                super(kilos);
+                this.count = count;
+            }
+
+            @Override
+            public int fee() {
+                return 4 * this.count;
+            }
+        }
+      DropOff.java: |
+        public abstract class DropOff {
+            private int kilos;
+
+            public DropOff(int kilos) {
+                this.kilos = kilos;
+            }
+
+            public int getKilos() {
+                return this.kilos;
+            }
+
+            public abstract int fee();
+
+            @Override
+            public String toString() {
+                return this.kilos + " kg, fee " + this.fee();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                DropOff tires = new Tires(36, 4);
+                System.out.println(tires);
+                System.out.println(tires.getKilos() + " " + tires.fee());
+            }
+        }
+    hints:
+      - "The triangle means `public class Tires extends DropOff`. Tires's own field is `count`. The kilos belong to DropOff, so the constructor passes them on with `super(kilos);`."
+      - "`fee()` is abstract in DropOff, so Tires must write it: `public int fee()`, returning 4 times the count. `toString` and `getKilos` are inherited."
+    require:
+      - pattern: \bclass\s+Tires\s+extends\s+DropOff\b
+        message: "The triangle from Tires to DropOff means `public class Tires extends DropOff`."
+    tests:
+      - call: |
+          DropOff tires = new Tires(36, 4);
+          System.out.println(tires);
+          System.out.println(tires.getKilos() + " " + tires.fee());
+      - call: |
+          Tires one = new Tires(9, 1);
+          Tires stack = new Tires(80, 10);
+          System.out.println(one + " / " + stack);
+          System.out.println(one.fee() + stack.fee());
+        hidden: true
+    more:
+      - task: |
+          A music festival's program has this diagram, but the code doesn't match it in two places, and `Main.java` doesn't compile:
+
+          ```classes
+          abstract class Performer
+          - name: String
+          + Performer(name: String)
+          + getName(): String
+          + slotMinutes(): int {abstract}
+          + toString(): String
+
+          class Band extends Performer
+          - members: int
+          + Band(name: String, members: int)
+          + slotMinutes(): int
+
+          class Dj extends Performer
+          + Dj(name: String)
+          + slotMinutes(): int
+          ```
+
+          A band plays 30 minutes plus 5 for each member, and a DJ plays 60 minutes. Fix `Performer.java` and `Dj.java` so that they match the diagram, and leave `Main.java` and `Band.java` as they are. The program should print:
+
+          ```
+          The Low Tides, 50 min
+          Kora, 60 min
+          110 min in all
+          ```
+        seed:
+          Performer.java: |
+            public class Performer {
+                private String name;
+
+                public Performer(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int slotMinutes() {
+                    return 0;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + ", " + this.slotMinutes() + " min";
+                }
+            }
+          Dj.java: |
+            public class Dj {
+                private String name;
+
+                public Dj(String name) {
+                    this.name = name;
+                }
+
+                public int slotMinutes() {
+                    return 60;
+                }
+            }
+          Band.java: |
+            public class Band extends Performer {
+                private int members;
+
+                public Band(String name, int members) {
+                    super(name);
+                    this.members = members;
+                }
+
+                @Override
+                public int slotMinutes() {
+                    return 30 + 5 * this.members;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Performer> lineup = new ArrayList<>();
+                    lineup.add(new Band("The Low Tides", 4));
+                    lineup.add(new Dj("Kora"));
+                    int minutes = 0;
+                    for (Performer performer : lineup) {
+                        System.out.println(performer);
+                        minutes += performer.slotMinutes();
+                    }
+                    System.out.println(minutes + " min in all");
+                }
+            }
+        solution:
+          Performer.java: |
+            public abstract class Performer {
+                private String name;
+
+                public Performer(String name) {
+                    this.name = name;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public abstract int slotMinutes();
+
+                @Override
+                public String toString() {
+                    return this.name + ", " + this.slotMinutes() + " min";
+                }
+            }
+          Dj.java: |
+            public class Dj extends Performer {
+                public Dj(String name) {
+                    super(name);
+                }
+
+                @Override
+                public int slotMinutes() {
+                    return 60;
+                }
+            }
+          Band.java: |
+            public class Band extends Performer {
+                private int members;
+
+                public Band(String name, int members) {
+                    super(name);
+                    this.members = members;
+                }
+
+                @Override
+                public int slotMinutes() {
+                    return 30 + 5 * this.members;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Performer> lineup = new ArrayList<>();
+                    lineup.add(new Band("The Low Tides", 4));
+                    lineup.add(new Dj("Kora"));
+                    int minutes = 0;
+                    for (Performer performer : lineup) {
+                        System.out.println(performer);
+                        minutes += performer.slotMinutes();
+                    }
+                    System.out.println(minutes + " min in all");
+                }
+            }
+        hints:
+          - "Performer's name and `slotMinutes()` are in italics, under «abstract»: the class is abstract, and so is that method, a header that ends in a semicolon."
+          - "The triangle from Dj points to Performer: `public class Dj extends Performer`. Dj's box has no fields, so the name belongs to Performer, and Dj's constructor passes it on with `super(name);`."
+        require:
+          - pattern: \babstract\s+class\s+Performer\b
+            message: "The «abstract» above Performer's name means `public abstract class Performer`."
+          - pattern: \babstract\s+int\s+slotMinutes\s*\(\s*\)\s*;
+            message: "`slotMinutes()` is in italics in Performer's box: it's abstract, `public abstract int slotMinutes();`, with no body."
+          - pattern: \bclass\s+Dj\s+extends\s+Performer\b
+            message: "The triangle from Dj to Performer means `public class Dj extends Performer`."
+        forbid:
+          - pattern: \bclass\s+Dj\b[^}]*\bprivate\s+String\s+name\b
+            message: "Dj's box has no fields: the name is Performer's. Pass it on with `super(name);`."
+        tests:
+          - name: The program's output
+          - call: |
+              Performer solo = new Band("Mira Solen", 1);
+              Performer dj = new Dj("Vex");
+              System.out.println(solo.getName() + " " + solo.slotMinutes());
+              System.out.println(dj.getName() + " / " + dj);
+            hidden: true
+      - task: |
+          A garden center delivers what its customers buy, by van or by bike. Write the three classes of this diagram, each in its own file:
+
+          ```classes
+          abstract class Delivery
+          - address: String
+          + Delivery(address: String)
+          + getAddress(): String
+          + cost(): int {abstract}
+          + toString(): String
+
+          class VanDelivery extends Delivery
+          - pallets: int
+          + VanDelivery(address: String, pallets: int)
+          + cost(): int
+
+          class BikeDelivery extends Delivery
+          + BikeDelivery(address: String)
+          + cost(): int
+          ```
+
+          - A van delivery costs 25 dollars, plus 15 for each pallet. A bike delivery costs 8.
+          - Every delivery's `toString` returns `8 Hill Street: 55 dollars`, with its own address and cost.
+
+          The check runs:
+
+          ```java fragment
+          Delivery van = new VanDelivery("8 Hill Street", 2);
+          Delivery bike = new BikeDelivery("3 Pond Lane");
+          System.out.println(van);
+          System.out.println(bike);
+          ```
+
+          and expects:
+
+          ```
+          8 Hill Street: 55 dollars
+          3 Pond Lane: 8 dollars
+          ```
+        seed:
+          Delivery.java: |
+            public class Delivery {
+
+            }
+          VanDelivery.java: |
+            public class VanDelivery {
+
+            }
+          BikeDelivery.java: |
+            public class BikeDelivery {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Delivery van = new VanDelivery("8 Hill Street", 2);
+                    Delivery bike = new BikeDelivery("3 Pond Lane");
+                    System.out.println(van);
+                    System.out.println(bike);
+                }
+            }
+        solution:
+          Delivery.java: |
+            public abstract class Delivery {
+                private String address;
+
+                public Delivery(String address) {
+                    this.address = address;
+                }
+
+                public String getAddress() {
+                    return this.address;
+                }
+
+                public abstract int cost();
+
+                @Override
+                public String toString() {
+                    return this.address + ": " + this.cost() + " dollars";
+                }
+            }
+          VanDelivery.java: |
+            public class VanDelivery extends Delivery {
+                private int pallets;
+
+                public VanDelivery(String address, int pallets) {
+                    super(address);
+                    this.pallets = pallets;
+                }
+
+                @Override
+                public int cost() {
+                    return 25 + 15 * this.pallets;
+                }
+            }
+          BikeDelivery.java: |
+            public class BikeDelivery extends Delivery {
+                public BikeDelivery(String address) {
+                    super(address);
+                }
+
+                @Override
+                public int cost() {
+                    return 8;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Delivery van = new VanDelivery("8 Hill Street", 2);
+                    Delivery bike = new BikeDelivery("3 Pond Lane");
+                    System.out.println(van);
+                    System.out.println(bike);
+                }
+            }
+        hints:
+          - "Start with Delivery: `public abstract class Delivery`, with the address, a constructor, `getAddress`, `public abstract int cost();`, and a `toString` that calls `cost()`."
+          - "Each subclass `extends Delivery`, passes the address on with `super(address);`, and writes `cost()`: 25 plus 15 times the pallets for a van, 8 for a bike."
+        require:
+          - pattern: \babstract\s+class\s+Delivery\b
+            message: "The «abstract» above Delivery's name means `public abstract class Delivery`."
+          - pattern: \babstract\s+int\s+cost\s*\(\s*\)\s*;
+            message: "`cost()` is in italics in Delivery's box: write it as `public abstract int cost();`."
+          - pattern: \bextends\s+Delivery\b
+            min: 2
+            message: "Both triangles point to Delivery: VanDelivery and BikeDelivery each `extends Delivery`."
+        tests:
+          - call: |
+              Delivery van = new VanDelivery("8 Hill Street", 2);
+              Delivery bike = new BikeDelivery("3 Pond Lane");
+              System.out.println(van);
+              System.out.println(bike);
+          - call: |
+              ArrayList<Delivery> today = new ArrayList<>();
+              today.add(new VanDelivery("1 Oak Row", 0));
+              today.add(new BikeDelivery("7 Fern Way"));
+              today.add(new VanDelivery("22 Birch Road", 5));
+              int total = 0;
+              for (Delivery delivery : today) {
+                  total += delivery.cost();
+              }
+              System.out.println(today.get(2).getAddress() + " " + today.get(2).cost() + " " + total);
+              System.out.println(today.get(0));
+            hidden: true
+
+  - id: class-diagrams-interfaces
+    slug: interfaces
+    title: Interfaces, and a whole program
+    text: |
+      ### An interface's box
+
+      An interface (module 35) gets a box like a class, with «interface» above its name. It has no instance variables and no constructor, so below its name, its box lists only the methods.
+
+      The recycling center's weighing station weighs anything that can say what it weighs, so it has an interface `Weighable`. A crate of bottles and a bale of paper both implement it:
+
+      ```classes
+      interface Weighable
+      + weight(): int
+
+      class Crate implements Weighable
+      - bottles: int
+      + Crate(bottles: int)
+      + weight(): int
+
+      class Bale implements Weighable
+      - kilos: int
+      + Bale(kilos: int)
+      + weight(): int
+      ```
+
+      - The interface's methods are public, `+`. The interface only lists them, so a line for each is all there is to show.
+      - A class that implements the interface is joined to it by a **dashed** line with a hollow triangle at the interface: the triangle of `extends`, dashed for `implements`.
+      - Each class's box lists the interface's methods again, since each class writes them.
+      - A class that implements several interfaces has a dashed line to each of them.
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Weighable> station = new ArrayList<>();
+              station.add(new Crate(24));
+              station.add(new Bale(250));
+              int total = 0;
+              for (Weighable item : station) {
+                  total += item.weight();
+              }
+              System.out.println(total + " kg");
+          }
+      }
+      // ==== Weighable.java ====
+      public interface Weighable {
+          int weight();
+      }
+      // ==== Crate.java ====
+      public class Crate implements Weighable {
+          private int bottles;
+
+          public Crate(int bottles) {
+              this.bottles = bottles;
+          }
+
+          @Override
+          public int weight() {
+              return 2 + this.bottles / 2;
+          }
+      }
+      // ==== Bale.java ====
+      public class Bale implements Weighable {
+          private int kilos;
+
+          public Bale(int kilos) {
+              this.kilos = kilos;
+          }
+
+          @Override
+          public int weight() {
+              return this.kilos;
+          }
+      }
+      ```
+
+      ```output
+      264 kg
+      ```
+
+      ### A whole program
+
+      A diagram of a whole program uses everything at once. Here's the weighing station with a `Scale` that remembers what it has weighed, and old tires, from step 6, that can be weighed as well:
+
+      ```classes
+      interface Weighable
+      + weight(): int
+
+      abstract class DropOff
+      - kilos: int
+      + DropOff(kilos: int)
+      + fee(): int {abstract}
+      ...
+
+      class Tires extends DropOff implements Weighable
+      - count: int
+      + Tires(kilos: int, count: int)
+      + fee(): int
+      + weight(): int
+
+      class Crate implements Weighable
+      - bottles: int
+      + Crate(bottles: int)
+      + weight(): int
+
+      class Scale
+      + Scale()
+      + weigh(item: Weighable): void
+      + total(): int
+
+      Scale --> * Weighable : weighed
+      ```
+
+      To read a diagram like this, go through it in layers:
+
+      1. **The boxes.** What each one is: a class, an abstract class («abstract») or an interface («interface»).
+      2. **The triangles.** Each solid one is an `extends`, each dashed one an `implements`. Tires does both: it extends DropOff and implements Weighable.
+      3. **The arrows.** Each is a field, and a star makes it a list. The Scale keeps a list of Weighables: it can weigh crates and tires alike, and any class that implements Weighable later.
+      4. **The members**, box by box. A line `...` stands for members that the diagram leaves out, as in DropOff's box: step 6 showed the rest.
+
+      To write the program, start with what needs no other class of the diagram: here the interface and DropOff. Then write the classes that extend or implement them, Tires and Crate, and last the classes whose arrows point at the others, the Scale. Each file then compiles as soon as it's written, since everything it names is already there.
+
+      **Your turn:** the ward's cleaning staff clean anything that's `Cleanable`. `Cleanable.java` is ready. Write the class `Wheelchair` in `Wheelchair.java`, as the diagram shows:
+
+      ```classes
+      interface Cleanable
+      + clean(): void
+      + isClean(): boolean
+
+      class Wheelchair implements Cleanable
+      - number: int
+      - uses: int
+      + Wheelchair(number: int)
+      + use(): void
+      + clean(): void
+      + isClean(): boolean
+      + toString(): String
+      ```
+
+      - A new wheelchair is clean: it has had no uses since it was last cleaned.
+      - `use` counts one use, and `clean` sets the count back to 0.
+      - `isClean` says whether the wheelchair has had no uses since it was last cleaned.
+      - `toString` returns `Wheelchair 7: 2 uses since cleaning`.
+
+      The check runs:
+
+      ```java fragment
+      Wheelchair chair = new Wheelchair(7);
+      chair.use();
+      chair.use();
+      System.out.println(chair + " " + chair.isClean());
+      Cleanable job = chair;
+      job.clean();
+      System.out.println(chair + " " + chair.isClean());
+      ```
+
+      and expects:
+
+      ```
+      Wheelchair 7: 2 uses since cleaning false
+      Wheelchair 7: 0 uses since cleaning true
+      ```
+    seed:
+      Wheelchair.java: |
+        public class Wheelchair {
+
+        }
+      Cleanable.java: |
+        public interface Cleanable {
+            void clean();
+            boolean isClean();
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Wheelchair chair = new Wheelchair(7);
+                chair.use();
+                chair.use();
+                System.out.println(chair + " " + chair.isClean());
+                Cleanable job = chair;
+                job.clean();
+                System.out.println(chair + " " + chair.isClean());
+            }
+        }
+    solution:
+      Wheelchair.java: |
+        public class Wheelchair implements Cleanable {
+            private int number;
+            private int uses;
+
+            public Wheelchair(int number) {
+                this.number = number;
+                this.uses = 0;
+            }
+
+            public void use() {
+                this.uses++;
+            }
+
+            @Override
+            public void clean() {
+                this.uses = 0;
+            }
+
+            @Override
+            public boolean isClean() {
+                return this.uses == 0;
+            }
+
+            @Override
+            public String toString() {
+                return "Wheelchair " + this.number + ": " + this.uses + " uses since cleaning";
+            }
+        }
+      Cleanable.java: |
+        public interface Cleanable {
+            void clean();
+            boolean isClean();
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Wheelchair chair = new Wheelchair(7);
+                chair.use();
+                chair.use();
+                System.out.println(chair + " " + chair.isClean());
+                Cleanable job = chair;
+                job.clean();
+                System.out.println(chair + " " + chair.isClean());
+            }
+        }
+    hints:
+      - "The dashed triangle means `public class Wheelchair implements Cleanable`. The two fields are ints, and a new wheelchair starts with 0 uses."
+      - "`clean` and `isClean` are Cleanable's methods, so they're `public`, with `@Override` above them. `isClean` returns `this.uses == 0`."
+    require:
+      - pattern: \bclass\s+Wheelchair\s+implements\s+Cleanable\b
+        message: "The dashed triangle from Wheelchair to Cleanable means `public class Wheelchair implements Cleanable`."
+    tests:
+      - call: |
+          Wheelchair chair = new Wheelchair(7);
+          chair.use();
+          chair.use();
+          System.out.println(chair + " " + chair.isClean());
+          Cleanable job = chair;
+          job.clean();
+          System.out.println(chair + " " + chair.isClean());
+      - call: |
+          Wheelchair spare = new Wheelchair(12);
+          System.out.println(spare + " " + spare.isClean());
+          spare.use();
+          spare.clean();
+          spare.use();
+          spare.use();
+          spare.use();
+          System.out.println(spare);
+        hidden: true
+    more:
+      - task: |
+          Here are the tires of step 6 in the weighing station's diagram. Fill in the three blanks, words from class headers, so that the code matches the diagram.
+
+          ```classes
+          interface Weighable
+          + weight(): int
+
+          abstract class DropOff
+          - kilos: int
+          + DropOff(kilos: int)
+          + getKilos(): int
+          + fee(): int {abstract}
+
+          class Tires extends DropOff implements Weighable
+          - count: int
+          + Tires(kilos: int, count: int)
+          + fee(): int
+          + weight(): int
+          ```
+        fill: |
+          public class Main {
+              public static void main(String[] args) {
+                  Tires tires = new Tires(36, 4);
+                  Weighable item = tires;
+                  DropOff dropOff = tires;
+                  System.out.println(item.weight() + " " + dropOff.fee());
+              }
+          }
+          // ==== Weighable.java ====
+          public interface Weighable {
+              int weight();
+          }
+          // ==== DropOff.java ====
+          public [[abstract]] class DropOff {
+              private int kilos;
+
+              public DropOff(int kilos) {
+                  this.kilos = kilos;
+              }
+
+              public int getKilos() {
+                  return this.kilos;
+              }
+
+              public abstract int fee();
+          }
+          // ==== Tires.java ====
+          public class Tires [[extends]] DropOff [[implements]] Weighable {
+              private int count;
+
+              public Tires(int kilos, int count) {
+                  super(kilos);
+                  this.count = count;
+              }
+
+              @Override
+              public int fee() {
+                  return 4 * this.count;
+              }
+
+              @Override
+              public int weight() {
+                  return this.getKilos();
+              }
+          }
+        hints:
+          - "Look above DropOff's name, and at the two lines from Tires: which one is solid, which dashed?"
+          - "«abstract» goes into DropOff's header as `abstract`. A solid line with a triangle is `extends`, a dashed one is `implements`, and `extends` comes first: `public class Tires extends DropOff implements Weighable`."
+      - task: |
+          To close the module, a whole program from one diagram. A board-game café bills each visit for table time and drinks. Write the four parts of this diagram, each in its own file:
+
+          ```classes
+          interface Billable
+          + price(): int
+
+          class TableTime implements Billable
+          - hours: int
+          - players: int
+          + TableTime(hours: int, players: int)
+          + price(): int
+
+          class Drink implements Billable
+          - name: String
+          - large: boolean
+          + Drink(name: String, large: boolean)
+          + price(): int
+
+          class Visit
+          - guest: String
+          + Visit(guest: String)
+          + add(item: Billable): void
+          + total(): int
+          + toString(): String
+
+          Visit --> * Billable : items
+          ```
+
+          - Table time costs 3 dollars per player per hour.
+          - A drink costs 4 dollars, or 6 if it's large.
+          - A new visit has nothing on its bill. `add` puts an item on it, and `total` returns the prices of the visit's items added up.
+          - A visit's `toString` returns `Visit of Ana: 3 items, 34 dollars`, with the visit's own guest, number of items and total.
+
+          The check runs:
+
+          ```java fragment
+          Visit visit = new Visit("Ana");
+          visit.add(new TableTime(2, 4));
+          visit.add(new Drink("cocoa", true));
+          visit.add(new Drink("tea", false));
+          System.out.println(visit);
+          System.out.println(new TableTime(1, 3).price());
+          ```
+
+          and expects:
+
+          ```
+          Visit of Ana: 3 items, 34 dollars
+          9
+          ```
+        seed:
+          Billable.java: |
+            public interface Billable {
+
+            }
+          TableTime.java: |
+            public class TableTime {
+
+            }
+          Drink.java: |
+            public class Drink {
+
+            }
+          Visit.java: |
+            public class Visit {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Visit visit = new Visit("Ana");
+                    visit.add(new TableTime(2, 4));
+                    visit.add(new Drink("cocoa", true));
+                    visit.add(new Drink("tea", false));
+                    System.out.println(visit);
+                    System.out.println(new TableTime(1, 3).price());
+                }
+            }
+        solution:
+          Billable.java: |
+            public interface Billable {
+                int price();
+            }
+          TableTime.java: |
+            public class TableTime implements Billable {
+                private int hours;
+                private int players;
+
+                public TableTime(int hours, int players) {
+                    this.hours = hours;
+                    this.players = players;
+                }
+
+                @Override
+                public int price() {
+                    return 3 * this.players * this.hours;
+                }
+            }
+          Drink.java: |
+            public class Drink implements Billable {
+                private String name;
+                private boolean large;
+
+                public Drink(String name, boolean large) {
+                    this.name = name;
+                    this.large = large;
+                }
+
+                @Override
+                public int price() {
+                    if (this.large) {
+                        return 6;
+                    }
+                    return 4;
+                }
+            }
+          Visit.java: |
+            import java.util.ArrayList;
+
+            public class Visit {
+                private String guest;
+                private ArrayList<Billable> items;
+
+                public Visit(String guest) {
+                    this.guest = guest;
+                    this.items = new ArrayList<>();
+                }
+
+                public void add(Billable item) {
+                    this.items.add(item);
+                }
+
+                public int total() {
+                    int sum = 0;
+                    for (Billable item : this.items) {
+                        sum += item.price();
+                    }
+                    return sum;
+                }
+
+                @Override
+                public String toString() {
+                    return "Visit of " + this.guest + ": " + this.items.size() + " items, " + this.total() + " dollars";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Visit visit = new Visit("Ana");
+                    visit.add(new TableTime(2, 4));
+                    visit.add(new Drink("cocoa", true));
+                    visit.add(new Drink("tea", false));
+                    System.out.println(visit);
+                    System.out.println(new TableTime(1, 3).price());
+                }
+            }
+        hints:
+          - "Write the files in the order of the lesson: Billable first (one method header), then TableTime and Drink, which implement it (the dashed triangles), and Visit last. Visit's arrow with a star is `private ArrayList<Billable> items;`."
+          - "Visit's `total` adds up `price()` over its list, and each item runs its own class's `price`. `toString` uses the list's size and `total()`."
+        require:
+          - pattern: \binterface\s+Billable\s*\{[^}]*\bint\s+price\s*\(\s*\)\s*;
+            message: "Billable's box lists one method: write `int price();` inside the interface."
+          - pattern: \bimplements\s+Billable\b
+            min: 2
+            message: "Both dashed triangles point to Billable: TableTime and Drink each `implements Billable`."
+          - pattern: \bprivate\s+ArrayList<Billable>\s+\w+\s*[;=]
+            message: "The arrow from Visit to Billable, with a star, is a list: `private ArrayList<Billable> items;`."
+        tests:
+          - call: |
+              Visit visit = new Visit("Ana");
+              visit.add(new TableTime(2, 4));
+              visit.add(new Drink("cocoa", true));
+              visit.add(new Drink("tea", false));
+              System.out.println(visit);
+              System.out.println(new TableTime(1, 3).price());
+          - call: |
+              Visit visit = new Visit("Leo");
+              System.out.println(visit + " " + visit.total());
+              Billable coffee = new Drink("coffee", false);
+              visit.add(coffee);
+              visit.add(new TableTime(3, 2));
+              visit.add(coffee);
+              System.out.println(visit.total() + " " + coffee.price());
+              System.out.println(visit);
+            hidden: true

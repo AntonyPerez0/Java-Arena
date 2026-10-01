@@ -22,9 +22,11 @@ import { gunzipSync } from "node:zlib";
 import YAML from "yaml";
 import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, mainProgram, normalizeOutput, parseTemplate, templateSolution } from "../src/grader/assemble.js";
 import { indentMessages } from "../src/grader/style.js";
-import { FILE_MARK, joinFiles, splitFiles } from "../src/grader/files.js";
+import { FILE_MARK, RESERVED_WORDS, baseName, classOfPath, declaredPackage, folderOf, joinFiles, packageOfPath, splitFiles } from "../src/grader/files.js";
 import { JUNIT_LIBRARY, TEST_RUNNER_CLASS, TEST_RUNNER_FILE, TEST_RUNNER_SOURCE, parseTestReport, testClassesOf, usesJUnit } from "../src/grader/junit.js";
+import { compareWrites, dataPathProblem } from "../src/grader/writes.js";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/suite.mjs";
+import { ANY_CLASSES, drawClassDiagrams, UNDRAWN_CLASSES } from "./content/class-diagram.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const CACHE_FILE = path.join(ROOT, "node_modules", ".cache", "java-arena-content.json");
@@ -154,10 +156,16 @@ function runBatch(b) {
   }
 }
 
+/**
+ * A compile's cache key. "cp-src" marks results from javac with the sources' folder as its class
+ * path (scripts/content/JavaCheck.java), so results from before that are compiled again.
+ */
+const compileId = (files, libraries) => sha(["compile", "cp-src", files, ...libraries.map((l) => library(l).sha)]);
+
 /** javac's verdict and messages for a program: { ok, output, files, libraries }. */
 async function compile(files) {
   const libraries = librariesFor(files);
-  const id = sha(["compile", files, ...libraries.map((l) => library(l).sha)]);
+  const id = compileId(files, libraries);
   const res = cache[id] ?? (await javacBatch(files, libraries, id));
   return { ok: res.ok, output: res.output, files, libraries };
 }
@@ -184,7 +192,9 @@ function limit(fn) {
 
 /**
  * Runs a compiled program on one input with the reference JVM flags. Cached by program and input.
- * `mainClass` and `args` are for the check program of tests that call methods.
+ * `mainClass` and `args` are for the check program of tests that call methods; `files` are files
+ * in its folder that it can read; with `writes`, the result's `written` holds every file in its
+ * folder after the run (for tests that check the files a program writes).
  */
 async function run(compiled, stdin, opts = {}, tries = 3) {
   const res = await runOnce(compiled, stdin, opts);
@@ -196,18 +206,31 @@ async function run(compiled, stdin, opts = {}, tries = 3) {
 }
 const JVM_LOG = /^\[\d+\.\d+s\]\[(warning|error)\].*$/m;
 
-async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files = null } = {}) {
+/** Every file in a folder and its subfolders, by its path in it (reports/summary.txt). */
+function folderFiles(dir, prefix = "", out = {}) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) folderFiles(full, `${prefix}${e.name}/`, out);
+    else if (e.isFile()) out[prefix + e.name] = fs.readFileSync(full, "utf8");
+  }
+  return out;
+}
+
+async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files = null, writes = false } = {}) {
   const libraries = compiled.libraries ?? [];
-  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS, ...(files ? [files] : []), ...libraries.map((l) => library(l).sha)]);
+  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS, ...(files ? [files] : []), ...(writes ? ["writes"] : []), ...libraries.map((l) => library(l).sha)]);
   if (cache[id]) return cache[id];
-  const { classes } = await javacBatch(compiled.files, libraries, sha(["compile", compiled.files, ...libraries.map((l) => library(l).sha)]));
+  const { classes } = await javacBatch(compiled.files, libraries, compileId(compiled.files, libraries));
   const classPath = [classes, ...libraries.map((l) => library(l).dir)].join(path.delimiter);
   return limit(
     () =>
       new Promise((resolve) => {
         const cwd = fs.mkdtempSync(path.join(TMP, "run-"));
         // Files the program reads sit in its working folder, as they would next to a real program.
-        for (const [name, text] of Object.entries(files ?? {})) fs.writeFileSync(path.join(cwd, name), text);
+        for (const [name, text] of Object.entries(files ?? {})) {
+          fs.mkdirSync(path.dirname(path.join(cwd, name)), { recursive: true });
+          fs.writeFileSync(path.join(cwd, name), text);
+        }
         const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, "-cp", classPath, mainClass, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
@@ -222,8 +245,10 @@ async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files =
         p.stdin.end(stdin);
         p.on("close", (code) => {
           clearTimeout(timer);
+          // The files the program left in its folder, read before the folder goes.
+          const written = writes && !timedOut ? folderFiles(cwd) : null;
           fs.rmSync(cwd, { recursive: true, force: true });
-          const res = { stdout, stderr, exitCode: timedOut ? null : code, timedOut };
+          const res = { stdout, stderr, exitCode: timedOut ? null : code, timedOut, ...(written ? { written } : {}) };
           if (!timedOut && !JVM_LOG.test(stdout + stderr)) cache[id] = res;
           resolve(res);
         });
@@ -258,10 +283,45 @@ const indentProblems = (text) => {
   return files.flatMap((f) => indentMessages(f.text).map((m) => (files.length > 1 ? `${f.path}: ${m}` : m)));
 };
 /**
- * A program given in YAML: text (Main.java), or a map of file names to their text, such as
- * { Person.java: ..., Main.java: ... }, which becomes one string with file markers.
+ * Why a file name in a program's map can't be used, or null. A file is named like its class
+ * (Person.java); one of a class in a package sits in the package's folders (library/domain/Book.java),
+ * whose names are Java names in lower case. Main.java stays at the top: the site runs Main.
  */
-function codeOf(where, value) {
+function pathProblem(p) {
+  if (!/^(?:[a-z][a-z0-9_]*\/)*[A-Z][A-Za-z0-9]*\.java$/.test(p)) return "isn't a Java file name (like Person.java, or library/domain/Book.java for a class in the package library.domain)";
+  const reserved = folderOf(p).split("/").find((d) => RESERVED_WORDS.has(d));
+  if (reserved) return `is in a folder named ${reserved}, a word Java reserves, so it can't be a package name`;
+  if (baseName(p) === "Main.java" && p !== "Main.java") return "must be at the top, not in a folder: the site runs the class Main, which is in no package";
+  return null;
+}
+
+/**
+ * Each file's package line must match its folders: a file in library/domain/ starts with
+ * `package library.domain;` and a file at the top has no package line. javac doesn't check this for
+ * the files it's given, but a class looked up by its package is looked for in those folders.
+ */
+function packageProblems(files) {
+  // A file whose name is wrong already has its own error.
+  return files.filter((f) => !pathProblem(f.path)).flatMap((f) => {
+    const want = packageOfPath(f.path);
+    const has = declaredPackage(f.text);
+    if (has === null) return [`${f.path}: its package line can't be read (it must be the first line of code, such as package ${want || "library.domain"};)`];
+    if (want && has !== want) return [`${f.path} is in the folder ${folderOf(f.path)}, so its first line of code must be package ${want};${has ? ` (it says package ${has};)` : " (it has no package line)"}`];
+    if (!want && has) return [`${f.path} is at the top, in no package, so it must not have a package line (it says package ${has};). A class of the package ${has} goes in the folder ${has.replace(/\./g, "/")}/`];
+    return [];
+  });
+}
+
+/** The file names and package lines of a lesson example of several files (one that must compile and run). */
+const fileProblems = (files) => [...files.flatMap((f) => (f.path === "Main.java" || !pathProblem(f.path) ? [] : [`"${f.path}" ${pathProblem(f.path)}`])), ...packageProblems(files)];
+
+/**
+ * A program given in YAML: text (Main.java), or a map of file names to their text, such as
+ * { Person.java: ..., Main.java: ... }, which becomes one string with file markers. With
+ * `packages`, for programs that must be right (solutions, not starter code, which may hold a
+ * mistake on purpose), each file's package line must match its folders.
+ */
+function codeOf(where, value, { packages = false } = {}) {
   if (value == null || typeof value === "string") return ensureNl(value ?? "");
   if (typeof value !== "object" || Array.isArray(value)) {
     errors.push(`${where}: code must be text, or a map of file names to text`);
@@ -269,10 +329,12 @@ function codeOf(where, value) {
   }
   const files = Object.entries(value).map(([p, text]) => ({ path: p, text: ensureNl(String(text ?? "")) }));
   for (const f of files) {
-    if (!/^[A-Z][A-Za-z0-9]*\.java$/.test(f.path)) errors.push(`${where}: "${f.path}" isn't a Java file name (like Person.java)`);
+    const problem = pathProblem(f.path);
+    if (problem) errors.push(`${where}: "${f.path}" ${problem}`);
     const cls = /^\s*public\s+(?:final\s+|abstract\s+)?(?:class|interface|record|enum)\s+(\w+)/m.exec(f.text)?.[1];
-    if (cls && `${cls}.java` !== f.path) errors.push(`${where}: ${f.path} holds public class ${cls}, which must be in ${cls}.java`);
+    if (cls && `${cls}.java` !== baseName(f.path)) errors.push(`${where}: ${f.path} holds public class ${cls}, which must be in ${folderOf(f.path)}${cls}.java`);
   }
+  if (packages) for (const m of packageProblems(files)) errors.push(`${where}: ${m}`);
   // A program runs from Main, except one of classes and their JUnit tests, which the tests run.
   if (!files.some((f) => f.path === "Main.java") && !(usesJUnit(files) && testClassesOf(files).length)) errors.push(`${where}: a program of several files needs a Main.java (or a JUnit test class)`);
   return joinFiles(files);
@@ -295,7 +357,7 @@ const KEYS = {
   step: ["id", "slug", "title", "text", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass", "more"],
   challenge: ["task", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass"],
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
-  test: ["name", "stdin", "call", "files", "expect", "hidden", "junit", "replace", "outcome"],
+  test: ["name", "stdin", "call", "files", "writes", "expect", "hidden", "junit", "replace", "outcome"],
   drillFile: ["topic", "drills"],
   drill: ["id", "type", "prompt", "pre", "body", "classes", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
 };
@@ -343,8 +405,11 @@ function checkRuleShape(where, list, kind) {
  *   ```file data.txt  a file that the next ```java run example reads (shown with its name). Several
  *                     can come before one example.
  * A ```java run example can hold several files: each one after the first starts with a line such as
- * `// ==== Person.java ====` (the page shows it as the file's name).
- * Returns the text with plain ```java info strings.
+ * `// ==== Person.java ====` (the page shows it as the file's name), or `// ==== library/domain/Book.java ====`
+ * for a class in a package (whose package line must match its folders).
+ * A ```classes block describes a UML class diagram (scripts/content/class-diagram.mjs), which is
+ * drawn here as HTML: an SVG and the same content as text.
+ * Returns the text with plain ```java info strings and the class diagrams drawn.
  */
 async function checkExamples(where, text) {
   if (!text) return text;
@@ -385,13 +450,17 @@ async function checkExamples(where, text) {
     }
     if (c.output) errors.push(`${w}: javac printed warnings:\n${c.output}`);
     for (const m of indentProblems(source)) errors.push(`${w}: indentation: ${m}`);
+    for (const m of fileProblems(mainFile(source))) errors.push(`${w}: ${m}`);
     const hasInput = blocks[i + 1]?.[1].trim() === "input";
     const stdin = hasInput ? blocks[i + 1][2] : "";
-    // The ```file blocks since the previous java block are files this example reads.
+    // The ```file blocks since the previous java block are files this example reads (in folders too:
+    // the run makes them).
     let files = null;
     for (let j = i - 1; j >= 0 && !/^java\b/.test(blocks[j][1].trim()); j--) {
-      const f = /^file\s+([\w.-]+)$/.exec(blocks[j][1].trim());
-      if (f) (files ??= {})[f[1]] = blocks[j][2];
+      const f = /^file\s+(\S+)$/.exec(blocks[j][1].trim());
+      if (!f) continue;
+      if (dataPathProblem(f[1])) errors.push(`${w}: the file block's name "${f[1]}" ${dataPathProblem(f[1])}`);
+      else (files ??= {})[f[1]] = blocks[j][2];
     }
     const r = await run(c, stdin, files ? { files } : {});
     let key = null;
@@ -416,7 +485,15 @@ async function checkExamples(where, text) {
     }
     checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, ...(files ? { files } : {}), stdout: r.stdout, exitCode: r.exitCode, ...(crash ? { stderrKey: key } : {}) }] });
   }
-  return text.replace(/^```java[ \t]+(run|main|error|fragment|test)([ \t]+crash)?[ \t]*$/gm, "```java");
+  const plain = text.replace(/^```java[ \t]+(run|main|error|fragment|test)([ \t]+crash)?[ \t]*$/gm, "```java");
+  const drawn = drawClassDiagrams(plain, (m) => errors.push(`${where}: ${m}`));
+  if (UNDRAWN_CLASSES.test(drawn)) errors.push(`${where}: a classes block is drawn only when its fence is three backticks at the start of a line (not indented in a list, not in a quote): \`\`\`classes`);
+  return drawn;
+}
+
+/** Hints and drills show no class diagrams: a ```classes block there would show as its raw description. */
+function noClassDiagram(where, text) {
+  if (typeof text === "string" && ANY_CLASSES.test(text)) errors.push(`${where}: has a classes block, but class diagrams are drawn only in step text and tasks`);
 }
 
 /**
@@ -429,6 +506,7 @@ async function checkTestExample(w, code, next) {
   if (!testClasses.length) return errors.push(`${w}: a "java test" example needs a test class (a file with @Test)`);
   if (!usesJUnit(own)) return errors.push(`${w}: a "java test" example must import JUnit (org.junit)`);
   for (const m of indentProblems(code)) errors.push(`${w}: indentation: ${m}`);
+  for (const m of fileProblems(own)) errors.push(`${w}: ${m}`);
   const files = [...own, { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }];
   const c = await compile(files);
   if (!c.ok) return errors.push(`${w}: does not compile:\n${c.output}`);
@@ -450,7 +528,7 @@ async function checkTestExample(w, code, next) {
  * line it prints. The answers are the program's real output.
  */
 async function buildPredict(where, raw, hints) {
-  const program = codeOf(where, raw.predict);
+  const program = codeOf(where, raw.predict, { packages: true });
   for (const k of ["seed", "solution", "fill", "tests", "require", "forbid", "style"]) if (raw[k] != null) errors.push(`${where}: a predict challenge can't have ${k}`);
   for (const m of indentProblems(program)) errors.push(`${where}: the program's indentation: ${m}`);
   const c = await compile(mainFile(program));
@@ -473,6 +551,7 @@ async function buildExercise(where, raw) {
   if (raw.predict != null) {
     const hints = raw.hints ?? [];
     if (!Array.isArray(hints) || hints.length === 0 || hints.some((h) => typeof h !== "string")) errors.push(`${where}: needs a list of hints (as text)`);
+    else hints.forEach((h, i) => noClassDiagram(`${where} hint ${i + 1}`, h));
     return buildPredict(where, raw, hints);
   }
   const kind = raw.fill != null ? "fill" : "code";
@@ -481,7 +560,7 @@ async function buildExercise(where, raw) {
   if (style != null && style !== "indent") errors.push(`${where}: style can only be "indent"`);
   if (kind === "fill" && typeof raw.fill !== "string") errors.push(`${where}: a fill challenge is one file of text`);
   const seed = kind === "fill" ? ensureNl(raw.fill) : codeOf(`${where} seed`, raw.seed);
-  const solution = kind === "fill" ? ensureNl(templateSolution(raw.fill)) : raw.solution == null ? "" : codeOf(`${where} solution`, raw.solution);
+  const solution = kind === "fill" ? ensureNl(templateSolution(raw.fill)) : raw.solution == null ? "" : codeOf(`${where} solution`, raw.solution, { packages: true });
   if (kind === "code" && raw.seed != null && splitFiles(seed).map((f) => f.path).join() !== splitFiles(solution).map((f) => f.path).join()) errors.push(`${where}: the seed and the solution must have the same files, in the same order`);
   if (!solution) {
     errors.push(`${where}: missing solution`);
@@ -495,7 +574,11 @@ async function buildExercise(where, raw) {
   // YAML reads an unquoted line with ": " in it as a key and value, not as text: catch that.
   const hints = raw.hints ?? [];
   if (!Array.isArray(hints) || hints.length === 0) errors.push(`${where}: needs a list of hints`);
-  else hints.forEach((h, i) => typeof h !== "string" && errors.push(`${where}: hint ${i + 1} isn't plain text (quote it: a ": " inside makes YAML read it as a key and value)`));
+  else
+    hints.forEach((h, i) => {
+      if (typeof h !== "string") errors.push(`${where}: hint ${i + 1} isn't plain text (quote it: a ": " inside makes YAML read it as a key and value)`);
+      else noClassDiagram(`${where} hint ${i + 1}`, h);
+    });
   const require = raw.require ?? [];
   const forbid = raw.forbid ?? [];
   checkRuleShape(where, require, "require");
@@ -514,20 +597,39 @@ async function buildExercise(where, raw) {
   if (testsRaw.every((t) => t.hidden)) errors.push(`${where}: at least one test must be visible`);
   if (testsRaw.some((t) => t.stdin) && !testsRaw.some((t) => t.hidden)) warnings.push(`${where}: reads input but has no hidden test`);
   for (const t of testsRaw) if (t.call != null && (typeof t.call !== "string" || !t.call.trim())) errors.push(`${where}: a test's call must be Java code (as text)`);
-  // Files a test's program reads: a map of file names to their text.
+  // Files a test's program reads: a map of file names (scores.txt, or data/scores.txt in a folder) to their text.
   const inputFiles = testsRaw.map((t, i) => {
     if (t.files == null) return null;
-    if (typeof t.files !== "object" || Array.isArray(t.files) || Object.keys(t.files).some((n) => !/^[\w.-]+$/.test(n))) {
-      errors.push(`${where} test ${i + 1}: files must be a map of plain file names (like scores.txt) to their text`);
+    if (typeof t.files !== "object" || Array.isArray(t.files) || Object.keys(t.files).some((n) => dataPathProblem(n))) {
+      errors.push(`${where} test ${i + 1}: files must be a map of plain file names (like scores.txt, or data/scores.txt in a folder) to their text`);
       return null;
     }
     return Object.fromEntries(Object.entries(t.files).map(([n, text]) => [n, ensureNl(String(text ?? ""))]));
   });
+  // Files a test's program must leave in its folder: a list of names, whose text the solution's run
+  // gives (as it gives the output), or a map of names to the text they must hold.
+  const writesAsked = testsRaw.map((t, i) => {
+    if (t.writes == null) return null;
+    const n = `${where} test ${i + 1}`;
+    const isMap = typeof t.writes === "object" && !Array.isArray(t.writes);
+    const names = Array.isArray(t.writes) ? t.writes : isMap ? Object.keys(t.writes) : [];
+    if (!names.length || names.some((f) => typeof f !== "string")) {
+      errors.push(`${n}: writes must be a list of file names (like [summary.txt]), or a map of file names to the text they must hold`);
+      return null;
+    }
+    const bad = names.filter((f) => dataPathProblem(f)).map((f) => `"${f}" ${dataPathProblem(f)}`);
+    if (bad.length) return errors.push(`${n}: in writes, ${bad.join("; ")}`), null;
+    if (new Set(names).size !== names.length) return errors.push(`${n}: writes names a file twice`), null;
+    return { names, want: isMap ? Object.fromEntries(names.map((f) => [f, String(t.writes[f] ?? "")])) : null };
+  });
   // Tests with a `call` run the check program (ArenaCheck), which calls the learner's methods.
   const calls = testsRaw.map((t) => (t.call == null ? undefined : ensureNl(String(t.call))));
-  const check = calls.some((x) => x != null) ? checkSource(calls.map((call) => ({ call }))) : null;
-  const filesFor = (text) => (check ? [...mainFile(text), { path: CHECK_FILE, text: check.text }] : mainFile(text));
-  const how = (i) => ({ ...(check ? { mainClass: CHECK_CLASS, args: [String(i)] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}) });
+  const check = calls.some((x) => x != null);
+  // The check program imports the program's own classes in packages (see checkImports), so it's made for each version.
+  const filesFor = (text) => (check ? [...mainFile(text), { path: CHECK_FILE, text: checkSource(calls.map((call) => ({ call })), mainFile(text)).text }] : mainFile(text));
+  const how = (i) => ({ ...(check ? { mainClass: CHECK_CLASS, args: [String(i)] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), ...(writesAsked[i] ? { writes: true } : {}) });
+  // Whether a run of another version (the starter code, a fill-in left empty) wrote a test's files as the solution did.
+  const wroteAsWanted = (t, r) => !t.writes || compareWrites(t.writes, r.written).every((f) => f.pass);
 
   const c = await compile(filesFor(solution));
   if (!c.ok) {
@@ -546,19 +648,22 @@ async function buildExercise(where, raw) {
     else if (r.stderr) errors.push(`${n}: the solution printed an error:\n${r.stderr}`);
     const actual = normalizeOutput(r.stdout);
     if (t.expect != null && normalizeOutput(String(t.expect)) !== actual) errors.push(`${n}: expected\n${t.expect}\nbut the solution prints\n${actual}`);
-    if (!actual) errors.push(`${n}: the solution prints nothing`);
+    // A program whose result is the files it writes may print nothing.
+    if (!actual && !writesAsked[i]) errors.push(`${n}: the solution prints nothing`);
+    const writes = writesAsked[i] && !r.timedOut ? solutionWrites(n, writesAsked[i], r.written ?? {}, inputFiles[i]) : null;
     const call = calls[i];
-    const name = t.name ?? (call && !call.trim().includes("\n") ? call.trim() : testsRaw.length > 1 ? `Test ${i + 1}` : "Output");
-    return { name, stdin: stdins[i], ...(call ? { call } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), expect: actual, hidden: !!t.hidden };
+    const name = t.name ?? (call && !call.trim().includes("\n") ? call.trim() : testsRaw.length > 1 ? `Test ${i + 1}` : writes ? (actual ? "Output and files" : "Files") : "Output");
+    return { name, stdin: stdins[i], ...(call ? { call } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), ...(writes ? { writes } : {}), expect: actual, hidden: !!t.hidden };
   });
-  checks.push({ where, kind: "run", files: filesFor(solution), ...(check ? { mainClass: CHECK_CLASS } : {}), tests: tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), stdout: runs[i].stdout, exitCode: 0 })) });
+  // The replay compares every file the run leaves in its folder, where a test checks written files.
+  checks.push({ where, kind: "run", files: filesFor(solution), ...(check ? { mainClass: CHECK_CLASS } : {}), tests: tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), stdout: runs[i].stdout, exitCode: 0, ...(runs[i].written ? { written: runs[i].written } : {}) })) });
 
   // Starter code must not already pass, or the challenge would be free.
   if (kind === "code" && seed && !raw.seedMayPass) {
     const sc = await compile(filesFor(seed));
     if (sc.ok) {
       const sr = await Promise.all(tests.map((t, i) => run(sc, t.stdin, how(i))));
-      const passes = tests.every((t, i) => sr[i].exitCode === 0 && !sr[i].timedOut && normalizeOutput(sr[i].stdout) === t.expect);
+      const passes = tests.every((t, i) => sr[i].exitCode === 0 && !sr[i].timedOut && normalizeOutput(sr[i].stdout) === t.expect && wroteAsWanted(t, sr[i]));
       const styleOk = style !== "indent" || indentProblems(seed).length === 0;
       if (passes && styleOk && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: the starter code already passes`);
     }
@@ -569,16 +674,32 @@ async function buildExercise(where, raw) {
     const ec = await compile(filesFor(empty));
     if (ec.ok) {
       const er = await Promise.all(tests.map((t, i) => run(ec, t.stdin, how(i))));
-      if (tests.every((t, i) => er[i].exitCode === 0 && normalizeOutput(er[i].stdout) === t.expect) && checkRules(empty, require, forbid).length === 0) errors.push(`${where}: the program passes with every blank left empty`);
+      if (tests.every((t, i) => er[i].exitCode === 0 && normalizeOutput(er[i].stdout) === t.expect && wroteAsWanted(t, er[i])) && checkRules(empty, require, forbid).length === 0) errors.push(`${where}: the program passes with every blank left empty`);
     }
   }
   return { kind, seed, solution, hints, tests, require, forbid, ...(style ? { style } : {}) };
 }
 
 /**
+ * The files a test wants written, with their text as the solution's run left them (normalized like
+ * output), or null. The solution must write each one; with a map, each must hold the text given.
+ * `written` is every file in the run's folder, `given` the files the test put there.
+ */
+function solutionWrites(n, asked, written, given) {
+  const missing = asked.names.filter((f) => written[f] == null);
+  const there = Object.keys(written);
+  if (missing.length) errors.push(`${n}: the solution doesn't write ${missing.join(", ")} (after its run, its folder holds ${there.length ? there.join(", ") : "no files"})`);
+  for (const f of asked.names) if (given?.[f] != null && given[f] === written[f]) errors.push(`${n}: writes names ${f}, but the solution leaves it as the test gives it`);
+  if (asked.want) for (const r of compareWrites(asked.want, written)) if (r.got !== null && !r.pass) errors.push(`${n}: ${r.name} should hold\n${r.expected}\nbut the solution writes\n${r.got}`);
+  const found = asked.names.filter((f) => written[f] != null);
+  return found.length ? Object.fromEntries(found.map((f) => [f, normalizeOutput(written[f])])) : null;
+}
+
+/**
  * A task shows the expected output in its last plain ``` block. It must be what the first visible
  * test really prints (the task card shows that test's output too, and drops the task's copy only
- * when the two are the same).
+ * when the two are the same). In a challenge that checks written files, that's the first visible
+ * test with `writes`, as the task card shows it.
  */
 /**
  * Tests that run the learner's JUnit tests (`junit: GardenTest`), on the program as written or with
@@ -592,8 +713,9 @@ async function buildJUnitTests(where, testsRaw, { kind, seed, solution, require,
   const specs = [];
   testsRaw.forEach((t, i) => {
     const n = `${where} test ${i + 1}`;
-    if (t.junit == null || t.stdin != null || t.call != null || t.files != null || t.expect != null) return errors.push(`${n}: in a challenge with junit tests, every test has junit (and no stdin, call, files or expect)`);
-    if (typeof t.junit !== "string" || !names.includes(`${t.junit}.java`)) return errors.push(`${n}: junit must name a test class of the program (one of ${names.join(", ")})`);
+    if (t.junit == null || t.stdin != null || t.call != null || t.files != null || t.writes != null || t.expect != null) return errors.push(`${n}: in a challenge with junit tests, every test has junit (and no stdin, call, files, writes or expect)`);
+    // A test class in a package is named with it (garden.GardenTest), as JUnit's runner loads it.
+    if (typeof t.junit !== "string" || !names.map(classOfPath).includes(t.junit)) return errors.push(`${n}: junit must name a test class of the program (one of ${names.map(classOfPath).join(", ")})`);
     const outcome = t.outcome ?? "pass";
     if (!["pass", "fail"].includes(outcome)) return errors.push(`${n}: outcome is "pass" (every test passes) or "fail" (at least one fails)`);
     if (typeof t.name !== "string" || !t.name.trim()) errors.push(`${n}: a junit test needs a name that says which version of the program it tests`);
@@ -639,11 +761,12 @@ function checkTaskOutput(where, task, ex) {
   if (!ex || ex.kind === "predict" || typeof task !== "string") return;
   // Fences are read in order (an info string such as "java" opens a block too), then the plain ones kept.
   const blocks = [...task.matchAll(/^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm)].filter((b) => !b[1].trim());
-  const shown = ex.tests.find((t) => !t.hidden && t.expect);
-  if (!blocks.length || !shown) return;
+  // The test the task card shows: the first visible one that checks written files, or else prints something.
+  const shown = ex.tests.find((t) => !t.hidden && t.writes) ?? ex.tests.find((t) => !t.hidden && t.expect);
+  if (!blocks.length || !shown?.expect) return;
   const block = blocks[blocks.length - 1][2];
   const norm = (x) => normalizeOutput(x).trim();
-  if (norm(block) !== norm(shown.expect)) errors.push(`${where}: the task shows the output\n${block}but the first visible test prints\n${shown.expect}`);
+  if (norm(block) !== norm(shown.expect)) errors.push(`${where}: the task shows the output\n${block}but the test the task card shows (${shown.writes ? "the first visible one with writes" : "the first visible one"}) prints\n${shown.expect}`);
 }
 
 function templateEmpty(template) {
@@ -802,8 +925,10 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
   if (d.why != null && typeof d.why !== "string") errors.push(`${where}: why must be text (quote it)`);
   if (!d.why && d.type !== "compiles" && d.type !== "boss") errors.push(`${where}: needs an explanation (why)`);
   // Drill text is Markdown, where <tag> or <!-- --> outside backticks would be read as HTML and vanish.
-  for (const [key, text] of [["prompt", d.prompt], ["why", d.why], ...(d.choices ?? []).map((c, i) => [`choice ${i + 1}`, c])])
+  for (const [key, text] of [["prompt", d.prompt], ["why", d.why], ...(d.choices ?? []).map((c, i) => [`choice ${i + 1}`, c])]) {
     if (typeof text === "string" && htmlLike(text)) errors.push(`${where}: ${key} has text that Markdown reads as HTML; put it in backticks: ${text}`);
+    noClassDiagram(`${where} ${key}`, text);
+  }
   const base = { id, topic, type: d.type, why: d.why ?? "", ...(after ? { after } : {}) };
   const pre = d.pre ? String(d.pre).replace(/\s*$/, "") : "";
   const body = d.body ? String(d.body).replace(/\s*$/, "") : "";

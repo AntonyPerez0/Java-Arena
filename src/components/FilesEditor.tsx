@@ -1,10 +1,11 @@
 // The code editor for a program of one or more files: one file is a plain editor; several get a
-// row of tabs (one per file), each file in its own editor with its own javac marks.
+// row of tabs (one per file), each file in its own editor with its own javac marks. A file in a
+// package's folders (library/domain/Book.java) shows its folders in small letters above its name.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { FileCode, Plus, X } from "lucide-react";
 import CodeEditor, { type SavedEditor } from "./CodeEditor";
 import type { FriendlyDiagnostic } from "../grader/grade";
-import { joinFiles, splitFiles } from "../grader/files.js";
+import { RESERVED_WORDS, baseName, folderOf, joinFiles, splitFiles } from "../grader/files.js";
 
 type SourceFile = { path: string; text: string };
 
@@ -20,7 +21,23 @@ type Props = {
   canAddFiles?: boolean;
 };
 
-const base = (p: string) => p.split("/").pop();
+/**
+ * The file for a class the learner adds: Person (Person.java), or a class in a package, written
+ * shop.model.Item or shop/model/Item (shop/model/Item.java, which starts with its package line).
+ */
+function newClass(input: string, files: SourceFile[]): SourceFile | string {
+  const parts = input.trim().replace(/\.java$/, "").split(/[./]/);
+  const name = parts.pop() ?? "";
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) return "A class name starts with a capital letter and has only letters and digits, like Person.";
+  for (const p of parts) {
+    if (RESERVED_WORDS.has(p)) return `${p} is a word Java reserves, so a package can't be called that.`;
+    if (!/^[a-z][a-z0-9_]*$/.test(p)) return `A package name is in small letters (digits can follow), with a dot between its parts, like shop.model.${p ? ` ${p} isn't.` : ""}`;
+  }
+  if (name === "Main" && parts.length) return "Main stays at the top, in no package: the program starts there. Give the class in the package another name.";
+  const path = [...parts, `${name}.java`].join("/");
+  if (files.some((f) => f.path === path)) return `There is already a ${path}.`;
+  return { path, text: `${parts.length ? `package ${parts.join(".")};\n\n` : ""}public class ${name} {\n\n}\n` };
+}
 
 export default function FilesEditor({ value, onChange, onRun, diagnostics = [], minHeight, label = "Java code editor", runAction, canAddFiles = false }: Props) {
   // Each file's exact text is kept here while typing (the joined string tidies line breaks between
@@ -47,7 +64,8 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
     else for (const p of [...saved.current.keys()]) if (!files.some((f) => f.path === p)) saved.current.delete(p);
     fromOutside.current = false;
   }, [files]);
-  const errorsIn = (f: SourceFile) => diagnostics.filter((d) => d.kind === "error" && base(d.file) === f.path).length;
+  // javac names each file by its path, folders included, as the files here are named.
+  const errorsIn = (f: SourceFile) => diagnostics.filter((d) => d.kind === "error" && d.file === f.path).length;
 
   // After a check with errors, show a file that has them.
   useEffect(() => {
@@ -70,10 +88,9 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
   };
   const change = (i: number, text: string) => emit(files.map((f, j) => (j === i ? { ...f, text } : f)));
   const addFile = () => {
-    const name = newName.trim().replace(/\.java$/, "");
-    if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) return setNameError("A class name starts with a capital letter and has only letters and digits, like Person.");
-    if (files.some((f) => f.path === `${name}.java`)) return setNameError(`There is already a ${name}.java.`);
-    emit([...files, { path: `${name}.java`, text: `public class ${name} {\n\n}\n` }]);
+    const file = newClass(newName, files);
+    if (typeof file === "string") return setNameError(file);
+    emit([...files, file]);
     setActive(files.length);
     setAdding(false);
     setNewName("");
@@ -97,13 +114,16 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
           }}
         >
           <label htmlFor="new-class">New class</label>
-          <input id="new-class" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Person" autoComplete="off" autoCapitalize="words" spellCheck={false} aria-describedby={nameError ? "new-class-error" : undefined} autoFocus />
+          <input id="new-class" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Person" autoComplete="off" autoCapitalize="words" spellCheck={false} aria-describedby={nameError ? "new-class-hint new-class-error" : "new-class-hint"} autoFocus />
           <button type="submit" className="btn btn-sm">
             Add
           </button>
           <button type="button" className="btn btn-sm btn-ghost" onClick={() => (setAdding(false), setNameError(""))}>
             Cancel
           </button>
+          <p id="new-class-hint" className="file-add-hint">
+            For a class in a package, write the package first: shop.model.Item.
+          </p>
           {nameError && (
             <p id="new-class-error" className="field-error" role="alert">
               {nameError}
@@ -157,9 +177,18 @@ export default function FilesEditor({ value, onChange, onRun, diagnostics = [], 
               className={"file-tab" + (i === active ? " file-tab-on" : "")}
               onClick={() => setActive(i)}
               onKeyDown={(e) => onKey(e, i)}
+              // The folders sit on a line of their own, which would split the name read out: say it whole.
+              aria-label={folderOf(f.path) ? `${f.path}${n > 0 ? `, ${n} ${n === 1 ? "error" : "errors"}` : ""}` : undefined}
             >
               <FileCode className="icon" aria-hidden="true" />
-              {f.path}
+              {folderOf(f.path) ? (
+                <span className="file-tab-path">
+                  <span className="file-tab-dir">{folderOf(f.path)}</span>
+                  {baseName(f.path)}
+                </span>
+              ) : (
+                f.path
+              )}
               {n > 0 && (
                 <span className="file-tab-errors">
                   {n}

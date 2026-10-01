@@ -1,0 +1,232 @@
+topic: packages
+drills:
+  - type: predict
+    after: package-line
+    classes: |
+      class Lantern {
+          private String color;
+
+          public Lantern(String color) {
+              this.color = color;
+          }
+
+          @Override
+          public String toString() {
+              return this.color + " lantern";
+          }
+      }
+    body: |
+      Lantern lantern = new Lantern("red");
+      System.out.println(lantern + ", " + lantern.getClass().getName());
+    why: "Lantern has no package line, so it's in the default package, and its full name is just its own name: `Lantern`. A class in a package would print with its package in front, like `quiz.domain.Question`."
+
+  - type: compiles
+    after: access
+    classes: |
+      class Badge {
+          protected int level;
+      }
+    body: |
+      Badge badge = new Badge();
+      badge.level = 4;
+      System.out.println(badge.level);
+    why: "Yes. `protected` lets in the subclasses, and also every class of its own package. Main isn't a subclass of Badge, but both are in the default package, so Main may use `level`. From a class of another package, `badge.level` wouldn't compile."
+
+  - type: predict
+    after: import
+    body: |
+      int[] points = {7, 2, 9};
+      java.util.Arrays.sort(points);
+      System.out.println(java.util.Arrays.toString(points) + " " + java.lang.Math.max(points[0], 5));
+    why: "A full name works without an import: `java.util.Arrays` is the Arrays you know, sorted into 2, 7, 9. `java.lang.Math` is Math, which never needs an import. After sorting, `points[0]` is 2, and the bigger of 2 and 5 is 5."
+
+  - type: predict
+    after: access
+    classes: |
+      class Counter {
+          int count;
+
+          void add(int amount) {
+              this.count += amount;
+          }
+      }
+    body: |
+      Counter counter = new Counter();
+      counter.add(3);
+      counter.count = counter.count * 10;
+      counter.add(1);
+      System.out.println(counter.count);
+    why: "`count` and `add` have no word in front, so they're package-private. Main and Counter are both in the default package, so Main may use them directly: 3, then 30, then 31. From a class in another package, neither would compile."
+
+  - type: fill
+    after: import
+    prompt: "Fill in the blank, a package name, so that Collections is written with its full name."
+    body: |
+      ArrayList<String> names = new ArrayList<>();
+      names.add("Otto");
+      names.add("Ada");
+      java.[[util]].Collections.sort(names);
+      System.out.println(names);
+    why: "Collections is in the package `java.util`, like ArrayList, so its full name is `java.util.Collections`. With the full name, the program needs no import for it."
+
+  - type: fill
+    after: import
+    prompt: "Fill in the blank, a package name, so that Math is written with its full name."
+    body: |
+      int bigger = java.[[lang]].Math.max(4, 9);
+      System.out.println(bigger);
+    why: "Math is in `java.lang`, with String, Integer and System. Every Java file imports `java.lang` automatically, which is why `Math.max` never needed an import line."
+
+  - type: bug
+    after: import
+    prompt: "The program should print the smallest score. Which line is wrong?"
+    body: |
+      int[] scores = {40, 15, 30};
+      java.utils.Arrays.sort(scores); // BUG
+      System.out.println(scores[0]);
+    fix: "java.util.Arrays.sort(scores);"
+    why: "The package is `java.util`, without an s. javac says `package java.utils does not exist`: a full name must spell the package exactly, as an import must."
+
+  - type: bug
+    after: access
+    prompt: "Main should be able to ask a postcard for its postage. Which line is wrong?"
+    classes: |
+      class Postcard {
+          private boolean abroad;
+
+          public Postcard(boolean abroad) {
+              this.abroad = abroad;
+          }
+
+          private int postage() { // BUG
+              if (this.abroad) {
+                  return 3;
+              }
+              return 1;
+          }
+      }
+    body: |
+      Postcard card = new Postcard(true);
+      System.out.println(card.postage());
+    fix: "public int postage() {"
+    why: "A `private` method can be called only by its own class's code, so Main's call doesn't compile: `postage() has private access in Postcard`. With `public`, every class can call it. (Nothing in front would do here too, since Main and Postcard share the default package, but not from another package.)"
+
+  - type: compiles
+    after: access
+    classes: |
+      class Box {
+          private int size;
+      }
+    body: |
+      Box box = new Box();
+      box.size = 3;
+      System.out.println(box.size);
+    why: "No. `private` means only Box's own code, and being in the same package doesn't help: javac says `size has private access in Box`. Without the word `private`, Main could use `size`, since both classes are in the default package."
+
+  - type: compiles
+    after: import
+    body: |
+      util.ArrayList<String> days = new util.ArrayList<>();
+      days.add("Monday");
+      System.out.println(days.size());
+    why: "No. The package is `java.util`, and a full name needs all of it: javac says `package util does not exist`. `java.util.ArrayList` would compile, and so would plain `ArrayList` with an import."
+
+  - type: choice
+    after: package-line
+    prompt: "The file `garden/tools/Rake.java` holds the class Rake. Which line must be its first line of code?"
+    choices:
+      - "`package garden.tools;`"
+      - "`package garden.tools.Rake;`"
+      - "`package garden/tools;`"
+      - "`import garden.tools;`"
+    answer: 1
+    why: "The package line names the package, not the class, with dots between the folders: `garden/tools/` is the package `garden.tools`. The class's full name is then `garden.tools.Rake`."
+
+  - type: choice
+    after: import
+    prompt: "A program's classes are `quiz.domain.Question` and `quiz.logic.Scorer`, and the package `quiz` has no classes of its own. `Main.java` starts with `import quiz.*;`. What happens?"
+    choices:
+      - "Main can use Question and Scorer by their simple names."
+      - "Main can use Question by its simple name, but not Scorer."
+      - "The import doesn't compile: `*` takes the classes of `quiz` itself, and there are none."
+      - "The import compiles, but Main must still write the full names."
+    answer: 3
+    why: "`*` covers the classes of one package, not the packages in its folders, and `quiz` itself has no classes, so javac says `package quiz does not exist`. `import quiz.domain.*;` and `import quiz.logic.*;` would work."
+
+  - type: choice
+    after: access
+    prompt: "`quiz.logic.Scorer` has a method `int bonus()`, with no word in front of it. Which class can call it?"
+    choices:
+      - "`quiz.logic.Round`"
+      - "`quiz.ui.TextUI`"
+      - "`quiz.Main`"
+      - "`quiz.logic.extra.Helper`"
+    answer: 1
+    why: "A method with no word in front is package-private: only classes of `quiz.logic` itself can call it. `quiz.logic.extra` is a different package, although its folder is inside `quiz/logic/`, and so are `quiz` and `quiz.ui`."
+
+  - type: choice
+    after: layers
+    prompt: "A quiz is split into the packages `quiz.domain`, `quiz.logic` and `quiz.ui`. Which import shows that the packages use each other in the wrong direction?"
+    choices:
+      - "`import quiz.ui.TextUI;` in a file of `quiz.logic`"
+      - "`import quiz.domain.Question;` in a file of `quiz.ui`"
+      - "`import quiz.logic.Quiz;` in a file of `quiz.ui`"
+      - "`import java.util.ArrayList;` in a file of `quiz.domain`"
+    answer: 1
+    why: "The user interface uses the logic and the domain, and the logic uses the domain, never the other way around. Logic that imports the user interface can't be used with any other user interface, or tested on its own. Java's own packages, such as `java.util`, can be used everywhere."
+
+  - type: boss
+    after: import
+    prompt: |
+      Write the method `distinctCount(java.util.List<String> words)`, which returns how many different words the list has. `Main.java` has no import lines, and it must stay that way: write Java's classes with their full names, such as `java.util.HashSet`. The program prints:
+
+      ```
+      3
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                java.util.List<String> birds = new java.util.ArrayList<>();
+                birds.add("robin");
+                birds.add("wren");
+                birds.add("robin");
+                birds.add("jay");
+                System.out.println(distinctCount(birds));
+            }
+
+            // Write the method distinctCount here.
+        }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                java.util.List<String> birds = new java.util.ArrayList<>();
+                birds.add("robin");
+                birds.add("wren");
+                birds.add("robin");
+                birds.add("jay");
+                System.out.println(distinctCount(birds));
+            }
+
+            public static int distinctCount(java.util.List<String> words) {
+                java.util.HashSet<String> seen = new java.util.HashSet<>();
+                for (String word : words) {
+                    seen.add(word);
+                }
+                return seen.size();
+            }
+        }
+    hints:
+      - "A HashSet keeps each value once (module 35). Put every word into one, and return its `size()`."
+      - "The header is `public static int distinctCount(java.util.List<String> words)`, and the set is `java.util.HashSet<String> seen = new java.util.HashSet<>();`."
+    forbid:
+      - pattern: ^\s*import\b
+        flags: m
+        message: "Leave `Main.java` without import lines: write `java.util.HashSet` and the other classes with their full names."
+    tests:
+      - name: The program's output
+      - call: |
+          System.out.println(distinctCount(new java.util.ArrayList<String>()));
+          System.out.println(distinctCount(java.util.List.of("owl", "Owl", "owl", "hawk")));
+        hidden: true

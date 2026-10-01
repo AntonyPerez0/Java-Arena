@@ -724,3 +724,66 @@ questions:
       String code = "[A-D]-(0|1)?[0-9]";
       System.out.println("B-7".matches(code) + " " + "C-17".matches(code) + " " + "E-4".matches(code) + " " + "A-27".matches(code));
     why: "`[A-D]` is one capital from A to D, `(0|1)?` is an optional 0 or 1, and `[0-9]` is one digit. `matches` asks whether the *whole* text has that form: `B-7` and `C-17` do, `E-4` doesn't because E isn't in `[A-D]`, and `A-27` doesn't because 2 isn't a 0 or a 1, so the 7 is left over. It prints `true true false false`."
+
+  - module: class-diagrams
+    type: choice
+    prompt: "A class diagram has an arrow from the box of `Patient` to the box of `Nurse`, with a `*` at Patient's end, where the arrow starts, and a `1` at Nurse's end. Which code fits the diagram?"
+    choices:
+      - "`Nurse` has `private ArrayList<Patient> patients;`"
+      - "`Patient` has `private ArrayList<Nurse> nurses;`"
+      - "`Patient` has `private Nurse nurse;`"
+      - "`Nurse` has `private Patient patient;`"
+    answer: 3
+    why: "The arrow starts at the class that holds the reference, Patient, and the `1` at its head means one Nurse: a plain field. The `*` at the start only says many patients can share a nurse; the Nurse doesn't know them, so it has no list."
+
+  - module: packages
+    type: predict
+    body: |
+      Object name = "Ada";
+      Object list = new java.util.ArrayList<String>();
+      System.out.println(name.getClass().getName() + " " + list.getClass().getName());
+    why: "`getName()` gives a class's full name, with its package in front: String is in `java.lang`, the package every file imports automatically, and ArrayList is in `java.util`. So the line is `java.lang.String java.util.ArrayList`, not `String ArrayList`."
+
+  - module: exceptions
+    type: predict
+    pre: |
+      public static int dial(String text) {
+          int degrees = Integer.parseInt(text);
+          if (degrees < 50 || degrees > 250) {
+              throw new IllegalArgumentException("No oven setting for " + degrees + " degrees");
+          }
+          return degrees;
+      }
+    body: |
+      String[] settings = {"180", "hot", "300"};
+      for (String setting : settings) {
+          try {
+              System.out.print(dial(setting));
+          } catch (IllegalArgumentException e) {
+              System.out.print("refused");
+          } finally {
+              System.out.print(", ");
+          }
+      }
+      System.out.println("done");
+    why: "`parseInt(\"hot\")` throws a NumberFormatException, and a NumberFormatException is an IllegalArgumentException, so the `catch` block catches it just as it catches the one `dial` throws for 300. The `finally` block prints the comma after every setting, thrown or not, and the loop carries on to `done`."
+
+  - module: writing-files
+    type: predict
+    body: |
+      try {
+          java.io.PrintWriter writer = new java.io.PrintWriter("log.txt");
+          writer.println("zero");
+          writer.close();
+          writer = new java.io.PrintWriter("log.txt");
+          writer.println("one");
+          writer.close();
+          writer = new java.io.PrintWriter(new java.io.FileWriter("log.txt", true));
+          writer.print("two");
+          writer.println("three");
+          writer.close();
+          System.out.println(java.nio.file.Files.readAllLines(java.nio.file.Paths.get("log.txt")));
+      } catch (Exception e) {
+          System.out.println("Error");
+      }
+    why: "A new PrintWriter empties the file, so `zero` is gone before `one` is written. A FileWriter with `true` appends after `one`, and `print` doesn't end the line, so `two` and `three` make one line: `[one, twothree]`."

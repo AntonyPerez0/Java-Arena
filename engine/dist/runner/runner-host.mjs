@@ -23,12 +23,15 @@
 //     outputLimit: bytes of stdout plus stderr before the program is stopped (default 65536)
 //     onOutput(stream, text): optional, called while the program runs with 'stdout' or 'stderr'
 //       and the text of each chunk the host receives (UTF-8 decoded in streaming mode, so a
-//       character split between chunks arrives whole in the later call). The runner sends a
-//       chunk at 16 KB, at a newline 50 ms or more after the previous chunk, every 50 ms while
-//       output waits, and at the end. A Worker can post these to the page, so output printed
-//       before a timeout is not lost when the page terminates the Worker.
-//   -> { stdout, stderr, exitCode, outputTruncated, files, durationMs, error? }
+//       character split between chunks arrives whole in the later call), in the order the
+//       program wrote them. The runner sends a chunk at 16 KB, at a newline 50 ms or more after
+//       the previous chunk, every 50 ms while output waits, when the program switches from one
+//       stream to the other, and at the end. A Worker can post these to the page, so output
+//       printed before a timeout is not lost when the page terminates the Worker.
+//   -> { stdout, stderr, output, exitCode, outputTruncated, files, durationMs, error? }
 //     stdout, stderr: the full text, including what onOutput already received
+//     output: stdout and stderr together, in the order the program wrote them (as a terminal
+//       shows a program's output, for example an error message between two printed lines)
 //     exitCode: the process status HotSpot's java launcher reports: 0 after a normal end,
 //       n & 0xFF after System.exit(n) or Runtime.halt(n) on any thread (so -1 gives 255),
 //       1 after an uncaught exception in main or a launcher error (no main class or method),
@@ -145,12 +148,15 @@ export async function createRunner({ fetchAsset = defaultFetchAsset, modules, fr
     state.root.entries.set('tmp', dirNode());
     const out = [];
     const err = [];
+    // Both streams' text in the order it came: the runner switches streams when the program does.
+    const both = [];
     const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
     const receive = (stream, chunks) => (bytes) => {
       chunks.push(bytes.slice());
-      if (!onOutput) return;
       const text = decoders[stream].decode(bytes, { stream: true });
-      if (text) onOutput(stream, text);
+      if (!text) return;
+      both.push(text);
+      onOutput?.(stream, text);
     };
     state.stdout = receive('stdout', out);
     state.stderr = receive('stderr', err);
@@ -172,10 +178,13 @@ export async function createRunner({ fetchAsset = defaultFetchAsset, modules, fr
     if (freshInstance) component = undefined;
     state.stdout = state.stderr = () => {};
     const truncated = !!result.outputTruncated;
-    if (onOutput && !truncated) {
+    // After a cut at the output limit, a character the cut split is dropped, as in stdout and stderr.
+    if (!truncated) {
       for (const stream of ['stdout', 'stderr']) {
         const rest = decoders[stream].decode();
-        if (rest) onOutput(stream, rest);
+        if (!rest) continue;
+        both.push(rest);
+        onOutput?.(stream, rest);
       }
     }
     const decode = (chunks) => {
@@ -185,6 +194,7 @@ export async function createRunner({ fetchAsset = defaultFetchAsset, modules, fr
     const response = {
       stdout: decode(out),
       stderr: decode(err),
+      output: both.join(''),
       exitCode: truncated ? null : result.exitCode ?? null,
       outputTruncated: truncated,
       files: filesFromTree(workspace),

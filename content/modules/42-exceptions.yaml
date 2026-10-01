@@ -1,0 +1,2390 @@
+id: exceptions
+summary: Exceptions, and what a program can do about them. Reading a crash, catching an exception with try and catch, several catch blocks and finally, checked and unchecked exceptions and throws, try-with-resources, throwing an IllegalArgumentException to refuse bad parameters, exceptions in interfaces, and an exception's message and stack trace. MOOC section 11.3.
+steps:
+  - id: exceptions-catching
+    slug: try-and-catch
+    title: "Catching an exception: try and catch"
+    text: |
+      You've met exceptions since module 12: a program gets to a line it can't carry out, and it stops with a report. Module 20 put file reading in a `try` block with a `catch` block after it. This module is all about exceptions: what they are, how to catch the ones you expect, which ones Java makes you plan for, and how your own classes can throw one.
+
+      ### A crash, read slowly
+
+      This program asks for a height in centimeters and prints it in meters. The user typed a unit after the number:
+
+      ```java run crash
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              System.out.println("Height in centimeters?");
+              int height = Integer.parseInt(scanner.nextLine());
+              System.out.println("That's " + (height / 100.0) + " meters");
+          }
+      }
+      ```
+
+      ```input
+      180 cm
+      ```
+
+      ```output
+      Height in centimeters?
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NumberFormatException: For input string: "180 cm"
+      	at Main.main(Main.java:7)
+      ```
+
+      `Integer.parseInt` can't turn `180 cm` into a number, and it can't return a made-up number either. So it **throws an exception**: it creates an object that describes the problem, and hands that object to the code that called it, in place of a return value. Nothing here catches it, so it goes on out of `main`, and Java stops the program and prints the report:
+
+      - `java.lang.NumberFormatException` is the exception's class, with its package in front (`java.lang` is the package of `String` and `Integer`). Exceptions are objects, and each kind of problem has a class of its own.
+      - `For input string: "180 cm"` is the exception's **message**, written by the code that threw it.
+      - `at Main.main(Main.java:7)` is the **stack trace**: where the program was when it happened. Line 7 is the `parseInt` line. On your own computer, Java also prints a few `at` lines from inside its own classes above this one (from inside `Integer.parseInt`, where the text was checked). The line to look for is the first one from your own code.
+
+      Everything after line 7 was skipped: the meters were never printed.
+
+      ### try and catch
+
+      A program that reads what people type should expect text that isn't a number. `try` and `catch` let it decide what happens then:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              System.out.println("Height in centimeters?");
+              String line = scanner.nextLine();
+              try {
+                  int height = Integer.parseInt(line);
+                  System.out.println("That's " + (height / 100.0) + " meters");
+              } catch (NumberFormatException e) {
+                  System.out.println("Please type just the number, like 172");
+              }
+              System.out.println("Thanks!");
+          }
+      }
+      ```
+
+      ```input
+      180 cm
+      ```
+
+      ```output
+      Height in centimeters?
+      Please type just the number, like 172
+      Thanks!
+      ```
+
+      - The `try` block holds the code that might throw. Java runs it line by line, as usual.
+      - When a line in it throws, the rest of the `try` block is skipped (here the line that prints the meters), and Java looks at the `catch` block. `catch (NumberFormatException e)` catches exceptions of the class NumberFormatException, so its block runs.
+      - `e` is a variable, a bit like a parameter, that holds the exception object. This `catch` block doesn't use it; the last step of this module shows what it can tell you.
+      - After the `catch` block, the program goes on as usual: `Thanks!` is printed.
+      - When nothing in the `try` block throws, the `catch` block is skipped. With the input `180`, the program prints `That's 1.8 meters` and `Thanks!`.
+
+      Module 20 wrote `catch (Exception e)`, which catches every kind of exception. `catch (NumberFormatException e)` catches only this kind, and that's often better: its message, "type just the number", fits this problem and no other. Any other exception still shows up as a crash with its report, instead of hiding behind a message that doesn't fit. The next step is about choosing what to catch.
+
+      `Integer.valueOf` throws a NumberFormatException for the same texts, and `Double.parseDouble` throws one for a text that isn't a decimal number, such as `1,80` with a comma.
+
+      ### Asking again
+
+      In a loop, a caught exception can simply mean "try again". This method asks until the user types a whole number:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int height = readHeight(scanner);
+              System.out.println("That's " + (height / 100.0) + " meters");
+          }
+
+          public static int readHeight(Scanner scanner) {
+              while (true) {
+                  System.out.println("Height in centimeters?");
+                  try {
+                      return Integer.parseInt(scanner.nextLine());
+                  } catch (NumberFormatException e) {
+                      System.out.println("Not a whole number, try again");
+                  }
+              }
+          }
+      }
+      ```
+
+      ```input
+      tall
+      1.80
+      180
+      ```
+
+      ```output
+      Height in centimeters?
+      Not a whole number, try again
+      Height in centimeters?
+      Not a whole number, try again
+      Height in centimeters?
+      That's 1.8 meters
+      ```
+
+      The `return` in the `try` block ends the method only when `parseInt` succeeds. When `parseInt` throws, the `return` never happens: the `catch` block prints its message, and the loop goes around again.
+
+      **Your turn:** fill in the blanks. The program reads a temperature in degrees Celsius, a whole number, and prints it in Fahrenheit. If the line isn't a whole number, it prints `Not a temperature: ` and the line instead. With the input `21.5` it prints:
+
+      ```
+      Not a temperature: 21.5
+      ```
+    fill: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String line = scanner.nextLine();
+              [[try]] {
+                  int celsius = Integer.parseInt(line);
+                  System.out.println(celsius + " C is " + (celsius * 9 / 5 + 32) + " F");
+              } catch ([[NumberFormatException‖Exception‖IllegalArgumentException‖RuntimeException]] e) {
+                  System.out.println("Not a temperature: " + line);
+              }
+          }
+      }
+    hints:
+      - "The block of code that might throw starts with the word `try`."
+      - "`Integer.parseInt` throws a `NumberFormatException` when the text isn't a whole number: that's the class to catch."
+    tests:
+      - stdin: "21.5"
+      - stdin: "20"
+      - stdin: "-40"
+        hidden: true
+      - stdin: warm
+        hidden: true
+      - stdin: "37"
+        hidden: true
+    more:
+      - task: |
+          A kitchen scale app reads weights in grams, one per line, until the line `done`. It adds up the lines that are whole numbers. For every other line, it prints `Not grams: ` and the line, and carries on with the next one. At the end it prints the total. For the input shown, it prints:
+
+          ```
+          Not grams: 1 kg
+          Not grams: half
+          Total: 1250 g
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int total = 0;
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("done")) {
+                          break;
+                      }
+                      try {
+                          total += Integer.parseInt(line);
+                      } catch (NumberFormatException e) {
+                          System.out.println("Not grams: " + line);
+                      }
+                  }
+                  System.out.println("Total: " + total + " g");
+              }
+          }
+        hints:
+          - "Read in a `while (true)` loop that ends at `done`, with the total in a variable made before the loop."
+          - "Inside the loop, put `total += Integer.parseInt(line);` in a `try` block, and print the message in the `catch (NumberFormatException e)` block."
+        require:
+          - pattern: \bcatch\s*\(
+            message: "Let `Integer.parseInt` try every line, and catch its exception with `try` and `catch`."
+        tests:
+          - stdin: |
+              250
+              1 kg
+              500
+              half
+              500
+              done
+          - stdin: done
+            hidden: true
+          - stdin: |
+              70
+              30
+              -20
+              12.5
+              ten
+              done
+            hidden: true
+      - task: |
+          What does this program print? Follow each round of the loop into the `try` block, and out of it.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  String[] readings = {"12", "7x", "30", "", "-4"};
+                  int total = 0;
+                  int bad = 0;
+                  for (String reading : readings) {
+                      try {
+                          total += Integer.parseInt(reading);
+                          System.out.println("added " + reading);
+                      } catch (NumberFormatException e) {
+                          bad++;
+                      }
+                  }
+                  System.out.println(total + " " + bad);
+              }
+          }
+        hints:
+          - "`Integer.parseInt(\"7x\")` throws, so `total` doesn't change and the `println` after it is skipped. The empty text `\"\"` isn't a number either."
+          - "A minus sign is fine: `-4` is a whole number. Each caught exception adds one to `bad`, and the loop goes on with the next reading."
+
+  - id: exceptions-choosing
+    slug: choosing-what-to-catch
+    title: Choosing what to catch
+    text: |
+      A time of day such as `7:45` is easy for people to read. A program that compares or adds up times often turns it into a single number, the minutes after midnight: 7 hours and 45 minutes is 7 * 60 + 45 = 465. Two different things can go wrong on the way, and each throws its own exception:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              String[] times = {"7:45", "745", "7:4five"};
+              for (String time : times) {
+                  try {
+                      String[] parts = time.split(":");
+                      int hours = Integer.parseInt(parts[0]);
+                      int minutes = Integer.parseInt(parts[1]);
+                      System.out.println(time + " is " + (hours * 60 + minutes) + " minutes after midnight");
+                  } catch (NumberFormatException e) {
+                      System.out.println(time + ": the hours and minutes must be numbers");
+                  } catch (ArrayIndexOutOfBoundsException e) {
+                      System.out.println(time + ": write the time as hours:minutes");
+                  }
+              }
+          }
+      }
+      ```
+
+      ```output
+      7:45 is 465 minutes after midnight
+      745: write the time as hours:minutes
+      7:4five: the hours and minutes must be numbers
+      ```
+
+      - `745` has no colon, so `split` gives just one part, and `parts[1]` throws an `ArrayIndexOutOfBoundsException` (module 15).
+      - In `7:4five`, the minutes aren't a number, and `parseInt` throws a `NumberFormatException`.
+
+      A `try` can have several `catch` blocks, one after the other. When an exception is thrown, Java checks them from the top and runs the **first** one whose class matches. At most one `catch` block runs, and then the program goes on after the last one.
+
+      ### A family of classes
+
+      Each kind of exception is a class, and the classes inherit from each other, just like the classes of module 34. Here's a part of the family, each class under its parent:
+
+      - `Exception`
+          - `IOException`: reading or writing data failed. Reading a missing file the way this course does, with `Paths.get(...)`, throws a `NoSuchFileException`, one of its descendants. Some other ways of opening a file throw a `FileNotFoundException` instead, also an IOException. Module 43 meets it.
+          - `RuntimeException`
+              - `ArithmeticException`, such as `/ by zero`
+              - `IllegalArgumentException`: a method got a value it can't work with
+                  - `NumberFormatException`
+              - `IndexOutOfBoundsException`
+                  - `ArrayIndexOutOfBoundsException` and `StringIndexOutOfBoundsException`
+              - `NullPointerException`
+
+      A NumberFormatException **is an** IllegalArgumentException, which is a RuntimeException, which is an Exception. So a `catch` block catches its own class and every class below it:
+
+      - `catch (IndexOutOfBoundsException e)` catches the index problems of lists, arrays and Strings.
+      - `catch (RuntimeException e)` catches everything in its branch.
+      - `catch (Exception e)`, as in module 20, catches all of them.
+
+      Catch a parent class when every child gets the same reaction, and separate classes when each problem needs its own. If one message covers both problems with the times, one block is enough:
+
+      ```java main
+      String[] times = {"745", "7:4five"};
+      for (String time : times) {
+          try {
+              String[] parts = time.split(":");
+              int minutes = Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
+              System.out.println(minutes);
+          } catch (RuntimeException e) {
+              System.out.println(time + " isn't a time like 7:45");
+          }
+      }
+      ```
+
+      ```output
+      745 isn't a time like 7:45
+      7:4five isn't a time like 7:45
+      ```
+
+      ### The more specific class first
+
+      Since a parent class catches its children, the order of the `catch` blocks matters. A `catch` for a child class after its parent's could never run, and javac refuses it:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              try {
+                  int minutes = Integer.parseInt("4five");
+                  System.out.println(minutes);
+              } catch (IllegalArgumentException e) {
+                  System.out.println("That's not a valid value");
+              } catch (NumberFormatException e) {
+                  System.out.println("That's not a number");
+              }
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:8: error: exception NumberFormatException has already been caught
+              } catch (NumberFormatException e) {
+                ^
+      1 error
+      ```
+
+      Swap the two blocks, and it compiles: a NumberFormatException then goes to its own block, and any other IllegalArgumentException to the second one. A common pattern is the specific classes first and a `catch (Exception e)` at the end, for anything else.
+
+      ### finally
+
+      A `try` can end with a `finally` block. It runs after the `try` block and the `catch` block, whatever happened: when nothing was thrown, when an exception was caught, and even when the `try` or `catch` block leaves the method with `return`:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(minutesOf("7:45"));
+              System.out.println(minutesOf("745"));
+          }
+
+          public static int minutesOf(String time) {
+              try {
+                  String[] parts = time.split(":");
+                  return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
+              } catch (RuntimeException e) {
+                  return -1;
+              } finally {
+                  System.out.println("checked " + time);
+              }
+          }
+      }
+      ```
+
+      ```output
+      checked 7:45
+      465
+      checked 745
+      -1
+      ```
+
+      The `return` decides the value, then the `finally` block runs, and only then does the method really return. That's why `checked 7:45` comes before `main` prints 465. An exception that no `catch` block catches runs the `finally` block too, on its way out of the method.
+
+      `finally` is for work that must be done however the `try` block ends, such as giving back something the program borrowed. The most common case, closing a file, has a shorter form of its own, in step 4.
+
+      **Your turn:** a kitchen timer is set with minutes and seconds with a colon between them, such as `2:30`. The program below reads one line and prints the time in seconds, but it crashes on bad input. Add a `try` with two `catch` blocks, so that:
+
+      - a line without a colon, such as `150`, prints `Use minutes:seconds, like 2:30`
+      - a line whose parts aren't whole numbers, such as `2:3o`, prints `Minutes and seconds must be whole numbers`
+
+      A good time still prints the seconds: `Timer set for 150 seconds` for `2:30`. With the input `150` the program prints:
+
+      ```
+      Use minutes:seconds, like 2:30
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String time = scanner.nextLine();
+              String[] parts = time.split(":");
+              int minutes = Integer.parseInt(parts[0]);
+              int seconds = Integer.parseInt(parts[1]);
+              System.out.println("Timer set for " + (minutes * 60 + seconds) + " seconds");
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              String time = scanner.nextLine();
+              try {
+                  String[] parts = time.split(":");
+                  int minutes = Integer.parseInt(parts[0]);
+                  int seconds = Integer.parseInt(parts[1]);
+                  System.out.println("Timer set for " + (minutes * 60 + seconds) + " seconds");
+              } catch (ArrayIndexOutOfBoundsException e) {
+                  System.out.println("Use minutes:seconds, like 2:30");
+              } catch (NumberFormatException e) {
+                  System.out.println("Minutes and seconds must be whole numbers");
+              }
+          }
+      }
+    hints:
+      - "Put the lines from `split` to the `println` inside `try { ... }`."
+      - "`parts[1]` throws an `ArrayIndexOutOfBoundsException` when there's no colon, and `Integer.parseInt` throws a `NumberFormatException`: one `catch` block for each."
+    require:
+      - pattern: \bcatch\s*\(
+        min: 2
+        message: "Use two `catch` blocks, one for each kind of problem."
+    tests:
+      - stdin: "150"
+      - stdin: "2:30"
+      - stdin: "2:3o"
+        hidden: true
+      - stdin: "one:30"
+        hidden: true
+      - stdin: "0:45"
+        hidden: true
+    more:
+      - task: |
+          What does this program print? Keep in mind which exception class is a child of which.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  check("4");
+                  check("0");
+                  check("four");
+              }
+
+              public static void check(String text) {
+                  try {
+                      int people = Integer.parseInt(text);
+                      System.out.println(12 / people);
+                  } catch (ArithmeticException e) {
+                      System.out.println("nobody");
+                  } catch (RuntimeException e) {
+                      System.out.println("not a number");
+                  } finally {
+                      System.out.println("done");
+                  }
+              }
+          }
+        hints:
+          - "`12 / 0` throws an ArithmeticException, and the first `catch` block matches it. A NumberFormatException isn't an ArithmeticException, but it is a RuntimeException, so the second block catches it."
+          - "The `finally` block runs at the end of every call, whether an exception was thrown or not."
+      - task: |
+          An online course shows your progress written as `done/total`, such as `7/20` for 7 lessons done out of 20. The program should print `35% done` for `7/20`, `The total can't be 0` when the total is 0, `Use whole numbers, like 7/20` when a part isn't a whole number, and `Write it as done/total, like 7/20` for any other problem. It doesn't compile. Read javac's messages and fix the program, without changing what any block prints. With the input `7/0` it prints:
+
+          ```
+          The total can't be 0
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String line = scanner.nextLine();
+                  try {
+                      String[] parts = line.split("/");
+                      int done = Integer.parseInt(parts[0]);
+                      int total = Integer.parseInt(parts[1]);
+                      System.out.println(done * 100 / total + "% done");
+                  } catch (Exception e) {
+                      System.out.println("Write it as done/total, like 7/20");
+                  } catch (ArithmeticException e) {
+                      System.out.println("The total can't be 0");
+                  } catch (NumberFormatException e) {
+                      System.out.println("Use whole numbers, like 7/20");
+                  }
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  String line = scanner.nextLine();
+                  try {
+                      String[] parts = line.split("/");
+                      int done = Integer.parseInt(parts[0]);
+                      int total = Integer.parseInt(parts[1]);
+                      System.out.println(done * 100 / total + "% done");
+                  } catch (ArithmeticException e) {
+                      System.out.println("The total can't be 0");
+                  } catch (NumberFormatException e) {
+                      System.out.println("Use whole numbers, like 7/20");
+                  } catch (Exception e) {
+                      System.out.println("Write it as done/total, like 7/20");
+                  }
+              }
+          }
+        hints:
+          - "javac says that the exceptions of the later blocks `have already been caught`. `catch (Exception e)` comes first, and it catches every exception, so the blocks after it could never run."
+          - "Move the `catch (Exception e)` block to the end, after the ArithmeticException and NumberFormatException blocks."
+        tests:
+          - stdin: "7/0"
+          - stdin: "7/20"
+          - stdin: "seven/20"
+            hidden: true
+          - stdin: "7"
+            hidden: true
+          - stdin: "20/20"
+            hidden: true
+
+  - id: exceptions-checked
+    slug: checked-exceptions
+    title: Checked exceptions and throws
+    text: |
+      In module 20, a program that opened a file without a `try` didn't compile: javac said `unreported exception IOException; must be caught or declared to be thrown`. A program that calls `Integer.parseInt` gets no such message, though `parseInt` can throw too. Java treats the two kinds of exceptions differently.
+
+      ### Checked and unchecked
+
+      - **Unchecked exceptions** are RuntimeException and every class below it: NumberFormatException, ArithmeticException, the index exceptions, NullPointerException and the rest. They usually come from a mistake in the program, or from a value it could have checked first. javac leaves them to you: you catch them where you expect them, like text that isn't a number.
+      - **Checked exceptions** are all the other Exceptions, such as IOException. They come from things outside the program's control: a file that isn't there, a full disk, a network that's down. However careful the code is, they can happen. So when javac compiles the program, it **checks** that every checked exception is either caught or declared. That's where the name comes from.
+
+      A method's documentation lists the checked exceptions it can throw, and javac tells you when you've forgotten one.
+
+      `Files.readAllLines` is another way to read a file: it reads all the lines at once and returns them in a `List<String>`. `Files` is in `java.nio.file`, next to `Paths`. This method reads a settings file, with one setting per line, a name and a value with `=` between them, and looks up one setting. It doesn't compile:
+
+      ```java error
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println("Volume: " + readSetting("settings.txt", "volume"));
+          }
+
+          public static String readSetting(String fileName, String name) {
+              List<String> lines = Files.readAllLines(Paths.get(fileName));
+              for (String line : lines) {
+                  String[] parts = line.split("=");
+                  if (parts[0].equals(name)) {
+                      return parts[1];
+                  }
+              }
+              return "";
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:11: error: unreported exception IOException; must be caught or declared to be thrown
+              List<String> lines = Files.readAllLines(Paths.get(fileName));
+                                                     ^
+      1 error
+      ```
+
+      ### Declaring it: throws
+
+      "Caught" you know: a `try` and a `catch` around the line. "Declared" is the other choice. The method writes `throws IOException` in its header, after the parameters:
+
+      ```java fragment
+      public static String readSetting(String fileName, String name) throws IOException {
+      ```
+
+      It says: this method may throw an IOException, and it doesn't handle it itself; whoever calls it must. The method's code stays as it was. If `readAllLines` throws, `readSetting` stops right there, and the exception goes on to the caller, which then has the same two choices: catch it, or declare it too. Here `main` catches it:
+
+      ```file settings.txt
+      volume=7
+      theme=dark
+      ```
+
+      ```java run
+      import java.io.IOException;
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              String[] files = {"settings.txt", "backup.txt"};
+              for (String file : files) {
+                  try {
+                      System.out.println("Volume in " + file + ": " + readSetting(file, "volume"));
+                  } catch (IOException e) {
+                      System.out.println("Could not read " + file);
+                  }
+              }
+          }
+
+          public static String readSetting(String fileName, String name) throws IOException {
+              List<String> lines = Files.readAllLines(Paths.get(fileName));
+              for (String line : lines) {
+                  String[] parts = line.split("=");
+                  if (parts[0].equals(name)) {
+                      return parts[1];
+                  }
+              }
+              return "";
+          }
+      }
+      ```
+
+      ```output
+      Volume in settings.txt: 7
+      Could not read backup.txt
+      ```
+
+      - `IOException` is in the package `java.io`, so it needs an import: `import java.io.IOException;`.
+      - There's no `backup.txt`, so `readAllLines` throws, `readSetting` passes the exception on, and `main`'s `catch` block handles it.
+      - Who should catch it? The method that knows what to do about it. `readSetting` can't know whether a missing file is an error or just means "use the defaults", so it passes the exception on, and `main` decides.
+
+      `throws Exception` declares any exception at all. It's shorter, and you'll see it often in small programs, but it tells the caller less, and the caller then has to catch `Exception`, or declare it too.
+
+      ### An exception travels up
+
+      An exception that isn't caught leaves the method it was thrown in, then the method that called that one, and so on up the call stack, until it reaches a `catch` block that matches. The stack trace of a crash lists exactly those methods. Unchecked exceptions travel the same way, only without any `throws`: javac checks the checked ones alone. So every method a checked exception can pass through must declare it. A method that calls `readSetting` and doesn't catch the IOException needs `throws IOException` in its own header too.
+
+      ### main throws Exception
+
+      `main` can declare exceptions too:
+
+      ```java run crash
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              List<String> lines = Files.readAllLines(Paths.get("settings.txt"));
+              System.out.println(lines.size() + " settings");
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.nio.file.NoSuchFileException: settings.txt
+      	at Main.main(Main.java:7)
+      ```
+
+      `public static void main(String[] args) throws Exception` passes every exception on to whoever called `main`: Java itself. Java handles it the only way it can: the program stops, with the report. Here there's no `settings.txt`, so that's what happens. With the file above, the program would print `2 settings`.
+
+      That's fine for a quick program, or an example where a missing file would be a mistake anyway, and you'll see `main` written this way in many examples, the MOOC's among them. A program for other people should catch the exception and tell them something useful instead.
+
+      **Your turn:** fill in the blanks, so that `countGuests` passes the IOException on and `main` handles it. The program prints how many names `guests.txt` has, one per line, or `No guest list yet` when the file can't be read (one of the tests gives no file). For the file shown below, it prints:
+
+      ```
+      Guests: 3
+      ```
+    fill: |
+      import java.io.IOException;
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              try {
+                  System.out.println("Guests: " + countGuests("guests.txt"));
+              } [[catch]] (IOException e) {
+                  System.out.println("No guest list yet");
+              }
+          }
+
+          public static int countGuests(String fileName) [[throws]] IOException {
+              List<String> names = Files.readAllLines(Paths.get(fileName));
+              return names.size();
+          }
+      }
+    hints:
+      - "The `try` block is followed by the block that runs when the reading fails: `catch`."
+      - "A method declares the exceptions it passes on in its header, after the parameters, with the word `throws`."
+    tests:
+      - files:
+          guests.txt: |
+            Ines
+            Tomasz
+            Priya
+      - name: Without the file
+        hidden: true
+      - files:
+          guests.txt: |
+            Ada
+            Grace
+            Linus
+            Margaret
+            Ken
+        hidden: true
+    more:
+      - task: |
+          A writing app counts the words in an essay. The program doesn't compile: javac says `unreported exception IOException` in `countWords`. Make `countWords` pass the exception on with `throws`, and make `main` catch it: when the file can't be read, the program prints `Could not read essay.txt`. `countWords` gets no `try` of its own. For the file shown below, the program prints:
+
+          ```
+          Words: 9
+          ```
+        seed: |
+          import java.io.IOException;
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println("Words: " + countWords("essay.txt"));
+              }
+
+              public static int countWords(String fileName) {
+                  List<String> lines = Files.readAllLines(Paths.get(fileName));
+                  int words = 0;
+                  for (String line : lines) {
+                      words += line.split(" ").length;
+                  }
+                  return words;
+              }
+          }
+        solution: |
+          import java.io.IOException;
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+
+          public class Main {
+              public static void main(String[] args) {
+                  try {
+                      System.out.println("Words: " + countWords("essay.txt"));
+                  } catch (IOException e) {
+                      System.out.println("Could not read essay.txt");
+                  }
+              }
+
+              public static int countWords(String fileName) throws IOException {
+                  List<String> lines = Files.readAllLines(Paths.get(fileName));
+                  int words = 0;
+                  for (String line : lines) {
+                      words += line.split(" ").length;
+                  }
+                  return words;
+              }
+          }
+        hints:
+          - "Add `throws IOException` to `countWords`'s header, after the parentheses. Then javac's message moves to `main`, which calls it."
+          - "In `main`, put the `println` in a `try` block, and print `Could not read essay.txt` in `catch (IOException e)`."
+        require:
+          - pattern: countWords\s*\([^)]*\)\s*throws\s+(IOException|Exception)\b
+            message: "Declare the exception in `countWords`'s header: `throws IOException`."
+          - pattern: \btry\b
+            min: 1
+            max: 1
+            message: "Use one `try`, in `main`. `countWords` passes the exception on instead of catching it."
+        tests:
+          - files:
+              essay.txt: |
+                Rivers shape the valleys
+                over many thousands of years
+          - name: Without the file
+            hidden: true
+          - files:
+              essay.txt: |
+                Bees visit flowers
+                and carry pollen between them
+                as they feed
+            hidden: true
+      - task: |
+          `sum` has no `try`, and an unchecked exception needs no `throws`. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(total("4,5"));
+                  System.out.println(total("4,five,6"));
+              }
+
+              public static int total(String text) {
+                  try {
+                      return sum(text.split(","));
+                  } catch (NumberFormatException e) {
+                      System.out.println("bad part");
+                      return -1;
+                  }
+              }
+
+              public static int sum(String[] parts) {
+                  int sum = 0;
+                  for (String part : parts) {
+                      sum += Integer.parseInt(part);
+                      System.out.println("added " + part);
+                  }
+                  return sum;
+              }
+          }
+        hints:
+          - "When `parseInt(\"five\")` throws, `sum` stops right there: no `added five`, no `6`, and no `return sum`. The exception goes up to `total`, which called `sum` inside its `try` block."
+          - "`total`'s `catch` block prints `bad part` and returns -1, which `main` prints."
+
+  - id: exceptions-resources
+    slug: try-with-resources
+    title: Exceptions and resources
+    text: |
+      Module 20 read files with a Scanner in `try (...)`, and said that this form of `try` closes the file. This step looks at what that means, and when it happens.
+
+      ### Resources
+
+      An open file is a **resource**: something a program borrows from the operating system while it uses it, and gives back when it's done, by **closing** it. Until then the system keeps the file marked as in use. On some systems another program can't change or delete a file while it's open, and a program that opens files without closing them can run out of files it's allowed to have open at once. Everything a program has open is closed when it ends, but some programs, such as a web server, run for months.
+
+      A Scanner that reads a file has a method `close()`, and try-with-resources calls it for you:
+
+      ```java fragment
+      try (Scanner scanner = new Scanner(Paths.get("settings.txt"))) {
+          // read with the scanner
+      } catch (Exception e) {
+          // the reading failed
+      }
+      ```
+
+      - The **resource** is created in the parentheses after `try`. It exists only inside the `try` block.
+      - When the `try` block ends, Java calls the resource's `close()`, however the block ends: after its last line, with a `return`, or with an exception.
+      - When an exception comes out of the `try` block, the resource is closed first, and then the `catch` block runs.
+      - When creating the resource fails, for example because there's no such file, there's no Scanner to close, and Java goes straight to the `catch` block.
+      - A try-with-resources needs no `catch` block at all when its method passes the exception on with `throws IOException`. The file is closed all the same, and the exception goes on to the caller.
+
+      ### Seeing it happen
+
+      Closing a Scanner prints nothing, so here's a class whose `close()` does. An object can be a resource when its class implements Java's interface `AutoCloseable`, which has one method, `close()`. The Scanner's class implements it, and so does this faucet, which turns the water on when it's created and off when it's closed:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              try (Faucet faucet = new Faucet("kitchen")) {
+                  System.out.println("Filling the kettle");
+                  int cups = Integer.parseInt("four");
+                  System.out.println("Filled " + cups + " cups");
+              } catch (NumberFormatException e) {
+                  System.out.println("Error: " + e.getMessage());
+              }
+              System.out.println("Done");
+          }
+      }
+      // ==== Faucet.java ====
+      public class Faucet implements AutoCloseable {
+          private String room;
+
+          public Faucet(String room) {
+              this.room = room;
+              System.out.println("Water on in the " + room);
+          }
+
+          @Override
+          public void close() {
+              System.out.println("Water off in the " + this.room);
+          }
+      }
+      ```
+
+      ```output
+      Water on in the kitchen
+      Filling the kettle
+      Water off in the kitchen
+      Error: For input string: "four"
+      Done
+      ```
+
+      The water goes off before the `catch` block runs: the resource is closed as soon as the `try` block ends. (You won't need resources of your own in this course: Java's own, such as the Scanner, already implement AutoCloseable.)
+
+      Several resources can go in the parentheses, separated by semicolons. They're closed in the opposite order: the one created last is closed first.
+
+      ### Returning from inside
+
+      Because the resource is closed however the block ends, a method can `return` from the middle of a try-with-resources. This one returns the first line of a file that starts with a given text. When it finds the line, it returns at once, and the file is closed on the way out:
+
+      ```file settings.txt
+      volume=7
+      theme=dark
+      ```
+
+      ```java run
+      import java.nio.file.Paths;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(findLine("settings.txt", "theme"));
+              System.out.println(findLine("settings.txt", "language"));
+              System.out.println(findLine("colors.txt", "theme"));
+          }
+
+          public static String findLine(String fileName, String start) {
+              try (Scanner scanner = new Scanner(Paths.get(fileName))) {
+                  while (scanner.hasNextLine()) {
+                      String line = scanner.nextLine();
+                      if (line.startsWith(start)) {
+                          return line;
+                      }
+                  }
+              } catch (Exception e) {
+                  return "no file " + fileName;
+              }
+              return "none";
+          }
+      }
+      ```
+
+      ```output
+      theme=dark
+      none
+      no file colors.txt
+      ```
+
+      ### The long way
+
+      Before try-with-resources came to Java (in version 7), programs closed their files themselves, in a `finally` block, so that it happened even after an exception:
+
+      ```java fragment
+      Scanner scanner = new Scanner(Paths.get("settings.txt"));
+      try {
+          while (scanner.hasNextLine()) {
+              System.out.println(scanner.nextLine());
+          }
+      } finally {
+          scanner.close();
+      }
+      ```
+
+      You'll still see this in older code. try-with-resources does the same with less to write, and nothing to forget.
+
+      ### Not the keyboard
+
+      One Scanner never goes in a try-with-resources: `new Scanner(System.in)`. Closing it closes `System.in` too, and after that the program can't read the keyboard any more, not even with a new Scanner. The keyboard isn't a file the program borrowed, so leave that Scanner open.
+
+      **Your turn:** this program reads water meter readings from `meter.txt`, one whole number per line, and prints how much water was used: the last reading minus the first. It works, but it never closes the file. Make the Scanner a resource of the `try`, so that the file is closed when the reading ends. For the file shown below, it prints:
+
+      ```
+      Used: 37 liters
+      ```
+    seed: |
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> readings = new ArrayList<>();
+              try {
+                  Scanner scanner = new Scanner(Paths.get("meter.txt"));
+                  while (scanner.hasNextLine()) {
+                      readings.add(Integer.parseInt(scanner.nextLine()));
+                  }
+              } catch (Exception e) {
+                  System.out.println("Error: " + e.getMessage());
+              }
+              int used = readings.get(readings.size() - 1) - readings.get(0);
+              System.out.println("Used: " + used + " liters");
+          }
+      }
+    solution: |
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Integer> readings = new ArrayList<>();
+              try (Scanner scanner = new Scanner(Paths.get("meter.txt"))) {
+                  while (scanner.hasNextLine()) {
+                      readings.add(Integer.parseInt(scanner.nextLine()));
+                  }
+              } catch (Exception e) {
+                  System.out.println("Error: " + e.getMessage());
+              }
+              int used = readings.get(readings.size() - 1) - readings.get(0);
+              System.out.println("Used: " + used + " liters");
+          }
+      }
+    hints:
+      - "Module 20, and the `findLine` example above, create the Scanner in the parentheses right after `try`. Do the same with this Scanner."
+      - "Move the Scanner line into `try (...)`, without its semicolon: `try (Scanner scanner = new Scanner(Paths.get(\"meter.txt\"))) {`. The loop stays inside the `try` block, and the `catch` block stays as it is."
+    require:
+      - pattern: \btry\s*\(\s*Scanner\s+\w+\s*=\s*new\s+Scanner\s*\(
+        message: "Create the Scanner in the parentheses after `try`."
+    tests:
+      - files:
+          meter.txt: |
+            1208
+            1219
+            1245
+      - files:
+          meter.txt: |
+            40210
+            40215
+            40233
+            40290
+            40302
+        hidden: true
+    more:
+      - task: |
+          Here's a faucet that prints a word when it's turned on and off. The bath is filled with two of them, as two resources of one `try`. What does the program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  try (Faucet hot = new Faucet("hot"); Faucet cold = new Faucet("cold")) {
+                      System.out.println("filling");
+                      int level = 10 / 0;
+                      System.out.println("level " + level);
+                  } catch (ArithmeticException e) {
+                      System.out.println("caught");
+                  } finally {
+                      System.out.println("towel");
+                  }
+              }
+          }
+          // ==== Faucet.java ====
+          public class Faucet implements AutoCloseable {
+              private String name;
+
+              public Faucet(String name) {
+                  this.name = name;
+                  System.out.println(name + " on");
+              }
+
+              @Override
+              public void close() {
+                  System.out.println(this.name + " off");
+              }
+          }
+        hints:
+          - "The resources are created from left to right, and closed the other way around: the one created last is closed first."
+          - "They're closed as soon as the `try` block ends, before the `catch` block runs. The `finally` block comes last."
+      - task: |
+          Settings files often have comment lines, which start with `#`, and empty lines. Write the method `countSettings(String fileName)`, which returns how many lines of the file are settings: lines that aren't empty and don't start with `#`. When the file can't be read, it returns -1. Read the file with a Scanner in a try-with-resources. The check runs `System.out.println(countSettings("settings.txt"));` with the file shown below, and expects:
+
+          ```
+          2
+          ```
+        seed: |
+          import java.nio.file.Paths;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(countSettings("settings.txt"));
+              }
+
+              public static int countSettings(String fileName) {
+                  return 0;
+              }
+          }
+        solution: |
+          import java.nio.file.Paths;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(countSettings("settings.txt"));
+              }
+
+              public static int countSettings(String fileName) {
+                  int count = 0;
+                  try (Scanner scanner = new Scanner(Paths.get(fileName))) {
+                      while (scanner.hasNextLine()) {
+                          String line = scanner.nextLine();
+                          if (!line.isEmpty() && !line.startsWith("#")) {
+                              count++;
+                          }
+                      }
+                  } catch (Exception e) {
+                      return -1;
+                  }
+                  return count;
+              }
+          }
+        hints:
+          - "Make a counter before the `try`, count the lines that are settings inside the loop, and return it after the whole `try` and `catch`."
+          - "The `catch` block returns -1. A line is a setting when `!line.isEmpty() && !line.startsWith(\"#\")`."
+        require:
+          - pattern: \btry\s*\(\s*Scanner\s+\w+\s*=\s*new\s+Scanner\s*\(
+            message: "Read the file with a Scanner created in the parentheses after `try`."
+        tests:
+          - call: System.out.println(countSettings("settings.txt"));
+            files:
+              settings.txt: |
+                # photo app
+                volume=7
+
+                # colors
+                theme=dark
+          - call: System.out.println(countSettings("prefs.txt"));
+            files:
+              prefs.txt: |
+                language=fi
+                font=large
+                # zoom=2
+                sound=off
+                autosave=on
+            hidden: true
+          - call: System.out.println(countSettings("missing.txt"));
+            hidden: true
+          - call: System.out.println(countSettings("empty.txt"));
+            files:
+              empty.txt: |
+                # nothing set yet
+            hidden: true
+
+  - id: exceptions-throwing
+    slug: throwing-exceptions
+    title: Throwing an exception
+    text: |
+      So far every exception came from one of Java's own methods. Your own methods and constructors can throw one too, with `throw`. That's how a class refuses values it can't work with.
+
+      ### Refusing a bad value
+
+      A bank transfer moves money from one person to another. A transfer of -40 dollars would move money the wrong way, so this class refuses to create one:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Transfer rent = new Transfer("Maya", "Leo", 400);
+              System.out.println(rent);
+              Transfer odd = new Transfer("Maya", "Leo", -40);
+              System.out.println(odd);
+          }
+      }
+      // ==== Transfer.java ====
+      public class Transfer {
+          private String from;
+          private String to;
+          private int amount;
+
+          public Transfer(String from, String to, int amount) {
+              if (amount <= 0) {
+                  throw new IllegalArgumentException("The amount must be positive, not " + amount);
+              }
+              this.from = from;
+              this.to = to;
+              this.amount = amount;
+          }
+
+          @Override
+          public String toString() {
+              return this.from + " -> " + this.to + ": " + this.amount + " dollars";
+          }
+      }
+      ```
+
+      ```output
+      Maya -> Leo: 400 dollars
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.IllegalArgumentException: The amount must be positive, not -40
+      	at Transfer.<init>(Transfer.java:8)
+      	at Main.main(Main.java:5)
+      ```
+
+      - `new IllegalArgumentException("...")` creates an exception object, like any other `new`. The text becomes its message.
+      - `throw` throws it. The constructor stops on that line, a bit like `return`, and the exception goes to the code that called it. Here that's `main`, which doesn't catch it, so the program stops.
+      - In the stack trace, `Transfer.<init>` is the constructor: `<init>` is how a stack trace names one.
+      - The check comes first, before any instance variable is set, and the exception stops the constructor, so no transfer of -40 is ever made: `odd` never gets a value. An object that refuses bad values can't end up in an impossible state.
+
+      **IllegalArgumentException** is Java's exception for exactly this: a method or constructor was given a parameter value it can't accept. It's a RuntimeException, so it's unchecked: neither the constructor nor the code that calls it needs a `throws`. A good message says what was wrong, and includes the value that was refused.
+
+      ### Catching it
+
+      The code that creates the transfers decides what a refusal means. Here the amounts come from an array, and a refused one is reported and skipped:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] amounts = {120, 0, 35, -8};
+              int sent = 0;
+              for (int amount : amounts) {
+                  try {
+                      Transfer transfer = new Transfer("Maya", "Leo", amount);
+                      System.out.println("Sent: " + transfer);
+                      sent += amount;
+                  } catch (IllegalArgumentException e) {
+                      System.out.println("Refused: " + e.getMessage());
+                  }
+              }
+              System.out.println("Sent in all: " + sent + " dollars");
+          }
+      }
+      // ==== Transfer.java ====
+      public class Transfer {
+          private String from;
+          private String to;
+          private int amount;
+
+          public Transfer(String from, String to, int amount) {
+              if (amount <= 0) {
+                  throw new IllegalArgumentException("The amount must be positive, not " + amount);
+              }
+              this.from = from;
+              this.to = to;
+              this.amount = amount;
+          }
+
+          @Override
+          public String toString() {
+              return this.from + " -> " + this.to + ": " + this.amount + " dollars";
+          }
+      }
+      ```
+
+      ```output
+      Sent: Maya -> Leo: 120 dollars
+      Refused: The amount must be positive, not 0
+      Sent: Maya -> Leo: 35 dollars
+      Refused: The amount must be positive, not -8
+      Sent in all: 155 dollars
+      ```
+
+      `e.getMessage()` is the text the exception was given when it was created.
+
+      ### In a method
+
+      Methods check their parameters the same way. A small concert hall has its seats numbered from 1 up, and a seat can be reserved once. Reserving a seat that doesn't exist is a bad parameter. Reserving a seat that's already taken is a different problem: the number is fine, just not now. Java has an exception for that too, **IllegalStateException**: the object isn't in a state where it can do what was asked. It's unchecked as well.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              SeatMap hall = new SeatMap(20);
+              int[] requests = {5, 25, 5, 6};
+              for (int seat : requests) {
+                  try {
+                      hall.reserve(seat);
+                      System.out.println("Seat " + seat + " is yours");
+                  } catch (IllegalArgumentException e) {
+                      System.out.println("Check the number: " + e.getMessage());
+                  } catch (IllegalStateException e) {
+                      System.out.println("Sorry: " + e.getMessage());
+                  }
+              }
+              System.out.println(hall.free() + " seats left");
+          }
+      }
+      // ==== SeatMap.java ====
+      public class SeatMap {
+          private boolean[] taken;
+
+          public SeatMap(int seats) {
+              this.taken = new boolean[seats];
+          }
+
+          public void reserve(int seat) {
+              if (seat < 1 || seat > this.taken.length) {
+                  throw new IllegalArgumentException("there's no seat " + seat);
+              }
+              if (this.taken[seat - 1]) {
+                  throw new IllegalStateException("seat " + seat + " is taken");
+              }
+              this.taken[seat - 1] = true;
+          }
+
+          public int free() {
+              int count = 0;
+              for (boolean seatTaken : this.taken) {
+                  if (!seatTaken) {
+                      count++;
+                  }
+              }
+              return count;
+          }
+      }
+      ```
+
+      ```output
+      Seat 5 is yours
+      Check the number: there's no seat 25
+      Sorry: seat 5 is taken
+      Seat 6 is yours
+      18 seats left
+      ```
+
+      - Both checks come before the seat is marked as taken, so a refused call changes nothing. Check first, then change.
+      - `reserve` returns nothing. When it returns normally, the reservation worked; when it can't do its job, it throws. A method could return `false` instead, but a return value is easy to ignore by accident. An exception isn't: if nothing catches it, the program stops.
+
+      **Your turn:** an oven can be set from 50 to 250 degrees. In `Oven.java`, write the class `Oven` with:
+
+      - a constructor `Oven(int degrees)`
+      - `setDegrees(int degrees)`, which changes the setting
+      - `getDegrees()`, which returns it
+
+      The constructor and `setDegrees` both refuse a temperature below 50 or above 250 with an IllegalArgumentException whose message is `No oven setting for 300 degrees`, with the refused value in it. A refused `setDegrees` keeps the old setting. The check runs:
+
+      ```java fragment
+      Oven oven = new Oven(180);
+      try {
+          oven.setDegrees(300);
+      } catch (IllegalArgumentException e) {
+          System.out.println(e.getMessage());
+      }
+      System.out.println(oven.getDegrees());
+      ```
+
+      and expects:
+
+      ```
+      No oven setting for 300 degrees
+      180
+      ```
+    seed:
+      Oven.java: |
+        public class Oven {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Oven oven = new Oven(180);
+                try {
+                    oven.setDegrees(300);
+                } catch (IllegalArgumentException e) {
+                    System.out.println(e.getMessage());
+                }
+                System.out.println(oven.getDegrees());
+            }
+        }
+    solution:
+      Oven.java: |
+        public class Oven {
+            private int degrees;
+
+            public Oven(int degrees) {
+                if (degrees < 50 || degrees > 250) {
+                    throw new IllegalArgumentException("No oven setting for " + degrees + " degrees");
+                }
+                this.degrees = degrees;
+            }
+
+            public void setDegrees(int degrees) {
+                if (degrees < 50 || degrees > 250) {
+                    throw new IllegalArgumentException("No oven setting for " + degrees + " degrees");
+                }
+                this.degrees = degrees;
+            }
+
+            public int getDegrees() {
+                return this.degrees;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Oven oven = new Oven(180);
+                try {
+                    oven.setDegrees(300);
+                } catch (IllegalArgumentException e) {
+                    System.out.println(e.getMessage());
+                }
+                System.out.println(oven.getDegrees());
+            }
+        }
+    hints:
+      - "The constructor and `setDegrees` both start with a check, as Transfer's constructor does: when the value is below 50 or above 250, throw an IllegalArgumentException before anything is set."
+      - "The check is `if (degrees < 50 || degrees > 250) { throw new IllegalArgumentException(\"No oven setting for \" + degrees + \" degrees\"); }`. Set `this.degrees` only after it: when it throws, the method stops and the old setting stays."
+    require:
+      - pattern: \bthrow\s+new\s+IllegalArgumentException\s*\(
+        message: "Refuse a bad temperature with `throw new IllegalArgumentException(...)`."
+    tests:
+      - call: |
+          Oven oven = new Oven(180);
+          try {
+              oven.setDegrees(300);
+          } catch (IllegalArgumentException e) {
+              System.out.println(e.getMessage());
+          }
+          System.out.println(oven.getDegrees());
+      - call: |
+          try {
+              new Oven(20);
+              System.out.println("accepted");
+          } catch (IllegalArgumentException e) {
+              System.out.println("refused: " + e.getMessage());
+          }
+          try {
+              new Oven(-10);
+              System.out.println("accepted");
+          } catch (IllegalArgumentException e) {
+              System.out.println("refused: " + e.getMessage());
+          }
+        hidden: true
+      - call: |
+          Oven oven = new Oven(50);
+          oven.setDegrees(250);
+          System.out.println(oven.getDegrees());
+          try {
+              oven.setDegrees(251);
+          } catch (IllegalArgumentException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              oven.setDegrees(49);
+          } catch (IllegalArgumentException e) {
+              System.out.println(e.getMessage());
+          }
+          System.out.println(oven.getDegrees());
+        hidden: true
+    more:
+      - task: |
+          A gift card refuses to spend what it doesn't have. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  GiftCard card = new GiftCard(50);
+                  int[] purchases = {20, 40, -10, 30};
+                  for (int amount : purchases) {
+                      try {
+                          card.spend(amount);
+                          System.out.println("spent " + amount);
+                      } catch (IllegalArgumentException e) {
+                          System.out.println(e.getMessage());
+                      }
+                  }
+                  System.out.println("left: " + card.getBalance());
+              }
+          }
+          // ==== GiftCard.java ====
+          public class GiftCard {
+              private int balance;
+
+              public GiftCard(int balance) {
+                  this.balance = balance;
+              }
+
+              public void spend(int amount) {
+                  if (amount <= 0) {
+                      throw new IllegalArgumentException("not an amount: " + amount);
+                  }
+                  if (amount > this.balance) {
+                      throw new IllegalArgumentException("only " + this.balance + " left");
+                  }
+                  this.balance -= amount;
+              }
+
+              public int getBalance() {
+                  return this.balance;
+              }
+          }
+        hints:
+          - "After spending 20, the card has 30 left. Spending 40 is refused before the balance changes, and so is -10."
+          - "When `spend` throws, the `println` after it in the `try` block is skipped, and the `catch` block prints the message instead."
+      - task: |
+          `Transfer.java` is the class from the lesson, with one more check and a getter. The sender and the receiver must be different people, or the constructor throws an IllegalArgumentException with the message `Can't send money to yourself`, and `getAmount()` returns the amount.
+
+          Write `main`. It reads lines until an empty line. Each line has a sender, a receiver and an amount, separated by commas, such as `Maya,Leo,40`. For each line, create a Transfer and print `Sent: ` and the transfer. When the constructor refuses, print `Refused: ` and its message. When the amount isn't a whole number, print `Refused: ` and the amount in quotes, followed by ` is not an amount`. At the end, print `Sent in all: `, the sum of the amounts sent, and ` dollars`. Every line has three parts.
+
+          A NumberFormatException is an IllegalArgumentException too, so mind the order of the `catch` blocks. For the input shown, the program prints:
+
+          ```
+          Sent: Maya -> Leo: 40 dollars
+          Refused: The amount must be positive, not -5
+          Refused: "ten" is not an amount
+          Refused: Can't send money to yourself
+          Sent in all: 40 dollars
+          ```
+        seed:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+
+                }
+            }
+          Transfer.java: |
+            public class Transfer {
+                private String from;
+                private String to;
+                private int amount;
+
+                public Transfer(String from, String to, int amount) {
+                    if (amount <= 0) {
+                        throw new IllegalArgumentException("The amount must be positive, not " + amount);
+                    }
+                    if (from.equals(to)) {
+                        throw new IllegalArgumentException("Can't send money to yourself");
+                    }
+                    this.from = from;
+                    this.to = to;
+                    this.amount = amount;
+                }
+
+                public int getAmount() {
+                    return this.amount;
+                }
+
+                @Override
+                public String toString() {
+                    return this.from + " -> " + this.to + ": " + this.amount + " dollars";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    int sent = 0;
+                    while (true) {
+                        String line = scanner.nextLine();
+                        if (line.isEmpty()) {
+                            break;
+                        }
+                        String[] parts = line.split(",");
+                        try {
+                            Transfer transfer = new Transfer(parts[0], parts[1], Integer.parseInt(parts[2]));
+                            System.out.println("Sent: " + transfer);
+                            sent += transfer.getAmount();
+                        } catch (NumberFormatException e) {
+                            System.out.println("Refused: \"" + parts[2] + "\" is not an amount");
+                        } catch (IllegalArgumentException e) {
+                            System.out.println("Refused: " + e.getMessage());
+                        }
+                    }
+                    System.out.println("Sent in all: " + sent + " dollars");
+                }
+            }
+          Transfer.java: |
+            public class Transfer {
+                private String from;
+                private String to;
+                private int amount;
+
+                public Transfer(String from, String to, int amount) {
+                    if (amount <= 0) {
+                        throw new IllegalArgumentException("The amount must be positive, not " + amount);
+                    }
+                    if (from.equals(to)) {
+                        throw new IllegalArgumentException("Can't send money to yourself");
+                    }
+                    this.from = from;
+                    this.to = to;
+                    this.amount = amount;
+                }
+
+                public int getAmount() {
+                    return this.amount;
+                }
+
+                @Override
+                public String toString() {
+                    return this.from + " -> " + this.to + ": " + this.amount + " dollars";
+                }
+            }
+        hints:
+          - "Split each line at the commas, and create the Transfer inside a `try` block, with `Integer.parseInt(parts[2])` as the amount. Add the amount to the sum only after the transfer was created."
+          - "Two `catch` blocks: `NumberFormatException` first, then `IllegalArgumentException`. The other way around, javac refuses: the first block would already catch every NumberFormatException."
+        require:
+          - pattern: \bcatch\s*\(\s*NumberFormatException\b
+            message: "Catch the `NumberFormatException` of an amount that isn't a number in a block of its own."
+          - pattern: \bcatch\s*\(\s*IllegalArgumentException\b
+            message: "Catch the constructor's `IllegalArgumentException` and print its message."
+        tests:
+          - stdin: "Maya,Leo,40\nLeo,Maya,-5\nLeo,Maya,ten\nMaya,Maya,15\n\n"
+          - stdin: "Ana,Ben,10\nBen,Ana,25\n\n"
+            hidden: true
+          - stdin: "Ana,Ben,1.5\nAna,Ben,0\n\n"
+            hidden: true
+          - stdin: "\n"
+            hidden: true
+
+  - id: exceptions-interfaces
+    slug: exceptions-and-interfaces
+    title: Exceptions and interfaces
+    text: |
+      An interface lists the headers of methods (module 35), and a header can include `throws`. Then it says, for every class that implements the interface, which checked exceptions that method may throw.
+
+      ### Door codes
+
+      The doors of an office building open with a code typed on a keypad. Some doors have one fixed code; others check a file of codes that the office manager keeps up to date. The keypad doesn't care which: it needs something that can answer "is this code valid?". Reading a file can fail, and the interface says so:
+
+      ```java fragment
+      import java.io.IOException;
+
+      public interface DoorCodes {
+          boolean isValid(String code) throws IOException;
+      }
+      ```
+
+      Here are two classes that implement it, and three doors:
+
+      ```file staff.txt
+      4711
+      2580
+      ```
+
+      ```java run
+      import java.io.IOException;
+
+      public class Main {
+          public static void main(String[] args) {
+              open("Bike shed", new FixedCode("1234"), "2580");
+              open("Staff entrance", new CodeFile("staff.txt"), "2580");
+              open("Guest entrance", new CodeFile("guests.txt"), "2580");
+          }
+
+          public static void open(String door, DoorCodes codes, String typed) {
+              try {
+                  if (codes.isValid(typed)) {
+                      System.out.println(door + ": the door opens");
+                  } else {
+                      System.out.println(door + ": wrong code");
+                  }
+              } catch (IOException e) {
+                  System.out.println(door + ": out of order, can't read " + e.getMessage());
+              }
+          }
+      }
+      // ==== DoorCodes.java ====
+      import java.io.IOException;
+
+      public interface DoorCodes {
+          boolean isValid(String code) throws IOException;
+      }
+      // ==== FixedCode.java ====
+      public class FixedCode implements DoorCodes {
+          private String code;
+
+          public FixedCode(String code) {
+              this.code = code;
+          }
+
+          @Override
+          public boolean isValid(String code) {
+              return this.code.equals(code);
+          }
+      }
+      // ==== CodeFile.java ====
+      import java.io.IOException;
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+
+      public class CodeFile implements DoorCodes {
+          private String fileName;
+
+          public CodeFile(String fileName) {
+              this.fileName = fileName;
+          }
+
+          @Override
+          public boolean isValid(String code) throws IOException {
+              return Files.readAllLines(Paths.get(this.fileName)).contains(code);
+          }
+      }
+      ```
+
+      ```output
+      Bike shed: wrong code
+      Staff entrance: the door opens
+      Guest entrance: out of order, can't read guests.txt
+      ```
+
+      - CodeFile reads a file, which can throw an IOException, and its `isValid` passes it on with `throws IOException`, as the interface allows.
+      - FixedCode can't fail, and its `isValid` has no `throws` at all. That's allowed: an implementation may throw fewer checked exceptions than the interface says, or none.
+      - `open` gets a DoorCodes. All it knows is the interface's header, so it must be ready for the IOException, even when the object behind it happens to be a FixedCode.
+
+      ### What an implementation may throw
+
+      The interface is a promise to the code that uses it: `open` catches IOException because the interface says that's what can come. If an implementation could throw some other checked exception, `open` wouldn't be ready for it. So javac refuses an implementation that declares a checked exception the interface doesn't list, or a broader one:
+
+      ```java error
+      import java.io.IOException;
+
+      public class Main {
+          public static void main(String[] args) {
+              DoorCodes codes = new CodeFile("staff.txt");
+              try {
+                  System.out.println(codes.isValid("2580"));
+              } catch (IOException e) {
+                  System.out.println("Out of order");
+              }
+          }
+      }
+      // ==== DoorCodes.java ====
+      import java.io.IOException;
+
+      public interface DoorCodes {
+          boolean isValid(String code) throws IOException;
+      }
+      // ==== CodeFile.java ====
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+
+      public class CodeFile implements DoorCodes {
+          private String fileName;
+
+          public CodeFile(String fileName) {
+              this.fileName = fileName;
+          }
+
+          @Override
+          public boolean isValid(String code) throws Exception {
+              return Files.readAllLines(Paths.get(this.fileName)).contains(code);
+          }
+      }
+      ```
+
+      ```javac
+      CodeFile.java:12: error: isValid(String) in CodeFile cannot implement isValid(String) in DoorCodes
+          public boolean isValid(String code) throws Exception {
+                         ^
+        overridden method does not throw Exception
+      1 error
+      ```
+
+      `Exception` is broader than `IOException`: it includes checked exceptions that `open` doesn't catch. In short:
+
+      - An implementation may declare the interface's checked exceptions, or classes below them (such as `NoSuchFileException`), or leave them out.
+      - It may not add other checked exceptions.
+      - Unchecked exceptions are always allowed, since nobody has to declare or catch them. FixedCode's `isValid` could throw an IllegalArgumentException when the typed code is empty, and it still needs no `throws`.
+
+      The same rule holds for a method that overrides a method of a superclass (module 34).
+
+      ### The variable's type decides
+
+      Whether a call needs a `try` depends on the header javac sees, and that's the header in the variable's type. Through a FixedCode variable, `isValid` throws nothing checked, so no `try` is needed:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              FixedCode shed = new FixedCode("1234");
+              System.out.println(shed.isValid("1234"));
+          }
+      }
+      // ==== DoorCodes.java ====
+      import java.io.IOException;
+
+      public interface DoorCodes {
+          boolean isValid(String code) throws IOException;
+      }
+      // ==== FixedCode.java ====
+      public class FixedCode implements DoorCodes {
+          private String code;
+
+          public FixedCode(String code) {
+              this.code = code;
+          }
+
+          @Override
+          public boolean isValid(String code) {
+              return this.code.equals(code);
+          }
+      }
+      ```
+
+      ```output
+      true
+      ```
+
+      Through a DoorCodes variable, the same call on the same object doesn't compile without one:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              DoorCodes shed = new FixedCode("1234");
+              System.out.println(shed.isValid("1234"));
+          }
+      }
+      // ==== DoorCodes.java ====
+      import java.io.IOException;
+
+      public interface DoorCodes {
+          boolean isValid(String code) throws IOException;
+      }
+      // ==== FixedCode.java ====
+      public class FixedCode implements DoorCodes {
+          private String code;
+
+          public FixedCode(String code) {
+              this.code = code;
+          }
+
+          @Override
+          public boolean isValid(String code) {
+              return this.code.equals(code);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: unreported exception IOException; must be caught or declared to be thrown
+              System.out.println(shed.isValid("1234"));
+                                             ^
+      1 error
+      ```
+
+      ### throws Exception, and AutoCloseable
+
+      Interfaces often declare `throws Exception`, the widest promise: then each implementation may throw whatever it needs to. Java's own AutoCloseable from step 4 is one of them: its method is `void close() throws Exception`. The Faucet's `close()` left the `throws` out, since turning off a faucet can't fail. That's why its try-with-resources didn't need a `catch (Exception e)`: javac knew from the Faucet's own header that closing it throws nothing checked.
+
+      **Your turn:** a door can also keep a short list of codes in memory. `DoorCodes.java` is ready. In `CodeList.java`, write the class `CodeList`, which implements DoorCodes, with:
+
+      - a constructor with no parameters; a new CodeList has no codes
+      - `add(String code)`, which adds a code to the list
+      - `isValid(String code)`, with `@Override`, which returns `true` if the code is on the list
+
+      A list in memory can't fail to be read, so leave out the `throws`. `Main.java` calls `isValid` through a CodeList variable without a `try`, so it only compiles when CodeList's `isValid` throws nothing checked. The check runs:
+
+      ```java fragment
+      CodeList codes = new CodeList();
+      codes.add("1357");
+      codes.add("8642");
+      System.out.println(codes.isValid("8642"));
+      System.out.println(codes.isValid("1234"));
+      ```
+
+      and expects:
+
+      ```
+      true
+      false
+      ```
+    seed:
+      CodeList.java: |
+        public class CodeList {
+
+        }
+      DoorCodes.java: |
+        import java.io.IOException;
+
+        public interface DoorCodes {
+            boolean isValid(String code) throws IOException;
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                CodeList codes = new CodeList();
+                codes.add("1357");
+                codes.add("8642");
+                System.out.println(codes.isValid("8642"));
+                System.out.println(codes.isValid("1234"));
+            }
+        }
+    solution:
+      CodeList.java: |
+        import java.util.ArrayList;
+
+        public class CodeList implements DoorCodes {
+            private ArrayList<String> codes;
+
+            public CodeList() {
+                this.codes = new ArrayList<>();
+            }
+
+            public void add(String code) {
+                this.codes.add(code);
+            }
+
+            @Override
+            public boolean isValid(String code) {
+                return this.codes.contains(code);
+            }
+        }
+      DoorCodes.java: |
+        import java.io.IOException;
+
+        public interface DoorCodes {
+            boolean isValid(String code) throws IOException;
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                CodeList codes = new CodeList();
+                codes.add("1357");
+                codes.add("8642");
+                System.out.println(codes.isValid("8642"));
+                System.out.println(codes.isValid("1234"));
+            }
+        }
+    hints:
+      - "Start with `public class CodeList implements DoorCodes {`, with an `ArrayList<String>` as the instance variable, created in the constructor. The class needs `import java.util.ArrayList;`."
+      - "The header is `public boolean isValid(String code)`, with no `throws`. A list's `contains` tells whether the code is on it."
+    require:
+      - pattern: \bclass\s+CodeList\s+implements\s+DoorCodes\b
+        message: "Write the header as `public class CodeList implements DoorCodes`."
+      - pattern: "@Override"
+        message: "Put `@Override` above `isValid`, so that javac checks its header against the interface's."
+    tests:
+      - call: |
+          CodeList codes = new CodeList();
+          codes.add("1357");
+          codes.add("8642");
+          System.out.println(codes.isValid("8642"));
+          System.out.println(codes.isValid("1234"));
+      - call: |
+          DoorCodes door = new CodeList();
+          System.out.println(door.isValid("1357"));
+        hidden: true
+      - call: |
+          CodeList codes = new CodeList();
+          codes.add("0000");
+          codes.add("4455");
+          codes.add("9021");
+          System.out.println(codes.isValid("9021") + " " + codes.isValid("0000") + " " + codes.isValid("4456"));
+        hidden: true
+    more:
+      - task: |
+          This keypad locks itself after too many wrong codes. Its `isValid` throws no checked exception, but it may throw an unchecked one. What does the program print?
+        predict: |
+          import java.io.IOException;
+
+          public class Main {
+              public static void main(String[] args) {
+                  DoorCodes codes = new LimitedCode("2468", 2);
+                  String[] tries = {"1111", "2468", "3333", "2468"};
+                  for (String code : tries) {
+                      try {
+                          System.out.println(code + ": " + codes.isValid(code));
+                      } catch (IOException e) {
+                          System.out.println("out of order");
+                      } catch (IllegalStateException e) {
+                          System.out.println(e.getMessage());
+                      }
+                  }
+              }
+          }
+          // ==== DoorCodes.java ====
+          import java.io.IOException;
+
+          public interface DoorCodes {
+              boolean isValid(String code) throws IOException;
+          }
+          // ==== LimitedCode.java ====
+          public class LimitedCode implements DoorCodes {
+              private String code;
+              private int limit;
+              private int wrong;
+
+              public LimitedCode(String code, int limit) {
+                  this.code = code;
+                  this.limit = limit;
+              }
+
+              @Override
+              public boolean isValid(String code) {
+                  if (this.wrong >= this.limit) {
+                      throw new IllegalStateException("Locked after " + this.limit + " wrong codes");
+                  }
+                  if (this.code.equals(code)) {
+                      return true;
+                  }
+                  this.wrong++;
+                  return false;
+              }
+          }
+        hints:
+          - "Only wrong codes are counted: after `1111` and `3333` there are two. The right code in between returns `true` and changes nothing."
+          - "The fourth call finds two wrong codes already, and throws before it looks at the code. Its `println` never prints, and the IllegalStateException block prints the message. The IOException block never runs, but it has to be there, since `codes` is a DoorCodes."
+      - task: |
+          Another door's code changes every day: the first line of `today.txt` is today's code. `DailyCode.java` reads it with a Scanner in a try-with-resources without a `catch`, so that its `isValid` passes the IOException on. The program reads a typed code and prints `The door opens` or `Wrong code`, but it doesn't compile. Fix it:
+
+          - DailyCode's `isValid` declares more than DoorCodes allows. Make it declare what the interface says.
+          - Then `main` has to deal with the exception: when the code can't be read, the program prints `Keypad out of order`.
+
+          For the input `7294` and the file shown below, the program prints:
+
+          ```
+          The door opens
+          ```
+        seed:
+          DailyCode.java: |
+            import java.io.IOException;
+            import java.nio.file.Paths;
+            import java.util.Scanner;
+
+            public class DailyCode implements DoorCodes {
+                private String fileName;
+
+                public DailyCode(String fileName) {
+                    this.fileName = fileName;
+                }
+
+                @Override
+                public boolean isValid(String code) throws Exception {
+                    try (Scanner scanner = new Scanner(Paths.get(this.fileName))) {
+                        return scanner.nextLine().equals(code);
+                    }
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    String typed = scanner.nextLine();
+                    DoorCodes codes = new DailyCode("today.txt");
+                    if (codes.isValid(typed)) {
+                        System.out.println("The door opens");
+                    } else {
+                        System.out.println("Wrong code");
+                    }
+                }
+            }
+          DoorCodes.java: |
+            import java.io.IOException;
+
+            public interface DoorCodes {
+                boolean isValid(String code) throws IOException;
+            }
+        solution:
+          DailyCode.java: |
+            import java.io.IOException;
+            import java.nio.file.Paths;
+            import java.util.Scanner;
+
+            public class DailyCode implements DoorCodes {
+                private String fileName;
+
+                public DailyCode(String fileName) {
+                    this.fileName = fileName;
+                }
+
+                @Override
+                public boolean isValid(String code) throws IOException {
+                    try (Scanner scanner = new Scanner(Paths.get(this.fileName))) {
+                        return scanner.nextLine().equals(code);
+                    }
+                }
+            }
+          Main.java: |
+            import java.io.IOException;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Scanner scanner = new Scanner(System.in);
+                    String typed = scanner.nextLine();
+                    DoorCodes codes = new DailyCode("today.txt");
+                    try {
+                        if (codes.isValid(typed)) {
+                            System.out.println("The door opens");
+                        } else {
+                            System.out.println("Wrong code");
+                        }
+                    } catch (IOException e) {
+                        System.out.println("Keypad out of order");
+                    }
+                }
+            }
+          DoorCodes.java: |
+            import java.io.IOException;
+
+            public interface DoorCodes {
+                boolean isValid(String code) throws IOException;
+            }
+        hints:
+          - "javac's first message is about DailyCode: `overridden method does not throw Exception`. The interface allows `IOException`, which DailyCode already imports."
+          - "Next javac says `unreported exception IOException` in `main`. Put the `if` and its `else` in a `try` block, and print `Keypad out of order` in `catch (IOException e)`, which needs `import java.io.IOException;` in Main.java."
+        require:
+          - pattern: \bisValid\s*\(\s*String\s+\w+\s*\)\s*throws\s+IOException\b
+            message: "DailyCode's `isValid` should declare `throws IOException`, as the interface does."
+        tests:
+          - stdin: "7294"
+            files:
+              today.txt: |
+                7294
+          - stdin: "1111"
+            files:
+              today.txt: |
+                7294
+          - name: Without the file
+            stdin: "7294"
+            hidden: true
+          - stdin: "3108"
+            files:
+              today.txt: |
+                3108
+            hidden: true
+
+  - id: exceptions-details
+    slug: details-of-an-exception
+    title: The details of an exception
+    text: |
+      The `e` in `catch (NumberFormatException e)` is an object, and it knows more than its class. This last step is about what it can tell you, and how to read the report a crash leaves behind.
+
+      ### getMessage, and printing e
+
+      ```java main
+      try {
+          Integer.parseInt("12 kg");
+      } catch (NumberFormatException e) {
+          System.out.println(e.getMessage());
+          System.out.println(e);
+      }
+      int[] floors = {0, 1, 2};
+      try {
+          System.out.println(floors[5]);
+      } catch (ArrayIndexOutOfBoundsException e) {
+          System.out.println(e.getMessage());
+      }
+      IllegalArgumentException plain = new IllegalArgumentException();
+      System.out.println(plain.getMessage());
+      System.out.println(plain);
+      ```
+
+      ```output
+      For input string: "12 kg"
+      java.lang.NumberFormatException: For input string: "12 kg"
+      Index 5 out of bounds for length 3
+      null
+      java.lang.IllegalArgumentException
+      ```
+
+      - `e.getMessage()` returns the message: the text after the colon in a crash report.
+      - Printing `e` itself uses the exception's `toString`: its class, with the package, then a colon and the message. That's the first line of a crash report, without the `Exception in thread "main"` in front.
+      - An exception created without a message, such as `new IllegalArgumentException()`, has `null` as its message, and printing it shows only its class. That's one reason to always give your own exceptions a message.
+
+      Which one should a program show? Your own messages, such as `there's no seat 25`, are written for the people who use the program, so `getMessage()` fits them. Java's messages are written for programmers: `For input string: "12 kg"` doesn't tell a user what to do, so a program usually prints a text of its own instead, as the first step did. Printing `e` is handy while you hunt for a bug, since it names the kind of exception too.
+
+      ### The stack trace
+
+      The `at` lines of a crash report are the **stack trace**: the methods that were running when the exception was created, the newest first. Each line names a class and a method, and in parentheses the file and the line. This program finds the last bus of the day from a list of departure times, and one of the times is written wrong:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              String[] departures = {"8:15", "9:40", "10h05"};
+              System.out.println("Last departure: " + latest(departures));
+          }
+
+          public static int latest(String[] times) {
+              int latest = 0;
+              for (String time : times) {
+                  latest = Math.max(latest, minutesOf(time));
+              }
+              return latest;
+          }
+
+          public static int minutesOf(String time) {
+              String[] parts = time.split(":");
+              return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NumberFormatException: For input string: "10h05"
+      	at Main.minutesOf(Main.java:17)
+      	at Main.latest(Main.java:10)
+      	at Main.main(Main.java:4)
+      ```
+
+      Read it from the top:
+
+      - `at Main.minutesOf(Main.java:17)`: the exception was thrown on line 17, in `minutesOf`, by `parseInt`. `10h05` has no colon, so `parts[0]` is the whole text.
+      - `at Main.latest(Main.java:10)`: `minutesOf` was called on line 10, in `latest`'s loop.
+      - `at Main.main(Main.java:4)`: and `latest` was called on line 4 of `main`, where it all started.
+
+      The top line says where it happened, and the lines below it say how the program got there. You can also read it from the bottom up, as the MOOC does: `main` called `latest`, which called `minutesOf`. The fix isn't always on the top line: here the mistake is in the data, `10h05`. On your own computer, lines from inside Java's own classes, which start with `at java.base/`, come first; skip them to the first line from your own code.
+
+      A `catch` block can print the whole report without stopping the program: `e.printStackTrace()`. It prints to the error stream, `System.err`, as a crash does. It's a tool for finding bugs; a finished program shows its users a message instead, so the programs of this course don't use it.
+
+      ### An exception class of your own
+
+      Java's exceptions cover most needs, but a program can also define its own kind, as a class that extends Exception (for a checked one) or RuntimeException (for an unchecked one):
+
+      ```java fragment
+      public class SeatTakenException extends RuntimeException {
+          public SeatTakenException(String message) {
+              super(message);
+          }
+      }
+      ```
+
+      `super(message)` hands the message to the parent's constructor (module 34). After that, `throw new SeatTakenException("seat 5 is taken")` works like any other `throw`, and `catch (SeatTakenException e)` catches exactly this kind. This course won't need any: IllegalArgumentException and IllegalStateException say well enough what's wrong.
+
+      ### What this module covered
+
+      - An exception is an object that describes a problem. It's thrown, travels up the call stack to a `catch` block for its class or a parent class, and stops the program with a report if nothing catches it.
+      - `try` holds the code that might throw. Several `catch` blocks go from the most specific class to the most general, and `finally` runs whatever happens.
+      - Checked exceptions, such as IOException, must be caught or declared with `throws`. Unchecked ones, RuntimeException and the classes below it, needn't be.
+      - try-with-resources closes a file, or any other AutoCloseable, as soon as its block ends.
+      - `throw new IllegalArgumentException("...")` refuses a bad parameter, before anything is changed.
+      - An interface's `throws` says what its implementations may throw: that, less, or nothing.
+      - `getMessage()` is the message, printing `e` adds the class, and the stack trace shows where it happened and how the program got there.
+
+      **Your turn:** here's a crash from a booking program you can't see. Fill in the blanks: the class whose code threw the exception, the line it was thrown on, and the line of `main` where it all started.
+
+      ```crash
+      Exception in thread "main" java.lang.IllegalStateException: seat 12 is taken
+      	at SeatMap.reserve(SeatMap.java:14)
+      	at TicketOrder.<init>(TicketOrder.java:9)
+      	at Main.main(Main.java:6)
+      ```
+
+      The program then prints:
+
+      ```
+      Thrown in SeatMap on line 14, started on line 6 of main
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              String thrownIn = "[[SeatMap]]";
+              int thrownOn = [[14]];
+              int mainLine = [[6]];
+              System.out.println("Thrown in " + thrownIn + " on line " + thrownOn + ", started on line " + mainLine + " of main");
+          }
+      }
+    hints:
+      - "The top `at` line is where the exception was thrown: the class and the method come before the parentheses, the file and the line inside them."
+      - "The bottom line is in `main`. `<init>` in the middle line is a constructor: TicketOrder's constructor called `reserve`."
+    tests:
+      - expect: Thrown in SeatMap on line 14, started on line 6 of main
+    more:
+      - task: |
+          An elevator program for a building with floors 0 to 5. What does it print? Mind which lines print `e` and which print `e.getMessage()`.
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  String[] inputs = {"3rd", "7"};
+                  for (String input : inputs) {
+                      try {
+                          int floor = Integer.parseInt(input);
+                          if (floor > 5) {
+                              throw new IllegalArgumentException("No floor " + floor);
+                          }
+                          System.out.println("Going to " + floor);
+                      } catch (NumberFormatException e) {
+                          System.out.println(e);
+                      } catch (IllegalArgumentException e) {
+                          System.out.println(e.getMessage());
+                      }
+                  }
+                  IllegalStateException stuck = new IllegalStateException();
+                  System.out.println(stuck.getMessage() + " / " + stuck);
+              }
+          }
+        hints:
+          - "`3rd` isn't a number. The first `catch` block prints the exception itself: its class with the package, a colon, and the message `For input string: \"3rd\"`."
+          - "7 is a number, but the program throws its own IllegalArgumentException, and the second block prints only its message. An exception made without a message has `null` as its message, and printing it shows only its class."
+      - task: |
+          The closing challenge puts the module together. A home heating system reads its schedule from `schedule.txt`. Each line has a time and a temperature, separated by a space, such as `06:30 21`. `Heating.java` is ready: `add(time, degrees)` adds a change to the schedule, and throws an IllegalArgumentException when the temperature isn't between 5 and 30 degrees; `count()` returns how many changes it has.
+
+          Write `main`. Read the file line by line with a Scanner in a try-with-resources, and for each line:
+
+          - add it to the Heating, and print the time, ` -> ` and the temperature, like `06:30 -> 21`
+          - if the temperature isn't a whole number, print `Line ` and the line's number, then `: not a number: ` and the temperature, like `Line 4: not a number: warm`
+          - if `add` refuses it, print `Line `, the line's number, `: ` and the exception's message
+
+          When the file can't be read, print `Could not read schedule.txt`. At the very end, print `Changes: ` and how many changes the Heating has. Every line of the file has a time, a space and a temperature. For the file shown below, the program prints:
+
+          ```
+          06:30 -> 21
+          08:00 -> 17
+          Line 3: 45 degrees is not a room temperature
+          Line 4: not a number: warm
+          22:00 -> 18
+          Changes: 3
+          ```
+        seed:
+          Main.java: |
+            import java.nio.file.Paths;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Heating heating = new Heating();
+
+                }
+            }
+          Heating.java: |
+            import java.util.ArrayList;
+
+            public class Heating {
+                private ArrayList<String> changes;
+
+                public Heating() {
+                    this.changes = new ArrayList<>();
+                }
+
+                public void add(String time, int degrees) {
+                    if (degrees < 5 || degrees > 30) {
+                        throw new IllegalArgumentException(degrees + " degrees is not a room temperature");
+                    }
+                    this.changes.add(time + " " + degrees);
+                }
+
+                public int count() {
+                    return this.changes.size();
+                }
+            }
+        solution:
+          Main.java: |
+            import java.nio.file.Paths;
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Heating heating = new Heating();
+                    try (Scanner scanner = new Scanner(Paths.get("schedule.txt"))) {
+                        int number = 0;
+                        while (scanner.hasNextLine()) {
+                            number++;
+                            String[] parts = scanner.nextLine().split(" ");
+                            try {
+                                int degrees = Integer.parseInt(parts[1]);
+                                heating.add(parts[0], degrees);
+                                System.out.println(parts[0] + " -> " + degrees);
+                            } catch (NumberFormatException e) {
+                                System.out.println("Line " + number + ": not a number: " + parts[1]);
+                            } catch (IllegalArgumentException e) {
+                                System.out.println("Line " + number + ": " + e.getMessage());
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Could not read schedule.txt");
+                    }
+                    System.out.println("Changes: " + heating.count());
+                }
+            }
+          Heating.java: |
+            import java.util.ArrayList;
+
+            public class Heating {
+                private ArrayList<String> changes;
+
+                public Heating() {
+                    this.changes = new ArrayList<>();
+                }
+
+                public void add(String time, int degrees) {
+                    if (degrees < 5 || degrees > 30) {
+                        throw new IllegalArgumentException(degrees + " degrees is not a room temperature");
+                    }
+                    this.changes.add(time + " " + degrees);
+                }
+
+                public int count() {
+                    return this.changes.size();
+                }
+            }
+        hints:
+          - "The Heating is made before the `try`, so it still exists afterwards for the count. Inside `try (Scanner scanner = new Scanner(Paths.get(\"schedule.txt\"))) { ... }`, count the lines in a variable as you read them."
+          - "Give each line a `try` of its own: `Integer.parseInt(parts[1])`, then `heating.add(...)`, then the `println`. Catch `NumberFormatException` first and `IllegalArgumentException` second. The outer `try` gets a `catch (Exception e)` for the file, and `Changes: ` is printed after it."
+        require:
+          - pattern: \btry\s*\(\s*Scanner\s+\w+\s*=\s*new\s+Scanner\s*\(
+            message: "Read the file with a Scanner created in the parentheses after `try`."
+          - pattern: \.getMessage\s*\(
+            message: "Print the refusal's own message with `e.getMessage()`."
+        tests:
+          - files:
+              schedule.txt: |
+                06:30 21
+                08:00 17
+                16:30 45
+                17:00 warm
+                22:00 18
+          - name: Without the file
+            hidden: true
+          - files:
+              schedule.txt: |
+                07:00 19
+                07:30 4
+                21:15 31
+                23:00 16
+            hidden: true
+          - files:
+              schedule.txt: |
+                05:45 20
+                12:00 20.5
+                18:10 22
+            hidden: true

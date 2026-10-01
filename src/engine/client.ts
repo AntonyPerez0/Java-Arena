@@ -220,7 +220,7 @@ function prepareSpare() {
   if (!spare && status.state === "ready" && runnerManifest) spare = startRunWorker();
 }
 
-const failed = (message: string): RunResult => ({ stdout: "", stderr: "", exitCode: null, timedOut: false, truncated: false, ms: 0, files: {}, internalError: message });
+const failed = (message: string): RunResult => ({ stdout: "", stderr: "", output: "", exitCode: null, timedOut: false, truncated: false, ms: 0, files: {}, internalError: message });
 
 /**
  * Run cases from `first` on in one run worker. Resolves with the index of the next case still to
@@ -235,7 +235,8 @@ function runBatch(classes: ClassFile[], mainClass: string, cases: RunInput[], fi
     let started = 0;
     const asked = performance.now();
     let workerStartMs: number | undefined;
-    const partial = { stdout: "", stderr: "" };
+    // What the running case printed so far: each stream, and both in the order they came.
+    const partial = { stdout: "", stderr: "", output: "" };
     let done = false;
     const finish = (next: number) => {
       if (done) return;
@@ -255,14 +256,18 @@ function runBatch(classes: ClassFile[], mainClass: string, cases: RunInput[], fi
         started = performance.now();
         partial.stdout = "";
         partial.stderr = "";
+        partial.output = "";
         if (current === first) workerStartMs = started - asked;
         arm(timeLimitMs, () => {
           // What the program printed before it was stopped is kept, so the learner can see where it got stuck.
-          results[current] = { stdout: partial.stdout, stderr: partial.stderr, exitCode: null, timedOut: true, truncated: false, ms: performance.now() - started, files: {}, workerStartMs: current === first ? workerStartMs : undefined };
+          results[current] = { stdout: partial.stdout, stderr: partial.stderr, output: partial.output, exitCode: null, timedOut: true, truncated: false, ms: performance.now() - started, files: {}, workerStartMs: current === first ? workerStartMs : undefined };
           finish(current + 1);
         });
       } else if (m.type === "output") {
-        if (m.index === current) partial[m.stream as "stdout" | "stderr"] += m.text;
+        if (m.index === current) {
+          partial[m.stream as "stdout" | "stderr"] += m.text;
+          partial.output += m.text;
+        }
       } else if (m.type === "result") {
         results[m.index] = m.index === first ? { ...m.result, workerStartMs } : m.result;
       } else if (m.type === "done") {

@@ -1,7 +1,8 @@
 // Replays every program of the lessons and drills in the browser engine (headless Chromium, the built site's
 // own worker code) and compares with the reference JDK's results, which scripts/build-content.mjs
 // wrote to fidelity/out/content-checks.json: every solution on every test input, every example,
-// and javac's exact message for every example that must not compile.
+// and javac's exact message for every example that must not compile. Where a test checks the
+// files a program writes, every file the run leaves in its folder is compared too.
 // Usage: npm run build && node scripts/content-browser.mjs
 // CONTENT_ONLY=<regular expression> replays only the programs whose place matches (while working on something).
 import { readFileSync, existsSync } from "node:fs";
@@ -36,7 +37,7 @@ for (const c of checks) {
     const r = await window.javaArena.compile(files, { libraries });
     if (!r.ok || !inputs) return { compile: { ok: r.ok, output: r.output, internalError: r.internalError }, runs: [] };
     const runs = await window.javaArena.runClasses(r.classes, mainClass, inputs, 30_000, { libraries });
-    return { compile: { ok: r.ok, output: r.output }, runs: runs.map((x) => ({ stdout: x.stdout, stderr: x.stderr, exitCode: x.exitCode, timedOut: x.timedOut, internalError: x.internalError })) };
+    return { compile: { ok: r.ok, output: r.output }, runs: runs.map((x) => ({ stdout: x.stdout, stderr: x.stderr, exitCode: x.exitCode, timedOut: x.timedOut, internalError: x.internalError, files: x.files })) };
   }, { files: c.files, mainClass: c.mainClass ?? "Main", inputs: c.kind === "run" ? c.tests.map((t) => ({ stdin: t.stdin, ...(t.args ? { args: t.args } : {}), ...(t.files ? { files: t.files } : {}) })) : null, libraries: usesJUnit(c.files) ? [JUNIT_LIBRARY] : [] });
   const problems = [];
   if (got.compile.internalError) problems.push(`engine error: ${got.compile.internalError}`);
@@ -59,6 +60,13 @@ for (const c of checks) {
         if (t.stderrKey != null) {
           if (stderrKey(r.stderr) !== t.stderrKey) problems.push(`input ${i + 1}: crashes differently\n--- JDK\n${t.stderrKey}\n--- browser\n${stderrKey(r.stderr)}`);
         } else if (r.stderr) problems.push(`input ${i + 1}: printed an error in the browser:\n${r.stderr}`);
+        // A test that checks written files: the folder must hold the same files, with the same text.
+        if (t.written) {
+          const want = Object.keys(t.written).sort();
+          const have = Object.keys(r.files ?? {}).sort();
+          if (want.join("\n") !== have.join("\n")) problems.push(`input ${i + 1}: leaves the files ${have.join(", ") || "(none)"} in its folder, the JDK ${want.join(", ") || "(none)"}`);
+          else for (const name of want) if (r.files[name] !== t.written[name]) problems.push(`input ${i + 1}: the file ${name} differs\n--- JDK\n${t.written[name]}--- browser\n${r.files[name]}`);
+        }
       }
     });
   }

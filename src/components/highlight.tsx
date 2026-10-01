@@ -1,8 +1,9 @@
 // A small regex-based Java highlighter for read-only code (lesson examples, fill-in challenges).
 import type { ReactNode } from "react";
-import { splitFiles } from "../grader/files.js";
+import { FILE_MARK, splitFiles } from "../grader/files.js";
 
-const FILE_MARK_ANY = /^\/\/ ={4} [A-Za-z_$][\w$]*\.java ={4}[ \t]*$/m;
+/** A file marker on any line (such as `// ==== library/domain/Book.java ====`). */
+const FILE_MARK_ANY = new RegExp(FILE_MARK.source, "m");
 
 const KEYWORDS = new Set(
   "abstract assert break case catch class const continue default do else enum extends final finally for goto if implements import instanceof interface native new package private protected public return static strictfp super switch synchronized this throw throws transient try volatile while var record yield sealed permits non-sealed true false null".split(

@@ -8,6 +8,7 @@ import { explainCalls, withoutCheckFrames } from "./calls";
 import { splitFiles } from "./files.js";
 import { JUNIT_LIBRARY, TEST_RUNNER_CLASS, TEST_RUNNER_FILE, TEST_RUNNER_SOURCE, parseTestReport, testClassesOf, usesJUnit } from "./junit.js";
 import { indentMessages } from "./style.js";
+import { changedFiles, compareWrites, writesNote } from "./writes.js";
 
 export type FriendlyDiagnostic = Diagnostic & { friendly: string | null };
 
@@ -20,6 +21,8 @@ export type TestResult = {
   call?: string;
   /** Files the program could read in this test. */
   files?: Record<string, string>;
+  /** Files the test wanted the program to write, each with what it should hold and what it holds (null: not created). */
+  writes?: WrittenFileCheck[];
   expected?: string;
   got?: string;
   /** Why the run went wrong, in plain English (a crash, the time limit, an exit code). */
@@ -29,6 +32,9 @@ export type TestResult = {
   /** A test that ran the learner's JUnit tests: what they had to do on this version of the program. */
   junit?: { outcome: "pass" | "fail" };
 };
+
+/** One file a test wanted written: its text as expected and as the program left it (normalized like output). */
+export type WrittenFileCheck = { name: string; expected: string; got: string | null; pass: boolean };
 
 export type GradeResult = {
   /** "call-error": the learner's code compiles, but the check couldn't call its methods. */
@@ -66,7 +72,7 @@ export function describeRun(r: RunResult | undefined, sources: string[] = ["Main
   if (crash && crash.line == null && /^(no main method|main is not static|no main class)$/.test(crash.exception)) return `The program didn't start. ${crash.explanation}`;
   if (crash) {
     const file = sources.length > 1 && crash.file ? `${crash.file}, ` : "";
-    const where = crash.line ? ` (${file}line ${crash.line}${crash.method && crash.method !== "main" ? `, in ${crash.method}` : ""})` : "";
+    const where = crash.line && !crash.placed ? ` (${file}line ${crash.line}${crash.method && crash.method !== "main" ? `, in ${crash.method}` : ""})` : "";
     return `The program crashed with ${crash.exception}${where}. ${crash.explanation}`;
   }
   if (r.truncated) return "The program printed more than 64 KB, so it was stopped. Probably a loop that never stops printing.";
@@ -93,7 +99,7 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   if (ex.tests.some((t) => t.junit)) return gradeJUnit(ex, own, { ruleProblems, styleProblems, styleNotes });
   const libraries = usesJUnit(own) ? [JUNIT_LIBRARY] : [];
   // Tests that call methods run a hidden check program next to the learner's Main.
-  const check = ex.tests.some((t) => t.call != null) ? checkSource(ex.tests) : null;
+  const check = ex.tests.some((t) => t.call != null) ? checkSource(ex.tests, own) : null;
   let c = await compile(check ? [...own, { path: CHECK_FILE, text: check.text }] : own, { libraries });
   let callProblems: string[] = [];
   if (check && !c.ok && !c.internalError) {
@@ -113,10 +119,12 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   const tests = ex.tests.map((t, i): TestResult => {
     const r = runs[i];
     const got = r ? normalizeOutput(r.stdout) : "";
-    const pass = !!r && !r.internalError && !r.timedOut && r.exitCode === 0 && got === t.expect;
-    const note = pass ? undefined : describeRun(r, sources);
+    // The files the test wants written, once the run has ended by itself (a stopped run keeps none).
+    const writes: WrittenFileCheck[] | undefined = t.writes && r && !r.internalError && !r.timedOut ? compareWrites(t.writes, r.files) : undefined;
+    const pass = !!r && !r.internalError && !r.timedOut && r.exitCode === 0 && got === t.expect && (!t.writes || !!writes?.every((f) => f.pass));
+    const note = pass ? undefined : (describeRun(r, sources) ?? (writes && writesNote(writes, t.hidden)));
     const stderr = r?.stderr ? withoutCheckFrames(r.stderr) : "";
-    return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, call: t.call, files: t.files, expected: t.expect, got, note, stderr: !pass && stderr ? stderr : undefined };
+    return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, call: t.call, files: t.files, writes, expected: t.expect, got, note, stderr: !pass && stderr ? stderr : undefined };
   });
   const allPass = tests.every((t) => t.pass) && ruleProblems.length === 0 && styleProblems.length === 0;
   return { ...base, status: allPass ? "pass" : "fail", tests };
@@ -190,6 +198,8 @@ export type FreeRun = {
   diagnostics: FriendlyDiagnostic[];
   javacOutput: string;
   run?: RunResult;
+  /** The files the program created or changed in its folder (not the files it was given, unchanged). */
+  written?: { name: string; text: string }[];
   note?: string;
   internalError?: string;
   /** The program has several files, so each message names its file. */
@@ -215,7 +225,7 @@ export async function runOnly(code: string, stdin: string, files?: Record<string
     ? await runClasses(c.classes, TEST_RUNNER_CLASS, [{ args: testClasses }], JUNIT_TIME_LIMIT_MS, { libraries })
     : await runClasses(c.classes, "Main", [{ stdin, ...(files ? { files } : {}) }], libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS, { libraries });
   if (run?.internalError) return { ...base, status: "internal-error", internalError: run.internalError };
-  return { ...base, status: "ran", run, note: describeRun(run, own.map((f) => f.path), libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS) };
+  return { ...base, status: "ran", run, written: changedFiles(files, run?.files), note: describeRun(run, own.map((f) => f.path), libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS) };
 }
 
 export type PredictResult = { pass: boolean; lines: { pass: boolean; got: string }[] };

@@ -1,0 +1,586 @@
+topic: class-diagrams
+drills:
+  - type: choice
+    after: boxes
+    prompt: "A class has the instance variable `private double kilos;`. Which line stands for it in the class's box?"
+    choices:
+      - "`-kilos: double`"
+      - "`+kilos: double`"
+      - "`-double kilos`"
+      - "`-kilos(): double`"
+    answer: 1
+    why: "A field in a box is its visibility, its name, a colon and its type, with the name first. `-` is private and `+` public, and parentheses would make it a method."
+
+  - type: bug
+    after: boxes
+    prompt: "Sack's box says `-kilos: double`, and the program should print `7.5`. Which line is wrong?"
+    classes: |
+      class Sack {
+          private int kilos; // BUG
+
+          public void add(double more) {
+              this.kilos += more;
+          }
+
+          public double getKilos() {
+              return this.kilos;
+          }
+      }
+    body: |
+      Sack sack = new Sack();
+      sack.add(5.0);
+      sack.add(2.5);
+      System.out.println(sack.getKilos());
+    fix: "private double kilos;"
+    why: "The box gives the field's type, and here it matters: with an `int` field, `+=` quietly drops the half kilo, and `getKilos` returns 7.0. Declared as `double`, as the box says, the sack keeps 7.5."
+
+  - type: fill
+    after: methods
+    prompt: "A box has the line `+refill(liters: int): boolean`. Fill in the blank, a type, so that the method matches it."
+    classes: |
+      class Teapot {
+          private int water;
+
+          public [[boolean]] refill(int liters) {
+              if (this.water + liters > 2) {
+                  return false;
+              }
+              this.water += liters;
+              return true;
+          }
+      }
+    body: |
+      Teapot pot = new Teapot();
+      System.out.println(pot.refill(1) + " " + pot.refill(2));
+    why: "In a box, the return type comes after the colon at the end: `refill(liters: int): boolean` returns a boolean. In Java it goes in front of the name: `public boolean refill(int liters)`."
+
+  - type: predict
+    after: methods
+    classes: |
+      class Planter {
+          private int soil;
+          private int seeds;
+
+          public Planter(int soil) {
+              this.soil = soil;
+              this.seeds = 0;
+          }
+
+          public void sow(int count) {
+              if (this.room() >= count) {
+                  this.seeds += count;
+              }
+          }
+
+          @Override
+          public String toString() {
+              return this.seeds + " seeds, room for " + this.room();
+          }
+
+          private int room() {
+              return this.soil * 3 - this.seeds;
+          }
+      }
+    body: |
+      Planter planter = new Planter(4);
+      planter.sow(5);
+      planter.sow(9);
+      planter.sow(3);
+      System.out.println(planter);
+    why: "The private helper `room` (a `-room(): int` line in the box) gives 4 * 3 = 12 minus the seeds already sown. 5 seeds fit, leaving room for 7, so the 9 are refused, and the 3 fit: 8 seeds, room for 4."
+
+  - type: choice
+    after: from-code
+    prompt: "Which line belongs in the box of this class?"
+    classes: |
+      class Wristband {
+          private String holder;
+          private int days;
+
+          public Wristband(String holder, int days) {
+              this.holder = holder;
+              this.days = days;
+          }
+
+          public boolean enter(int day) {
+              return day <= this.days;
+          }
+      }
+    body: |
+      Wristband band = new Wristband("Ana", 3);
+      System.out.println(band.enter(2));
+    choices:
+      - "`+enter(day: int): boolean`"
+      - "`+enter(int day): boolean`"
+      - "`+boolean enter(day: int)`"
+      - "`+Wristband(holder: String, days: int): void`"
+    answer: 1
+    why: "In a box, a parameter is written name first, `day: int`, and the return type goes at the end, after a colon. A constructor has no return type, not even `void`."
+
+  - type: compiles
+    after: connections
+    prompt: "Does this compile? (In the diagram of these classes, an arrow goes from Performance to Play.)"
+    classes: |
+      class Play {
+          private String title;
+
+          public Play(String title) {
+              this.title = title;
+          }
+
+          public String getTitle() {
+              return this.title;
+          }
+      }
+
+      class Performance {
+          private Play play;
+          private String date;
+
+          public Performance(Play play, String date) {
+              this.play = play;
+              this.date = date;
+          }
+
+          public Play getPlay() {
+              return this.play;
+          }
+      }
+    body: |
+      Play tempest = new Play("The Tempest");
+      Performance opening = new Performance(tempest, "May 2");
+      System.out.println(tempest.getPerformance());
+    why: "No. The arrow goes from Performance to Play: a Performance knows its Play, but a Play has no field for its performances and no method that returns one. javac says `cannot find symbol`. Going the arrow's way works: `opening.getPlay().getTitle()`."
+
+  - type: fill
+    after: connections
+    prompt: "In the diagram, an arrow goes from Patient to Nurse, with a `1` at Nurse's end and the name `nurse`. Fill in the blank, a type."
+    classes: |
+      class Nurse {
+          private String name;
+
+          public Nurse(String name) {
+              this.name = name;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+      }
+
+      class Patient {
+          private String name;
+          private [[Nurse]] nurse;
+
+          public Patient(String name, Nurse nurse) {
+              this.name = name;
+              this.nurse = nurse;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + ", cared for by " + this.nurse.getName();
+          }
+      }
+    body: |
+      Nurse sara = new Nurse("Sara Lind");
+      System.out.println(new Patient("Leo Park", sara));
+    why: "An arrow from Patient to Nurse is a field in Patient whose type is Nurse, and the name by the arrow is the field's name: `private Nurse nurse;`. That's why the field isn't a line in Patient's box."
+
+  - type: predict
+    after: connections
+    classes: |
+      class Nurse {
+          private String name;
+          private int shifts;
+
+          public Nurse(String name) {
+              this.name = name;
+          }
+
+          public void addShift() {
+              this.shifts++;
+          }
+
+          public int getShifts() {
+              return this.shifts;
+          }
+      }
+
+      class Patient {
+          private String name;
+          private Nurse nurse;
+
+          public Patient(String name, Nurse nurse) {
+              this.name = name;
+              this.nurse = nurse;
+          }
+
+          public Nurse getNurse() {
+              return this.nurse;
+          }
+      }
+    body: |
+      Nurse sara = new Nurse("Sara");
+      Patient leo = new Patient("Leo", sara);
+      Patient mei = new Patient("Mei", sara);
+      Patient ana = new Patient("Ana", new Nurse("Sara"));
+      leo.getNurse().addShift();
+      mei.getNurse().addShift();
+      System.out.println(sara.getShifts() + " " + ana.getNurse().getShifts());
+    why: "\"Each Patient has one Nurse\" doesn't mean each has a nurse of its own. `leo` and `mei` refer to the same Nurse object, so both shifts go to `sara`: 2. Ana's nurse is another object, even with the same name, and has 0 shifts."
+
+  - type: predict
+    after: many
+    prompt: "In the diagram of these classes, an arrow goes from GameShelf to BoardGame, with a `*` at BoardGame's end. What does this print?"
+    classes: |
+      class BoardGame {
+          private String title;
+          private int plays;
+
+          public BoardGame(String title) {
+              this.title = title;
+          }
+
+          public void play() {
+              this.plays++;
+          }
+
+          public int getPlays() {
+              return this.plays;
+          }
+      }
+
+      class GameShelf {
+          private ArrayList<BoardGame> games = new ArrayList<>();
+
+          public void add(BoardGame game) {
+              this.games.add(game);
+          }
+
+          public int count() {
+              return this.games.size();
+          }
+
+          public int totalPlays() {
+              int total = 0;
+              for (BoardGame game : this.games) {
+                  total += game.getPlays();
+              }
+              return total;
+          }
+      }
+    body: |
+      GameShelf shelf = new GameShelf();
+      BoardGame chess = new BoardGame("Chess");
+      shelf.add(chess);
+      shelf.add(new BoardGame("Go"));
+      shelf.add(chess);
+      chess.play();
+      System.out.println(shelf.count() + " " + shelf.totalPlays());
+    why: "The star's list holds references. `chess` is in it twice, so the shelf counts 3 games, and the one play of the chess object is counted at both places in the list: 1 + 0 + 1 = 2."
+
+  - type: bug
+    after: many
+    prompt: "A Stage has any number of Acts (an arrow with a star), kept in a list. The program should print `2`. The constructor should stay as it is. Which line is wrong?"
+    classes: |
+      class Act {
+          private String name;
+
+          public Act(String name) {
+              this.name = name;
+          }
+      }
+
+      class Stage {
+          private String name;
+          private ArrayList<Act> acts; // BUG
+
+          public Stage(String name) {
+              this.name = name;
+          }
+
+          public void add(Act act) {
+              this.acts.add(act);
+          }
+
+          public int count() {
+              return this.acts.size();
+          }
+      }
+    body: |
+      Stage tent = new Stage("Blue Tent");
+      tent.add(new Act("The Low Tides"));
+      tent.add(new Act("Mira Solen"));
+      System.out.println(tent.count());
+    fix: "private ArrayList<Act> acts = new ArrayList<>();"
+    why: "The arrow with the star is a list, but the list must also be created. Here `acts` stays `null`, and the first `add` stops with a NullPointerException. The constructor stays as it is, so the list is created in the field's declaration: with `= new ArrayList<>()` there, each stage starts with an empty list of its own."
+
+  - type: choice
+    after: inheritance
+    prompt: "In a diagram, a solid line joins `Band` to `Performer`, with a hollow triangle at Performer's end. Which code fits?"
+    choices:
+      - "`public class Band extends Performer`"
+      - "`public class Performer extends Band`"
+      - "`public class Band implements Performer`"
+      - "`public class Band` with a field `private Performer performer;`"
+    answer: 1
+    why: "The hollow triangle points to the parent, the class that is extended, so Band extends Performer. A dashed line would be `implements`, and a field would be an arrow with an open arrowhead."
+
+  - type: predict
+    after: inheritance
+    classes: |
+      abstract class Meal {
+          private String name;
+
+          public Meal(String name) {
+              this.name = name;
+          }
+
+          public abstract int portions();
+
+          public int trays() {
+              return (this.portions() + 3) / 4;
+          }
+
+          @Override
+          public String toString() {
+              return this.name + ": " + this.trays();
+          }
+      }
+
+      class Soup extends Meal {
+          public Soup() {
+              super("Soup");
+          }
+
+          @Override
+          public int portions() {
+              return 10;
+          }
+      }
+
+      class Porridge extends Meal {
+          private int beds;
+
+          public Porridge(int beds) {
+              super("Porridge");
+              this.beds = beds;
+          }
+
+          @Override
+          public int portions() {
+              return this.beds;
+          }
+      }
+    body: |
+      Meal soup = new Soup();
+      Meal porridge = new Porridge(3);
+      System.out.println(soup + " " + porridge);
+    why: "`trays` is written once, in Meal, but the `portions()` it calls is the object's own: 10 for the soup, 3 for the porridge. With int division, (10 + 3) / 4 is 3 and (3 + 3) / 4 is 1."
+
+  - type: compiles
+    after: interfaces
+    prompt: "Does this compile? (In the diagram of these classes, a dashed line with a hollow triangle goes from Stretcher to Cleanable.)"
+    classes: |
+      interface Cleanable {
+          void clean();
+          boolean isClean();
+      }
+
+      class Stretcher implements Cleanable {
+          private boolean clean;
+          private boolean folded;
+
+          @Override
+          public void clean() {
+              this.clean = true;
+          }
+
+          @Override
+          public boolean isClean() {
+              return this.clean;
+          }
+
+          public void fold() {
+              this.folded = true;
+          }
+      }
+    body: |
+      Cleanable item = new Stretcher();
+      item.clean();
+      System.out.println(item.isClean());
+    why: "Yes. The dashed triangle from Stretcher to Cleanable says that a Stretcher is a Cleanable, so a Cleanable variable can refer to one, and call the methods that Cleanable's box lists. `item.fold()` wouldn't compile: `fold` is in Stretcher's box, not Cleanable's."
+
+  - type: predict
+    after: interfaces
+    classes: |
+      interface Weighable {
+          int weight();
+      }
+
+      class Crate implements Weighable {
+          private int bottles;
+
+          public Crate(int bottles) {
+              this.bottles = bottles;
+          }
+
+          @Override
+          public int weight() {
+              return 2 + this.bottles / 2;
+          }
+      }
+
+      class Bale implements Weighable {
+          private int kilos;
+
+          public Bale(int kilos) {
+              this.kilos = kilos;
+          }
+
+          @Override
+          public int weight() {
+              return this.kilos;
+          }
+      }
+    body: |
+      ArrayList<Weighable> scale = new ArrayList<>();
+      scale.add(new Crate(9));
+      scale.add(new Bale(40));
+      scale.add(new Crate(12));
+      int total = 0;
+      for (Weighable item : scale) {
+          total += item.weight();
+      }
+      System.out.println(scale.size() + " " + total);
+    why: "Each item runs its own class's `weight`. A crate weighs 2 plus half its bottles, in int division: 2 + 4 = 6 for 9 bottles and 2 + 6 = 8 for 12. With the bale's 40, that's 54."
+
+  - type: boss
+    after: many
+    prompt: |
+      A board-game café keeps its games on a shelf. Write the two classes of this diagram, `BoardGame` in `BoardGame.java` and `GameShelf` in `GameShelf.java`. The lines of their boxes:
+
+      - BoardGame: `-title: String`, `-minPlayers: int`, `-maxPlayers: int`, `+BoardGame(title: String, minPlayers: int, maxPlayers: int)`, `+getTitle(): String`, `+fits(players: int): boolean`
+      - GameShelf: `+GameShelf()`, `+add(game: BoardGame): void`, `+gamesFor(players: int): ArrayList<String>`
+      - An arrow goes from GameShelf to BoardGame, with a `*` at BoardGame's end.
+
+      `fits` says whether that many players can play the game. `gamesFor` returns the titles of the games that fit, in the order they were added. The check runs:
+
+      ```java fragment
+      GameShelf shelf = new GameShelf();
+      shelf.add(new BoardGame("Harbor Lights", 2, 4));
+      shelf.add(new BoardGame("Word Tiles", 2, 6));
+      shelf.add(new BoardGame("Night Market", 5, 8));
+      System.out.println(shelf.gamesFor(5));
+      System.out.println(shelf.gamesFor(2));
+      ```
+
+      and expects:
+
+      ```
+      [Word Tiles, Night Market]
+      [Harbor Lights, Word Tiles]
+      ```
+    seed:
+      BoardGame.java: |
+        public class BoardGame {
+
+        }
+      GameShelf.java: |
+        public class GameShelf {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                GameShelf shelf = new GameShelf();
+                shelf.add(new BoardGame("Harbor Lights", 2, 4));
+                shelf.add(new BoardGame("Word Tiles", 2, 6));
+                shelf.add(new BoardGame("Night Market", 5, 8));
+                System.out.println(shelf.gamesFor(5));
+                System.out.println(shelf.gamesFor(2));
+            }
+        }
+    solution:
+      BoardGame.java: |
+        public class BoardGame {
+            private String title;
+            private int minPlayers;
+            private int maxPlayers;
+
+            public BoardGame(String title, int minPlayers, int maxPlayers) {
+                this.title = title;
+                this.minPlayers = minPlayers;
+                this.maxPlayers = maxPlayers;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public boolean fits(int players) {
+                return players >= this.minPlayers && players <= this.maxPlayers;
+            }
+        }
+      GameShelf.java: |
+        import java.util.ArrayList;
+
+        public class GameShelf {
+            private ArrayList<BoardGame> games;
+
+            public GameShelf() {
+                this.games = new ArrayList<>();
+            }
+
+            public void add(BoardGame game) {
+                this.games.add(game);
+            }
+
+            public ArrayList<String> gamesFor(int players) {
+                ArrayList<String> titles = new ArrayList<>();
+                for (BoardGame game : this.games) {
+                    if (game.fits(players)) {
+                        titles.add(game.getTitle());
+                    }
+                }
+                return titles;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                GameShelf shelf = new GameShelf();
+                shelf.add(new BoardGame("Harbor Lights", 2, 4));
+                shelf.add(new BoardGame("Word Tiles", 2, 6));
+                shelf.add(new BoardGame("Night Market", 5, 8));
+                System.out.println(shelf.gamesFor(5));
+                System.out.println(shelf.gamesFor(2));
+            }
+        }
+    hints:
+      - "BoardGame gets its three fields as private instance variables. The arrow with the star is GameShelf's only instance variable: `private ArrayList<BoardGame> games;`, created in the constructor."
+      - "`fits` returns `players >= this.minPlayers && players <= this.maxPlayers`. `gamesFor` makes a new `ArrayList<String>` and adds the title of each game that fits."
+    require:
+      - pattern: \bprivate\s+ArrayList<BoardGame>\s+\w+\s*[;=]
+        message: "The arrow with the star from GameShelf to BoardGame is a list: `private ArrayList<BoardGame> games;`."
+      - pattern: \bpublic\s+boolean\s+fits\s*\(\s*int\s+\w+\s*\)
+        message: "The box's line `+fits(players: int): boolean` is the header `public boolean fits(int players)`."
+    tests:
+      - call: |
+          GameShelf shelf = new GameShelf();
+          shelf.add(new BoardGame("Harbor Lights", 2, 4));
+          shelf.add(new BoardGame("Word Tiles", 2, 6));
+          shelf.add(new BoardGame("Night Market", 5, 8));
+          System.out.println(shelf.gamesFor(5));
+          System.out.println(shelf.gamesFor(2));
+      - call: |
+          GameShelf shelf = new GameShelf();
+          System.out.println(shelf.gamesFor(3));
+          shelf.add(new BoardGame("Solo Quest", 1, 1));
+          shelf.add(new BoardGame("Duel", 2, 2));
+          BoardGame party = new BoardGame("Party Night", 4, 10);
+          shelf.add(party);
+          System.out.println(shelf.gamesFor(1) + " " + shelf.gamesFor(10) + " " + shelf.gamesFor(11));
+          System.out.println(party.fits(3) + " " + party.fits(4));
+        hidden: true

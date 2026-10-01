@@ -43,7 +43,11 @@ export function shiftHeadings(html: string, top: number): string {
   return html.replace(/<(\/?)h([1-6])([\s>])/g, (_, slash, n, after) => `<${slash}h${Math.min(6, Math.max(1, Number(n) + shift))}${after}`);
 }
 
-/** Lesson Markdown as HTML (the content is written in this repository and checked at build time). */
+/**
+ * Lesson Markdown as HTML (the content is written in this repository and checked at build time).
+ * HTML in it passes through as it is: the class diagrams the build draws from ```classes blocks
+ * (scripts/content/class-diagram.mjs), which scripts/prerender.mjs shows the same way.
+ */
 export function markdownHtml(text: string, top?: number): string {
   // Code blocks and tables can scroll sideways, so they must be reachable with the keyboard.
   const out = (marked.parse(text, { async: false }) as string).replace(/<(pre|table)([ >])/g, '<$1 tabindex="0"$2');

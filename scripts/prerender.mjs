@@ -7,7 +7,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { marked } from "marked";
-import { splitFiles } from "../src/grader/files.js";
+import { FILE_MARK, splitFiles } from "../src/grader/files.js";
+import { withoutClassDiagrams } from "./content/class-diagram.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const DIST = path.join(ROOT, "dist");
@@ -37,7 +38,7 @@ marked.use({
     code({ text, lang }) {
       const file = lang ? /^file\s+(\S+)$/.exec(lang) : null;
       if (file) return `<figure class="io io-file"><figcaption>The file ${esc(file[1])}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
-      if (lang === "java" && /^\/\/ ={4} [\w$]+\.java ={4}[ \t]*$/m.test(text))
+      if (lang === "java" && new RegExp(FILE_MARK.source, "m").test(text))
         return splitFiles(text).map((f) => `<figure class="code-file"><figcaption>${esc(f.path)}</figcaption><pre class="code-java"><code>${esc(f.text.replace(/\n$/, ""))}</code></pre></figure>\n`).join("");
       if (lang === "input" && /\n$/.test(text))
         return `<figure class="io io-input"><figcaption>Input</figcaption><pre><code>${esc(text.replace(/\n$/, ""))}\n<span class="input-empty">(an empty line)</span></code></pre></figure>\n`;
@@ -51,15 +52,16 @@ marked.use({
 });
 /** Markdown whose shallowest heading becomes <h{top}>, so the outline has no gaps. */
 function md(s, top = 2) {
-  const html = marked.parse(s, { async: false });
+  // Code blocks and tables can scroll sideways, so they take the keyboard focus (as in src/components/Markdown.tsx).
+  const html = marked.parse(s, { async: false }).replace(/<(pre|table)([ >])/g, '<$1 tabindex="0"$2');
   const levels = [...html.matchAll(/<h([1-6])[\s>]/g)].map((m) => Number(m[1]));
   if (!levels.length) return html;
   const shift = top - Math.min(...levels);
   return html.replace(/<(\/?)h([1-6])([\s>])/g, (_, slash, n, after) => `<${slash}h${Math.min(6, Math.max(1, Number(n) + shift))}${after}`);
 }
-/** Plain-text summary of Markdown, cut at a word boundary. */
+/** Plain-text summary of Markdown, cut at a word boundary. Class diagrams (HTML drawn by the build) are left out. */
 function summary(text, max = 155) {
-  const plain = text
+  const plain = withoutClassDiagrams(text)
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/^\s*(?:[-*+]|\d+\.)\s+/gm, "")
     .replace(/`([^`]*)`/g, "$1")

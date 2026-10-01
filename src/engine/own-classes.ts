@@ -3,8 +3,13 @@
 // class extends or implements which, and which methods and variables each one declares. The
 // reading is rough on purpose: it only has to be right for the programs beginners write, and when
 // it can't tell, an explanation falls back to its general wording.
+//
+// A class in a package (library.domain.Book, in the file library/domain/Book.java) is known by its
+// full name, so two classes of the same simple name in different packages are kept apart; typeNamed
+// finds the one a message's name means.
 
 import type { SourceFile } from "./types";
+import { baseName, declaredPackage } from "../grader/files.js";
 
 export type OwnMember = {
   name: string;
@@ -19,10 +24,17 @@ export type OwnMember = {
 };
 
 export type OwnClass = {
+  /** Its simple name, such as Book. */
   name: string;
+  /** Its package, from its file's package line ("" when the file has none). */
+  package: string;
+  /** Its name with its package, such as library.domain.Book (Book in no package). */
+  fullName: string;
   kind: "class" | "interface" | "enum" | "record";
   /** An abstract class, or an interface. */
   abstract: boolean;
+  /** Declared public (public class Book): code in other packages can use it. */
+  public: boolean;
   /** The simple names after extends in its header. */
   extends: string[];
   /** The simple names after implements in its header. */
@@ -35,7 +47,7 @@ export type OwnClass = {
   constructors: string[];
   /** An enum's constants, in order. */
   constants: string[];
-  /** Its file's name, without folders. */
+  /** Its file's path, with the folders (library/domain/Book.java). */
   file: string;
   /** The lines its declaration spans, from its header to its closing brace. */
   from: number;
@@ -43,15 +55,20 @@ export type OwnClass = {
 };
 
 export type OwnClasses = {
-  /** By simple name. */
+  /** By full name (library.domain.Book, or Book in no package). Look a type up with typeNamed. */
   types: Map<string, OwnClass>;
-  /** Each file's lines, by the file's name without folders. */
+  /** Each file's lines, by the file's path. */
   lines: Map<string, string[]>;
   /** The same lines with comments, strings and char literals blanked out (see codeOnly). */
   code: Map<string, string[]>;
+  /** Each file's package, from its package line ("" for none), by the file's path. */
+  packages: Map<string, string>;
+  /** Each file's imports as written, such as library.domain.Book or library.domain.* (static imports left out), by the file's path. */
+  imports: Map<string, string[]>;
 };
 
-export const fileName = (path: string) => path.split("/").pop() ?? path;
+/** A file's name without its folders: Book.java for library/domain/Book.java. */
+export const fileName = (path: string) => baseName(path) as string;
 
 /** Files longer than this aren't read (a beginner's file is far shorter): explanations then use their general wording. */
 const MAX_CHARS = 100_000;
@@ -171,7 +188,7 @@ function listAfter(plain: string, word: string): string[] {
     .filter(Boolean);
 }
 
-function readFile(file: SourceFile, code: string, types: Map<string, OwnClass>) {
+function readFile(file: SourceFile, code: string, types: Map<string, OwnClass>, pkg: string) {
   const starts = [0];
   for (let k = 0; k < code.length; k++) if (code.charCodeAt(k) === 10) starts.push(k + 1);
   /** The 1-based line of a position: the number of line starts at or before it. */
@@ -272,17 +289,21 @@ function readFile(file: SourceFile, code: string, types: Map<string, OwnClass>) 
     }
     const before = code.slice(separator + 1, m.index);
     const [ext, impl] = [listAfter(plain, "extends"), listAfter(plain, "implements")];
-    types.set(name, {
+    const fullName = pkg ? `${pkg}.${name}` : name;
+    types.set(fullName, {
       name,
+      package: pkg,
+      fullName,
       kind: kind as OwnClass["kind"],
       abstract: kind === "interface" || /\babstract\b/.test(before),
+      public: /\bpublic\b/.test(before),
       extends: ext,
       implements: impl,
       supers: [...ext, ...impl],
       members,
       constructors,
       constants,
-      file: fileName(file.path),
+      file: file.path,
       from: lineAt(m.index),
       to: lineAt(close),
     });
@@ -295,14 +316,17 @@ const cache = new WeakMap<SourceFile[], OwnClasses>();
 export function ownClasses(sources: SourceFile[]): OwnClasses {
   let own = cache.get(sources);
   if (!own) {
-    own = { types: new Map(), lines: new Map(), code: new Map() };
+    own = { types: new Map(), lines: new Map(), code: new Map(), packages: new Map(), imports: new Map() };
     for (const f of sources) {
-      own.lines.set(fileName(f.path), f.text.split("\n"));
+      own.lines.set(f.path, f.text.split("\n"));
       if (f.text.length > MAX_CHARS) continue;
       try {
         const code = codeOnly(f.text);
-        own.code.set(fileName(f.path), code.split("\n"));
-        readFile(f, code, own.types);
+        own.code.set(f.path, code.split("\n"));
+        const pkg = (declaredPackage(code) as string | null) ?? "";
+        own.packages.set(f.path, pkg);
+        own.imports.set(f.path, [...code.matchAll(/^\s*import\s+(?!static\b)([\w$]+(?:\s*\.\s*(?:[\w$]+|\*))*)\s*;/gm)].map((m) => m[1].replace(/\s+/g, "")));
+        readFile(f, code, own.types, pkg);
       } catch {
         // An explanation must never fail because of the source it looks at.
       }
@@ -312,10 +336,36 @@ export function ownClasses(sources: SourceFile[]): OwnClasses {
   return own;
 }
 
+/**
+ * The own type a name means: a full name (library.domain.Book) or a simple one (Book). When types
+ * in several packages share a simple name, the one the file `from` sees is chosen as Java would (its
+ * single-type imports, then its own package, then its imports of whole packages); without `from`, or
+ * when that doesn't tell, there is none.
+ */
+export function typeNamed(own: OwnClasses, name: string, from?: string): OwnClass | undefined {
+  // A simple name found as it is is a class in no package, which a file in a package doesn't see.
+  const exact = own.types.get(name);
+  if (exact && (name.includes(".") || !from || !own.packages.get(from))) return exact;
+  const simple = name.split(".").pop() ?? name;
+  const all = [...own.types.values()].filter((t) => t.name === simple);
+  if (all.length <= 1) return all[0];
+  if (!from) return undefined;
+  const imports = own.imports.get(from) ?? [];
+  const single = imports.find((i) => i.split(".").pop() === simple);
+  if (single) return own.types.get(single);
+  const here = all.find((t) => t.package === (own.packages.get(from) ?? ""));
+  if (here) return here;
+  const star = all.filter((t) => imports.includes(`${t.package}.*`));
+  return star.length === 1 ? star[0] : undefined;
+}
+
+/** Whether a name is one of the program's own types (full or simple, even one that several packages share). */
+export const knows = (own: OwnClasses, name: string) => own.types.has(name) || [...own.types.values()].some((t) => t.name === name);
+
 /** Whether `sub` is `sup` or extends or implements it, directly or through other own types, as the headers say. */
 export function isSubtype(own: OwnClasses, sub: string, sup: string, seen = new Set<string>()): boolean {
   if (sub === sup) return true;
-  const t = own.types.get(sub);
+  const t = typeNamed(own, sub);
   if (!t || seen.has(sub)) return false;
   seen.add(sub);
   return t.supers.some((s) => isSubtype(own, s, sup, seen));
@@ -335,7 +385,7 @@ const linksOf = (t: OwnClass): HeaderLink[] => [
  * enum or a record implements interfaces. A type that isn't one of the program's own counts as accepted.
  */
 export function accepted(own: OwnClasses, link: HeaderLink): boolean {
-  const to = own.types.get(link.to);
+  const to = typeNamed(own, link.to, link.from.file);
   if (!to) return true;
   if (link.keyword === "implements" || link.from.kind === "interface") return to.kind === "interface";
   return link.from.kind === "class" && to.kind !== "interface" && link.from.extends.length === 1;
@@ -344,7 +394,7 @@ export function accepted(own: OwnClasses, link: HeaderLink): boolean {
 /** Whether `sub` is `sup` for javac: like isSubtype, but only through header links javac accepts. */
 export function isRealSubtype(own: OwnClasses, sub: string, sup: string, seen = new Set<string>()): boolean {
   if (sub === sup) return true;
-  const t = own.types.get(sub);
+  const t = typeNamed(own, sub);
   if (!t || seen.has(sub)) return false;
   seen.add(sub);
   return linksOf(t).some((l) => accepted(own, l) && isRealSubtype(own, l.to, sup, seen));
@@ -359,7 +409,7 @@ export function droppedLink(own: OwnClasses, sub: string, sup: string): HeaderLi
   if (!isSubtype(own, sub, sup) || isRealSubtype(own, sub, sup)) return null;
   const seen = new Set<string>();
   const walk = (name: string): HeaderLink | null => {
-    const t = own.types.get(name);
+    const t = typeNamed(own, name);
     if (!t || seen.has(name)) return null;
     seen.add(name);
     for (const l of linksOf(t)) {
@@ -379,10 +429,14 @@ export const subtypesOf = (own: OwnClasses, name: string) => [...own.types.value
 /** The own types above `name`: what it extends and implements, and what those do in turn. */
 export const ancestorsOf = (own: OwnClasses, name: string) => [...own.types.values()].filter((t) => t.name !== name && isSubtype(own, name, t.name));
 
-/** The innermost own type whose declaration contains this line of this file. */
+/**
+ * The innermost own type whose declaration contains this line of this file. `file` is the file's path,
+ * or its name without folders (as a stack trace writes it) when only one of the files has that name.
+ */
 export function classAt(own: OwnClasses, file: string, line: number): OwnClass | undefined {
+  const path = own.lines.has(file) ? file : [...own.lines.keys()].filter((p) => fileName(p) === file).length === 1 ? [...own.lines.keys()].find((p) => fileName(p) === file) : file;
   let best: OwnClass | undefined;
-  for (const t of own.types.values()) if (t.file === fileName(file) && t.from <= line && line <= t.to && (!best || t.from >= best.from)) best = t;
+  for (const t of own.types.values()) if (t.file === path && t.from <= line && line <= t.to && (!best || t.from >= best.from)) best = t;
   return best;
 }
 

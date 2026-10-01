@@ -73,9 +73,9 @@ self.onmessage = async (e: MessageEvent) => {
       });
       const files: Record<string, string> = {};
       for (const [name, bytes] of Object.entries(r.files ?? {})) files[name] = decoder.decode(bytes as Uint8Array);
-      result = { stdout: r.stdout, stderr: r.stderr, exitCode: r.exitCode, timedOut: false, truncated: !!r.outputTruncated, ms: r.durationMs ?? performance.now() - t, files, internalError: r.error ? String(r.error) : undefined };
+      result = { stdout: r.stdout, stderr: r.stderr, output: r.output ?? r.stdout + r.stderr, exitCode: r.exitCode, timedOut: false, truncated: !!r.outputTruncated, ms: r.durationMs ?? performance.now() - t, files, internalError: r.error ? String(r.error) : undefined };
     } catch (err: any) {
-      result = { stdout: "", stderr: "", exitCode: null, timedOut: false, truncated: false, ms: performance.now() - t, files: {}, internalError: String(err?.message ?? err) };
+      result = { stdout: "", stderr: "", output: "", exitCode: null, timedOut: false, truncated: false, ms: performance.now() - t, files: {}, internalError: String(err?.message ?? err) };
     }
     post({ type: "result", index: i, result });
   }

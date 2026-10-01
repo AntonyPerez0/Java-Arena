@@ -1,4 +1,5 @@
 // Pure helpers shared by the browser grader and the Node content build (scripts/build-content.mjs).
+import { baseName, declaredPackage } from "./files.js";
 
 /** Blanks in fill-in templates look like [[answer]] or [[answer‖alt1‖alt2]] (U+2016 separates accepted alternatives). */
 export const BLANK_RE = /\[\[(?!\[)(.*?)\]\]/g;
@@ -122,18 +123,44 @@ export function mainProgram(statements, imports = "") {
 export const CHECK_CLASS = "ArenaCheck";
 export const CHECK_FILE = "ArenaCheck.java";
 
+// Names the check program itself uses (and System, which every test's code does), which an import
+// of a learner's class must not take over.
+const CHECK_NAMES = new Set(["Main", CHECK_CLASS, "String", "Throwable", "RuntimeException", "SuppressWarnings", "System"]);
+
+/**
+ * Imports that let a test's code name the learner's classes in packages by their simple names, as
+ * Main would after importing them: `import library.domain.Book;` for each public class of a file with
+ * a package line (a single-type import each, so nothing is ambiguous). A name that two packages
+ * share, or that a class in no package also has, gets no import: a test names such a class in full
+ * (`new library.domain.Book(...)`). A program without packages gets none.
+ */
+export function checkImports(files = []) {
+  const inNoPackage = new Set();
+  const found = new Map();
+  for (const f of files) {
+    const code = stripForRules(String(f.text));
+    const pkg = declaredPackage(code);
+    if (pkg === "") for (const m of code.matchAll(/\b(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)/g)) inNoPackage.add(m[1]);
+    const name = baseName(f.path).replace(/\.java$/, "");
+    if (!pkg || !new RegExp(`\\bpublic\\s+(?:(?:final|abstract|sealed|non-sealed|strictfp)\\s+)*(?:class|interface|enum|record)\\s+${name.replace(/\$/g, "\\$")}\\b`).test(code)) continue;
+    found.set(name, found.has(name) ? null : `${pkg}.${name}`);
+  }
+  return [...found].filter(([name, full]) => full && !inNoPackage.has(name) && !CHECK_NAMES.has(name)).map(([, full]) => `import ${full};`);
+}
+
 /**
  * The check program for a challenge whose tests call methods: `ArenaCheck extends Main`, so a call
  * reads exactly as it would inside Main (`printStars(3);`). It runs with the test's number as its
  * only argument; a test without a call runs Main's own main method. An exception from the
- * learner's code, checked or not, leaves unchanged, as it would from Main itself. Returns the
+ * learner's code, checked or not, leaves unchanged, as it would from Main itself. `files` are the
+ * learner's files, whose classes in packages are imported (see checkImports). Returns the
  * source and, for each test, the lines its code is on (to tell which call a compile error
  * belongs to).
  */
-export function checkSource(tests) {
+export function checkSource(tests, files = []) {
   // java.util.* lets a test's code use ArrayList, Arrays and friends as a learner's code would; an
   // on-demand import never clashes with the learner's own classes (theirs win).
-  const lines = ["import java.util.*;", "", `public class ${CHECK_CLASS} extends Main {`, "    public static void main(String[] args) {", "        try {", "            switch (args[0]) {"];
+  const lines = ["import java.util.*;", ...checkImports(files), "", `public class ${CHECK_CLASS} extends Main {`, "    public static void main(String[] args) {", "        try {", "            switch (args[0]) {"];
   const ranges = [];
   tests.forEach((t, i) => {
     lines.push(`                case "${i}" -> {`);

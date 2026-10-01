@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 import { launchChromium } from '../browser.mjs';
 import { serve } from '../serve.mjs';
 import { loadSuite, REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from './suite.mjs';
-import { runOnJdk } from './jdk.mjs';
+import { runOnJdk, writeDataFiles } from './jdk.mjs';
 
 const out = new URL('../../fidelity/out/', import.meta.url).pathname;
 mkdirSync(out, { recursive: true });
@@ -56,7 +56,7 @@ function runOnHotSpot(classes, p) {
     mkdirSync(dirname(join(cdir, c.path)), { recursive: true });
     writeFileSync(join(cdir, c.path), Buffer.from(c.bytes));
   }
-  for (const [name, text] of Object.entries(p.files)) writeFileSync(join(work, name), text);
+  writeDataFiles(work, p.files);
   const r = spawnSync(bin('java'), [...REFERENCE_JVM_FLAGS, '-cp', cdir, p.mainClass, ...p.args], { cwd: work, env, input: p.stdin, encoding: 'utf8', timeout: 60_000 });
   rmSync(tmp, { recursive: true, force: true });
   return { stdout: r.stdout, stderr: r.stderr, exitCode: r.status };

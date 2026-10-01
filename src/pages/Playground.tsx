@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Link2, Play, RotateCcw } from "lucide-react";
 import FilesEditor from "../components/FilesEditor";
 import SymbolBar from "../components/SymbolBar";
-import { DiagnosticList } from "../components/Results";
+import { DiagnosticList, WrittenFiles } from "../components/Results";
 import { DownloadCard, EngineErrorCard, UnsupportedCard, useEngineAutoload, useEngineStatus } from "../components/Engine";
 import { engineSupported } from "../engine/client";
 import { runOnly, type FreeRun } from "../grader/grade";
@@ -46,7 +46,8 @@ function save(s: Saved) {
 function announce(r: FreeRun): string {
   if (r.status === "compile-error") return "It didn't compile. The errors are listed below.";
   if (r.status === "internal-error") return "The Java engine couldn't run this. Try again.";
-  return r.note ? "The program stopped with a problem. The output and an explanation are below." : "The program finished. Its output is below.";
+  const files = r.written?.length ? ` and the ${r.written.length === 1 ? "file" : "files"} it wrote` : "";
+  return r.note ? `The program stopped with a problem. The output${files} and an explanation are below.` : `The program finished. Its output${files} ${files ? "are" : "is"} below.`;
 }
 
 /** Write and run any Java program, with your own input; share it as a link. */
@@ -164,7 +165,8 @@ export default function Playground() {
 
   const waiting = engine.state !== "ready";
   const unsupported = !engineSupported();
-  const out = result?.status === "ran" ? (result.run?.stdout ?? "") + (result.run?.stderr ?? "") : "";
+  // What the program printed and its error messages, in the order it wrote them.
+  const out = result?.status === "ran" ? (result.run?.output ?? "") : "";
 
   return (
     <div className="playground">
@@ -267,6 +269,7 @@ export default function Playground() {
                 </pre>
                 {result.note && <div className="t-note">{result.note}</div>}
                 {result.run && <div className="muted small">Exit code {result.run.exitCode ?? "none"}</div>}
+                <WrittenFiles files={result.written} />
               </>
             )}
           </div>

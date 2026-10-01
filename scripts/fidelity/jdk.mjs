@@ -18,24 +18,36 @@ function writeSources(dir, sources) {
   }
 }
 
-function snapshot(dir) {
-  const files = {};
+/** Every file in the folder and its subfolders, by its path in it (data/scores.txt). */
+function snapshot(dir, prefix = '', files = {}) {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
-    if (statSync(full).isFile()) files[name] = readFileSync(full, 'utf8');
+    if (statSync(full).isDirectory()) snapshot(full, `${prefix}${name}/`, files);
+    else if (statSync(full).isFile()) files[prefix + name] = readFileSync(full, 'utf8');
   }
   return files;
 }
 
+/** Writes a program's data files into its working folder, subfolders too (data/scores.txt). */
+export function writeDataFiles(dir, files) {
+  for (const [name, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), text);
+  }
+}
+
+// javac runs in the sources' folder, with that folder as its class path (as the browser's compiler
+// has it). It's given by its full path, which is taken out of the messages, so a file javac finds by
+// itself there (such as one whose package line doesn't match its folder) is named as the browser names it.
 function javac(src, out, sources) {
   mkdirSync(out, { recursive: true });
   const t = Date.now();
-  const r = spawnSync(bin('javac'), ['-encoding', 'UTF-8', '-d', out, ...sources.map((s) => s.path)], {
+  const r = spawnSync(bin('javac'), ['-encoding', 'UTF-8', '-d', out, '-cp', src, ...sources.map((s) => s.path)], {
     cwd: src,
     env,
     encoding: 'utf8',
   });
-  return { exitCode: r.status, output: (r.stdout ?? '') + (r.stderr ?? ''), ms: Date.now() - t };
+  return { exitCode: r.status, output: ((r.stdout ?? '') + (r.stderr ?? '')).replaceAll(src + '/', ''), ms: Date.now() - t };
 }
 
 export function runOnJdk(suite = loadSuite()) {
@@ -49,7 +61,7 @@ export function runOnJdk(suite = loadSuite()) {
     mkdirSync(src);
     mkdirSync(work);
     writeSources(src, p.sources);
-    for (const [name, text] of Object.entries(p.files)) writeFileSync(join(work, name), text);
+    writeDataFiles(work, p.files);
     const c = javac(src, classes, p.sources);
     if (c.exitCode !== 0) {
       result.programs[p.id] = { compileError: c.output };

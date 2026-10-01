@@ -1,0 +1,1941 @@
+id: writing-files
+summary: Writing text files. PrintWriter with println, print and close, and the checked exception its constructor may throw, adding to the end of a file with FileWriter, try-with-resources for writing, a list of objects written one per line with commas between the values, a class that saves its data to a file and loads it back, and the end of part 11. MOOC sections 11.4 and 11.5.
+steps:
+  - id: writing-files-printwriter
+    slug: printwriter
+    title: Writing a file with PrintWriter
+    text: |
+      Module 20 read files that were already there. This module writes them. Everything a program keeps in its variables is gone when it ends, so a program that should remember something until the next time it runs, such as a shopping list, a high-score table or a to-do list, saves it in a file and reads it back when it starts again.
+
+      ### PrintWriter
+
+      The class `PrintWriter`, in the package `java.io`, writes text into a file. Its methods are named like those of `System.out`, so you know them already:
+
+      ```java run
+      import java.io.PrintWriter;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              PrintWriter writer = new PrintWriter("shopping.txt");
+              writer.println("oat milk");
+              writer.println("rye bread");
+              writer.print("apples");
+              writer.println(", 6");
+              writer.close();
+              System.out.println("List saved");
+          }
+      }
+      ```
+
+      ```output
+      List saved
+      ```
+
+      Only `List saved` appears in the output: it's the only text printed with `System.out`. The rest went into a file. After the run, the program's working folder has a file called `shopping.txt`, and it holds:
+
+      ```text
+      oat milk
+      rye bread
+      apples, 6
+      ```
+
+      - `new PrintWriter("shopping.txt")` opens the file `shopping.txt` for writing. A name alone means a file in the working folder, as in module 20. When there's no file by that name, it's created. When there is one, it's emptied first, so what the program writes replaces what the file held. (The next step shows how to add to a file instead.)
+      - `writer.println(...)` writes the text and a line break into the file, as `System.out.println` does on the screen. `writer.print(...)` writes the text without a line break, so whatever comes next goes on the same line: `apples` and `, 6` make one line.
+      - `writer.close()` closes the file once the program is done with it. Don't leave it out: the next section shows why.
+      - `throws Exception` in `main`'s header is there because creating a PrintWriter may throw an exception. The last section of this step is about it.
+
+      On Java Arena, **Run with my input** shows the files your program created or changed below its output, each under its name. The checks of this module look at those files too. Each test runs your program in a folder of its own, which holds only the files the task gives, and then compares the files your program should have written with the ones the model solution wrote, the same way it compares the output: line endings, spaces at the ends of lines and blank lines at the end don't matter; everything else does.
+
+      ### Close the file
+
+      A PrintWriter doesn't send each `println` to the file right away. It gathers the text in memory and writes it to the file in larger pieces, which is much faster than writing every line on its own. `close()` writes whatever is still waiting, and then gives the file back to the operating system: an open file is a resource, as module 42 said. When the program ends, the operating system takes the file back, as it does with everything a program has open, but nothing calls the PrintWriter's `close()`, so the text still waiting in memory never reaches the file. A program that never calls `close()` can leave the file empty.
+
+      This program forgets to close its writer, and then reads the file back with a Scanner, as module 20 did:
+
+      ```java run
+      import java.io.PrintWriter;
+      import java.nio.file.Paths;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              PrintWriter writer = new PrintWriter("reminders.txt");
+              writer.println("Call the dentist");
+              writer.println("Buy stamps");
+
+              int lines = 0;
+              try (Scanner reader = new Scanner(Paths.get("reminders.txt"))) {
+                  while (reader.hasNextLine()) {
+                      System.out.println("Read: " + reader.nextLine());
+                      lines++;
+                  }
+              }
+              System.out.println("Lines read: " + lines);
+          }
+      }
+      ```
+
+      ```output
+      Lines read: 0
+      ```
+
+      Creating the PrintWriter created the file, but the two lines were still waiting in memory, so the file was empty when the Scanner read it. With `writer.close();` right after the second `println`, the same program prints `Read: Call the dentist`, `Read: Buy stamps` and `Lines read: 2`.
+
+      (The try-with-resources that reads the file has no `catch` block: `main` passes exceptions on with `throws Exception`, which module 42 said is enough.)
+
+      ### The exception
+
+      Opening a file for writing can fail. The name might belong to a folder, the folder the file should go in might not exist, or the program might not be allowed to write there. PrintWriter's constructor then throws a `FileNotFoundException`. That's a kind of IOException, and so a checked exception (module 42): the program must catch it or declare it. With neither, javac refuses the program:
+
+      ```java error
+      import java.io.PrintWriter;
+
+      public class Main {
+          public static void main(String[] args) {
+              PrintWriter writer = new PrintWriter("shopping.txt");
+              writer.println("oat milk");
+              writer.close();
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:5: error: unreported exception FileNotFoundException; must be caught or declared to be thrown
+              PrintWriter writer = new PrintWriter("shopping.txt");
+                                   ^
+      1 error
+      ```
+
+      You have module 42's two choices.
+
+      **Declare it.** `throws Exception` in `main`'s header passes the exception on to Java, which stops the program with a report when it happens. That's what the examples above do, and the MOOC's examples do the same. Here the file should go into a folder called `backup`, which doesn't exist:
+
+      ```java run crash
+      import java.io.PrintWriter;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              PrintWriter writer = new PrintWriter("backup/shopping.txt");
+              writer.println("oat milk");
+              writer.close();
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.io.FileNotFoundException: backup/shopping.txt (No such file or directory)
+      	at Main.main(Main.java:5)
+      ```
+
+      A PrintWriter creates the file, but not the folders on the way to it. A method of your own that writes a file can declare the exception in the same way, such as `public static void saveList(String fileName) throws Exception`, and then the code that calls it has the same two choices.
+
+      **Catch it.** A `try` around the writing lets the program go on, and tell the user what went wrong:
+
+      ```java run
+      import java.io.FileNotFoundException;
+      import java.io.PrintWriter;
+
+      public class Main {
+          public static void main(String[] args) {
+              String[] names = {"shopping.txt", "backup/shopping.txt"};
+              for (String name : names) {
+                  try {
+                      PrintWriter writer = new PrintWriter(name);
+                      writer.println("oat milk");
+                      writer.close();
+                      System.out.println("Saved " + name);
+                  } catch (FileNotFoundException e) {
+                      System.out.println("Could not save " + name);
+                  }
+              }
+          }
+      }
+      ```
+
+      ```output
+      Saved shopping.txt
+      Could not save backup/shopping.txt
+      ```
+
+      **Your turn:** a time capsule program reads lines until the input ends, writes each of them into the file `capsule.txt`, and at the end prints how many lines it sealed in. Fill in the blanks. For the input shown below, it prints:
+
+      ```
+      Sealed 3 lines
+      ```
+
+      and `capsule.txt` then holds the same three lines as the input.
+    fill: |
+      import java.io.PrintWriter;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              Scanner scanner = new Scanner(System.in);
+              PrintWriter writer = new [[PrintWriter]]("capsule.txt");
+              int count = 0;
+              while (scanner.hasNextLine()) {
+                  String line = scanner.nextLine();
+                  writer.[[println]](line);
+                  count++;
+              }
+              writer.[[close]]();
+              System.out.println("Sealed " + count + " lines");
+          }
+      }
+    hints:
+      - "The first blank is the class that writes a file. The second writes a line and its line break into the file, as `System.out`'s method of the same name does on the screen."
+      - "The last blank closes the file, so that the lines really reach it: `writer.close()`."
+    tests:
+      - stdin: |
+          Dear me in ten years,
+          did the lemon tree survive?
+          Love, me
+        writes: [capsule.txt]
+      - stdin: "Hello from the past\nSee you in 2036\n"
+        writes: [capsule.txt]
+        hidden: true
+      - stdin: |
+          Top song: Blue Rain
+          Best friend: Noor
+          Height: 142 cm
+          Bike: red
+          Dream: to see a whale
+        writes: [capsule.txt]
+        hidden: true
+    more:
+      - task: |
+          A shop writes the sign for its door with `print` and `println`, and then reads the file back, printing each line between brackets after its number. What does the program print?
+        predict: |
+          import java.io.PrintWriter;
+          import java.nio.file.Paths;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  PrintWriter writer = new PrintWriter("sign.txt");
+                  writer.print("Open");
+                  writer.println(" daily");
+                  writer.println();
+                  writer.print("Closed");
+                  writer.print(" on May 1");
+                  writer.close();
+
+                  try (Scanner reader = new Scanner(Paths.get("sign.txt"))) {
+                      int number = 1;
+                      while (reader.hasNextLine()) {
+                          System.out.println(number + " [" + reader.nextLine() + "]");
+                          number++;
+                      }
+                  }
+              }
+          }
+        hints:
+          - "`print` doesn't end the line, so `Open` and ` daily` end up on one line. `println()` with nothing in the parentheses writes only a line break, which makes an empty line."
+          - "The last two `print`s aren't followed by a line break, but their text is still a line of the file: the last one."
+      - task: |
+          A teacher wants practice sheets for the multiplication table. Write the method `writeGrid(String fileName, int size)`, which writes a grid of products into the file: `size` lines, where line number `row` (counting from 1) holds `row * 1`, `row * 2` and so on up to `row * size`, with a space between the numbers. The method prints nothing. Creating a PrintWriter may throw, so the method's header needs `throws Exception`.
+
+          The check runs `writeGrid("grid.txt", 4);`, and after it `grid.txt` should hold:
+
+          ```text
+          1 2 3 4
+          2 4 6 8
+          3 6 9 12
+          4 8 12 16
+          ```
+        seed: |
+          import java.io.PrintWriter;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  writeGrid("grid.txt", 4);
+              }
+
+              public static void writeGrid(String fileName, int size) {
+                  // Write the grid into the file here.
+              }
+          }
+        solution: |
+          import java.io.PrintWriter;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  writeGrid("grid.txt", 4);
+              }
+
+              public static void writeGrid(String fileName, int size) throws Exception {
+                  PrintWriter writer = new PrintWriter(fileName);
+                  for (int row = 1; row <= size; row++) {
+                      for (int column = 1; column <= size; column++) {
+                          writer.print(row * column);
+                          if (column < size) {
+                              writer.print(" ");
+                          }
+                      }
+                      writer.println();
+                  }
+                  writer.close();
+              }
+          }
+        hints:
+          - "Two loops, one inside the other: the outer one goes through the rows and the inner one through the columns. `writer.print(row * column + \" \")` writes a number and a space without ending the line. A space at the end of a line doesn't matter to the check."
+          - "After the inner loop, `writer.println()` ends the row. After both loops, `writer.close()`. And add `throws Exception` after the method's parentheses."
+        tests:
+          - call: writeGrid("grid.txt", 4);
+            writes: [grid.txt]
+          - call: writeGrid("one.txt", 1);
+            writes: [one.txt]
+            hidden: true
+          - call: writeGrid("sheet.txt", 7);
+            writes: [sheet.txt]
+            hidden: true
+          - call: |
+              writeGrid("grid.txt", 5);
+              writeGrid("grid.txt", 2);
+            writes: [grid.txt]
+            hidden: true
+
+  - id: writing-files-appending
+    slug: adding-to-a-file
+    title: Adding to a file
+    text: |
+      ### Writing replaces
+
+      A workout log gets a new line after every workout. Here's `workouts.txt` after two of them, and a program that should add Friday's yoga to it, written with what step 1 taught. It then reads the file back:
+
+      ```file workouts.txt
+      Mon: run, 5 km
+      Wed: swim, 40 min
+      ```
+
+      ```java run
+      import java.io.PrintWriter;
+      import java.nio.file.Paths;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              PrintWriter writer = new PrintWriter("workouts.txt");
+              writer.println("Fri: yoga, 30 min");
+              writer.close();
+
+              try (Scanner reader = new Scanner(Paths.get("workouts.txt"))) {
+                  while (reader.hasNextLine()) {
+                      System.out.println(reader.nextLine());
+                  }
+              }
+          }
+      }
+      ```
+
+      ```output
+      Fri: yoga, 30 min
+      ```
+
+      Monday's run and Wednesday's swim are gone: creating the PrintWriter emptied the file before anything was written. That's right for a file the program writes from scratch, but a log should grow.
+
+      ### FileWriter, which can append
+
+      `FileWriter`, also in `java.io`, writes into a file as well, and its constructor takes a second parameter: `new FileWriter("workouts.txt", true)`. `true` means **append**: the file keeps what it holds, and the new text goes after it. When the file doesn't exist yet, it's created, as before.
+
+      A FileWriter has no `print` or `println`. Its `write` methods write the text as it is, with no line break: `write("Fri: yoga, 30 min\n")` needs the `\n` at the end. Give the FileWriter to a PrintWriter's constructor instead, and you get `println` and `print`, which write through the FileWriter into the file:
+
+      ```file workouts.txt
+      Mon: run, 5 km
+      Wed: swim, 40 min
+      ```
+
+      ```java run
+      import java.io.FileWriter;
+      import java.io.PrintWriter;
+      import java.nio.file.Paths;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              PrintWriter writer = new PrintWriter(new FileWriter("workouts.txt", true));
+              writer.println("Fri: yoga, 30 min");
+              writer.close();
+
+              try (Scanner reader = new Scanner(Paths.get("workouts.txt"))) {
+                  while (reader.hasNextLine()) {
+                      System.out.println(reader.nextLine());
+                  }
+              }
+          }
+      }
+      ```
+
+      ```output
+      Mon: run, 5 km
+      Wed: swim, 40 min
+      Fri: yoga, 30 min
+      ```
+
+      - `new PrintWriter(new FileWriter("workouts.txt", true))` makes two objects. The FileWriter opens the file for appending, and the PrintWriter writes into the FileWriter. Closing the PrintWriter closes the FileWriter too.
+      - Without the `true`, or with `false`, a FileWriter empties the file first, just as a PrintWriter does.
+      - FileWriter's constructor can throw an IOException (step 1's FileNotFoundException is one kind of it), so it needs `throws` or `catch` too. A `catch (IOException e)` block, with `import java.io.IOException;`, catches every kind.
+      - Every run adds one line. Run the program three times on your own computer, and the file ends with three yoga lines. Each check on Java Arena starts again from the files the test gives, so there each run adds exactly one.
+
+      ### Append or replace?
+
+      - A log, a diary or a list of events grows: each run adds to it, so the program appends.
+      - A file that holds all of a program's data, such as a to-do list or a high-score table, is written again from the start each time, so it's replaced. Appending there would write the old contents into the file a second time. Step 4 is about such files.
+
+      **Your turn:** a reading log. The program reads the title of a book you've just finished, adds it as a new line at the end of `books.txt`, and prints `Added: ` and the title. Fill in the blanks, so that the titles already in the file stay, and the file is created if there isn't one yet. For the input `Dune` and the file shown below, it prints:
+
+      ```
+      Added: Dune
+      ```
+
+      and `books.txt` then ends with the line `Dune`.
+    fill: |
+      import java.io.FileWriter;
+      import java.io.PrintWriter;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              Scanner scanner = new Scanner(System.in);
+              String title = scanner.nextLine();
+              PrintWriter writer = new PrintWriter(new [[FileWriter]]("books.txt", [[true]]));
+              writer.println(title);
+              writer.close();
+              System.out.println("Added: " + title);
+          }
+      }
+    hints:
+      - "The class that can append to a file is `FileWriter`, and the PrintWriter writes through it."
+      - "FileWriter's second parameter says whether to append: `true` keeps what the file holds and writes after it."
+    tests:
+      - stdin: Dune
+        files:
+          books.txt: |
+            The Hobbit
+            Beloved
+        writes: [books.txt]
+      - name: Without the file
+        stdin: Emma
+        writes: [books.txt]
+        hidden: true
+      - stdin: Kindred
+        files:
+          books.txt: |
+            Matilda
+            Ulysses
+            Frankenstein
+        writes: [books.txt]
+        hidden: true
+    more:
+      - task: |
+          A calculator keeps its history in `history.txt`, and its method `save` writes a line there, appending or not. The folder is empty when the program starts. What does the program print?
+        predict: |
+          import java.io.FileWriter;
+          import java.io.PrintWriter;
+          import java.nio.file.Paths;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  save("2 + 2 = 4", true);
+                  save("5 * 3 = 15", true);
+                  save("9 / 3 = 3", false);
+                  save("7 + 1 = 8", true);
+
+                  try (Scanner reader = new Scanner(Paths.get("history.txt"))) {
+                      while (reader.hasNextLine()) {
+                          System.out.println(reader.nextLine());
+                      }
+                  }
+              }
+
+              public static void save(String line, boolean append) throws Exception {
+                  PrintWriter writer = new PrintWriter(new FileWriter("history.txt", append));
+                  writer.println(line);
+                  writer.close();
+              }
+          }
+        hints:
+          - "`new FileWriter(\"history.txt\", true)` creates the file when it isn't there yet, and otherwise adds after what it holds. With `false`, it empties the file first."
+          - "The third call empties the file, so the first two lines are gone. Only one call comes after it."
+      - task: |
+          A sleep tracker adds a line to its log every morning. Write the method `logNight(String fileName, String day, int hours)`, which adds the line `day: hours h`, such as `Tue: 7 h`, at the end of the file, keeping what the file holds. When there's no such file yet, it's created. Use a FileWriter that appends.
+
+          Nobody sleeps less than 0 or more than 24 hours in a night. For such hours, `logNight` throws an IllegalArgumentException with the message `impossible: ` and the hours and ` hours`, such as `impossible: 30 hours`, and writes nothing.
+
+          The check calls `logNight` for Tuesday (7 hours) and Wednesday (6 hours) on the file shown below, which has Monday's line, and after it `sleep.txt` should hold:
+
+          ```text
+          Mon: 8 h
+          Tue: 7 h
+          Wed: 6 h
+          ```
+        seed: |
+          import java.io.FileWriter;
+          import java.io.PrintWriter;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  logNight("sleep.txt", "Tue", 7);
+                  logNight("sleep.txt", "Wed", 6);
+              }
+
+              // Write the method logNight here.
+          }
+        solution: |
+          import java.io.FileWriter;
+          import java.io.PrintWriter;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  logNight("sleep.txt", "Tue", 7);
+                  logNight("sleep.txt", "Wed", 6);
+              }
+
+              public static void logNight(String fileName, String day, int hours) throws Exception {
+                  if (hours < 0 || hours > 24) {
+                      throw new IllegalArgumentException("impossible: " + hours + " hours");
+                  }
+                  PrintWriter writer = new PrintWriter(new FileWriter(fileName, true));
+                  writer.println(day + ": " + hours + " h");
+                  writer.close();
+              }
+          }
+        hints:
+          - "Check the hours first, and `throw new IllegalArgumentException(\"impossible: \" + hours + \" hours\")` before the file is opened. The header ends with `throws Exception`, for the FileWriter."
+          - "Then `PrintWriter writer = new PrintWriter(new FileWriter(fileName, true));`, one `println` with the day, `: `, the hours and ` h`, and `writer.close()`."
+        require:
+          - pattern: new\s+FileWriter\s*\([^;]*,\s*true\s*\)
+            message: "Append with a FileWriter: `new FileWriter(fileName, true)`."
+        tests:
+          - call: |
+              logNight("sleep.txt", "Tue", 7);
+              logNight("sleep.txt", "Wed", 6);
+            files:
+              sleep.txt: |
+                Mon: 8 h
+            writes: [sleep.txt]
+          - call: logNight("nights.txt", "Sun", 9);
+            writes: [nights.txt]
+            hidden: true
+          - call: |
+              try {
+                  logNight("sleep.txt", "Thu", 30);
+              } catch (IllegalArgumentException e) {
+                  System.out.println(e.getMessage());
+              }
+              logNight("sleep.txt", "Fri", 0);
+              try {
+                  logNight("sleep.txt", "Sat", -2);
+              } catch (IllegalArgumentException e) {
+                  System.out.println(e.getMessage());
+              }
+              logNight("sleep.txt", "Sun", 24);
+            files:
+              sleep.txt: |
+                Wed: 5 h
+                Thu: 6 h
+            writes: [sleep.txt]
+            hidden: true
+
+  - id: writing-files-objects
+    slug: lists-of-objects
+    title: try-with-resources, and objects in a file
+    text: |
+      ### Closed however the block ends
+
+      A PrintWriter is a resource like the Scanner that reads a file: its class implements AutoCloseable, so it can go in the parentheses of a try-with-resources (module 42), which closes it as soon as the block ends. That matters when something goes wrong halfway. Here a game saves its players' points from text, and one of them isn't a number:
+
+      ```java run
+      import java.io.PrintWriter;
+      import java.nio.file.Paths;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              String[] points = {"120", "95", "x", "80"};
+              try (PrintWriter writer = new PrintWriter("points.txt")) {
+                  for (String point : points) {
+                      writer.println(Integer.parseInt(point));
+                  }
+              } catch (NumberFormatException e) {
+                  System.out.println("Stopped: " + e.getMessage());
+              }
+
+              try (Scanner reader = new Scanner(Paths.get("points.txt"))) {
+                  while (reader.hasNextLine()) {
+                      System.out.println("Saved: " + reader.nextLine());
+                  }
+              }
+          }
+      }
+      ```
+
+      ```output
+      Stopped: For input string: "x"
+      Saved: 120
+      Saved: 95
+      ```
+
+      - `parseInt("x")` throws, and the loop stops there. The writer is closed on the way out of the `try` block, before the `catch` block runs, so the two lines written before the problem reach the file.
+      - Written as in step 1, with `writer.close()` as the last line of the `try` block, the exception would skip `close()`, and the file would stay empty.
+      - In a method that passes exceptions on with `throws Exception`, a try-with-resources needs no `catch`: the writer is closed, and then the exception goes on to the caller.
+
+      try-with-resources is shorter than calling `close()` yourself, and there's nothing to forget, so from here on this module writes files that way.
+
+      ### A list of objects, one per line
+
+      A game keeps a high-score table: a list of HighScore objects, each with a player and points. To save it, the program writes one line per object, with the values separated by commas, like the CSV files module 20 read:
+
+      ```java run
+      import java.io.PrintWriter;
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              ArrayList<HighScore> scores = new ArrayList<>();
+              scores.add(new HighScore("Mia", 4200));
+              scores.add(new HighScore("Leo", 3950));
+              scores.add(new HighScore("Ana", 3100));
+
+              try (PrintWriter writer = new PrintWriter("highscores.csv")) {
+                  for (HighScore score : scores) {
+                      writer.println(score.toCsv());
+                  }
+              }
+              System.out.println("Saved " + scores.size() + " scores");
+              System.out.println(scores.get(0));
+          }
+      }
+      // ==== HighScore.java ====
+      public class HighScore {
+          private String player;
+          private int points;
+
+          public HighScore(String player, int points) {
+              this.player = player;
+              this.points = points;
+          }
+
+          public String getPlayer() {
+              return this.player;
+          }
+
+          public int getPoints() {
+              return this.points;
+          }
+
+          public String toCsv() {
+              return this.player + "," + this.points;
+          }
+
+          @Override
+          public String toString() {
+              return this.player + ": " + this.points;
+          }
+      }
+      ```
+
+      ```output
+      Saved 3 scores
+      Mia: 4200
+      ```
+
+      After the run, `highscores.csv` holds:
+
+      ```text
+      Mia,4200
+      Leo,3950
+      Ana,3100
+      ```
+
+      - The loop writes one line per object, in the list's order.
+      - `toCsv()` says how one HighScore looks as a line of the file. The format is then written in one place: the class knows its own values, and every program that saves HighScores writes the same lines.
+      - `toString()` is for people: it's what `println(scores.get(0))` showed on the screen. `toCsv()` is for the program that reads the file back. `writer.println(score)` would write `Mia: 4200` into the file, which is harder to take apart again. `Mia,4200` splits with module 20's `split(",")` into the player and the points, and `Integer.valueOf` turns the points back into a number. Step 4 does exactly that.
+
+      ### Headers and commas
+
+      - A file meant for a spreadsheet often starts with a header line that names the columns, such as `player,points` (module 20 skipped such a line when reading). Write it once, before the loop.
+      - A value with a comma of its own, such as the player `Lee, Jr.`, would split into too many parts when the file is read back. Choose a separator that doesn't occur in the data (`;` is common, as module 20 said), or refuse such values when an object is created (module 42).
+
+      **Your turn:** a teacher exports a course's gradebook for a spreadsheet. `StudentRecord.java` is ready: a record has the student's name and the points of the exam and of the project, and `total()` returns their sum. In `Main.java`, write the method `export(ArrayList<StudentRecord> records, String fileName)`, which writes the file: first the header line `name,exam,project,total`, and then one line for each record, in the list's order, with its four values separated by commas. Write the file in a try-with-resources, and let the method pass exceptions on with `throws Exception`. It prints nothing.
+
+      The check exports the three records of `main` into `grades.csv`, and after it the file should hold:
+
+      ```text
+      name,exam,project,total
+      Ada,38,45,83
+      Linus,29,40,69
+      Grace,41,50,91
+      ```
+    seed:
+      Main.java: |
+        import java.io.PrintWriter;
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                ArrayList<StudentRecord> records = new ArrayList<>();
+                records.add(new StudentRecord("Ada", 38, 45));
+                records.add(new StudentRecord("Linus", 29, 40));
+                records.add(new StudentRecord("Grace", 41, 50));
+                export(records, "grades.csv");
+            }
+
+            // Write the method export here.
+        }
+      StudentRecord.java: |
+        public class StudentRecord {
+            private String name;
+            private int exam;
+            private int project;
+
+            public StudentRecord(String name, int exam, int project) {
+                this.name = name;
+                this.exam = exam;
+                this.project = project;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getExam() {
+                return this.exam;
+            }
+
+            public int getProject() {
+                return this.project;
+            }
+
+            public int total() {
+                return this.exam + this.project;
+            }
+        }
+    solution:
+      Main.java: |
+        import java.io.PrintWriter;
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                ArrayList<StudentRecord> records = new ArrayList<>();
+                records.add(new StudentRecord("Ada", 38, 45));
+                records.add(new StudentRecord("Linus", 29, 40));
+                records.add(new StudentRecord("Grace", 41, 50));
+                export(records, "grades.csv");
+            }
+
+            public static void export(ArrayList<StudentRecord> records, String fileName) throws Exception {
+                try (PrintWriter writer = new PrintWriter(fileName)) {
+                    writer.println("name,exam,project,total");
+                    for (StudentRecord record : records) {
+                        writer.println(record.getName() + "," + record.getExam() + "," + record.getProject() + "," + record.total());
+                    }
+                }
+            }
+        }
+      StudentRecord.java: |
+        public class StudentRecord {
+            private String name;
+            private int exam;
+            private int project;
+
+            public StudentRecord(String name, int exam, int project) {
+                this.name = name;
+                this.exam = exam;
+                this.project = project;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getExam() {
+                return this.exam;
+            }
+
+            public int getProject() {
+                return this.project;
+            }
+
+            public int total() {
+                return this.exam + this.project;
+            }
+        }
+    hints:
+      - "The header is `public static void export(ArrayList<StudentRecord> records, String fileName) throws Exception {`, and inside it goes `try (PrintWriter writer = new PrintWriter(fileName)) { ... }`."
+      - "In the `try` block, `println` the header line once, and then loop over the records: `writer.println(record.getName() + \",\" + record.getExam() + \",\" + record.getProject() + \",\" + record.total());`."
+    require:
+      - pattern: \btry\s*\(\s*(?:PrintWriter|FileWriter)\b
+        message: "Write the file in a try-with-resources, for example `try (PrintWriter writer = new PrintWriter(fileName)) {`."
+    tests:
+      - call: |
+          ArrayList<StudentRecord> records = new ArrayList<>();
+          records.add(new StudentRecord("Ada", 38, 45));
+          records.add(new StudentRecord("Linus", 29, 40));
+          records.add(new StudentRecord("Grace", 41, 50));
+          export(records, "grades.csv");
+        writes: [grades.csv]
+      - call: export(new ArrayList<>(), "empty.csv");
+        writes: [empty.csv]
+        hidden: true
+      - call: |
+          ArrayList<StudentRecord> records = new ArrayList<>();
+          records.add(new StudentRecord("Mei", 0, 12));
+          records.add(new StudentRecord("Omar", 50, 50));
+          export(records, "spring.csv");
+          records.add(new StudentRecord("Pia", 7, 9));
+          export(records, "spring.csv");
+        writes: [spring.csv]
+        hidden: true
+    more:
+      - task: |
+          Two ways to write the same numbers, and one of the entries isn't a number. `Files.readAllLines` (module 42) returns a file's lines in a list. What does the program print?
+        predict: |
+          import java.io.PrintWriter;
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  String[] entries = {"7", "12", "many", "3"};
+
+                  try {
+                      PrintWriter writer = new PrintWriter("first.txt");
+                      for (String entry : entries) {
+                          writer.println(Integer.parseInt(entry));
+                      }
+                      writer.close();
+                  } catch (NumberFormatException e) {
+                      System.out.println("first: bad entry");
+                  }
+
+                  try (PrintWriter writer = new PrintWriter("second.txt")) {
+                      for (String entry : entries) {
+                          writer.println(Integer.parseInt(entry));
+                      }
+                  } catch (NumberFormatException e) {
+                      System.out.println("second: bad entry");
+                  }
+
+                  System.out.println(Files.readAllLines(Paths.get("first.txt")));
+                  System.out.println(Files.readAllLines(Paths.get("second.txt")));
+              }
+          }
+        hints:
+          - "In both, `parseInt(\"many\")` throws in the third round, so `3` is never written, and each `catch` block prints its line."
+          - "In the first, the exception skips `writer.close()`, so the text the PrintWriter was holding never reaches `first.txt`, and the list is empty. try-with-resources closes the second writer on the way out, so `second.txt` has the lines written before the problem."
+      - task: |
+          A summer camp splits its campers into two groups. `Camper.java` is ready: a camper has a name and an age. Write the method `splitGroups(ArrayList<Camper> campers)`, which writes every camper aged 12 or under into `juniors.txt`, and every older camper into `seniors.txt`, one per line as `name,age`, in the list's order. Both files are always written, even when a group is empty.
+
+          Open both writers in one try-with-resources: its parentheses can hold several resources, separated by a semicolon (module 42). The method prints nothing, and passes exceptions on with `throws Exception`. For the campers of `main`, `juniors.txt` should hold:
+
+          ```text
+          Aino,11
+          Ben,9
+          Dara,12
+          ```
+
+          and `seniors.txt`:
+
+          ```text
+          Chloe,14
+          ```
+        seed:
+          Main.java: |
+            import java.io.PrintWriter;
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) throws Exception {
+                    ArrayList<Camper> campers = new ArrayList<>();
+                    campers.add(new Camper("Aino", 11));
+                    campers.add(new Camper("Ben", 9));
+                    campers.add(new Camper("Chloe", 14));
+                    campers.add(new Camper("Dara", 12));
+                    splitGroups(campers);
+                }
+
+                // Write the method splitGroups here.
+            }
+          Camper.java: |
+            public class Camper {
+                private String name;
+                private int age;
+
+                public Camper(String name, int age) {
+                    this.name = name;
+                    this.age = age;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getAge() {
+                    return this.age;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.age + ")";
+                }
+            }
+        solution:
+          Main.java: |
+            import java.io.PrintWriter;
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) throws Exception {
+                    ArrayList<Camper> campers = new ArrayList<>();
+                    campers.add(new Camper("Aino", 11));
+                    campers.add(new Camper("Ben", 9));
+                    campers.add(new Camper("Chloe", 14));
+                    campers.add(new Camper("Dara", 12));
+                    splitGroups(campers);
+                }
+
+                public static void splitGroups(ArrayList<Camper> campers) throws Exception {
+                    try (PrintWriter juniors = new PrintWriter("juniors.txt"); PrintWriter seniors = new PrintWriter("seniors.txt")) {
+                        for (Camper camper : campers) {
+                            String line = camper.getName() + "," + camper.getAge();
+                            if (camper.getAge() <= 12) {
+                                juniors.println(line);
+                            } else {
+                                seniors.println(line);
+                            }
+                        }
+                    }
+                }
+            }
+          Camper.java: |
+            public class Camper {
+                private String name;
+                private int age;
+
+                public Camper(String name, int age) {
+                    this.name = name;
+                    this.age = age;
+                }
+
+                public String getName() {
+                    return this.name;
+                }
+
+                public int getAge() {
+                    return this.age;
+                }
+
+                @Override
+                public String toString() {
+                    return this.name + " (" + this.age + ")";
+                }
+            }
+        hints:
+          - "`try (PrintWriter juniors = new PrintWriter(\"juniors.txt\"); PrintWriter seniors = new PrintWriter(\"seniors.txt\")) {` creates both files, and closes both when the block ends."
+          - "Inside, one loop: when `camper.getAge() <= 12`, the line goes to `juniors`, and otherwise to `seniors`. The line is `camper.getName() + \",\" + camper.getAge()`, not the camper's `toString`."
+        require:
+          - pattern: \btry\s*\(\s*(?:PrintWriter|FileWriter)[^{]*;\s*(?:PrintWriter|FileWriter)\b
+            message: "Open both writers in the parentheses of one `try`, separated by a semicolon, for example `try (PrintWriter juniors = ...; PrintWriter seniors = ...) {`."
+        tests:
+          - call: |
+              ArrayList<Camper> campers = new ArrayList<>();
+              campers.add(new Camper("Aino", 11));
+              campers.add(new Camper("Ben", 9));
+              campers.add(new Camper("Chloe", 14));
+              campers.add(new Camper("Dara", 12));
+              splitGroups(campers);
+            writes: [juniors.txt, seniors.txt]
+          - call: |
+              ArrayList<Camper> campers = new ArrayList<>();
+              campers.add(new Camper("Eemil", 15));
+              campers.add(new Camper("Fatima", 13));
+              splitGroups(campers);
+            writes: [juniors.txt, seniors.txt]
+            hidden: true
+          - call: |
+              ArrayList<Camper> campers = new ArrayList<>();
+              campers.add(new Camper("Gus", 7));
+              campers.add(new Camper("Hana", 16));
+              campers.add(new Camper("Ivo", 12));
+              campers.add(new Camper("Jade", 13));
+              campers.add(new Camper("Kim", 8));
+              splitGroups(campers);
+            writes: [juniors.txt, seniors.txt]
+            hidden: true
+
+  - id: writing-files-saving-loading
+    slug: saving-and-loading
+    title: Saving and loading
+    text: |
+      ### save and load
+
+      A program that writes its data when it ends, and reads it back when it starts, remembers the data from one run to the next. The data usually lives in an object, so that object's class gets two methods: `save` writes everything the object holds into a file, and `load` reads such a file back into the object. The two must agree on the format: `load` has to understand whatever `save` writes.
+
+      Here's a to-do list. It keeps its tasks in a list of Strings, and its file has one task per line:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              TodoList monday = new TodoList();
+              monday.add("Water the ferns");
+              monday.add("Pay the phone bill");
+              monday.save("todo.txt");
+
+              TodoList tuesday = new TodoList();
+              tuesday.load("todo.txt");
+              tuesday.add("Return the library books");
+              tuesday.print();
+          }
+      }
+      // ==== TodoList.java ====
+      import java.io.PrintWriter;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class TodoList {
+          private ArrayList<String> tasks;
+
+          public TodoList() {
+              this.tasks = new ArrayList<>();
+          }
+
+          public void add(String task) {
+              this.tasks.add(task);
+          }
+
+          public void print() {
+              for (int i = 0; i < this.tasks.size(); i++) {
+                  System.out.println((i + 1) + ". " + this.tasks.get(i));
+              }
+          }
+
+          public void save(String fileName) throws Exception {
+              try (PrintWriter writer = new PrintWriter(fileName)) {
+                  for (String task : this.tasks) {
+                      writer.println(task);
+                  }
+              }
+          }
+
+          public void load(String fileName) throws Exception {
+              try (Scanner reader = new Scanner(Paths.get(fileName))) {
+                  while (reader.hasNextLine()) {
+                      String line = reader.nextLine();
+                      if (!line.isEmpty()) {
+                          this.tasks.add(line);
+                      }
+                  }
+              }
+          }
+      }
+      ```
+
+      ```output
+      1. Water the ferns
+      2. Pay the phone bill
+      3. Return the library books
+      ```
+
+      - `tuesday` is a new object, and its list starts empty. Its first two tasks come from the file, as they would in a program started again the next day.
+      - `save` writes the whole list every time, with a PrintWriter that replaces what the file held, so the file always matches the list. Appending would put every old task into the file a second time.
+      - `load` adds each line of the file to the list. It skips empty lines, which a person who edits the file by hand may leave behind.
+      - Both methods pass their exceptions on with `throws Exception`. The class can't know what a program wants to do when its file can't be read or written, so the code that calls them decides, as module 42 said.
+
+      ### The first run
+
+      The very first time the program runs, there's no `todo.txt` yet, and `load`'s Scanner throws a NoSuchFileException. For a to-do app that isn't a problem: it just starts with an empty list. So the program catches the exception around `load`, and goes on:
+
+      ```java fragment
+      TodoList list = new TodoList();
+      try {
+          list.load("todo.txt");
+      } catch (Exception e) {
+          System.out.println("No saved tasks yet");
+      }
+      ```
+
+      ### Load when it starts, save when it ends
+
+      Put together with a loop that reads commands (module 25), this gives a to-do app that remembers its tasks. `main` loads the list, the loop runs the commands, and after `quit`, `main` saves the list:
+
+      ```file todo.txt
+      Water the ferns
+      Pay the phone bill
+      ```
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              TodoList list = new TodoList();
+              try {
+                  list.load("todo.txt");
+              } catch (Exception e) {
+                  System.out.println("No saved tasks yet");
+              }
+
+              Scanner scanner = new Scanner(System.in);
+              while (true) {
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      break;
+                  }
+                  if (command.equals("add")) {
+                      list.add(scanner.nextLine());
+                  } else if (command.equals("list")) {
+                      list.print();
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+
+              try {
+                  list.save("todo.txt");
+                  System.out.println("Saved");
+              } catch (Exception e) {
+                  System.out.println("Could not save: " + e.getMessage());
+              }
+          }
+      }
+      // ==== TodoList.java ====
+      import java.io.PrintWriter;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Scanner;
+
+      public class TodoList {
+          private ArrayList<String> tasks;
+
+          public TodoList() {
+              this.tasks = new ArrayList<>();
+          }
+
+          public void add(String task) {
+              this.tasks.add(task);
+          }
+
+          public void print() {
+              for (int i = 0; i < this.tasks.size(); i++) {
+                  System.out.println((i + 1) + ". " + this.tasks.get(i));
+              }
+          }
+
+          public void save(String fileName) throws Exception {
+              try (PrintWriter writer = new PrintWriter(fileName)) {
+                  for (String task : this.tasks) {
+                      writer.println(task);
+                  }
+              }
+          }
+
+          public void load(String fileName) throws Exception {
+              try (Scanner reader = new Scanner(Paths.get(fileName))) {
+                  while (reader.hasNextLine()) {
+                      String line = reader.nextLine();
+                      if (!line.isEmpty()) {
+                          this.tasks.add(line);
+                      }
+                  }
+              }
+          }
+      }
+      ```
+
+      ```input
+      add
+      Buy birdseed
+      list
+      quit
+      ```
+
+      ```output
+      1. Water the ferns
+      2. Pay the phone bill
+      3. Buy birdseed
+      Saved
+      ```
+
+      After the run, `todo.txt` holds the three tasks, and the next time the program starts, it has them all. In a larger program the command loop would be in a user interface class of its own, as in module 25, and `main` would still load at the start and save at the end.
+
+      **Your turn:** step 3's high scores get a class that keeps them. `HighScore.java` is step 3's class, and `ScoreBoard` keeps a list of HighScores, with `add` and `best()` ready. Write ScoreBoard's methods `save(String fileName)` and `load(String fileName)`:
+
+      - `save` writes every score into the file as `player,points`, one per line, in the list's order, replacing what the file held.
+      - `load` reads such a file, and adds a HighScore for each of its lines to the board.
+      - Both pass exceptions on with `throws Exception`.
+
+      The check loads the file shown below, adds Kai's 5100 points, saves the board into the same file and prints the best score:
+
+      ```
+      Kai: 5100
+      ```
+
+      and `scores.csv` then holds all three scores.
+    seed:
+      ScoreBoard.java: |
+        import java.io.PrintWriter;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class ScoreBoard {
+            private ArrayList<HighScore> scores;
+
+            public ScoreBoard() {
+                this.scores = new ArrayList<>();
+            }
+
+            public void add(HighScore score) {
+                this.scores.add(score);
+            }
+
+            public HighScore best() {
+                HighScore best = null;
+                for (HighScore score : this.scores) {
+                    if (best == null || score.getPoints() > best.getPoints()) {
+                        best = score;
+                    }
+                }
+                return best;
+            }
+
+            // Write the methods save and load here.
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                ScoreBoard board = new ScoreBoard();
+                board.load("scores.csv");
+                board.add(new HighScore("Kai", 5100));
+                board.save("scores.csv");
+                System.out.println(board.best());
+            }
+        }
+      HighScore.java: |
+        public class HighScore {
+            private String player;
+            private int points;
+
+            public HighScore(String player, int points) {
+                this.player = player;
+                this.points = points;
+            }
+
+            public String getPlayer() {
+                return this.player;
+            }
+
+            public int getPoints() {
+                return this.points;
+            }
+
+            public String toCsv() {
+                return this.player + "," + this.points;
+            }
+
+            @Override
+            public String toString() {
+                return this.player + ": " + this.points;
+            }
+        }
+    solution:
+      ScoreBoard.java: |
+        import java.io.PrintWriter;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class ScoreBoard {
+            private ArrayList<HighScore> scores;
+
+            public ScoreBoard() {
+                this.scores = new ArrayList<>();
+            }
+
+            public void add(HighScore score) {
+                this.scores.add(score);
+            }
+
+            public HighScore best() {
+                HighScore best = null;
+                for (HighScore score : this.scores) {
+                    if (best == null || score.getPoints() > best.getPoints()) {
+                        best = score;
+                    }
+                }
+                return best;
+            }
+
+            public void save(String fileName) throws Exception {
+                try (PrintWriter writer = new PrintWriter(fileName)) {
+                    for (HighScore score : this.scores) {
+                        writer.println(score.toCsv());
+                    }
+                }
+            }
+
+            public void load(String fileName) throws Exception {
+                try (Scanner reader = new Scanner(Paths.get(fileName))) {
+                    while (reader.hasNextLine()) {
+                        String[] parts = reader.nextLine().split(",");
+                        this.scores.add(new HighScore(parts[0], Integer.valueOf(parts[1])));
+                    }
+                }
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                ScoreBoard board = new ScoreBoard();
+                board.load("scores.csv");
+                board.add(new HighScore("Kai", 5100));
+                board.save("scores.csv");
+                System.out.println(board.best());
+            }
+        }
+      HighScore.java: |
+        public class HighScore {
+            private String player;
+            private int points;
+
+            public HighScore(String player, int points) {
+                this.player = player;
+                this.points = points;
+            }
+
+            public String getPlayer() {
+                return this.player;
+            }
+
+            public int getPoints() {
+                return this.points;
+            }
+
+            public String toCsv() {
+                return this.player + "," + this.points;
+            }
+
+            @Override
+            public String toString() {
+                return this.player + ": " + this.points;
+            }
+        }
+    hints:
+      - "`save` is step 3's loop in a try-with-resources, like TodoList's `save` above, writing each score's `toCsv()`. `load` is module 20's reading loop, like TodoList's `load`, splitting each line at the comma."
+      - "`save`: `try (PrintWriter writer = new PrintWriter(fileName)) { for (HighScore score : this.scores) { writer.println(score.toCsv()); } }`. `load` reads with `try (Scanner reader = new Scanner(Paths.get(fileName)))`, splits each line with `split(\",\")`, and adds `new HighScore(parts[0], Integer.valueOf(parts[1]))` to `this.scores`."
+    require:
+      - pattern: \bvoid\s+save\s*\([^)]*\)\s*throws\b
+        message: "`save` passes exceptions on: `public void save(String fileName) throws Exception`."
+      - pattern: \bvoid\s+load\s*\([^)]*\)\s*throws\b
+        message: "`load` passes exceptions on: `public void load(String fileName) throws Exception`."
+    tests:
+      - call: |
+          ScoreBoard board = new ScoreBoard();
+          board.load("scores.csv");
+          board.add(new HighScore("Kai", 5100));
+          board.save("scores.csv");
+          System.out.println(board.best());
+        files:
+          scores.csv: |
+            Mia,4200
+            Leo,3950
+        writes: [scores.csv]
+      - call: |
+          ScoreBoard board = new ScoreBoard();
+          board.load("scores.csv");
+          System.out.println(board.best());
+          board.save("copy.csv");
+        files:
+          scores.csv: |
+            Ana,3100
+            Mia,4200
+            Leo,3950
+            Tove,12
+        writes: [copy.csv]
+        hidden: true
+      - call: |
+          ScoreBoard board = new ScoreBoard();
+          board.add(new HighScore("Rui", 700));
+          board.add(new HighScore("Sol", 900));
+          board.save("new.csv");
+          board.add(new HighScore("Tam", 800));
+          board.save("new.csv");
+          ScoreBoard other = new ScoreBoard();
+          other.load("new.csv");
+          System.out.println(other.best());
+        writes: [new.csv]
+        hidden: true
+    more:
+      - task: |
+          A program keeps count of how many times it has been run, in the file `runs.txt`, which holds one number. Write `main`: it reads the number from `runs.txt`, adds one, writes the new number back into the file, replacing the old one, and prints `Run number ` and the new number. When there's no `runs.txt` yet, this is the first run, and the count starts from 0. With the file shown below, the program prints:
+
+          ```
+          Run number 4
+          ```
+
+          and `runs.txt` then holds `4`.
+        seed: |
+          import java.io.PrintWriter;
+          import java.nio.file.Paths;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+
+              }
+          }
+        solution: |
+          import java.io.PrintWriter;
+          import java.nio.file.Paths;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  int runs = 0;
+                  try (Scanner reader = new Scanner(Paths.get("runs.txt"))) {
+                      runs = Integer.valueOf(reader.nextLine());
+                  } catch (Exception e) {
+                      // No file yet: this is the first run.
+                  }
+                  runs++;
+                  try (PrintWriter writer = new PrintWriter("runs.txt")) {
+                      writer.println(runs);
+                  }
+                  System.out.println("Run number " + runs);
+              }
+          }
+        hints:
+          - "Start with `int runs = 0;`. Read the number in a try-with-resources with a Scanner, `runs = Integer.valueOf(reader.nextLine());`, and let the `catch` block keep the 0: no file means the first run."
+          - "Then `runs++`, write it with a PrintWriter, which replaces the old number, and print the line. `main` needs `throws Exception` for the PrintWriter, or a `try` of its own."
+        tests:
+          - files:
+              runs.txt: |
+                3
+            writes: [runs.txt]
+          - name: The first run, without the file
+            writes: [runs.txt]
+            hidden: true
+          - files:
+              runs.txt: |
+                41
+            writes: [runs.txt]
+            hidden: true
+          - files:
+              runs.txt: |
+                999
+            writes: [runs.txt]
+            hidden: true
+      - task: |
+          A wish list app saves its wishes when it ends. The output looks right, but after a few runs the file is full of the same wishes over and over. Find the bug in `Wishlist.java` and fix it, so that the file holds each wish once. With the file shown below, the program prints:
+
+          ```
+          3 wishes saved
+          ```
+
+          and `wishes.txt` should then hold `kite`, `bike` and `board game`, one per line.
+        seed:
+          Wishlist.java: |
+            import java.io.FileWriter;
+            import java.io.PrintWriter;
+            import java.nio.file.Paths;
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Wishlist {
+                private ArrayList<String> wishes;
+
+                public Wishlist() {
+                    this.wishes = new ArrayList<>();
+                }
+
+                public void add(String wish) {
+                    this.wishes.add(wish);
+                }
+
+                public int size() {
+                    return this.wishes.size();
+                }
+
+                public void save(String fileName) throws Exception {
+                    try (PrintWriter writer = new PrintWriter(new FileWriter(fileName, true))) {
+                        for (String wish : this.wishes) {
+                            writer.println(wish);
+                        }
+                    }
+                }
+
+                public void load(String fileName) throws Exception {
+                    try (Scanner reader = new Scanner(Paths.get(fileName))) {
+                        while (reader.hasNextLine()) {
+                            this.wishes.add(reader.nextLine());
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) throws Exception {
+                    Wishlist list = new Wishlist();
+                    list.load("wishes.txt");
+                    list.add("board game");
+                    list.save("wishes.txt");
+                    System.out.println(list.size() + " wishes saved");
+                }
+            }
+        solution:
+          Wishlist.java: |
+            import java.io.PrintWriter;
+            import java.nio.file.Paths;
+            import java.util.ArrayList;
+            import java.util.Scanner;
+
+            public class Wishlist {
+                private ArrayList<String> wishes;
+
+                public Wishlist() {
+                    this.wishes = new ArrayList<>();
+                }
+
+                public void add(String wish) {
+                    this.wishes.add(wish);
+                }
+
+                public int size() {
+                    return this.wishes.size();
+                }
+
+                public void save(String fileName) throws Exception {
+                    try (PrintWriter writer = new PrintWriter(fileName)) {
+                        for (String wish : this.wishes) {
+                            writer.println(wish);
+                        }
+                    }
+                }
+
+                public void load(String fileName) throws Exception {
+                    try (Scanner reader = new Scanner(Paths.get(fileName))) {
+                        while (reader.hasNextLine()) {
+                            this.wishes.add(reader.nextLine());
+                        }
+                    }
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) throws Exception {
+                    Wishlist list = new Wishlist();
+                    list.load("wishes.txt");
+                    list.add("board game");
+                    list.save("wishes.txt");
+                    System.out.println(list.size() + " wishes saved");
+                }
+            }
+        hints:
+          - "The output is right, and the file isn't. Look at how `save` opens the file: what does the `true` do there?"
+          - "`save` writes the whole list, the wishes that `load` read from the file included, so the file must be emptied first: `new PrintWriter(fileName)`, without the FileWriter."
+        tests:
+          - files:
+              wishes.txt: |
+                kite
+                bike
+            writes: [wishes.txt]
+          - call: |
+              Wishlist list = new Wishlist();
+              list.add("puzzle");
+              list.save("mine.txt");
+              list.add("skates");
+              list.save("mine.txt");
+              System.out.println(list.size());
+            writes: [mine.txt]
+            hidden: true
+          - files:
+              wishes.txt: |
+                telescope
+            writes: [wishes.txt]
+            hidden: true
+
+  - id: writing-files-end-of-part-11
+    slug: end-of-part-11
+    title: The end of part 11
+    text: |
+      This step ends this module, and with it the MOOC's part 11. First a look back at the whole part, and then a last program that puts its class diagrams, exceptions and files to work together.
+
+      ### What part 11 covered
+
+      - **Module 40, class diagrams.** A UML class diagram shows a program's classes as boxes: the name, the fields, and the constructors and methods, with `-` for private and `+` for public, and the types after colons. An arrow shows that one class refers to another, with a multiplicity such as `1`, `0..1` or `*` at its end, and a line with a hollow triangle shows inheritance, dashed for a class that implements an interface. You wrote classes from boxes, and drew boxes from classes.
+      - **Module 41, packages.** Classes are grouped in packages, which are folders: a file in `quiz/domain/` starts with `package quiz.domain;`. A class of another package is used by its full name or after an `import`, and from another package a class sees only what's `public` (and a subclass also what's `protected`). Larger programs split their classes into packages by what they're responsible for, such as `domain`, `logic` and `ui`.
+      - **Module 42, exceptions.** `try` and `catch`, several `catch` blocks and `finally`; checked exceptions, which must be caught or declared with `throws`, and unchecked ones, which needn't be; try-with-resources; `throw new IllegalArgumentException(...)` to refuse a bad parameter; and reading a stack trace.
+      - **Module 43, writing files.** A PrintWriter writes a file and replaces what it held, a FileWriter with `true` appends to it, and `close()`, or better a try-with-resources, makes sure the text reaches the file. Objects go into a file one per line, with a separator that reading can split at, and a class with `save` and `load` keeps its data from one run to the next.
+
+      ### Other ways to write
+
+      Java has more ways to write a file than PrintWriter. One is `Files.write`, the writing twin of module 42's `Files.readAllLines`: `Files.write(Paths.get("todo.txt"), tasks)` writes every String of the list `tasks` into the file, one per line, in a single call. This course sticks with PrintWriter, which works just like `System.out`, but you may meet the others in code that other people write.
+
+      ### The end of part 11
+
+      Part 12 comes next, starting with type parameters (generics): classes of your own that take a type as a parameter, as ArrayList does in `ArrayList<String>`. Part 11 ends with [the MOOC's conclusion page](https://java-programming.mooc.fi/part-11/5-conclusion) on its own site.
+
+      **Your turn:** a last program for part 11: a notes app that keeps its notes in a file, one note per line, with the note's title and text separated by `;`, like `Door code;4417`. Here's its plan:
+
+      ```classes
+      class Notebook
+      + Notebook()
+      + add(note: Note): void
+      + count(): int
+      + printAll(): void
+      + save(fileName: String): void
+      + load(fileName: String): void
+
+      class Note
+      - title: String
+      - text: String
+      + Note(title: String, text: String)
+      + getTitle(): String
+      + getText(): String
+      + toString(): String
+
+      Notebook --> * Note : notes
+      ```
+
+      Most of it is written. What's left:
+
+      - In `Note.java`, a title with a `;` in it would break the file's format, so the constructor refuses one: it throws an IllegalArgumentException with the message `a title can't contain ;`. A note's text may contain `;`.
+      - In `Notebook.java`, `save` writes every note as its title, `;` and its text, one per line, replacing what the file held. `load` reads such a file and adds a note for each line to the notebook. The title ends at the line's first `;`, and everything after that `;` is the text. Both pass exceptions on with `throws Exception`.
+
+      A note prints as its title, a colon and its text. The check loads the file shown below, adds a shopping note, saves the notebook into the same file and prints every note:
+
+      ```
+      Wifi: the password is on the router
+      Door code: 4417
+      Shopping: milk; eggs; bread
+      ```
+
+      and `notes.txt` then holds the three notes, the new one as `Shopping;milk; eggs; bread`.
+    seed:
+      Notebook.java: |
+        import java.io.PrintWriter;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Notebook {
+            private ArrayList<Note> notes;
+
+            public Notebook() {
+                this.notes = new ArrayList<>();
+            }
+
+            public void add(Note note) {
+                this.notes.add(note);
+            }
+
+            public int count() {
+                return this.notes.size();
+            }
+
+            public void printAll() {
+                for (Note note : this.notes) {
+                    System.out.println(note);
+                }
+            }
+
+            // Write the methods save and load here.
+        }
+      Note.java: |
+        public class Note {
+            private String title;
+            private String text;
+
+            public Note(String title, String text) {
+                this.title = title;
+                this.text = text;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public String getText() {
+                return this.text;
+            }
+
+            @Override
+            public String toString() {
+                return this.title + ": " + this.text;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                Notebook notebook = new Notebook();
+                notebook.load("notes.txt");
+                notebook.add(new Note("Shopping", "milk; eggs; bread"));
+                notebook.save("notes.txt");
+                notebook.printAll();
+            }
+        }
+    solution:
+      Notebook.java: |
+        import java.io.PrintWriter;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Notebook {
+            private ArrayList<Note> notes;
+
+            public Notebook() {
+                this.notes = new ArrayList<>();
+            }
+
+            public void add(Note note) {
+                this.notes.add(note);
+            }
+
+            public int count() {
+                return this.notes.size();
+            }
+
+            public void printAll() {
+                for (Note note : this.notes) {
+                    System.out.println(note);
+                }
+            }
+
+            public void save(String fileName) throws Exception {
+                try (PrintWriter writer = new PrintWriter(fileName)) {
+                    for (Note note : this.notes) {
+                        writer.println(note.getTitle() + ";" + note.getText());
+                    }
+                }
+            }
+
+            public void load(String fileName) throws Exception {
+                try (Scanner reader = new Scanner(Paths.get(fileName))) {
+                    while (reader.hasNextLine()) {
+                        String line = reader.nextLine();
+                        int at = line.indexOf(";");
+                        this.notes.add(new Note(line.substring(0, at), line.substring(at + 1)));
+                    }
+                }
+            }
+        }
+      Note.java: |
+        public class Note {
+            private String title;
+            private String text;
+
+            public Note(String title, String text) {
+                if (title.contains(";")) {
+                    throw new IllegalArgumentException("a title can't contain ;");
+                }
+                this.title = title;
+                this.text = text;
+            }
+
+            public String getTitle() {
+                return this.title;
+            }
+
+            public String getText() {
+                return this.text;
+            }
+
+            @Override
+            public String toString() {
+                return this.title + ": " + this.text;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) throws Exception {
+                Notebook notebook = new Notebook();
+                notebook.load("notes.txt");
+                notebook.add(new Note("Shopping", "milk; eggs; bread"));
+                notebook.save("notes.txt");
+                notebook.printAll();
+            }
+        }
+    hints:
+      - "Note's constructor checks the title with `contains` and throws before it stores anything. `save` works like TodoList's `save` in step 4, writing the title, a `;` and the text of each note. `load` needs only the line's first `;`, since the text may contain more."
+      - "In Note's constructor: `if (title.contains(\";\")) { throw new IllegalArgumentException(\"a title can't contain ;\"); }`. `save` writes `note.getTitle() + \";\" + note.getText()`. `load` can't use `split(\";\")`, since the text may contain `;` too. Find the first one with `int at = line.indexOf(\";\");`: the title is `line.substring(0, at)`, and the text is `line.substring(at + 1)`."
+    tests:
+      - call: |
+          Notebook notebook = new Notebook();
+          notebook.load("notes.txt");
+          notebook.add(new Note("Shopping", "milk; eggs; bread"));
+          notebook.save("notes.txt");
+          notebook.printAll();
+        files:
+          notes.txt: |
+            Wifi;the password is on the router
+            Door code;4417
+        writes: [notes.txt]
+      - call: |
+          Notebook notebook = new Notebook();
+          notebook.load("notes.txt");
+          notebook.printAll();
+          System.out.println(notebook.count());
+          notebook.save("copy.txt");
+        files:
+          notes.txt: |
+            Plants;water on Sundays; not on Mondays
+            Bike;tires at 4 bar
+            Recipe;flour;sugar;butter
+        writes: [copy.txt]
+        hidden: true
+      - call: |
+          try {
+              new Note("Bank;PIN", "1234");
+              System.out.println("accepted");
+          } catch (IllegalArgumentException e) {
+              System.out.println(e.getMessage());
+          }
+          Note fine = new Note("Recipe", "flour; sugar");
+          System.out.println(fine);
+        hidden: true
+      - call: |
+          Notebook notebook = new Notebook();
+          notebook.add(new Note("A", "first"));
+          notebook.add(new Note("B", "second"));
+          notebook.save("mine.txt");
+          notebook.add(new Note("C", "third"));
+          notebook.save("mine.txt");
+          System.out.println(notebook.count());
+        writes: [mine.txt]
+        hidden: true
+    more:
+      - task: |
+          A last look at exceptions and files together. `save` throws an IllegalArgumentException for an empty item, and one of the files is to go into a folder that doesn't exist. `Files.readAllLines` returns a file's lines in a list. What does the program print?
+        predict: |
+          import java.io.FileNotFoundException;
+          import java.io.PrintWriter;
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  String[] items = {"eggs", "", "milk"};
+                  save("list.txt", items);
+                  save("shop/list.txt", items);
+                  System.out.println(Files.readAllLines(Paths.get("list.txt")));
+              }
+
+              public static void save(String fileName, String[] items) {
+                  try (PrintWriter writer = new PrintWriter(fileName)) {
+                      for (String item : items) {
+                          if (item.isEmpty()) {
+                              throw new IllegalArgumentException("empty item");
+                          }
+                          writer.println(item);
+                      }
+                      System.out.println("saved " + fileName);
+                  } catch (IllegalArgumentException e) {
+                      System.out.println("stopped: " + e.getMessage());
+                  } catch (FileNotFoundException e) {
+                      System.out.println("no folder for " + fileName);
+                  } finally {
+                      System.out.println("done");
+                  }
+              }
+          }
+        hints:
+          - "In the first call, `eggs` is written, and then the empty item throws. The writer is closed on the way out, the first `catch` block prints its line, and `finally` prints `done`. `saved list.txt` is never printed."
+          - "In the second call, creating the PrintWriter already throws a FileNotFoundException, since there's no folder `shop`. Last, `list.txt` holds the one line written before the problem."
+      - task: |
+          Two roommates keep their own shopping lists, `mine.txt` and `yours.txt`, one item per line in small letters. Write the method `merge(String first, String second, String target)`, which writes every item of the files `first` and `second` into the file `target`, each item only once, in alphabetical order. The method prints nothing, and passes exceptions on with `throws Exception`.
+
+          The check runs `merge("mine.txt", "yours.txt", "shared.txt");` with the files shown below, and after it `shared.txt` should hold:
+
+          ```text
+          apples
+          bread
+          coffee
+          milk
+          ```
+        seed: |
+          import java.io.PrintWriter;
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.ArrayList;
+          import java.util.Collections;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  merge("mine.txt", "yours.txt", "shared.txt");
+              }
+
+              // Write the method merge here.
+          }
+        solution: |
+          import java.io.PrintWriter;
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.ArrayList;
+          import java.util.Collections;
+
+          public class Main {
+              public static void main(String[] args) throws Exception {
+                  merge("mine.txt", "yours.txt", "shared.txt");
+              }
+
+              public static void merge(String first, String second, String target) throws Exception {
+                  ArrayList<String> items = new ArrayList<>();
+                  for (String item : Files.readAllLines(Paths.get(first))) {
+                      if (!items.contains(item)) {
+                          items.add(item);
+                      }
+                  }
+                  for (String item : Files.readAllLines(Paths.get(second))) {
+                      if (!items.contains(item)) {
+                          items.add(item);
+                      }
+                  }
+                  Collections.sort(items);
+                  try (PrintWriter writer = new PrintWriter(target)) {
+                      for (String item : items) {
+                          writer.println(item);
+                      }
+                  }
+              }
+          }
+        hints:
+          - "Collect the items of both files into one list, adding an item only when the list doesn't contain it yet. `Files.readAllLines(Paths.get(first))` returns a file's lines as a list you can loop over."
+          - "`Collections.sort(items)` puts the list in alphabetical order. Then write it with a PrintWriter in a try-with-resources, one item per line."
+        tests:
+          - call: merge("mine.txt", "yours.txt", "shared.txt");
+            files:
+              mine.txt: |
+                milk
+                bread
+                apples
+              yours.txt: |
+                coffee
+                milk
+            writes: [shared.txt]
+          - call: merge("mine.txt", "yours.txt", "together.txt");
+            files:
+              mine.txt: |
+                tea
+                rice
+                tea
+              yours.txt: |
+                rice
+            writes: [together.txt]
+            hidden: true
+          - call: merge("a.txt", "b.txt", "all.txt");
+            files:
+              a.txt: |
+                pears
+              b.txt: |
+                oats
+                lemons
+                figs
+                pears
+                honey
+            writes: [all.txt]
+            hidden: true

@@ -1,0 +1,317 @@
+topic: exceptions
+drills:
+  - type: predict
+    after: try-and-catch
+    body: |
+      int total = 0;
+      try {
+          for (String part : "3,4,x,5".split(",")) {
+              total += Integer.parseInt(part);
+          }
+      } catch (NumberFormatException e) {
+          total = -total;
+      }
+      System.out.println(total);
+    why: "The `try` holds the whole loop, so the exception from `x` ends the loop too, and 5 is never added. The `catch` block turns the 7 added so far into -7."
+
+  - type: predict
+    after: choosing-what-to-catch
+    body: |
+      String text = "5:x";
+      try {
+          String[] parts = text.split(":");
+          System.out.print(Integer.parseInt(parts[1]) + " ");
+      } catch (IllegalArgumentException e) {
+          System.out.print("A ");
+      } catch (RuntimeException e) {
+          System.out.print("B ");
+      } finally {
+          System.out.println("C");
+      }
+    why: "`parseInt(\"x\")` throws a NumberFormatException, which is an IllegalArgumentException, so the first `catch` block matches and the second is skipped. The `finally` block runs either way."
+
+  - type: predict
+    after: try-with-resources
+    classes: |
+      class Valve implements AutoCloseable {
+          public Valve() {
+              System.out.print("open ");
+          }
+
+          @Override
+          public void close() {
+              System.out.print("closed ");
+          }
+      }
+    body: |
+      try (Valve valve = new Valve()) {
+          System.out.print("flow ");
+          int liters = 10 / 0;
+          System.out.print(liters + " ");
+      } catch (ArithmeticException e) {
+          System.out.print("caught ");
+      } finally {
+          System.out.println("end");
+      }
+    why: "The resource is created first, then the `try` block runs until `10 / 0` throws. The resource is closed as soon as the `try` block ends, before the `catch` block runs, and `finally` comes last."
+
+  - type: predict
+    after: throwing-exceptions
+    classes: |
+      class CargoLift {
+          private int top;
+          private int floor;
+
+          public CargoLift(int top) {
+              this.top = top;
+          }
+
+          public void goTo(int floor) {
+              if (floor < 0 || floor > this.top) {
+                  throw new IllegalArgumentException("no floor " + floor);
+              }
+              this.floor = floor;
+          }
+
+          public int getFloor() {
+              return this.floor;
+          }
+      }
+    body: |
+      CargoLift lift = new CargoLift(4);
+      int[] requests = {3, 6, -1};
+      for (int request : requests) {
+          try {
+              lift.goTo(request);
+          } catch (IllegalArgumentException e) {
+              System.out.print(e.getMessage() + ", ");
+          }
+      }
+      System.out.println("at " + lift.getFloor());
+    why: "Floors 6 and -1 don't exist, so `goTo` throws before it changes `floor`, and the `catch` block prints each message. The lift stays where the last accepted request took it: floor 3."
+
+  - type: predict
+    after: details-of-an-exception
+    body: |
+      IllegalArgumentException a = new IllegalArgumentException("no seat 9");
+      IllegalArgumentException b = new IllegalArgumentException();
+      System.out.println(a.getMessage() + " / " + b.getMessage() + " / " + b);
+    why: "`getMessage()` returns the text the exception was created with. `b` got none, so its message is `null`. Printing an exception shows its class with the package, followed by a colon and the message only when there is one."
+
+  - type: fill
+    after: throwing-exceptions
+    prompt: "Fill in the blank, a word, so that `check` passes its exception on to the code that called it."
+    pre: |
+      public static void check(String name) [[throws]] Exception {
+          if (name.isEmpty()) {
+              throw new Exception("No file name");
+          }
+          System.out.println("Reading " + name);
+      }
+    body: |
+      try {
+          check("report.txt");
+          check("");
+      } catch (Exception e) {
+          System.out.println(e.getMessage());
+      }
+    why: "`new Exception(...)` is a checked exception, so `check` must either catch it or declare it. `throws Exception` in the header passes it on, and the `catch` block in `main` prints its message."
+
+  - type: fill
+    after: details-of-an-exception
+    prompt: "Fill in the blank, so that the program prints only the exception's message: `Index 12 out of bounds for length 10`."
+    body: |
+      try {
+          int[] seats = new int[10];
+          seats[12] = 1;
+      } catch (ArrayIndexOutOfBoundsException e) {
+          System.out.println(e.[[getMessage‖getLocalizedMessage]]());
+      }
+    why: "`e.getMessage()` returns just the message. Printing `e` itself would put the class in front: `java.lang.ArrayIndexOutOfBoundsException: Index 12 out of bounds for length 10`."
+
+  - type: bug
+    after: choosing-what-to-catch
+    prompt: "The program should print `Not a number: 3 cm` and then `0`, but it crashes. Which line is wrong?"
+    body: |
+      String input = "3 cm";
+      int cm = 0;
+      try {
+          cm = Integer.parseInt(input);
+      } catch (ArithmeticException e) { // BUG
+          System.out.println("Not a number: " + input);
+      }
+      System.out.println(cm);
+    fix: "} catch (NumberFormatException e) {"
+    why: "`parseInt` throws a NumberFormatException, and a `catch` block for ArithmeticException doesn't match it, so the exception goes on and crashes the program. The `catch` must name the class that's thrown, or one of its parents."
+
+  - type: bug
+    after: throwing-exceptions
+    prompt: "Seat 2 can't be reserved twice: the program should print `Seat 2 is taken`. Which line is wrong?"
+    classes: |
+      class SeatRow {
+          private boolean[] taken;
+
+          public SeatRow() {
+              this.taken = new boolean[8];
+          }
+
+          public void reserve(int seat) {
+              if (this.taken[seat]) {
+                  new IllegalStateException("Seat " + seat + " is taken"); // BUG
+              }
+              this.taken[seat] = true;
+          }
+      }
+    body: |
+      SeatRow row = new SeatRow();
+      row.reserve(2);
+      try {
+          row.reserve(2);
+          System.out.println("Booked twice");
+      } catch (IllegalStateException e) {
+          System.out.println(e.getMessage());
+      }
+    fix: "throw new IllegalStateException(\"Seat \" + seat + \" is taken\");"
+    why: "`new IllegalStateException(...)` only creates the exception object. Without `throw`, nothing happens to it: the method goes on and marks the seat once more. `throw` stops the method and sends the exception to the caller."
+
+  - type: compiles
+    after: throwing-exceptions
+    pre: |
+      public static int floorNumber(int floor) {
+          if (floor < 0) {
+              throw new IllegalArgumentException("No floor " + floor);
+          }
+          return floor;
+      }
+    body: |
+      System.out.println(floorNumber(3));
+    why: "Yes. IllegalArgumentException is a RuntimeException, so it's unchecked: the method needs no `throws`, and the call needs no `try`. It prints 3."
+
+  - type: compiles
+    after: checked-exceptions
+    pre: |
+      public static String readName() throws Exception {
+          return "Ada";
+      }
+    body: |
+      System.out.println(readName());
+    why: "No. `throws Exception` in the header is enough, even though `readName` never throws: whoever calls it must catch the exception or declare it, and `main` does neither. javac says `unreported exception Exception; must be caught or declared to be thrown`."
+
+  - type: choice
+    after: checked-exceptions
+    prompt: "Which of these exceptions does javac make you catch or declare?"
+    choices:
+      - "`NumberFormatException`"
+      - "`ArrayIndexOutOfBoundsException`"
+      - "`IOException`"
+      - "`IllegalArgumentException`"
+    answer: 3
+    why: "IOException is a checked exception: it isn't a RuntimeException. The other three are RuntimeExceptions, which are unchecked, so javac leaves them to you."
+
+  - type: choice
+    after: exceptions-and-interfaces
+    prompt: "An interface has the method `String next() throws IOException;`. Which header compiles in a class that implements it? (InterruptedException is a checked exception, and it isn't a kind of IOException.)"
+    choices:
+      - "`public String next() throws Exception`"
+      - "`public String next()`"
+      - "`String next() throws IOException`"
+      - "`public String next() throws InterruptedException`"
+    answer: 2
+    why: "An implementation may throw fewer checked exceptions than the interface says, even none. `Exception` is broader than IOException, and InterruptedException is a checked exception the interface doesn't list, so javac refuses both. Without `public`, the method would be less visible than the interface's."
+
+  - type: boss
+    after: details-of-an-exception
+    prompt: |
+      Write the method `toMinutes(String time)`, which turns a time of day written as `hours:minutes`, such as `7:05` or `23:59`, into minutes after midnight. When the text isn't such a time, it throws an IllegalArgumentException with the message `Not a time: ` followed by the text. That's the case when there isn't exactly one colon, when a part isn't a whole number, or when the hours aren't 0 to 23 or the minutes 0 to 59.
+
+      The check runs:
+
+      ```java fragment
+      System.out.println(toMinutes("7:05"));
+      try {
+          toMinutes("7.05");
+          System.out.println("accepted");
+      } catch (IllegalArgumentException e) {
+          System.out.println(e.getMessage());
+      }
+      ```
+
+      and expects:
+
+      ```
+      425
+      Not a time: 7.05
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(toMinutes("7:05"));
+              try {
+                  toMinutes("7.05");
+                  System.out.println("accepted");
+              } catch (IllegalArgumentException e) {
+                  System.out.println(e.getMessage());
+              }
+          }
+
+          // Write the method toMinutes here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(toMinutes("7:05"));
+              try {
+                  toMinutes("7.05");
+                  System.out.println("accepted");
+              } catch (IllegalArgumentException e) {
+                  System.out.println(e.getMessage());
+              }
+          }
+
+          public static int toMinutes(String time) {
+              String[] parts = time.split(":");
+              if (parts.length != 2 || time.endsWith(":")) {
+                  throw new IllegalArgumentException("Not a time: " + time);
+              }
+              int hours;
+              int minutes;
+              try {
+                  hours = Integer.parseInt(parts[0]);
+                  minutes = Integer.parseInt(parts[1]);
+              } catch (NumberFormatException e) {
+                  throw new IllegalArgumentException("Not a time: " + time);
+              }
+              if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                  throw new IllegalArgumentException("Not a time: " + time);
+              }
+              return hours * 60 + minutes;
+          }
+      }
+    hints:
+      - "Split at the colon and check `parts.length` first. `split` drops empty parts at the end, so also refuse a text that ends with a colon. Then parse both parts inside a `try`, and in `catch (NumberFormatException e)` throw your own IllegalArgumentException with the right message."
+      - "Last, check the ranges of the hours and the minutes, and throw again if either is out of range. Only a time that passes every check gets to `return hours * 60 + minutes;`."
+    require:
+      - pattern: \bthrow\s+new\s+IllegalArgumentException\s*\(
+        message: "Refuse a text that isn't a time with `throw new IllegalArgumentException(...)`."
+    tests:
+      - call: |
+          System.out.println(toMinutes("7:05"));
+          try {
+              toMinutes("7.05");
+              System.out.println("accepted");
+          } catch (IllegalArgumentException e) {
+              System.out.println(e.getMessage());
+          }
+      - call: |
+          System.out.println(toMinutes("0:00") + " " + toMinutes("23:59") + " " + toMinutes("12:30"));
+        hidden: true
+      - call: |
+          String[] times = {"24:00", "12:60", "12:3x", "12", "1:2:3", "-1:30", ":45"};
+          for (String time : times) {
+              try {
+                  System.out.println(toMinutes(time));
+              } catch (IllegalArgumentException e) {
+                  System.out.println(e.getMessage());
+              }
+          }
+        hidden: true

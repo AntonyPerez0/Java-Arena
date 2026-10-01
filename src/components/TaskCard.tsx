@@ -2,18 +2,20 @@ import { Target } from "lucide-react";
 import type { Exercise } from "../content/types";
 import Markdown from "./Markdown";
 import InputText from "./InputText";
+import { FileName } from "./Results";
 
 /**
  * What the challenge asks for, set apart from the lesson so it's obvious: the task, then the exact
- * output the program must print, with the input it gets.
+ * output the program must print, with the input it gets, and the files it must write.
  */
 export default function TaskCard({ ex, task, index, total }: { ex: Exercise; task: string; index: number; total: number }) {
   // Tests that run the learner's JUnit tests on versions of the program.
   const junitTests = ex.tests.filter((t) => t.junit);
   const hiddenBuggy = junitTests.filter((t) => t.hidden && t.outcome === "fail").length;
   const hiddenPassing = junitTests.filter((t) => t.hidden && t.outcome !== "fail").length;
-  // A "What does it print?" challenge must not show its answer.
-  const shown = ex.kind === "predict" ? undefined : ex.tests.find((t) => !t.hidden && t.expect);
+  // A "What does it print?" challenge must not show its answer. A challenge whose program writes
+  // files shows the first visible test that checks them (scripts/build-content.mjs checkTaskOutput picks the same).
+  const shown = ex.kind === "predict" ? undefined : (ex.tests.find((t) => !t.hidden && t.writes) ?? ex.tests.find((t) => !t.hidden && t.expect));
   const others = ex.tests.filter((t) => t !== shown);
   const moreTests = others.length;
   const hiddenCount = others.filter((t) => t.hidden).length;
@@ -21,7 +23,7 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
   const files = others.filter((t) => t.files).length;
   const what = calls === 0 ? (files ? "input or files" : "input") : calls === others.length ? "calls" : "input or calls";
   // The expected output (and the check's code) get boxes of their own below, so copies in the task text are dropped.
-  const text = shown ? withoutBlock(task, shown.expect, shown.call) : task;
+  const text = shown?.expect ? withoutBlock(task, shown.expect, shown.call) : task;
   return (
     <section className="task-card" aria-labelledby="task-h">
       <div className="task-head">
@@ -82,7 +84,9 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
             ) : null}
             {Object.entries(shown.files ?? {}).map(([name, text]) => (
               <div key={name}>
-                <div className="lbl">The file {name}</div>
+                <div className="lbl">
+                  The file <FileName name={name} />
+                </div>
                 <pre className="console tiny" tabIndex={0}>
                   {text.replace(/\n$/, "")}
                 </pre>
@@ -91,8 +95,18 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
             <div>
               <div className="lbl">Expected output</div>
               <pre className="console task-output" tabIndex={0}>
-                {shown.expect}
+                {shown.expect || <em className="muted">(nothing)</em>}
               </pre>
+              {Object.entries(shown.writes ?? {}).map(([name, text]) => (
+                <div key={name}>
+                  <div className="lbl">
+                    The file <FileName name={name} /> after the run
+                  </div>
+                  <pre className="console tiny" tabIndex={0}>
+                    {text.replace(/\n$/, "") || <em className="muted">(empty)</em>}
+                  </pre>
+                </div>
+              ))}
             </div>
           </div>
           {moreTests > 0 && (

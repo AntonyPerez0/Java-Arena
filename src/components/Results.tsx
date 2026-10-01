@@ -10,8 +10,8 @@ export function DiagnosticList({ diagnostics, raw, multiFile }: { diagnostics: F
   const errors = diagnostics.filter((d) => d.kind === "error");
   const shown = (errors.length ? errors : diagnostics.filter((d) => d.kind !== "note")).slice(0, 4);
   const more = (errors.length || diagnostics.length) - shown.length;
-  // With several files, each message says which one it's about.
-  const fileOf = (d: FriendlyDiagnostic) => d.file.split("/").pop() ?? "";
+  // With several files, each message says which one it's about, with its folders (library/domain/Book.java).
+  const fileOf = (d: FriendlyDiagnostic) => d.file;
   const named = multiFile || diagnostics.some((d) => d.line > 0 && fileOf(d) !== "Main.java");
   return (
     <div className="diags">
@@ -21,7 +21,12 @@ export function DiagnosticList({ diagnostics, raw, multiFile }: { diagnostics: F
             <span className="diag-sev">{d.kind}</span>
             {d.line > 0 && (
               <span className="diag-line">
-                {named ? `${fileOf(d)}, ` : ""}line {d.line}
+                {named && (
+                  <>
+                    <FileName name={fileOf(d)} />,{" "}
+                  </>
+                )}
+                line {d.line}
               </span>
             )}
           </div>
@@ -45,9 +50,54 @@ export function DiagnosticList({ diagnostics, raw, multiFile }: { diagnostics: F
   );
 }
 
-function Shown({ s }: { s: string }) {
-  if (s === "") return <em className="muted">(nothing)</em>;
+function Shown({ s, empty = "(nothing)" }: { s: string; empty?: string }) {
+  if (s === "") return <em className="muted">{empty}</em>;
   return <>{s}</>;
+}
+
+/** A file's name in a label, in its own letters (the label is in capitals). */
+export function FileName({ name }: { name: string }) {
+  return <span className="lbl-file">{name}</span>;
+}
+
+// A file a free run wrote starts folded when it's longer than this.
+const LONG_FILE_LINES = 15;
+const LONG_FILE_CHARS = 1500;
+
+/** The files a free run created or changed, each under its name; a long one starts folded. */
+export function WrittenFiles({ files }: { files?: { name: string; text: string }[] }) {
+  if (!files?.length) return null;
+  return (
+    <div className="written-files">
+      {files.map((f) => {
+        const text = f.text.replace(/\n$/, "");
+        const lines = text === "" ? 0 : text.split("\n").length;
+        const label = (
+          <span className="lbl">
+            the file <FileName name={f.name} /> after the run
+          </span>
+        );
+        const body = (
+          <pre tabIndex={0} className="console tiny">
+            <Shown s={text} empty="(empty)" />
+          </pre>
+        );
+        return lines > LONG_FILE_LINES || text.length > LONG_FILE_CHARS ? (
+          <details key={f.name} className="written-file">
+            <summary>
+              {label} <span className="muted small">({lines === 1 ? "1 line" : `${lines} lines`})</span>
+            </summary>
+            {body}
+          </details>
+        ) : (
+          <div key={f.name} className="written-file">
+            {label}
+            {body}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function Results({ result }: { result: GradeResult }) {
@@ -151,26 +201,51 @@ export default function Results({ result }: { result: GradeResult }) {
                     ) : null}
                     {Object.entries(t.files ?? {}).map(([name, text]) => (
                       <div key={name}>
-                        <span className="lbl">the file {name}</span>
+                        <span className="lbl">
+                          the file <FileName name={name} />
+                        </span>
                         <pre tabIndex={0} className="console tiny">
                           {text.replace(/\n$/, "")}
                         </pre>
                       </div>
                     ))}
-                    <div className="t-cmp">
-                      <div>
-                        <span className="lbl">expected</span>
-                        <pre tabIndex={0} className="console tiny">
-                          <Shown s={t.expected ?? ""} />
-                        </pre>
+                    {/* When only a written file is wrong, the output (which is right) isn't compared again. */}
+                    {!(t.writes?.some((f) => !f.pass) && t.got === t.expected) && (
+                      <div className="t-cmp">
+                        <div>
+                          <span className="lbl">expected</span>
+                          <pre tabIndex={0} className="console tiny">
+                            <Shown s={t.expected ?? ""} />
+                          </pre>
+                        </div>
+                        <div>
+                          <span className="lbl">{t.junit ? "your tests printed" : "your program printed"}</span>
+                          <pre tabIndex={0} className="console tiny">
+                            <Shown s={t.got ?? ""} />
+                          </pre>
+                        </div>
                       </div>
-                      <div>
-                        <span className="lbl">{t.junit ? "your tests printed" : "your program printed"}</span>
-                        <pre tabIndex={0} className="console tiny">
-                          <Shown s={t.got ?? ""} />
-                        </pre>
-                      </div>
-                    </div>
+                    )}
+                    {t.writes
+                      ?.filter((f) => !f.pass)
+                      .map((f) => (
+                        <div key={f.name} className="t-cmp">
+                          <div>
+                            <span className="lbl">
+                              the file <FileName name={f.name} /> should contain
+                            </span>
+                            <pre tabIndex={0} className="console tiny">
+                              <Shown s={f.expected} empty="(an empty file)" />
+                            </pre>
+                          </div>
+                          <div>
+                            <span className="lbl">your program wrote</span>
+                            <pre tabIndex={0} className="console tiny">
+                              {f.got === null ? <em className="muted">(it didn't create {f.name})</em> : <Shown s={f.got} empty="(an empty file)" />}
+                            </pre>
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 )}
                 {!t.pass && t.note && <div className="t-note">{t.note}</div>}

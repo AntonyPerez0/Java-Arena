@@ -13,8 +13,13 @@ import { useResolvedTheme } from "../lib/appearance";
 import { lightEditorTheme } from "./lightTheme";
 
 // One Dark, except that true and false get its keyword violet in place of its orange, as they do in
-// the lessons' code (the site has no orange).
-const darkEditorTheme = [oneDarkTheme, syntaxHighlighting(HighlightStyle.define([...oneDarkHighlightStyle.specs, { tag: t.bool, color: "#c678dd" }]))];
+// the lessons' code (the site has no orange), and the current line's number gets One Dark's text
+// color: its own #7d8799 on the highlighted #2c313a is only 3.6:1 (now 6.1:1).
+const darkEditorTheme = [
+  oneDarkTheme,
+  EditorView.theme({ ".cm-activeLineGutter": { color: "#abb2bf" } }, { dark: true }),
+  syntaxHighlighting(HighlightStyle.define([...oneDarkHighlightStyle.specs, { tag: t.bool, color: "#c678dd" }])),
+];
 
 type Props = {
   value: string;
@@ -49,7 +54,8 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
   useEffect(() => () => void (view.current && leave.current?.(view.current.state.toJSON(savedFields) as SavedEditor)), []);
   const theme = useResolvedTheme();
   const extensions = useMemo(() => {
-    const marks = diagnostics.filter((d) => d.line > 0 && d.kind !== "note" && d.file.split("/").pop() === file);
+    // javac names a file by its path, as the program's files are named (library/domain/Book.java).
+    const marks = diagnostics.filter((d) => d.line > 0 && d.kind !== "note" && d.file === file);
     return [
       java(),
       // Four spaces per level, like the lessons and the style check (CodeMirror's default is two).

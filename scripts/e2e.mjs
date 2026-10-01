@@ -11,7 +11,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { launchChromium } from './browser.mjs';
 import { serve } from './serve.mjs';
 import { indentProblems } from '../src/grader/style.js';
-import { splitFiles } from '../src/grader/files.js';
+import { folderOf, joinFiles, splitFiles } from '../src/grader/files.js';
 
 const shotsIdx = process.argv.indexOf('--shots');
 const SHOTS = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
@@ -602,6 +602,155 @@ const lessonSession = await newPage();
 }
 await lessonSession.ctx.close();
 
+// Part 11 lessons. The steps are picked from the build's own module files, by what they hold.
+const moduleOf = (id) => JSON.parse(readFileSync(new URL(`../src/generated/modules/${id}.json`, import.meta.url), 'utf8'));
+/** Each challenge of a module: { step, ex, index } (the step itself is challenge 1, then its `more`). */
+const challengesOf = (mod) => mod.steps.flatMap((step) => [step, ...(step.more ?? [])].map((ex, index) => ({ step, ex, index })));
+async function openChallenge(page, moduleId, { step, index }) {
+  await page.goto(BASE + `learn/${moduleId}/${step.slug}/`);
+  await lessonReady(page);
+  if (index > 0) await page.locator('.challenge-tab').nth(index).click();
+  await page.locator('.task-card', { hasText: `Challenge ${index + 1} of` }).waitFor();
+}
+/** The path of each file tab, in order (a tab of a folder file says its path in its label). */
+const tabPaths = (page) => page.locator('.file-tab').evaluateAll((els) => els.map((e) => (e.getAttribute('aria-label') ?? e.textContent).replace(/,?\s*\d+ errors?$/, '').trim()));
+/** Types each file of a program (joined with file markers) into its tab. */
+async function setFiles(page, code) {
+  const paths = await tabPaths(page);
+  for (const f of splitFiles(code)) {
+    const i = paths.indexOf(f.path);
+    expect(i >= 0, `no tab for ${f.path} (tabs: ${paths})`);
+    await page.click(`#file-tab-${i}`);
+    await page.locator(`#file-tab-${i}[aria-selected="true"]`).waitFor();
+    await setCode(page, f.text);
+  }
+}
+await test('a class diagram in a lesson: drawn, with a text version; axe passes in both themes; a 320 px phone does not scroll sideways', async () => {
+  // The step of module 40 whose lesson text has the widest diagram: on a phone it scrolls, if anything does.
+  const widths = (text) => [...text.matchAll(/<svg class="uml-svg" viewBox="0 0 ([\d.]+) /g)].map((m) => Number(m[1]));
+  const step = moduleOf('class-diagrams').steps.reduce((a, b) => (Math.max(0, ...widths(b.text)) > Math.max(0, ...widths(a.text)) ? b : a));
+  const widest = Math.max(0, ...widths(step.text));
+  expect(widest > 0, 'no class diagram in the lesson text of module 40');
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + `learn/class-diagrams/${step.slug}/`);
+  await lessonReady(page);
+  const figures = page.locator('article.step-text figure.uml');
+  expect((await figures.count()) === widths(step.text).length, `${await figures.count()} diagrams in the lesson text, not ${widths(step.text).length}`);
+  const figure = figures.filter({ has: page.locator(`svg[viewBox^="0 0 ${widest} "]`) }).first();
+  const svg = figure.locator('svg.uml-svg');
+  const box = await svg.boundingBox();
+  expect(box && box.width > 100 && box.height > 50, `the drawing is ${JSON.stringify(box)}`);
+  // The drawing and its text version have the same classes.
+  const drawn = await svg.locator('text.u-name').allTextContents();
+  const listed = await figure.locator('details.uml-text > ul > li > strong').allTextContents();
+  expect(drawn.length > 1 && drawn.slice().sort().join() === listed.slice().sort().join(), `drawn: ${drawn}; as text: ${listed}`);
+  // The text version opens under the drawing.
+  const details = figure.locator('details.uml-text');
+  expect((await details.getAttribute('open')) === null, 'the text version starts closed');
+  await details.locator('summary').click();
+  await details.locator('li code').first().waitFor({ state: 'visible' });
+  const asText = await details.innerText();
+  expect(listed.every((name) => asText.includes(name)) && /field|method|constructor/.test(asText), asText);
+  // Both themes: the drawing's text has the page's text color, and axe passes.
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    const [fill, color] = await page.evaluate(() => [getComputedStyle(document.querySelector('article .uml-svg text.u-name')).fill, getComputedStyle(document.body).color]);
+    expect(fill === color, `${colorScheme}: class names drawn in ${fill} on a page whose text is ${color}`);
+    await axe(page, `a lesson with class diagrams, ${colorScheme} theme`);
+    await shot(page, `class-diagram-${colorScheme}`);
+  }
+  // A 320 px phone: the page doesn't scroll sideways; a drawing shrinks only while its text stays
+  // 11 px or more, and one that scrolls inside itself can be scrolled from the keyboard.
+  await page.setViewportSize({ width: 320, height: 700 });
+  await noOverflow(page, 'a lesson with class diagrams at 320 px');
+  const drawings = await page.locator('article figure.uml').evaluateAll((els) =>
+    els.map((f) => {
+      const scroll = f.querySelector('.uml-scroll');
+      const svg = f.querySelector('svg');
+      return { font: (12 * svg.getBoundingClientRect().width) / svg.viewBox.baseVal.width, scrolls: scroll.scrollWidth > scroll.clientWidth, tabindex: scroll.getAttribute('tabindex'), label: scroll.getAttribute('aria-label') };
+    }),
+  );
+  expect(drawings.every((d) => d.font >= 10.9), `text below 11 px: ${JSON.stringify(drawings)}`);
+  expect(drawings.filter((d) => d.scrolls).every((d) => d.tabindex === '0' && d.label?.startsWith('Class diagram of')), `a drawing scrolls but can't take the focus: ${JSON.stringify(drawings)}`);
+  await axe(page, 'a lesson with class diagrams at 320 px');
+  await shot(page, 'class-diagram-320');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+await test('a check on the file a program writes: a wrong file shows what it should contain and what the program wrote; the model solution passes', async () => {
+  // A challenge of module 43 whose starter program runs but has a bug in what it writes.
+  const found = challengesOf(moduleOf('writing-files')).find(({ ex }) => ex.kind === 'code' && /\bbug\b/i.test(ex.task) && ex.tests.some((t) => !t.hidden && t.writes));
+  expect(found, 'no challenge in module 43 asks to fix a bug in a program that writes a file');
+  const shown = found.ex.tests.find((t) => !t.hidden && t.writes);
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'writing-files', found);
+  // The task says what each file should hold after the run.
+  const card = await page.locator('.task-card').innerText();
+  for (const [name, text] of Object.entries(shown.writes)) expect(new RegExp(`${name.replace(/\./g, '\\.')} after the run`, 'i').test(card) && card.includes(text), card);
+  // The starter code: the file check fails, with the file it should be and the file it is.
+  let out = await check(page);
+  expect(out.includes('Not yet'), out);
+  const failed = page.locator('.t-fail', { hasText: shown.name }).first();
+  for (const [name, text] of Object.entries(shown.writes)) {
+    const cmp = failed.locator('.t-cmp', { hasText: new RegExp(`${name.replace(/\./g, '\\.')} should contain`, 'i') });
+    expect((await cmp.count()) === 1, `no comparison of ${name}: ${out}`);
+    const [should, wrote] = await cmp.locator('pre').allInnerTexts();
+    expect(should.trim() === text.trim(), `${name} should contain ${JSON.stringify(should)}, not ${JSON.stringify(text)}`);
+    expect(/your program wrote/i.test(await cmp.innerText()) && wrote.trim() !== '' && wrote.trim() !== text.trim() && !wrote.includes("didn't create"), `what the program wrote: ${JSON.stringify(wrote)}`);
+  }
+  // Hidden tests keep their files' contents hidden.
+  for (const t of found.ex.tests.filter((t) => t.hidden && t.writes)) for (const text of Object.values(t.writes)) expect(text.length < 8 || !out.includes(text), `a hidden test's file is shown: ${text}`);
+  await axe(page, 'a failed check of a written file');
+  // The model solution passes every test, the files included.
+  await setFiles(page, found.ex.solution);
+  out = await check(page);
+  expect(out.includes('All tests passed'), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+await test('a challenge in package folders: each file has its tab, with its folders; a compile error in a folder file lands on its tab', async () => {
+  // The first code challenge of module 41 whose files sit in two folders or more.
+  const found = challengesOf(moduleOf('packages')).find(({ ex }) => ex.kind === 'code' && new Set(splitFiles(ex.seed).map((f) => folderOf(f.path)).filter(Boolean)).size >= 2);
+  expect(found, 'no challenge in module 41 has files in two folders');
+  const seedPaths = splitFiles(found.ex.seed).map((f) => f.path);
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'packages', found);
+  expect((await tabPaths(page)).join() === seedPaths.join(), `tabs: ${await tabPaths(page)}; files: ${seedPaths}`);
+  const dirs = await page.locator('.file-tab').evaluateAll((els) => els.map((e) => e.querySelector('.file-tab-dir')?.textContent ?? ''));
+  expect(dirs.join() === seedPaths.map((p) => folderOf(p)).join(), `folders on the tabs: ${dirs}`);
+  // The model solution with a semicolon missing in a folder file (a line in its class body).
+  const files = splitFiles(found.ex.solution);
+  const broken = files.find((f) => folderOf(f.path) && f.text.split('\n').some((l) => /^\s{4,}\S.*;$/.test(l)));
+  const lines = broken.text.split('\n');
+  const line = lines.findIndex((l) => /^\s{4,}\S.*;$/.test(l)) + 1;
+  lines[line - 1] = lines[line - 1].replace(/;$/, '');
+  await setFiles(page, joinFiles(files.map((f) => (f === broken ? { ...f, text: lines.join('\n') } : f))));
+  // Checked from another file's tab, the error opens the folder file's tab, with its count and the mark on its line.
+  const at = seedPaths.indexOf(broken.path);
+  const tab = page.locator(`#file-tab-${at}`);
+  await page.click(`#file-tab-${at === 0 ? 1 : 0}`);
+  let out = await check(page);
+  expect(out.includes("It didn't compile") && new RegExp(`${broken.path.replace(/[./]/g, '\\$&')}, line ${line}\\b`, 'i').test(out) && out.includes("';' expected"), out);
+  await page.locator(`#file-tab-${at}[aria-selected="true"]`).waitFor();
+  expect((await tab.getAttribute('aria-label')) === `${broken.path}, 1 error` && (await page.locator('.file-tab-errors').count()) === 1, `the tab: ${await tab.getAttribute('aria-label')}`);
+  await page.locator('.cm-lint-marker-error').first().waitFor();
+  const marked = await page.evaluate(() => [...document.querySelectorAll('.cm-content .cm-line')].findIndex((l) => l.querySelector('.cm-lintRange-error, .cm-lintPoint-error')) + 1);
+  expect(marked === line && (await page.locator('.cm-lint-marker-error').count()) === 1, `the mark is on line ${marked}, not ${line}`);
+  await axe(page, 'a challenge in package folders, with an error');
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 700 });
+    await noOverflow(page, `a challenge in package folders at ${width} px`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // The whole model solution passes.
+  await setFiles(page, found.ex.solution);
+  out = await check(page);
+  expect(out.includes('All tests passed'), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 console.log('Playground');
 await test('playground: a class in a file of its own; errors and crashes name their file; the link carries both files', async () => {
   const { ctx, page, errors } = await newPage();
@@ -636,6 +785,83 @@ await test('playground: a class in a file of its own; errors and crashes name th
   await other.page.locator('.banner-info').waitFor();
   expect((await other.page.locator('.file-tab').allInnerTexts()).join() === 'Main.java,Greeter.java', 'both files came with the link');
   await other.ctx.close();
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('playground: a class in a package gets a file in its folders, with its package line; errors and crashes land on that file', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, 'import shop.model.Item;\n\n' + MAIN('        Item item = new Item("apple", 3);\n        System.out.println(item.describe());'));
+  const addClass = async (name) => {
+    await page.click('text=Add a class');
+    await page.fill('#new-class', name);
+    await page.click('.file-add-form button[type=submit]');
+  };
+  await addClass('shop.model.Item');
+  // The tab shows the folders above the file name, and gives screen readers the whole path.
+  const tab = page.locator('#file-tab-1');
+  expect((await tab.getAttribute('aria-label')) === 'shop/model/Item.java' && (await tab.getAttribute('aria-selected')) === 'true', `the new file's tab: ${await tab.getAttribute('aria-label')}`);
+  expect((await tab.locator('.file-tab-dir').innerText()) === 'shop/model/', 'the folders on the tab');
+  expect((await editorText(page)).startsWith('package shop.model;\n\npublic class Item {'), await editorText(page));
+  // Names are checked: no reserved words, no second file of the same class.
+  for (const [name, says] of [['shop.class.Item', 'class is a word Java reserves'], ['shop/model/Item', 'There is already a shop/model/Item.java']]) {
+    await addClass(name);
+    const said = await page.locator('#new-class-error').innerText();
+    expect(said.includes(says), `${name}: ${said}`);
+    await page.click('.file-add-form button:has-text("Cancel")');
+  }
+  const item = (constructor, price) => `package shop.model;\n\npublic class Item {\n    private String name;\n    private int price;\n\n    public Item(String name, int price) {\n${constructor}\n        this.price = ${price};\n    }\n\n    public String describe() {\n        return name + " costs " + (12 / price);\n    }\n}\n`;
+  await setCode(page, item('        this.name = name;', 'price'));
+  let out = await check(page);
+  expect(out.includes('apple costs 4'), out);
+  // A mistake in the folder file, checked from Main's tab: the message names the file with its
+  // folders, that file's tab opens with the count, and the mark is on its line.
+  await setCode(page, item('        this.name = name', 'price'));
+  await page.click('#file-tab-0');
+  await page.locator('.file-tab-on', { hasText: 'Main.java' }).waitFor();
+  out = await check(page);
+  expect(/shop\/model\/Item\.java, line 8/i.test(out), out);
+  expect((await tab.getAttribute('aria-selected')) === 'true' && (await tab.locator('.file-tab-errors').innerText()).startsWith('1') && (await tab.getAttribute('aria-label')) === 'shop/model/Item.java, 1 error', 'the file with the error is open, with its count');
+  await page.locator('.cm-lint-marker-error').first().waitFor();
+  const marked = await page.evaluate(() => [...document.querySelectorAll('.cm-content .cm-line')].findIndex((l) => l.querySelector('.cm-lintRange-error, .cm-lintPoint-error')) + 1);
+  expect(marked === 8 && (await page.locator('.cm-lint-marker-error').count()) === 1, `the mark is on line ${marked}`);
+  await page.click('#file-tab-0');
+  await page.locator('.file-tab-on', { hasText: 'Main.java' }).waitFor();
+  // Marks appear as the editor starts: give Main.java's a moment to show one it shouldn't have.
+  await page.waitForTimeout(300);
+  expect((await page.locator('.cm-lint-marker-error').count()) === 0, 'Main.java has no mark');
+  // A crash in the folder file names it with its folders.
+  await page.click('#file-tab-1');
+  await setCode(page, item('        this.name = name;', '0'));
+  out = await check(page);
+  expect(out.includes('ArithmeticException') && out.includes('shop/model/Item.java, line 13'), out);
+  await axe(page, 'playground with a file in a folder');
+  await page.setViewportSize({ width: 320, height: 700 });
+  await noOverflow(page, 'playground with a file in a folder at 320 px');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // The link carries the folder file.
+  await page.click('text=Share');
+  await page.locator('#pg-link').waitFor();
+  const link = await page.inputValue('#pg-link');
+  const other = await newPage();
+  await other.page.goto(link);
+  await other.page.locator('.banner-info').waitFor();
+  const names = await other.page.locator('.file-tab').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent));
+  expect(names.join() === 'Main.java,shop/model/Item.java', `the link's files: ${names}`);
+  await other.ctx.close();
+  // A long path keeps its letters and wraps in the error card, and the tabs scroll inside their
+  // strip: a phone doesn't scroll sideways.
+  await addClass('vending.coffee.CoffeeMachine');
+  await setCode(page, 'package vending.coffee;\n\npublic class CoffeeMachine {\n    private int cups\n}\n');
+  out = await check(page);
+  expect(out.includes('vending/coffee/CoffeeMachine.java,') && /CoffeeMachine\.java, line 4/i.test(out), out);
+  for (const width of [320, 360, 390]) {
+    await page.setViewportSize({ width, height: 700 });
+    await noOverflow(page, `an error in vending/coffee/CoffeeMachine.java at ${width} px`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
@@ -721,6 +947,32 @@ await test('part 10 mistakes are explained: a lambda that changes a local variab
   await ctx.close();
 });
 
+await test('part 11 mistakes are explained: an unreported exception names its method, a class from another package gets its import line, and a refused value names the throw and the call', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  // A checked exception: the note names what throws it and gives both ways to handle it.
+  await setCode(page, 'import java.nio.file.Files;\nimport java.nio.file.Path;\n\n' + MAIN('        System.out.println(Files.readAllLines(Path.of("scores.txt")));'));
+  let out = await check(page);
+  expect(out.includes('Files.readAllLines(...) can throw IOException') && out.includes('catch (IOException e)') && out.includes('add throws IOException to the header of main: public static void main(String[] args) throws IOException'), out);
+  // A class in a package, used from Main without an import: the note names the package and gives the import line.
+  await page.click('text=Add a class');
+  await page.fill('#new-class', 'shop.model.Item');
+  await page.click('.file-add-form button[type=submit]');
+  await setCode(page, 'package shop.model;\n\npublic class Item {\n    private int price;\n\n    public Item(int price) {\n        if (price < 0) {\n            throw new IllegalArgumentException("A price can\'t be negative: " + price);\n        }\n        this.price = price;\n    }\n}\n');
+  await page.click('#file-tab-0');
+  await page.locator('.file-tab-on', { hasText: 'Main.java' }).waitFor();
+  await setCode(page, MAIN('        Item item = new Item(-2);\n        System.out.println(item);'));
+  out = await check(page);
+  expect(/Main\.java, line 3/i.test(out) && out.includes('Item is in the package shop.model (the file shop/model/Item.java)') && out.includes('add import shop.model.Item; at the top of Main.java'), out);
+  // With the import it runs, and the constructor refuses the price: the note names the throw and the call that passed the value.
+  await setCode(page, 'import shop.model.Item;\n\n' + MAIN('        Item item = new Item(-2);\n        System.out.println(item);'));
+  out = await check(page);
+  expect(out.includes('crashed with IllegalArgumentException. Your own code threw it on purpose, with the throw in the constructor of Item (shop/model/Item.java, line 8)') && out.includes('the call in main (Main.java, line 5) passed it') && out.includes("A price can't be negative: -2"), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('playground: run a program with input, share it, open the link elsewhere', async () => {
   const { ctx, page, errors } = await newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -767,6 +1019,31 @@ await test('playground: run a program with input, share it, open the link elsewh
   await page.goto(BASE + 'playground/');
   await page.locator('.cm-content').waitFor();
   expect((await editorText(page)).includes('What is your name?'), 'the Playground shows the example again');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+await test('playground: the output keeps the order it was printed in, error messages too; the files the program wrote are shown', async () => {
+  const { ctx, page, errors } = await newPage({ viewport: { width: 320, height: 800 } });
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(
+    page,
+    'import java.io.PrintWriter;\nimport java.nio.file.Files;\nimport java.nio.file.Path;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n' +
+      '        System.out.println("Reading scores");\n        System.err.println("Warning: line 2 is not a number");\n        System.out.println("Total: 8");\n' +
+      '        Files.createDirectories(Path.of("reports"));\n        try (PrintWriter out = new PrintWriter("reports/summary.txt")) {\n            for (int i = 1; i <= 20; i++) {\n                out.println("line " + i);\n            }\n        }\n' +
+      '        Files.writeString(Path.of("note.txt"), "Done\\n");\n        System.out.println("Last line");\n    }\n}\n',
+  );
+  await check(page);
+  const out = await page.locator('.results .console').first().innerText();
+  expect(out.trim() === 'Reading scores\nWarning: line 2 is not a number\nTotal: 8\nLast line', `the error message stays between the lines: ${out}`);
+  const short = await page.locator('div.written-file').allInnerTexts();
+  expect(short.length === 1 && /note\.txt after the run/i.test(short[0]) && short[0].includes('Done'), `a short file is shown: ${short}`);
+  const folded = page.locator('details.written-file');
+  expect(/reports\/summary\.txt after the run/i.test(await folded.locator('summary').innerText()) && (await folded.getAttribute('open')) === null, 'a long file starts folded, under its path');
+  await folded.locator('summary').click();
+  expect((await folded.locator('pre').innerText()).includes('line 20'), 'opened, it shows the whole file');
+  await noOverflow(page, 'playground with written files at 320 px');
+  await axe(page, 'playground with written files');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });

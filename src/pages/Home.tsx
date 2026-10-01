@@ -38,7 +38,7 @@ export default function Home() {
           <div>
             <div className="eyebrow">Free and non-commercial</div>
             <h1>
-              Learn Java by writing <span className="hero-accent">real Java</span>
+              Learn Java by writing <span className="hero-accent">real</span> Java
             </h1>
             <p className="hero-lead">
               Every exercise is compiled by the real <code>javac</code> 21 compiler and run by a Java virtual machine, both inside your browser, on your own device. The lessons follow the University of Helsinki's Java Programming MOOC, with their own explanations and exercises.

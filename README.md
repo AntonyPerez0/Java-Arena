@@ -22,7 +22,8 @@ The site is built in batches, one pull request per batch.
 | 10 | MOOC part 7 (modules 27 to 29: procedural and object-oriented programs, sorting and searching, larger programs), the end of Java Programming I; lesson pages load only their own step | done |
 | 11 | MOOC part 8 (modules 30 to 33: a recap of parts 1 to 7, hash maps, equals and hashCode, grouping data), the start of Java Programming II; Continue buttons open their lesson at once, a keyboard user keeps their place when the app starts | done |
 | 12 | MOOC part 9 (modules 34 to 36: inheritance and abstract classes, interfaces, polymorphism), plain-English explanations for part 9 mistakes | done |
-| 13 | MOOC part 10 (modules 37 to 39: streams and lambdas, Comparable and Comparator, StringBuilder, regular expressions, enums and iterators); plain-English explanations for part 10 mistakes | this batch |
+| 13 | MOOC part 10 (modules 37 to 39: streams and lambdas, Comparable and Comparator, StringBuilder, regular expressions, enums and iterators); plain-English explanations for part 10 mistakes | done |
+| 13b | Java colors: Java red and blue instead of orange, a new logo of our own (a red and blue tile with a white J, clearly not Oracle's cup logo), and small fixes found on the way | this batch |
 | 14 | MOOC part 11 (modules 40 to 43: class diagrams, packages, exceptions, writing files); class diagrams in lessons, package folders in the editor, checks on the files a program writes | planned |
 | 15 | MOOC part 12 (modules 44 to 47: generics, your own list and hash map, random numbers, two-dimensional arrays) | planned |
 | 16 | MOOC part 13 (modules 48 to 50: graphical user interfaces); what runs in the browser and what needs your own computer, decided and said plainly | planned |

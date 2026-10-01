@@ -26,7 +26,7 @@ export const isDue = (st: DrillStat | undefined, now = Date.now()) => !!st && st
 
 /**
  * A drill is open once the step that teaches it is done, its module was skipped by the placement
- * quiz, or it has been practised in Deathmatch before (so review never loses a drill). Interview
+ * quiz, or it has been practiced in Deathmatch before (so review never loses a drill). Interview
  * drills are always open.
  */
 export function drillUnlocked(s: State, d: Drill): boolean {

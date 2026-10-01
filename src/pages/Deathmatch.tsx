@@ -375,7 +375,7 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
         {unlocked.length === 0 ? (
           <div className="card">
             <h2 className="h3">No drills unlocked yet</h2>
-            <p>Each lesson step unlocks the drills that practise it. Finish a step, take the placement quiz if you already know some Java, or start with interview prep, which is open to everyone.</p>
+            <p>Each lesson step unlocks the drills that practice it. Finish a step, take the placement quiz if you already know some Java, or start with interview prep, which is open to everyone.</p>
             <div className="actions">
               {first && (
                 <Link className="btn btn-primary" to={stepPath(first, first.steps[0])}>

@@ -1,17 +1,15 @@
-/** The Java Arena mark: curly braces around a J on an orange tile. Also used as the favicon (public/favicon.svg). */
+/**
+ * The Java Arena mark: an arena seen from above, a rounded tile split corner to corner into a red
+ * corner and a blue corner (the two Java colors), with a white J standing across both. It is our own
+ * drawing (no cup, steam or Java wordmark lettering). The same drawing is public/favicon.svg, the
+ * MARK in scripts/prerender.mjs and the share card's logo in src/lib/card.ts.
+ */
 export function BrandMark() {
   return (
     <svg className="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-      <defs>
-        <linearGradient id="ja-bm" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#fdba74" />
-          <stop offset="0.55" stopColor="#f97316" />
-          <stop offset="1" stopColor="#dc2626" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="8" fill="url(#ja-bm)" />
-      <path d="M10 8.5c-2 0-2.6 1-2.6 2.8v2.2c0 1.4-.6 2.2-1.9 2.5 1.3.3 1.9 1.1 1.9 2.5v2.2c0 1.8.6 2.8 2.6 2.8M22 8.5c2 0 2.6 1 2.6 2.8v2.2c0 1.4.6 2.2 1.9 2.5-1.3.3-1.9 1.1-1.9 2.5v2.2c0 1.8-.6 2.8-2.6 2.8" fill="none" stroke="#1c0a02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M18.2 10v7.6c0 2.2-1.1 3.4-3 3.4-1.3 0-2.2-.6-2.7-1.6" fill="none" stroke="#1c0a02" strokeWidth="2.6" strokeLinecap="round" />
+      <rect width="32" height="32" rx="8" fill="#0D6EB5" />
+      <path d="M2.34 29.66A8 8 0 0 1 0 24V8A8 8 0 0 1 8 0H24A8 8 0 0 1 29.66 2.34Z" fill="#E11D21" />
+      <path d="M11.5 8.8H21.5M18.6 8.8V18.4c0 3-1.7 4.8-4.4 4.8-1.9 0-3.2-.9-3.9-2.5" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

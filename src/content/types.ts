@@ -105,7 +105,7 @@ export type DrillType = "predict" | "fill" | "bug" | "compiles" | "choice" | "bo
  */
 export type Drill = {
   id: string;
-  /** The module it practises, or "interview". */
+  /** The module it practices, or "interview". */
   topic: string;
   type: DrillType;
   prompt: string;

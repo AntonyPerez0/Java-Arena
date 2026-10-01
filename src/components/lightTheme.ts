@@ -8,11 +8,11 @@ const style = HighlightStyle.define([
   { tag: [t.keyword, t.controlKeyword, t.modifier, t.operatorKeyword, t.definitionKeyword, t.bool, t.null, t.self], color: "#7a2fae" },
   { tag: [t.typeName, t.standard(t.typeName), t.className, t.namespace], color: "#805300" },
   { tag: [t.string, t.character, t.special(t.string)], color: "#2b6e1f" },
-  { tag: [t.number, t.integer, t.float], color: "#a8401b" },
+  { tag: [t.number, t.integer, t.float], color: "#a3246a" },
   { tag: [t.comment, t.lineComment, t.blockComment], color: "#545c6a", fontStyle: "italic" },
   { tag: [t.processingInstruction, t.meta, t.macroName], color: "#0a6590" },
   { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#2448a8" },
-  { tag: [t.escape, t.regexp], color: "#8a3a00" },
+  { tag: [t.escape, t.regexp], color: "#a3246a" },
   { tag: t.invalid, color: "#b8192c" },
 ]);
 

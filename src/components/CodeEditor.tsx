@@ -1,15 +1,20 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { java } from "@codemirror/lang-java";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { oneDarkHighlightStyle, oneDarkTheme } from "@codemirror/theme-one-dark";
 import { keymap, EditorView } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import { historyField } from "@codemirror/commands";
-import { indentUnit } from "@codemirror/language";
+import { HighlightStyle, indentUnit, syntaxHighlighting } from "@codemirror/language";
+import { tags as t } from "@lezer/highlight";
 import { linter, lintGutter, type Diagnostic as CmDiagnostic } from "@codemirror/lint";
 import type { FriendlyDiagnostic } from "../grader/grade";
 import { useResolvedTheme } from "../lib/appearance";
 import { lightEditorTheme } from "./lightTheme";
+
+// One Dark, except that true and false get its keyword violet in place of its orange, as they do in
+// the lessons' code (the site has no orange).
+const darkEditorTheme = [oneDarkTheme, syntaxHighlighting(HighlightStyle.define([...oneDarkHighlightStyle.specs, { tag: t.bool, color: "#c678dd" }]))];
 
 type Props = {
   value: string;
@@ -50,7 +55,7 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
       // Four spaces per level, like the lessons and the style check (CodeMirror's default is two).
       indentUnit.of("    "),
       EditorView.lineWrapping,
-      // An explicit tabindex keeps the text area a tab stop that tools like axe recognise inside the scroll area.
+      // An explicit tabindex keeps the text area a tab stop that tools like axe recognize inside the scroll area.
       EditorView.contentAttributes.of({ "aria-label": label, "aria-describedby": helpId, tabindex: "0", autocapitalize: "off", autocorrect: "off", spellcheck: "false" }),
       lintGutter(),
       linter(
@@ -86,7 +91,7 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
       <CodeMirror
         value={value}
         onChange={onChange}
-        theme={theme === "light" ? lightEditorTheme : oneDark}
+        theme={theme === "light" ? lightEditorTheme : darkEditorTheme}
         extensions={extensions}
         minHeight={minHeight}
         basicSetup={{ tabSize: 4, foldGutter: false, highlightActiveLine: true, autocompletion: false }}

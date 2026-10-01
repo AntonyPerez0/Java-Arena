@@ -299,11 +299,11 @@ function BossRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   );
 }
 
-// ---------------------------------------------------------------- review after a miss
-export function Death({ drill, given, title, sub, children }: { drill: Drill; given: string; title: string; sub: string; children: ReactNode }) {
+// ---------------------------------------------------------------- review after a miss (or a solved Daily)
+export function Death({ drill, given, title, sub, cleared = false, children }: { drill: Drill; given: string; title: string; sub: string; cleared?: boolean; children: ReactNode }) {
   const choice = (n: string) => drill.choices?.[parseInt(n, 10) - 1];
   return (
-    <div className="death">
+    <div className={cleared ? "death cleared" : "death"}>
       <h2 className="death-title" tabIndex={-1} id="death-title">
         {title}
       </h2>

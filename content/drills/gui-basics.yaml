@@ -1,0 +1,282 @@
+topic: gui-basics
+drills:
+  - type: predict
+    after: scene-and-layout
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names, such as `javafx.scene.control.Label`.)"
+    body: |
+      javafx.scene.control.Label order = new javafx.scene.control.Label("Order 9: mocha");
+      javafx.scene.control.Button small = new javafx.scene.control.Button("Small");
+      javafx.scene.control.Button large = new javafx.scene.control.Button("Large");
+      javafx.scene.layout.FlowPane slip = new javafx.scene.layout.FlowPane(order, small);
+      slip.getChildren().add(0, large);
+      slip.getChildren().remove(order);
+      System.out.println(slip.getChildren().size() + " " + slip.getChildren().indexOf(small));
+    why: "`getChildren()` is a list, and it works like an ArrayList. The constructor makes it `[order, small]`, `add(0, large)` puts the large button in front, `[large, order, small]`, and `remove(order)` leaves `[large, small]`: 2 children, with the small button at index 1."
+
+  - type: predict
+    after: text-input
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.TextField search = new javafx.scene.control.TextField();
+      search.setPromptText("Title or author");
+      int before = search.getLength();
+      search.appendText("Emma");
+      search.appendText(" Woodhouse");
+      String typed = search.getText();
+      search.clear();
+      System.out.println(before + " " + typed + " " + search.getLength());
+    why: "The prompt text is only a hint: it isn't the field's text, so the length starts at 0. `appendText` adds to the end, twice, and `clear()` empties the text again."
+
+  - type: predict
+    after: border-pane
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.layout.BorderPane card = new javafx.scene.layout.BorderPane();
+      javafx.scene.control.Label first = new javafx.scene.control.Label("Bean stew");
+      card.setTop(first);
+      card.setBottom(new javafx.scene.control.Label("Serves 4"));
+      card.setTop(new javafx.scene.control.Label("Spicy bean stew"));
+      card.setRight(first);
+      System.out.println(card.getChildren().size() + " " + (card.getRight() == first));
+    why: "A region holds one node: the second `setTop` replaces `first`, which leaves the card. That makes it free to go into the right region. The card then holds three nodes, one each in the top, right and bottom regions."
+
+  - type: predict
+    after: boxes-and-grids
+    prompt: "The loops of a keypad: each digit's button goes into the grid with `keypad.add(button, column, row)`. This version prints where two of the digits go. What does it print?"
+    body: |
+      for (int row = 0; row < 3; row++) {
+          for (int column = 0; column < 3; column++) {
+              int digit = row * 3 + column + 1;
+              if (digit % 4 == 0) {
+                  System.out.println(digit + " goes to (" + column + ", " + row + ")");
+              }
+          }
+      }
+    why: "Row 0 holds 1 to 3, row 1 holds 4 to 6 and row 2 holds 7 to 9. The 4 is the first digit of row 1, so it's in column 0, and the 8 is in the middle of row 2. A cell is written column first, as `add` takes it."
+
+  - type: predict
+    after: nesting-layouts
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Label title = new javafx.scene.control.Label("Final score");
+      javafx.scene.layout.VBox home = new javafx.scene.layout.VBox(title, new javafx.scene.control.Label("Harbor 2"));
+      javafx.scene.layout.VBox away = new javafx.scene.layout.VBox(title, new javafx.scene.control.Label("Mill 1"));
+      javafx.scene.layout.HBox board = new javafx.scene.layout.HBox(home, away);
+      System.out.println(home.getChildren().size() + " " + away.getChildren().size() + " " + board.getChildren().size());
+    why: "A node can be in one place at a time. The `title` label goes into `home` first, and then `away` takes it out of `home`. So `home` keeps only its score, `away` has two labels, and the HBox holds the two VBoxes. Each column needs its own `new Label`."
+
+  - type: fill
+    after: scene-and-layout
+    prompt: "This code runs inside `start`. Fill in the blank, a method's name, so that the button goes into the pane."
+    body: |
+      javafx.scene.layout.FlowPane slip = new javafx.scene.layout.FlowPane();
+      slip.[[getChildren]]().add(new javafx.scene.control.Button("To go"));
+      System.out.println(slip.getChildren().size());
+    why: "A pane's children are in the list that `getChildren()` returns, and adding to that list puts the node into the pane."
+
+  - type: fill
+    after: boxes-and-grids
+    prompt: "A keypad has the columns 0 to 2 and the rows 0 to 3. The Open button belongs in the cell at the bottom right. This code runs inside `start`: fill in the blank, a number."
+    body: |
+      javafx.scene.layout.GridPane keypad = new javafx.scene.layout.GridPane();
+      javafx.scene.control.Button open = new javafx.scene.control.Button("Open");
+      keypad.add(open, [[2]], 3);
+      System.out.println(javafx.scene.layout.GridPane.getColumnIndex(open) + " " + javafx.scene.layout.GridPane.getRowIndex(open));
+    why: "`add(node, column, row)` takes the column first. The bottom right cell is in the last column, 2, of the last row, 3."
+
+  - type: bug
+    after: border-pane
+    prompt: "This code runs inside `start`. It should put the dish's name at the top of the card and the servings at the bottom, so it should print `true true`. Which line is wrong?"
+    body: |
+      javafx.scene.layout.BorderPane card = new javafx.scene.layout.BorderPane();
+      javafx.scene.control.Label dish = new javafx.scene.control.Label("Bean stew");
+      javafx.scene.control.Label serves = new javafx.scene.control.Label("Serves 4");
+      card.setTop(dish);
+      card.setTop(serves); // BUG
+      System.out.println((card.getTop() == dish) + " " + (card.getBottom() == serves));
+    fix: card.setBottom(serves);
+    why: "Each region has its own method. The second `setTop` replaces the dish's name with the servings, and the bottom region stays empty. The servings go to `setBottom`."
+
+  - type: bug
+    after: boxes-and-grids
+    prompt: "This code runs inside `start`. The row of buttons should have 20 pixels of padding on its left side and none on the other sides, so the program should print `0.0 20.0`. Which line is wrong?"
+    body: |
+      javafx.scene.layout.HBox buttons = new javafx.scene.layout.HBox(8);
+      buttons.setPadding(new javafx.geometry.Insets(0, 20, 0, 0)); // BUG
+      javafx.geometry.Insets padding = buttons.getPadding();
+      System.out.println(padding.getRight() + " " + padding.getLeft());
+    fix: buttons.setPadding(new javafx.geometry.Insets(0, 0, 0, 20));
+    why: "Insets takes the four sides clockwise from the top: top, right, bottom, left. The second value is the right side, so the left side's 20 goes last."
+
+  - type: compiles
+    after: first-window
+    prompt: "This class is meant to be a JavaFX application. Does it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    classes: |
+      class StopScreen extends javafx.application.Application {
+          public void show(javafx.stage.Stage stage) {
+              stage.setTitle("Stop 3");
+              stage.show();
+          }
+      }
+    body: |
+      System.out.println("Ready");
+    why: "Application is abstract, and its abstract method is `start(Stage)`. A class that extends it must write that method, under that name: javac says that StopScreen `is not abstract and does not override abstract method start(Stage)`. A method called `show` is just another method."
+
+  - type: compiles
+    after: scene-and-layout
+    prompt: "This code runs inside `start`. Does it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Button ok = new javafx.scene.control.Button("OK");
+      javafx.scene.Scene scene = new javafx.scene.Scene(ok);
+      System.out.println(scene.getRoot() == ok);
+    why: "A scene's root must be a Parent, a node that can hold others. JavaFX counts controls such as Button as Parents too, so this compiles (as step 1's label could be a root). A window that shows a single button is rare, though: the root is usually a layout."
+
+  - type: choice
+    after: boxes-and-grids
+    prompt: Which padding puts 10 pixels on the left side of a pane, and none on its other sides?
+    choices:
+      - "`new Insets(10, 0, 0, 0)`"
+      - "`new Insets(0, 10, 0, 0)`"
+      - "`new Insets(0, 0, 10, 0)`"
+      - "`new Insets(0, 0, 0, 10)`"
+    answer: 4
+    why: "The four values go clockwise from the top: top, right, bottom, left. The left side is the last one."
+
+  - type: choice
+    after: first-window
+    prompt: "A program's `main` calls `launch(Main.class)`, and its `start` shows a window. On your own computer, with the real JavaFX, when does the call to `launch` return?"
+    choices:
+      - Right after `start` has shown the window
+      - When the user closes the window
+      - Never, since the program ends inside `start`
+    answer: 2
+    why: "`launch` calls `start` and then waits while the window is open, so that the user can click and type. When the user closes the last window, `launch` returns, and `main` goes on after the call. (Java Arena closes the window for you at the end of each run.)"
+
+  - type: boss
+    after: nesting-layouts
+    prompt: |
+      A café prints a slip for each order. The file `order.txt` has the order's number on its first line, and an item of the order on each line after it. Build the window, whose title is `Order slip`, with a BorderPane as its root:
+
+      - top: the label `Order ` and the number, like `Order 42`
+      - center: a VBox with the spacing 4 and the padding 10 on every side, holding a label for each item, in the file's order
+      - bottom: an HBox with the spacing 8, the padding 10 on every side and the alignment `CENTER_RIGHT`, holding the buttons `Cancel` and `Pay`
+
+      Nothing in the left and right regions. For a file with `42`, `Oat latte` and `Cinnamon bun` on its three lines, the window as text is:
+
+      ```text
+      Window "Order slip"
+        BorderPane
+          top: Label "Order 42"
+          center: VBox spacing 4, padding 10
+            Label "Oat latte"
+            Label "Cinnamon bun"
+          bottom: HBox spacing 8, padding 10, alignment CENTER_RIGHT
+            Button "Cancel"
+            Button "Pay"
+      ```
+    seed: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.geometry.Insets;
+      import javafx.geometry.Pos;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.BorderPane;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              List<String> lines = Files.readAllLines(Paths.get("order.txt"));
+              BorderPane slip = new BorderPane();
+
+              stage.setScene(new Scene(slip));
+              stage.setTitle("Order slip");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.geometry.Insets;
+      import javafx.geometry.Pos;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.BorderPane;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              List<String> lines = Files.readAllLines(Paths.get("order.txt"));
+              BorderPane slip = new BorderPane();
+              slip.setTop(new Label("Order " + lines.get(0)));
+              slip.setCenter(items(lines));
+              slip.setBottom(buttons());
+
+              stage.setScene(new Scene(slip));
+              stage.setTitle("Order slip");
+              stage.show();
+          }
+
+          private VBox items(List<String> lines) {
+              VBox items = new VBox(4);
+              items.setPadding(new Insets(10));
+              for (int i = 1; i < lines.size(); i++) {
+                  items.getChildren().add(new Label(lines.get(i)));
+              }
+              return items;
+          }
+
+          private HBox buttons() {
+              HBox buttons = new HBox(8, new Button("Cancel"), new Button("Pay"));
+              buttons.setPadding(new Insets(10));
+              buttons.setAlignment(Pos.CENTER_RIGHT);
+              return buttons;
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "The number is `lines.get(0)`, and the items are the lines from index 1 on. A loop from 1 adds a `new Label(lines.get(i))` for each to the VBox."
+      - "`new HBox(8, new Button(\"Cancel\"), new Button(\"Pay\"))` makes the row of buttons. Give the boxes `setPadding(new Insets(10))`, and the HBox `setAlignment(Pos.CENTER_RIGHT)`."
+    tests:
+      - files:
+          order.txt: |
+            42
+            Oat latte
+            Cinnamon bun
+        events: []
+      - files:
+          order.txt: |
+            7
+            Pot of green tea
+            Lemon cake
+            Lemon cake
+            Water
+        events: []
+        hidden: true
+      - files:
+          order.txt: |
+            108
+            Espresso
+        events: []
+        hidden: true

@@ -6,8 +6,10 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { launchChromium } from '../browser.mjs';
+import { javaRunArgs } from '../javafx/reference.mjs';
+import { libraryDir } from '../libraries.mjs';
 import { serve } from '../serve.mjs';
 import { loadSuite, REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from './suite.mjs';
 import { runOnJdk, writeDataFiles } from './jdk.mjs';
@@ -32,19 +34,23 @@ const tStart = Date.now();
 await page.evaluate(() => window.javaArena.engineReady());
 const engineStartMs = Date.now() - tStart;
 
-// Helpers that run inside the page. Class bytes cross the boundary as plain arrays.
-const compileInPage = (sources) =>
-  page.evaluate(async (sources) => {
-    const r = await window.javaArena.compile(sources);
-    return { ...r, classes: r.classes.map((c) => ({ path: c.path, bytes: Array.from(c.bytes) })) };
-  }, sources);
-const runInPage = (classes, mainClass, input) =>
+// Helpers that run inside the page. Class bytes cross the boundary as plain arrays. Libraries
+// (Java Arena's JavaFX) go on the class path, as the site puts them there.
+const compileInPage = (sources, libraries = []) =>
   page.evaluate(
-    async ({ classes, mainClass, input }) => {
-      const cls = classes.map((c) => ({ path: c.path, bytes: new Uint8Array(c.bytes) }));
-      return (await window.javaArena.runClasses(cls, mainClass, [input], 60_000))[0];
+    async ({ sources, libraries }) => {
+      const r = await window.javaArena.compile(sources, { libraries });
+      return { ...r, classes: r.classes.map((c) => ({ path: c.path, bytes: Array.from(c.bytes) })) };
     },
-    { classes, mainClass, input },
+    { sources, libraries },
+  );
+const runInPage = (classes, mainClass, input, libraries = []) =>
+  page.evaluate(
+    async ({ classes, mainClass, input, libraries }) => {
+      const cls = classes.map((c) => ({ path: c.path, bytes: new Uint8Array(c.bytes) }));
+      return (await window.javaArena.runClasses(cls, mainClass, [input], 60_000, { libraries }))[0];
+    },
+    { classes, mainClass, input, libraries },
   );
 
 function runOnHotSpot(classes, p) {
@@ -57,7 +63,8 @@ function runOnHotSpot(classes, p) {
     writeFileSync(join(cdir, c.path), Buffer.from(c.bytes));
   }
   writeDataFiles(work, p.files);
-  const r = spawnSync(bin('java'), [...REFERENCE_JVM_FLAGS, '-cp', cdir, p.mainClass, ...p.args], { cwd: work, env, input: p.stdin, encoding: 'utf8', timeout: 60_000 });
+  const classPath = [cdir, ...p.libraries.map(libraryDir)].join(delimiter);
+  const r = spawnSync(bin('java'), [...REFERENCE_JVM_FLAGS, ...javaRunArgs({ javaHome: referenceJavaHome(), libraries: p.libraries, classPath, mainClass: p.mainClass, args: p.args })], { cwd: work, env, input: p.stdin, encoding: 'utf8', timeout: 60_000 });
   rmSync(tmp, { recursive: true, force: true });
   return { stdout: r.stdout, stderr: r.stderr, exitCode: r.status };
 }
@@ -68,7 +75,8 @@ function cliClasses(p) {
     mkdirSync(dirname(join(tmp, 'src', s.path)), { recursive: true });
     writeFileSync(join(tmp, 'src', s.path), s.text);
   }
-  spawnSync(bin('javac'), ['-encoding', 'UTF-8', '-d', join(tmp, 'classes'), ...p.sources.map((s) => s.path)], { cwd: join(tmp, 'src'), env });
+  const cp = p.libraries.length ? ['-cp', ['.', ...p.libraries.map(libraryDir)].join(delimiter)] : [];
+  spawnSync(bin('javac'), ['-encoding', 'UTF-8', '-d', join(tmp, 'classes'), ...cp, ...p.sources.map((s) => s.path)], { cwd: join(tmp, 'src'), env });
   const list = spawnSync('find', ['.', '-name', '*.class'], { cwd: join(tmp, 'classes'), encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
   const classes = list.map((f) => ({ path: f.replace(/^\.\//, ''), bytes: Array.from(readFileSync(join(tmp, 'classes', f))) }));
   rmSync(tmp, { recursive: true, force: true });
@@ -96,13 +104,13 @@ const results = { engineStartMs, programs: {}, errors: {} };
 let failures = 0;
 for (const p of suite.programs) {
   const ref = jdk.programs[p.id];
-  const c = await compileInPage(p.sources);
+  const c = await compileInPage(p.sources, p.libraries);
   const entry = { compileMs: c.ms, compileOk: c.ok, diagnostics: c.diagnostics.map((d) => d.formatted) };
   if (!c.ok) {
     entry.problems = ['did not compile in the browser'];
   } else {
     const t = Date.now();
-    const run = await runInPage(c.classes, p.mainClass, { stdin: p.stdin, args: p.args, files: p.files });
+    const run = await runInPage(c.classes, p.mainClass, { stdin: p.stdin, args: p.args, files: p.files }, p.libraries);
     entry.wallMs = Date.now() - t;
     entry.run = run;
     entry.problems = compare(ref, run, p);
@@ -110,7 +118,7 @@ for (const p of suite.programs) {
     const hs = runOnHotSpot(c.classes, p);
     entry.compilerOnly = compare({ ...ref, files: {} }, { ...hs, files: {} }, p);
     // CLI javac -> browser runner: tests the runner alone.
-    const run2 = await runInPage(cliClasses(p), p.mainClass, { stdin: p.stdin, args: p.args, files: p.files });
+    const run2 = await runInPage(cliClasses(p), p.mainClass, { stdin: p.stdin, args: p.args, files: p.files }, p.libraries);
     entry.runnerOnly = compare(ref, run2, p);
   }
   const bad = entry.problems.length + (entry.compilerOnly?.length ?? 0) + (entry.runnerOnly?.length ?? 0);
@@ -128,7 +136,7 @@ const normalizeJavac = (text) =>
     .join('\n');
 let errorMatches = 0;
 for (const e of suite.errors) {
-  const c = await compileInPage(e.sources);
+  const c = await compileInPage(e.sources, e.libraries);
   const got = normalizeJavac(c.diagnostics.map((d) => d.formatted).join('\n'));
   const want = normalizeJavac(jdk.errors[e.id].output);
   const firstGot = got.split('\n')[0];

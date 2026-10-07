@@ -26,19 +26,27 @@ const RULES: Rule[] = [
   // A name that this method created in a block that has ended is stronger evidence than an enum constant of the same name.
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: outOfScope },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable [\w$]+\n\s*location: (?:class|interface|enum|record) /, explain: enumConstant },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class [\w$]+\n\s*location: package javafx/, explain: fxNotInPackage },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class [\w$]+\n\s*location: package /, explain: notInPackage },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: classElsewhere },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+(?:variable|class) [\w$]+\n/, explain: importFor },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+(?:variable|class) [A-Z][\w$]*\n/, explain: fxMissingClass },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable [\w$]+\n\s*location: variable /, explain: fxMethodAsVariable },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: () => "Java doesn't know a variable with this name here. Check the spelling (upper and lower case matter) and that the variable was created before this line, inside the same block { }." },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: () => "Java doesn't know a class with this name. Check the spelling and capital letters, and whether it needs an import at the top of the file." },
   { code: "compiler.err.doesnt.exist", when: /^package system does not exist/, explain: () => "System needs a capital S. With a small s, Java reads system as the name of a package (a folder of classes), and there is no such package." },
+  { code: "compiler.err.doesnt.exist", when: /^package javafx\b/, explain: fxPackage },
   { code: "compiler.err.doesnt.exist", explain: unknownPackage },
   { code: "compiler.err.doesnt.exist", explain: () => "Java can't find this package. Check the spelling of the import or name before the dot, for example java.util.Scanner." },
   { code: "compiler.err.cant.resolve.location.args", when: /symbol:\s+method [A-Z]/, explain: missingNew },
+  { code: "compiler.err.cant.resolve.location.args", when: /symbol:\s+method launch\(/, explain: fxLaunchMissing },
+  { code: "compiler.err.cant.resolve.location.args", explain: fxMethod },
   { code: "compiler.err.cant.resolve.location.args", explain: notInOwnType },
   { code: "compiler.err.cant.resolve.location.args", explain: libraryMethod },
   { code: "compiler.err.cant.resolve.location.args", explain: () =>"There is no method with this name that takes these arguments. Check the spelling, and which methods this type really has." },
   { code: "compiler.err.cant.resolve.location", explain: () => "Java can't find this name. Check the spelling and capital letters." },
+  { code: "compiler.err.cant.resolve", when: /symbol:\s+class [\w$]+$/m, explain: importFor },
+  { code: "compiler.err.cant.resolve", when: /symbol:\s+class [A-Z][\w$]*$/m, explain: fxMissingClass },
   { code: "compiler.err.cant.resolve", explain: () => "Java can't find this name. Check the spelling and capital letters." },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: bad return type in lambda expression/, explain: lambdaResult },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: lambda body is not compatible with a void functional interface/, explain: lambdaResult },
@@ -70,6 +78,10 @@ const RULES: Rule[] = [
     },
   },
   { code: "compiler.err.prob.found.req", when: /cannot be converted to Throwable$/m, explain: notThrowable },
+  { code: "compiler.err.prob.found.req", when: /incompatible parameter types in lambda expression/, explain: fxLambdaParams },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: ObservableList</, explain: fxChildrenList },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+ cannot be converted to [\w$.]+$/m, explain: fxNarrowing },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: /, explain: fxWrongValue },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+ cannot be converted to [\w$.]+$/m, explain: ownConversion },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: String cannot be converted to [\w$.]+$/m, explain: textToEnum },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+(?:\[\])* cannot be converted to [\w$.]+(?:\[\])*$/, explain: arrayLevels },
@@ -80,6 +92,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.prob.found.req", when: /unexpected return value/, explain: () => "This method is void, so it can't return a value. Change void to the value's type, or remove the value after return." },
   { code: "compiler.err.prob.found.req", when: /missing return value/, explain: () => "This method must return a value: write return followed by the value." },
   { code: "compiler.err.prob.found.req", explain: () => "The types here don't match what Java expects." },
+  { code: "compiler.err.void.not.allowed.here", explain: fxHandlerValue },
   { code: "compiler.err.void.not.allowed.here", explain: () => "This uses the value of a method that is void, so there is no value to print or store. Give the method a return type (such as int) and a return statement, or call it on a line of its own." },
   { code: "compiler.err.missing.ret.stmt", explain: () => "This method promises to return a value, but some path through it reaches the end without a return statement. Make sure every possible path ends with return." },
   { code: "compiler.err.unreachable.stmt", explain: afterJump },
@@ -126,6 +139,12 @@ const RULES: Rule[] = [
     explain: needsComparator,
   },
   { code: "compiler.err.cant.apply.symbol", when: /^method collect in interface (?:Int|Double|Long)Stream cannot be applied/, explain: numberStreamCollect },
+  { code: "compiler.err.cant.apply.symbol", when: /incompatible parameter types in lambda expression/, explain: fxLambdaParams },
+  { code: "compiler.err.cant.apply.symbol", when: /^incompatible types: (?:T|ObservableValue<CAP#1>) cannot be converted to /, explain: fxListenerFollowOn },
+  { code: "compiler.err.cant.apply.symbol", when: /^incompatible types: [\w$.]+(?:<.*?>)? cannot be converted to (?:EventHandler|ChangeListener)</, explain: fxNotHandler },
+  { code: "compiler.err.cant.apply.symbol", when: /^incompatible types: invalid method reference/, explain: fxMethodRef },
+  { code: "compiler.err.cant.apply.symbol", when: /^incompatible types: /, explain: fxWrongValue },
+  { code: "compiler.err.cant.apply.symbol", when: /^method add in class GridPane cannot be applied/, explain: fxGridAdd },
   { code: "compiler.err.cant.apply.symbol", explain: () => "The method was called with the wrong number or types of arguments. Compare the call with the method's parameter list (Java lists what it required and what it found)." },
   {
     code: "compiler.err.cant.apply.symbols",
@@ -137,6 +156,11 @@ const RULES: Rule[] = [
     },
   },
   { code: "compiler.err.cant.apply.symbols", when: /^no suitable constructor found for Random\(/, explain: randomSeed },
+  { code: "compiler.err.cant.apply.symbols", when: /^no suitable method found for launch\(Class</, explain: fxLaunchClass },
+  { code: "compiler.err.cant.apply.symbols", when: /^no suitable constructor found for Scene\(/, explain: fxScene },
+  { code: "compiler.err.cant.apply.symbols", when: /^incompatible types: |^no suitable method found for add\(/, explain: fxChildrenAdd },
+  { code: "compiler.err.cant.apply.symbols", when: /^no suitable method found for add\(/, explain: fxGridAdd },
+  { code: "compiler.err.cant.apply.symbols", when: /^incompatible types: /, explain: fxWrongValue },
   { code: "compiler.err.cant.apply.symbols", when: /^no suitable constructor found for ([\w$]+)/, explain: (d) => `None of the constructors of ${/^no suitable constructor found for ([\w$]+)/.exec(d.message)?.[1]} takes these values. Check the number, order and types of the values in the parentheses.` },
   { code: "compiler.err.cant.apply.symbols", when: /^no suitable method found for sort\([\w$.]+<[\w$.]+>\)[\s\S]*upper bounds: Comparable<\? super/, explain: sortNotComparable },
   { code: "compiler.err.cant.apply.symbols", explain: () => "None of the versions of this method accepts these arguments. Check the number and types of values in the parentheses." },
@@ -156,6 +180,7 @@ const RULES: Rule[] = [
   },
   { code: "compiler.err.already.defined", when: /^variable [\w$]+ is already defined in/, explain: lambdaParameterTaken },
   { code: "compiler.err.already.defined", explain: () => "A variable or method with this name already exists here. Use a different name, or drop the type to change the existing variable (name = ... instead of String name = ...)." },
+  { code: "compiler.err.report.access", when: /^getChildren\(\) has protected access/, explain: fxProtectedChildren },
   { code: "compiler.err.report.access", explain: privateInParent },
   { code: "compiler.err.report.access", explain: accessDenied },
   { code: "compiler.err.report.access", explain: () => "This is private, so only code inside its own class can use it. Use a public method of that class (for example a getter) instead." },
@@ -173,6 +198,8 @@ const RULES: Rule[] = [
   { code: "compiler.err.does.not.override.abstract", explain: missingAbstractMethod },
   { code: "compiler.err.override.weaker.access", explain: weakerAccess },
   { code: "compiler.err.override.weaker.access", explain: () => "A method that replaces an inherited one can't be harder to reach than the method it replaces. Give it the same access word as that method (public, protected or none), or a more open one, such as public." },
+  { code: "compiler.err.override.static", explain: overrideStatic },
+  { code: "compiler.err.override.incompatible.ret", explain: overrideReturnType },
   { code: "compiler.err.method.does.not.override.superclass", explain: overridesNothing },
   { code: "compiler.err.abstract.cant.be.instantiated", explain: cannotCreate },
   { code: "compiler.err.intf.expected.here", explain: (d) => wrongParentKind(d, "class") },
@@ -212,6 +239,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.type.found.req", when: /found:\s+type parameter /, explain: newTypeParameter },
   { code: "compiler.err.type.found.req", explain: (d) => `Java expected another kind of type here: ${/required: (.+)/.exec(d.message)?.[1] ?? "another one"}, and found ${/found:\s+(.+)/.exec(d.message)?.[1] ?? "this"}.` },
   { code: "compiler.err.generic.array.creation", explain: genericArray },
+  { code: "compiler.err.unexpected.type", explain: notAVariable },
   { code: "compiler.err.array.req.but.found", explain: arrayRequired },
   { code: "compiler.note.unchecked.filename", explain: uncheckedNote },
   { code: "compiler.note.unchecked.plural", explain: uncheckedNote },
@@ -313,7 +341,7 @@ function headerAt(d: Diagnostic, method: string): string | null {
 /** Whether a type is an interface: one of the program's own, or a common one of Java's. */
 function isInterface(own: OwnClasses, name: string): boolean {
   const t = typeNamed(own, name);
-  return t ? t.kind === "interface" : /^(Comparable|Comparator|Runnable|Iterable|Iterator|Collection|List|Set|Map|Queue|Deque|Cloneable)$/.test(name);
+  return t ? t.kind === "interface" : /^(Comparable|Comparator|Runnable|Iterable|Iterator|Collection|List|Set|Map|Queue|Deque|Cloneable|EventHandler|ChangeListener|ObservableValue|ObservableList)$/.test(name);
 }
 
 /** "X is not abstract and does not override abstract method m(...) in Y". */
@@ -321,6 +349,7 @@ function missingAbstractMethod(d: Diagnostic, own: OwnClasses): string | null {
   const m = /^([\w$.]+) is not abstract and does not override abstract method ([\w$]+)\((.*)\) in ([\w$.]+)$/.exec(d.message);
   if (!m) return null;
   const [cls, method, params, parent] = [simple(m[1]), m[2], spaced(m[3]), simple(m[4])];
+  if (parent === "Application" && method === "start" && cls !== parent && !knows(own, parent)) return fxNoStart(own, cls, d.file);
   const sig = `${method}(${params})`;
   if (cls === parent) {
     const t = typeNamed(own, cls, d.file);
@@ -459,7 +488,9 @@ function editDistance(a: string, b: string): number {
   return row[b.length];
 }
 
-const LIBRARY_METHODS: Record<string, string[]> = { Comparable: ["compareTo"], Comparator: ["compare"], Runnable: ["run"], Iterable: ["iterator"] };
+const LIBRARY_METHODS: Record<string, string[]> = { Comparable: ["compareTo"], Comparator: ["compare"], Runnable: ["run"], Iterable: ["iterator"], Application: ["start", "init", "stop"] };
+/** The parameter types of those methods, where they don't depend on a type in angle brackets. */
+const LIBRARY_PARAMS: Record<string, string> = { "Application.start": "Stage", "Application.init": "", "Application.stop": "" };
 
 /** "method does not override or implement a method from a supertype", on an @Override. */
 function overridesNothing(d: Diagnostic, own: OwnClasses): string {
@@ -480,6 +511,12 @@ function overridesNothing(d: Diagnostic, own: OwnClasses): string {
     const good = knows(own, bad) ? null : names.find((n) => n !== cls?.name && editDistance(n.toLowerCase(), bad.toLowerCase()) <= 2);
     if (cls && good) return `The header of ${cls.name} names ${bad}, but there is no ${bad}. Did you mean ${good}? Until Java finds the parent, it can't tell what ${name} replaces, so each @Override in ${cls.name} fails. Fix the name in the header, and these errors go away.`;
   }
+  // JavaFX's start(Stage), in a class that doesn't extend Application (or names it wrongly).
+  if (cls && name === "start" && /^(?:[\w$]+\.)*Stage$/.test(parameterTypes(params)) && !extendsApplication(own, cls)) {
+    const typo = cls.extends.find((s) => !knows(own, s) && s !== "Application" && editDistance(s.toLowerCase(), "application") <= 2);
+    if (typo) return `The header of ${cls.name} names ${typo}: did you mean Application? Until Java finds the parent class, it can't tell what start replaces, so the @Override fails. Fix the name in the header, and this error goes away.`;
+    if (!cls.extends.length) return `start(Stage) is the method JavaFX calls in a class that extends Application, and ${cls.name} doesn't extend Application, so the @Override has nothing to replace. Write public class ${cls.name} extends Application${importNote(own, d.file, "Application")}.`;
+  }
   const parents = cls ? ancestorsOf(own, cls.name) : [];
   // The methods this class could replace: where each one is, and its parameter types when they are known.
   const known = new Map<string, { where: string; params?: string }>([
@@ -487,12 +524,12 @@ function overridesNothing(d: Diagnostic, own: OwnClasses): string {
     ["equals", { where: "Object", params: "Object" }],
     ["hashCode", { where: "Object", params: "" }],
   ]);
-  for (const s of [cls, ...parents].flatMap((t) => t?.supers ?? [])) for (const m of LIBRARY_METHODS[s] ?? []) known.set(m, { where: s });
+  for (const s of [cls, ...parents].flatMap((t) => t?.supers ?? [])) for (const m of LIBRARY_METHODS[s] ?? []) known.set(m, { where: s, params: LIBRARY_PARAMS[`${s}.${m}`] });
   for (const p of parents) for (const m of p.members) if (m.method && !m.private) known.set(m.name, { where: p.name, params: m.params });
   const remove = ` If ${name} is a new method, not a replacement, remove @Override.`;
   const found = known.get(name);
   const where = found?.where;
-  if (found && where && found.params === parameterTypes(params)) {
+  if (found && where && found.params != null && bareType(found.params) === bareType(parameterTypes(params))) {
     // The same name and parameter types as the parent's method: something else keeps them apart.
     const dropped = cls ? droppedLink(own, cls.name, where) : null;
     if (cls && dropped)
@@ -521,6 +558,9 @@ function overridesNothing(d: Diagnostic, own: OwnClasses): string {
   if (hidden) return `${name} is private in ${hidden.name}, so ${cls?.name ?? "a subclass"} can't see it, and a method can't replace what it can't see. If it should be replaceable, make it protected or public in ${hidden.name}.${remove}`;
   const near = [...known.keys()].find((k) => k.toLowerCase() === name.toLowerCase() || editDistance(k.toLowerCase(), name.toLowerCase()) <= (name.length > 5 ? 2 : 1));
   if (near) return `@Override says that ${name} replaces a method of a parent class or an interface, but none of them has a method ${name}. Did you mean ${near}, the method of ${known.get(near)?.where}? Check the spelling: upper and lower case matter.${remove}`;
+  // Application's start, misspelled more than near allows (strat): the same parameter type, a Stage, tells.
+  const sameParams = [...known.entries()].find(([k, v]) => k !== name && v.where === "Application" && v.params && bareType(v.params) === bareType(parameterTypes(params)));
+  if (sameParams) return `@Override says that ${name} replaces a method of a parent class or an interface, but none of them has a method ${name}. Did you mean ${sameParams[0]}, the method of Application, which takes the same (${sameParams[1].params})? Check the spelling: upper and lower case matter.${remove}`;
   // A class that has the method, which this class could extend (it extends no class yet) or implement.
   const free = cls?.kind === "class" && !cls.supers.some((s) => !isInterface(own, s));
   const rank = (t: { kind: string; abstract: boolean }) => (t.kind === "interface" ? 0 : t.abstract ? 1 : 2);
@@ -809,13 +849,15 @@ const LIBRARY_PACKAGES: Record<string, string> = Object.fromEntries(
 /** "cannot find symbol" for one of Java's classes that isn't imported, whether used as a type (class) or through its name (variable), as in Collectors.toList(). */
 function importFor(d: Diagnostic, own: OwnClasses): string | null {
   const name = /symbol:\s+(?:variable|class) ([\w$]+)/.exec(d.message)?.[1];
-  const pkg = name && LIBRARY_PACKAGES[name];
+  // A class of Java Arena's JavaFX, only in a JavaFX program: elsewhere Stage, Button or Node may be a class of the program's own not written yet.
+  const fx = name && !LIBRARY_PACKAGES[name] && FX[name] && fxProgram(own) ? FX[name].pkg : undefined;
+  const pkg = name && (LIBRARY_PACKAGES[name] ?? fx);
   if (!name || !pkg) return null;
   // The program's own class of that name (in another package, or inside another class) is the one it means.
   if ([...own.types.values()].some((t) => t.name === name)) return null;
-  // import java.util.*; doesn't reach into java.util.stream or java.util.function.
-  const star = pkg.startsWith("java.util.") && own.code.get(d.file)?.some((l) => /^\s*import\s+java\.util\.\*\s*;/.test(l));
-  return `To use ${name}, import it at the top of the file: import ${pkg}.${name};${star ? ` (import java.util.*; covers only java.util itself, not ${pkg}.)` : ""}`;
+  // A star import covers only its own package: import java.util.*; doesn't reach into java.util.stream, nor import javafx.scene.control.*; into javafx.scene.layout.
+  const star = (own.imports.get(d.file) ?? []).map((i) => (i.endsWith(".*") ? i.slice(0, -2) : "")).find((s) => s && s !== pkg && (pkg.startsWith(`${s}.`) || (!!fx && s.startsWith("javafx."))));
+  return `To use ${name}, import it at the top of the file: import ${pkg}.${name};${star ? ` (import ${star}.*; covers only ${star} itself, not ${pkg}.)` : ""}`;
 }
 
 /** "cannot find symbol: variable length" on a String or a collection. */
@@ -2006,6 +2048,9 @@ function effectivelyFinal(d: Diagnostic, own: OwnClasses): string {
   if (!name || !pos) return `${rule}. To count or add up values, use an ordinary for-each loop, or let a stream compute the value, such as count() or sum(). Otherwise copy the variable into a new one that never changes, and use that instead.`;
   const { code, at } = pos;
   const { type, changes } = changesOf(code, name, at);
+  // A JavaFX event handler or change listener that changes it: it runs later, so the value belongs in an instance variable.
+  const handler = usesFX(own) ? fxHandlerAround(code, at, inner) : null;
+  if (handler && changes.some((k) => k > handler.from && k < handler.to)) return fxHandlerChanges(code, pos.text, name, at, type, handler, inner);
   const line = (k: number) => code.slice(0, k).split("\n").length;
   const lambda = inner ? null : lambdaAround(code, at);
   const inside = lambda ? changes.filter((k) => k > lambda.arrow && k < lambda.end) : changes.filter((k) => line(k) === d.line);
@@ -2200,7 +2245,9 @@ function unreported(d: Diagnostic, own: OwnClasses): string | null {
   // A method that replaces one of a parent's can't add throws unless the parent's method has it.
   const cls = classAt(own, d.file, d.line);
   const parent = m && !m.constructor && cls ? ancestorsOf(own, cls.name).find((a) => declares(a, m.name, true)) : undefined;
-  const replaces = !!m && !m.constructor && (m.override || !!parent);
+  // JavaFX's Application says throws Exception on its start, init and stop, so they can pass any exception on.
+  const fxApp = !!m && !m.constructor && !m.lambda && FX_APP_METHODS.test(m.name) && !!cls && extendsApplication(own, cls) && !parent;
+  const replaces = !fxApp && !!m && !m.constructor && (m.override || !!parent);
   const theirs = parent ? `${m?.name} in ${parent.name}` : "that method";
   const replacing = `${m?.name} replaces the method ${m?.name} of ${parent?.name ?? "a parent class or an interface"}, so it can't pass ${ex} on with throws unless ${theirs} says throws ${ex} too.`;
   if (/^throw\b/.test(c.at)) {
@@ -2211,6 +2258,7 @@ function unreported(d: Diagnostic, own: OwnClasses): string | null {
     if (m.lambda) return `This throw is inside a lambda (->), and ${checked}, which a lambda can't pass on with throws. Catch it inside the lambda, or throw an unchecked exception instead, such as IllegalArgumentException.`;
     if (replaces) return `${m.name} throws ${ex} here, and ${checked}. But ${replacing} Throw an unchecked exception instead, such as IllegalArgumentException, which needs no throws${parent ? `, or add throws ${ex} to ${theirs} as well, and then to ${m.name} here` : ""}.`;
     const other = ex === "Exception" ? " Or throw an unchecked exception instead, which needs no throws, such as IllegalArgumentException for a value that isn't allowed." : "";
+    if (fxApp) return `${m.name} throws ${ex} here, and ${checked}: a method that throws one must say so in its header. Application's ${m.name} says throws Exception, so ${m.name} may say so too: ${throwsFix(own, m, ex)}.${fxPassedOn(m)}`;
     return `${m.constructor ? `The constructor ${m.name}` : m.name} throws ${ex} here, and ${checked}: a method that throws one must say so in its header, so that the code calling it knows to handle it. So ${throwsFix(own, m, ex)}.${passedOn(m)}${other}`;
   }
   // What can throw it: a constructor (new Scanner(...)), a method (Files.readAllLines(...)), or super(...).
@@ -2228,8 +2276,12 @@ function unreported(d: Diagnostic, own: OwnClasses): string | null {
   }
   if (m.lambda) return `${intro} This code is inside a lambda (->), and a lambda can't pass a checked exception on: throws on ${m.name} doesn't cover it. Catch it inside the lambda, with try { ... } catch (${ex} e) { ... }, or use a for loop instead, where throws works.`;
   if (replaces) return `${intro} ${replacing} So catch it here: ${catchIt}.${parent ? ` Or add throws ${ex} to ${theirs} as well, and then to ${m.name} here.` : ""}`;
+  if (fxApp) return `${intro} Either catch it: ${catchIt}. Or pass it on: Application's ${m.name} says throws Exception, so ${m.name} may say so too: ${throwsFix(own, m, ex)}.${fxPassedOn(m)}`;
   return `${intro} Either catch it: ${catchIt}. Or pass it on: ${throwsFix(own, m, ex)}.${passedOn(m)}`;
 }
+
+/** What passing an exception on with throws means for JavaFX's start, init or stop. */
+const fxPassedOn = (m: Around) => ` Then, if it happens, JavaFX prints "Exception in Application ${m.name} method" and stops the program.`;
 
 /** "unreported exception IOException ... exception thrown from implicit call to close() on resource variable 'writer'". */
 function implicitClose(d: Diagnostic, own: OwnClasses): string | null {
@@ -2514,7 +2566,7 @@ function packageMismatch(own: OwnClasses, file: string): { has: string; fix: str
 
 /** "cannot find symbol: class Bok", when the program has a class of a similar name, such as Book. */
 function nearClass(own: OwnClasses, file: string, name: string, types: OwnClass[]): string | null {
-  if (LIBRARY_PACKAGES[name]) return null;
+  if (LIBRARY_PACKAGES[name] || (FX[name] && fxProgram(own))) return null;
   const lower = name.toLowerCase();
   const near = types.find((t) => t.name.toLowerCase() === lower) ?? types.find((t) => name.length >= 3 && editDistance(t.name.toLowerCase(), lower) <= (name.length > 6 ? 2 : 1));
   if (!near) return null;
@@ -3354,6 +3406,948 @@ function explainCast(m: string, library = false, crash?: CrashContext): string {
   return `The program cast an object to ${to}, but it is ${an(from)}, not ${an(to)}. A cast doesn't change the object: it only works when the object already is ${an(to)}.${number || ` Check with instanceof before the cast, for example if (value instanceof ${to}) { ${to} ${varFor(to, "value")} = (${to}) value; ... }, and handle other objects another way.`}`;
 }
 
+// ---- Graphical user interfaces with JavaFX (MOOC part 13) ----
+
+/**
+ * Java Arena's practice version of JavaFX (engine/libraries/javafx): each public class and interface,
+ * its package, its parent among these ("" for none, or for a class of Java's own), and the public
+ * methods it declares itself (not Object's, nor an enum's values and valueOf). Learners' programs use
+ * the same names as real JavaFX, but the practice version has only what the lessons use.
+ * scripts/explanations.test.mjs checks this table against the library's class files.
+ */
+const FX: Record<string, { pkg: string; parent: string; methods: string }> = {
+  Application: { pkg: "javafx.application", parent: "", methods: "launch init start stop getParameters" },
+  Platform: { pkg: "javafx.application", parent: "", methods: "runLater exit isFxApplicationThread" },
+  ObservableValue: { pkg: "javafx.beans.value", parent: "", methods: "addListener removeListener getValue" },
+  ChangeListener: { pkg: "javafx.beans.value", parent: "", methods: "changed" },
+  StringProperty: { pkg: "javafx.beans.property", parent: "ObservableValue", methods: "get set getValue setValue" },
+  SimpleStringProperty: { pkg: "javafx.beans.property", parent: "StringProperty", methods: "get set addListener removeListener" },
+  ObservableList: { pkg: "javafx.collections", parent: "", methods: "addAll setAll removeAll remove" },
+  Event: { pkg: "javafx.event", parent: "", methods: "" },
+  ActionEvent: { pkg: "javafx.event", parent: "Event", methods: "" },
+  EventHandler: { pkg: "javafx.event", parent: "", methods: "handle" },
+  Insets: { pkg: "javafx.geometry", parent: "", methods: "getTop getRight getBottom getLeft" },
+  Pos: { pkg: "javafx.geometry", parent: "", methods: "" },
+  Node: { pkg: "javafx.scene", parent: "", methods: "setId getId setDisable isDisable isDisabled setVisible isVisible getParent getScene setStyle getStyle lookup" },
+  Parent: { pkg: "javafx.scene", parent: "Node", methods: "getChildrenUnmodifiable lookup" },
+  Scene: { pkg: "javafx.scene", parent: "", methods: "getRoot setRoot getWidth getHeight" },
+  Region: { pkg: "javafx.scene.layout", parent: "Parent", methods: "setPadding getPadding setPrefWidth getPrefWidth setPrefHeight getPrefHeight setPrefSize setMinSize setMaxSize" },
+  Pane: { pkg: "javafx.scene.layout", parent: "Region", methods: "getChildren" },
+  FlowPane: { pkg: "javafx.scene.layout", parent: "Pane", methods: "setHgap getHgap setVgap getVgap setAlignment getAlignment" },
+  HBox: { pkg: "javafx.scene.layout", parent: "Pane", methods: "setSpacing getSpacing setAlignment getAlignment" },
+  VBox: { pkg: "javafx.scene.layout", parent: "Pane", methods: "setSpacing getSpacing setAlignment getAlignment" },
+  StackPane: { pkg: "javafx.scene.layout", parent: "Pane", methods: "setAlignment getAlignment" },
+  BorderPane: { pkg: "javafx.scene.layout", parent: "Pane", methods: "setTop getTop setLeft getLeft setCenter getCenter setRight getRight setBottom getBottom" },
+  GridPane: { pkg: "javafx.scene.layout", parent: "Pane", methods: "add getColumnIndex getRowIndex setHgap getHgap setVgap getVgap setAlignment getAlignment" },
+  Control: { pkg: "javafx.scene.control", parent: "Region", methods: "" },
+  Labeled: { pkg: "javafx.scene.control", parent: "Control", methods: "textProperty setText getText setFont getFont setWrapText isWrapText" },
+  Label: { pkg: "javafx.scene.control", parent: "Labeled", methods: "" },
+  ButtonBase: { pkg: "javafx.scene.control", parent: "Labeled", methods: "setOnAction getOnAction fire" },
+  Button: { pkg: "javafx.scene.control", parent: "ButtonBase", methods: "fire" },
+  TextInputControl: { pkg: "javafx.scene.control", parent: "Control", methods: "textProperty getText setText appendText clear setPromptText getPromptText setEditable isEditable getLength setFont getFont" },
+  TextField: { pkg: "javafx.scene.control", parent: "TextInputControl", methods: "setOnAction getOnAction" },
+  PasswordField: { pkg: "javafx.scene.control", parent: "TextField", methods: "" },
+  TextArea: { pkg: "javafx.scene.control", parent: "TextInputControl", methods: "setWrapText isWrapText" },
+  Font: { pkg: "javafx.scene.text", parent: "", methods: "getDefault font getName getFamily getSize" },
+  Window: { pkg: "javafx.stage", parent: "", methods: "getWidth setWidth getHeight setHeight getScene isShowing hide" },
+  Stage: { pkg: "javafx.stage", parent: "Window", methods: "setTitle getTitle setScene show close setResizable isResizable" },
+};
+
+/** For the unit test that checks the table against the library's class files. */
+export { FX as PRACTICE_JAVAFX };
+
+/** The practice version's packages, in the order of the table. */
+const FX_PACKAGES = [...new Set(Object.values(FX).map((c) => c.pkg))];
+/** The nodes a program creates with new: the controls and the panes. */
+const FX_NODES = ["Label", "Button", "TextField", "PasswordField", "TextArea", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Pane"];
+const FX_CONTROLS = "Label, Button, TextField, PasswordField and TextArea";
+const FX_PANES = "FlowPane, HBox, VBox, StackPane, BorderPane, GridPane and Pane";
+
+/**
+ * Classes of real JavaFX that the practice version doesn't have, which programs often use, by their
+ * package (each checked against OpenJFX 21.0.12): an explanation can then say that real JavaFX has
+ * the class and the practice version doesn't, instead of guessing at a misspelling.
+ */
+const REAL_FX: Record<string, string> = Object.fromEntries(
+  Object.entries({
+    "javafx.scene.control": "CheckBox RadioButton ToggleButton ToggleGroup Slider ComboBox ChoiceBox ListView TableView TableColumn Spinner ProgressBar ProgressIndicator Hyperlink MenuBar Menu MenuItem ScrollPane TabPane Tab Separator Tooltip Alert ButtonType Dialog TextInputDialog DatePicker ColorPicker TitledPane SplitPane",
+    "javafx.scene.layout": "AnchorPane TilePane Background BackgroundFill Border Priority ColumnConstraints RowConstraints CornerRadii",
+    "javafx.scene": "Group Cursor",
+    "javafx.scene.shape": "Rectangle Circle Line Ellipse Polygon Polyline Arc Shape Path",
+    "javafx.scene.paint": "Color Paint LinearGradient",
+    "javafx.scene.canvas": "Canvas GraphicsContext",
+    "javafx.scene.text": "Text TextFlow FontWeight FontPosture TextAlignment",
+    "javafx.scene.input": "KeyEvent MouseEvent KeyCode MouseButton ScrollEvent",
+    "javafx.scene.image": "Image ImageView",
+    "javafx.scene.chart": "LineChart BarChart PieChart ScatterChart AreaChart NumberAxis CategoryAxis XYChart",
+    "javafx.animation": "Timeline KeyFrame KeyValue AnimationTimer FadeTransition TranslateTransition RotateTransition PauseTransition Animation Interpolator",
+    "javafx.util": "Duration Pair Callback StringConverter",
+    "javafx.geometry": "HPos VPos Orientation Side",
+    "javafx.stage": "FileChooser DirectoryChooser Modality StageStyle Screen WindowEvent",
+    "javafx.beans.property": "SimpleIntegerProperty IntegerProperty SimpleDoubleProperty DoubleProperty SimpleBooleanProperty BooleanProperty SimpleObjectProperty ObjectProperty ReadOnlyStringProperty",
+    "javafx.beans.binding": "Bindings",
+    "javafx.beans": "InvalidationListener Observable",
+    "javafx.collections": "FXCollections ListChangeListener",
+    "javafx.event": "EventType",
+  }).flatMap(([pkg, names]) => names.split(" ").map((name) => [name, pkg])),
+);
+/** Packages of real JavaFX (its modules base, graphics, controls, fxml, media, web and swing) that the practice version has nothing of. */
+const REAL_FX_PACKAGES = new Set(
+  "javafx.animation javafx.beans javafx.beans.binding javafx.beans.property.adapter javafx.collections.transformation javafx.concurrent javafx.css javafx.print javafx.scene.canvas javafx.scene.chart javafx.scene.control.cell javafx.scene.effect javafx.scene.image javafx.scene.input javafx.scene.paint javafx.scene.robot javafx.scene.shape javafx.scene.transform javafx.util javafx.util.converter javafx.fxml javafx.scene.media javafx.scene.web javafx.embed.swing".split(" "),
+);
+
+/** An FX class's parents, nearest first. */
+function fxAncestors(name: string): string[] {
+  const out: string[] = [];
+  for (let t = FX[name]?.parent; t && out.length < 20; t = FX[t]?.parent) out.push(t);
+  return out;
+}
+/** Whether FX class `sub` is `sup` or a kind of it. */
+const fxIsKind = (sub: string, sup: string) => sub === sup || fxAncestors(sub).includes(sup);
+/** The practice version's methods of an FX class: its own and its parents'. */
+const fxMethods = (name: string) => [...new Set([name, ...fxAncestors(name)].flatMap((t) => (FX[t]?.methods ? FX[t].methods.split(" ") : [])))];
+/** Whether the program uses JavaFX: one of its files mentions javafx. (as src/grader/javafx.js decides). */
+const usesFX = (own: OwnClasses) => [...own.code.values()].some((lines) => lines.some((l) => /\bjavafx\s*\./.test(l)));
+/**
+ * Whether the program is meant as a JavaFX program: it mentions javafx., or (with every import
+ * forgotten) one of its classes extends Application and it has no Application of its own. Only then
+ * does a name such as Stage, Button or Node mean JavaFX's class.
+ */
+const fxProgram = (own: OwnClasses) => usesFX(own) || (!knows(own, "Application") && [...own.types.values()].some((t) => t.extends.includes("Application")));
+
+/** The FX class a type of the program is: the type itself, or the one an own class extends, as VBox for class MenuView extends VBox. */
+function fxTypeOf(own: OwnClasses, type: string): string | null {
+  if (FX[type] && !knows(own, type)) return type;
+  const t = typeNamed(own, type);
+  for (const a of t ? [t, ...ancestorsOf(own, t.name)] : []) for (const s of a.extends) if (FX[s] && !knows(own, s)) return s;
+  return null;
+}
+
+/** Whether one of the program's classes extends Application, itself or through another of its classes. */
+const extendsApplication = (own: OwnClasses, t: OwnClass) => [t, ...ancestorsOf(own, t.name)].some((a) => a.extends.includes("Application"));
+/** The program's classes that extend Application. */
+const fxApps = (own: OwnClasses) => [...own.types.values()].filter((t) => t.kind === "class" && extendsApplication(own, t));
+/** Whether a file imports a class of a package, by its name or with the package's *. */
+const fxImported = (own: OwnClasses, file: string, pkg: string, name: string) => (own.imports.get(file) ?? []).some((i) => i === `${pkg}.${name}` || i === `${pkg}.*`);
+/** " (with import javafx.scene.control.Button;)" when the file doesn't import it yet. */
+const importNote = (own: OwnClasses, file: string, name: string) => (FX[name] && !fxImported(own, file, FX[name].pkg, name) ? ` (with import ${FX[name].pkg}.${name};)` : "");
+
+/** What the practice version has instead of a class of real JavaFX in a package, in a sentence. */
+function fxInstead(pkg: string, name?: string): string {
+  if (pkg === "javafx.scene.control") return `Its controls are ${FX_CONTROLS}.`;
+  if (pkg === "javafx.scene.layout" || (pkg === "javafx.scene" && name === "Group")) return `Its panes are ${FX_PANES}.`;
+  if (pkg === "javafx.scene.input" || /Event$/.test(name ?? "")) return "Of the events, it has only setOnAction: a click on a Button, or Enter in a TextField.";
+  if (pkg === "javafx.scene.text") return "For text, use a Label; of javafx.scene.text it has only Font, with a family and a size, as in Font.font(20).";
+  if (/^javafx\.scene\.(?:shape|paint|canvas|image|chart|effect|transform)$/.test(pkg)) return `It doesn't draw shapes, colors, pictures or charts: it has the controls (${FX_CONTROLS}) and the panes that hold them.`;
+  if (pkg === "javafx.animation") return "It has no animations: each click runs the program again from the start.";
+  if (pkg === "javafx.beans.property" || pkg === "javafx.beans" || pkg === "javafx.beans.binding") return "Of the properties, it has StringProperty and SimpleStringProperty (a label's or a text field's textProperty()), with change listeners.";
+  if (pkg === "javafx.collections") return "Of javafx.collections, it has ObservableList, the list that getChildren() gives.";
+  if (pkg === "javafx.stage") return "Of javafx.stage, it has Stage, the window.";
+  if (pkg === "javafx.geometry") return "Of javafx.geometry, it has Insets and Pos.";
+  if (pkg === "javafx.event") return "Of javafx.event, it has Event, ActionEvent and EventHandler.";
+  return `Its packages are ${list(FX_PACKAGES)}.`;
+}
+
+/** The start of a note about a class of real JavaFX that the practice version doesn't have. */
+const fxMissing = (name: string, pkg: string) => `${name} is part of real JavaFX (${pkg}.${name}), but Java Arena's practice version of JavaFX doesn't have it: it has only the classes and methods its lessons use. ${fxInstead(pkg, name)}`;
+
+/** An FX class whose name is close to this one (Buton for Button, Vbox for VBox), or undefined. */
+function fxNear(name: string, among = Object.keys(FX)): string | undefined {
+  const lower = name.toLowerCase();
+  return among.find((k) => k !== name && k.toLowerCase() === lower) ?? among.find((k) => k !== name && name.length >= 3 && editDistance(k.toLowerCase(), lower) <= (name.length > 5 ? 2 : 1));
+}
+
+/** "cannot find symbol: class CheckBox" (or variable Color) in a program that uses JavaFX: a class real JavaFX has and the practice version doesn't, or a misspelled one. */
+function fxMissingClass(d: Diagnostic, own: OwnClasses): string | null {
+  const name = /symbol:\s+(?:variable|class) ([A-Z][\w$]*)/.exec(d.message)?.[1];
+  if (!name || knows(own, name) || FX[name] || LIBRARY_PACKAGES[name] || !usesFX(own)) return null;
+  const near = fxNear(name);
+  if (near) return `There is no class ${name}. Did you mean ${near}? Upper and lower case matter.${fxImported(own, d.file, FX[near].pkg, near) ? "" : ` It also needs import ${FX[near].pkg}.${near}; at the top of the file.`}`;
+  if (fxNear(name, ["Parameters"])) return `There is no class ${name}. Did you mean Parameters, the class of what getParameters() gives? Upper and lower case matter. ${FX_PARAMETERS_PLACE}`;
+  const real = REAL_FX[name];
+  return real ? fxMissing(name, real) : null;
+}
+
+/** "cannot find symbol: class CheckBox, location: package javafx.scene.control": an import of a class the practice version doesn't have in that package. */
+function fxNotInPackage(d: Diagnostic): string | null {
+  const m = /symbol:\s+class ([\w$]+)\n\s*location: package (javafx(?:\.[\w$]+)*)/.exec(d.message);
+  if (!m) return null;
+  const [, name, pkg] = m;
+  if (name === "Parameters") return `Parameters isn't a class of ${pkg} of its own, so this import doesn't compile: it's Application.Parameters, the class of what getParameters() gives. Remove the import. ${FX_PARAMETERS_PLACE}`;
+  if (FX[name]) return `${name} isn't in ${pkg}: it's in ${FX[name].pkg}. Write import ${FX[name].pkg}.${name};`;
+  const near = fxNear(name);
+  if (near) return `There is no class ${name} in ${pkg}. Did you mean ${near}? Upper and lower case matter. Write import ${FX[near].pkg}.${near};`;
+  if (REAL_FX[name]) return fxMissing(name, REAL_FX[name]);
+  const here = Object.keys(FX).filter((k) => FX[k].pkg === pkg);
+  return `Java Arena's practice version of JavaFX has no class ${name} in ${pkg}: it has only the classes and methods its lessons use. ${here.length ? `In ${pkg}, it has ${list(here)}.` : fxInstead(pkg)}`;
+}
+
+/** "package javafx.scene.canvas does not exist": a package of real JavaFX that the practice version doesn't have, or a misspelled one. */
+function fxPackage(d: Diagnostic): string | null {
+  const pkg = /^package (javafx(?:\.[\w$]+)*) does not exist/.exec(d.message)?.[1];
+  if (!pkg) return null;
+  // The class after the package on the line, as in import javafx.scene.canvas.Canvas;.
+  const line = atCaret(d)?.line ?? "";
+  const cls = new RegExp(`${escapeRegExp(pkg)}\\s*\\.\\s*([A-Z][\\w$]*)`).exec(line)?.[1];
+  const lower = pkg.toLowerCase();
+  const near = FX_PACKAGES.find((p) => p.toLowerCase() === lower) ?? FX_PACKAGES.find((p) => editDistance(p, pkg) <= 2);
+  if (near) {
+    const fix = cls && FX[cls]?.pkg === near ? ` Write import ${near}.${cls};` : "";
+    return `There is no package ${pkg}. Did you mean ${near}? Check the spelling: upper and lower case matter.${fix}`;
+  }
+  // A class of the practice version, imported from the wrong package.
+  if (cls && FX[cls]) return `${cls} isn't in ${pkg}: it's in ${FX[cls].pkg}. Write import ${FX[cls].pkg}.${cls};`;
+  if (REAL_FX_PACKAGES.has(pkg) || (cls && REAL_FX[cls] === pkg)) {
+    const what = cls ? `${cls} (${pkg}.${cls}) is part of real JavaFX` : `The package ${pkg} is part of real JavaFX`;
+    return `${what}, but Java Arena's practice version of JavaFX doesn't have the package ${pkg}: it has only the classes and methods its lessons use. ${fxInstead(pkg, cls)}`;
+  }
+  return `Java Arena's practice version of JavaFX has no package ${pkg}. Its packages are ${list(FX_PACKAGES)}.`;
+}
+
+/** The bracket that opens the ) or ] at `close` in the code, or -1. */
+function openBracket(code: string, close: number): number {
+  const [o, c] = code[close] === ")" ? ["(", ")"] : ["[", "]"];
+  let depth = 0;
+  for (let k = close; k >= 0; k--) {
+    if (code[k] === c) depth++;
+    else if (code[k] === o && --depth === 0) return k;
+  }
+  return -1;
+}
+
+/** Where the expression that ends right before `end` in the code starts: a name, or a chain such as box.getChildren().get(0). */
+function expressionStart(code: string, end: number): number {
+  let k = end;
+  while (k > 0 && /\s/.test(code[k - 1])) k--;
+  for (let n = 0; n < 50; n++) {
+    if (k > 0 && (code[k - 1] === ")" || code[k - 1] === "]")) {
+      const open = openBracket(code, k - 1);
+      if (open < 0) return k;
+      k = open;
+      continue;
+    }
+    let j = k;
+    while (j > 0 && /[\w$]/.test(code[j - 1])) j--;
+    if (j === k) return k;
+    k = j;
+    let dot = k;
+    while (dot > 0 && /\s/.test(code[dot - 1])) dot--;
+    if (dot > 0 && code[dot - 1] === ".") {
+      k = dot - 1;
+      while (k > 0 && /\s/.test(code[k - 1])) k--;
+      continue;
+    }
+    return k;
+  }
+  return k;
+}
+
+type Call = {
+  /** The method's name, or the class's of new. */
+  name: string;
+  newClass: boolean;
+  /** The value before the dot, as written: box.getChildren() for box.getChildren().add(...) ("" for none). */
+  receiver: string;
+  /** The values in the parentheses, as written. */
+  args: string[];
+  /** Which of them holds javac's caret (-1 when the caret is on the call's dot). */
+  index: number;
+};
+
+/** The values in the parentheses that open at `open`, split at the commas outside brackets, as written in `text`. */
+function argumentsOf(code: string, text: string, open: number): string[] {
+  const end = pastClose(code, open);
+  if (end < 0) return [];
+  const out: string[] = [];
+  let depth = 0;
+  let from = open + 1;
+  for (let k = open + 1; k < end - 1; k++) {
+    const ch = code[k];
+    if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch)) depth--;
+    else if (ch === "," && depth === 0) {
+      out.push(text.slice(from, k).trim());
+      from = k + 1;
+    }
+  }
+  const last = text.slice(from, end - 1).trim();
+  return last || out.length ? [...out, last] : [];
+}
+
+/**
+ * The call javac's caret is about: the one that starts at it (the caret on the dot of box.getChildren().add(...)),
+ * or else the innermost one whose parentheses hold it.
+ */
+function callAt(d: Diagnostic, own: OwnClasses): Call | null {
+  const p = caretIn(d, own);
+  if (!p) return null;
+  const { code, text, at } = p;
+  const call = (open: number, nameAt: number, name: string, index: number): Call => {
+    const before = code.slice(Math.max(0, nameAt - 300), nameAt);
+    const newClass = /\bnew\s+$/.test(before);
+    const dot = /\.\s*$/.exec(before);
+    const receiver = dot ? text.slice(expressionStart(code, nameAt - dot[0].length), nameAt - dot[0].length).trim() : "";
+    return { name, newClass, receiver, args: argumentsOf(code, text, open), index };
+  };
+  const starts = /^\.\s*([\w$]+)\s*\(/.exec(code.slice(at, at + 200));
+  if (starts) return call(at + starts[0].length - 1, at + starts[0].indexOf(starts[1]), starts[1], -1);
+  let depth = 0;
+  for (let k = at - 1; k >= 0 && k > at - 3000; k--) {
+    const ch = code[k];
+    if (")]}".includes(ch)) depth++;
+    else if ("([{".includes(ch)) {
+      if (depth-- > 0) continue;
+      if (ch !== "(") return null;
+      const m = /([\w$]+)\s*(?:<[^<>()]*>)?\s*$/.exec(code.slice(Math.max(0, k - 200), k));
+      if (!m || NOT_A_METHOD.test(m[1])) return null;
+      const index = argumentAt(code, k, at).index;
+      return call(k, k - (code.slice(Math.max(0, k - 200), k).length - m.index), m[1], index);
+    } else if (ch === ";") return null;
+  }
+  return null;
+}
+
+/** The declared type of a plain variable at the caret's place (null for var, an expression, or when no declaration is found). */
+function typeOfName(d: Diagnostic, own: OwnClasses, name: string): string | null {
+  const p = caretIn(d, own);
+  if (!p || !/^(?:this\s*\.\s*)?[\w$]+$/.test(name)) return null;
+  const type = changesOf(p.code, name.replace(/^this\s*\.\s*/, ""), p.at).type;
+  return type ? simple(type.replace(/<.*$/, "")) : null;
+}
+
+/** When an event happens, by the class whose setOnAction gets it. */
+const fxWhen = (type: string | null, name: string) =>
+  type && fxIsKind(type, "TextField") ? `each time Enter is pressed in ${/^[\w$]+$/.test(name) ? name : "the field"}` : type && fxIsKind(type, "ButtonBase") ? `each time ${/^[\w$]+$/.test(name) ? name : "the button"} is clicked` : "each time the event happens";
+/** Methods that get an event handler or a change listener. */
+const FX_HANDLER = /^(?:setOn[A-Z][\w$]*|addListener)$/;
+
+/** The FX class's methods for a list in a sentence: its own and those of its parents up to Region, then a word about every node's. */
+function fxMethodList(fx: string): string {
+  const stop = new Set(["Region", "Parent", "Node"]);
+  const mine = [...new Set([fx, ...fxAncestors(fx)].filter((t) => !stop.has(t)).flatMap((t) => (FX[t]?.methods ? FX[t].methods.split(" ") : [])))];
+  const node = fxIsKind(fx, "Region") ? `${mine.length ? ", and" : ""} those every control and pane has, such as setPadding, setPrefWidth, setDisable and setVisible` : fxIsKind(fx, "Node") ? `${mine.length ? ", and" : ""} those every node has, such as setDisable and setVisible` : "";
+  return `${listed(mine)}${node}`;
+}
+
+/** The static methods of the practice version's classes (the others' methods belong to each object). scripts/explanations.test.mjs checks them against the library's class files. */
+const FX_STATIC: Record<string, string> = { Application: "launch", Platform: "runLater exit isFxApplicationThread", Font: "getDefault font", GridPane: "getColumnIndex getRowIndex" };
+export { FX_STATIC as PRACTICE_JAVAFX_STATIC };
+
+/** The methods of a list, such as the children list that getChildren() gives. */
+const FX_LIST_METHOD = /^(?:add|addAll|remove|removeAll|clear|size|get|set|setAll|contains|isEmpty|indexOf)$/;
+/** Events of real JavaFX's nodes and scenes that the practice version doesn't have. */
+const FX_NODE_EVENT = /^setOn(?:Mouse|Key|Scroll|Drag|Touch|Zoom|Rotat|Swipe|ContextMenuRequested|InputMethodTextChanged)/;
+/** Events of real JavaFX's windows that the practice version doesn't have. */
+const FX_WINDOW_EVENT = /^setOn(?:CloseRequest|Show(?:n|ing)|Hid(?:den|ing))$/;
+
+/** "cannot find symbol: method setOnMouseClicked(...), location: variable button of type Button": a method that the FX class (in the practice version) doesn't have. */
+function fxMethod(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+method ([\w$]+)\((.*)\)\n\s*location: (?:variable ([\w$]+) of type |class |interface )([\w$.]+)(?:<.*>)?$/m.exec(d.message);
+  if (!m) return null;
+  const [, method, args, variable] = m;
+  const type = simple(m[4]);
+  if (type === "Parameters") return fxParameters(own, method, args, variable);
+  const fx = fxTypeOf(own, type);
+  if (!fx) return null;
+  const dots = `${method}(${args ? "..." : ""})`;
+  const p = caretIn(d, own);
+  const qualified = !!variable || (!!p && p.code[p.at] === ".");
+  const value = variable ?? (p && p.code[p.at] === "." ? p.text.slice(expressionStart(p.code, p.at), p.at).trim() : "");
+  // A static call written on the class's name, as in HBox.setMargin(...) or javafx.scene.layout.HBox.setMargin(...) (not new HBox().setMargin(...)).
+  if (!variable && type === fx && /^[\w$]+(?:\s*\.\s*[\w$]+)*$/.test(value) && simple(value.replace(/\s+/g, "")) === type) {
+    const statics = FX_STATIC[fx]?.split(" ") ?? [];
+    const head = `${fx} has no static method ${dots} in Java Arena's practice version of JavaFX`;
+    const nearStatic = fxNear(method, statics);
+    if (nearStatic) return `${head}. Did you mean ${nearStatic}? Check the spelling: upper and lower case matter.`;
+    // A misspelled method of each object (javac says "non-static method" for one spelled right).
+    const nearEach = fxNear(method, fxMethods(fx).filter((x) => !statics.includes(x)));
+    if (nearEach) return `${head}. Did you mean ${nearEach}? Check the spelling (upper and lower case matter). ${nearEach} isn't static: it belongs to each ${fx}, so call it on one, as in ${varFor(fx.replace(/^[HV](?=Box$)/, ""))}.${nearEach}(...).`;
+    const those = statics.length ? `${fx}'s static methods here are ${listed(statics)}.` : `${fx} has no static methods here: its methods belong to each ${fx}, and are called on one.`;
+    return `${head}: it has only the classes and methods its lessons use, so a method of real JavaFX may be missing. Check the spelling (upper and lower case matter). ${those}`;
+  }
+  const kindOf = type !== fx ? `, which is ${aNode(fx)}` : "";
+  const holder = !qualified ? `This code is in ${type}${kindOf}` : variable ? `${variable} is ${aNode(type)}${kindOf}` : `${value.length <= 40 && value ? value : "The value before the dot"} is ${aNode(type)}${kindOf}`;
+  const has = `${holder}, and ${fx} has no method ${dots}`;
+  const v = value && value.length <= 40 ? value : "pane";
+  const list = method === "getChildren" || FX_LIST_METHOD.test(method);
+  const rootCall = `root.getChildren().${method === "getChildren" ? "add(...)" : dots}`;
+  if (list && fx === "Scene")
+    return `${has}: a Scene holds one node, its root, the pane given to new Scene(...), and the other nodes are that pane's children. Keep the pane in a variable of its own type (VBox root = new VBox(); ... new Scene(root)) and add to it: ${rootCall}.`;
+  if (list && fxIsKind(fx, "Window"))
+    return `${has}: a Stage is the window itself, and its nodes are in the pane at the root of its Scene. Keep that pane in a variable of its own type and add to it: ${rootCall}.`;
+  if (list && method !== "getChildren" && fx === "Application")
+    return `${has}: the window's nodes go in a pane, the root of its Scene. Keep that pane in a variable of its own type (VBox root = new VBox(); ... stage.setScene(new Scene(root))) and add to it: ${rootCall}.`;
+  if (fxIsKind(fx, "Pane") && FX_LIST_METHOD.test(method))
+    return `${has}: a pane keeps its nodes in its list of children, which getChildren() gives. Write ${v}.getChildren().${dots}.`;
+  const near = fxNear(method, fxMethods(fx));
+  if (near) return `${has}. Did you mean ${near}? Check the spelling: upper and lower case matter.`;
+  // A method of the kinds of node below this type: Java goes by the variable's type, not by the node in it.
+  const below = FX_NODES.filter((k) => k !== fx && fxIsKind(k, fx) && fxMethods(k).includes(method));
+  if (below.length) {
+    const s = below[0];
+    const val = value && value.length <= 40 ? value : "node";
+    const x = varFor(s, val);
+    const init = variable && p ? localValue(p.code, p.text, variable, p.at) : null;
+    const from = /getChildren(?:Unmodifiable)?\s*\(\s*\)\s*\.\s*get\s*\(/.test(init ?? value) ? " getChildren().get(...) gives a Node, since a pane's children can be any kind of node." : /\blookup\s*\(/.test(init ?? value) ? " lookup(...) gives a Node, since the node it finds can be any kind of node." : "";
+    return `${has}. ${listed(below)} ${below.length > 1 ? "have" : "has"} it, but Java goes by the ${variable ? "variable's" : "value's"} type, ${type}, not by the node in it, even when that node is ${aNode(s)}.${from} Keep the ${s} in a variable of its own type when you create it (${s} ${varFor(s)} = new ${s}(...);) and use that variable. Or, if the node is ${aNode(s)}, check and cast it: if (${val} instanceof ${s}) { ${s} ${x} = (${s}) ${val}; ${x}.${dots}; }`;
+  }
+  if (/^setOn[A-Z]/.test(method)) {
+    const listener = `${v}.textProperty().addListener((observable, oldValue, newValue) -> ...)`;
+    const typing = `To react to typing, a change listener on the text works: ${listener}.`;
+    const tip = fxIsKind(fx, "ButtonBase")
+      ? `To react to a click, use ${v}.setOnAction(e -> ...).`
+      : fxIsKind(fx, "TextField")
+        ? `For Enter, use ${v}.setOnAction(e -> ...); to react to typing, a change listener on the text works: ${listener}.`
+        : fxIsKind(fx, "TextInputControl")
+          ? typing
+          : "To react to a click, add a Button and use its setOnAction(e -> ...).";
+    // In the practice version only buttons and text fields have setOnAction; the classes that get here (labels, text areas, panes, scenes, windows) don't have it in real JavaFX either.
+    if (method === "setOnAction")
+      return `${has}: in Java Arena's practice version of JavaFX, only buttons and text fields have setOnAction (a click on a Button, or Enter in a TextField), and in real JavaFX ${aNode(fx)} doesn't have it either. ${tip}`;
+    if (FX_WINDOW_EVENT.test(method) && fxIsKind(fx, "Window"))
+      return `${holder}, and Java Arena's practice version of JavaFX has no ${method}: its windows have no events of their own, such as setOnCloseRequest and setOnShown, which are part of real JavaFX. To do something as the program ends, after the last window closes, override stop() in your class that extends Application: JavaFX calls it then.`;
+    const of = `${holder}, and Java Arena's practice version of JavaFX has no ${method}: of the events, it has only setOnAction, for a click on a Button or Enter in a TextField.`;
+    if (FX_NODE_EVENT.test(method) && (fxIsKind(fx, "Node") || fx === "Scene"))
+      return `${of} Mouse, keyboard, scroll and drag events, such as setOnMouseClicked and setOnKeyPressed, are part of real JavaFX but not of this version. ${tip}`;
+    return `${of} ${tip}`;
+  }
+  const elsewhere = FX_NODES.concat(Object.keys(FX).filter((k) => !FX_NODES.includes(k))).filter((k) => !fxIsKind(fx, k) && !fxIsKind(k, fx) && fxMethods(k).includes(method));
+  const concrete = elsewhere.filter((k) => !elsewhere.some((o) => o !== k && fxIsKind(o, k)) || FX_NODES.includes(k));
+  if (concrete.length) {
+    const call = fx === "Application" && concrete.includes("Stage") ? ` Call it on the Stage that start gets, as in stage.${dots}.` : "";
+    return `${has}: in Java Arena's practice version of JavaFX, ${method} is a method of ${listed(concrete.slice(0, 6))}.${call}`;
+  }
+  // A class of the program's own that extends a JavaFX class: the method may be meant as one of its own.
+  if (type !== fx) return null;
+  return `${holder}, and Java Arena's practice version of JavaFX has no method ${dots} in ${fx}: it has only the classes and methods its lessons use, so a method of real JavaFX may be missing. Check the spelling (upper and lower case matter). ${fx}'s methods here are ${fxMethodList(fx)}.`;
+}
+
+/**
+ * Application.Parameters, what getParameters() gives: a class inside Application, so it isn't in the
+ * table of classes (FX), whose package and import sentences would be wrong for it. Its methods are
+ * those of real JavaFX's Application.Parameters, all three.
+ */
+const FX_PARAMETERS = ["getRaw", "getUnnamed", "getNamed"];
+/** How a program names Application.Parameters, a class inside Application. */
+const FX_PARAMETERS_PLACE = "It is a class inside Application: in a class that extends Application, write Parameters, with no import of its own; elsewhere, write Application.Parameters (with import javafx.application.Application;).";
+
+/** "cannot find symbol: method getNamd(), location: variable p of type Parameters": a method Application.Parameters doesn't have. */
+function fxParameters(own: OwnClasses, method: string, args: string, variable: string | undefined): string | null {
+  // A class of the program's own called Parameters, or a program that doesn't use JavaFX: not this.
+  if (knows(own, "Parameters") || !fxProgram(own)) return null;
+  const dots = `${method}(${args ? "..." : ""})`;
+  const head = variable ? `${variable} is an Application.Parameters, what getParameters() gives, and it has no method ${dots}.` : `An Application.Parameters, what getParameters() gives, has no method ${dots}.`;
+  const near = fxNear(method, FX_PARAMETERS);
+  if (near) return `${head} Did you mean ${near}? Check the spelling: upper and lower case matter.`;
+  return `${head} It has three methods, as in real JavaFX: getRaw() gives all the arguments, getUnnamed() those that aren't --name=value, and getNamed() the --name=value ones, as a map from name to value.`;
+}
+
+/** The value a local variable gets where it's declared before `at` (Node first = box.getChildren().get(0);), as written, or null. */
+function localValue(code: string, text: string, name: string, at: number): string | null {
+  const n = escapeRegExp(name);
+  let found: string | null = null;
+  for (const m of code.slice(0, at).matchAll(new RegExp(`(?<![\\w$.])[\\w$.]+(?:\\s*<[^;{}()=]*>)?(?:\\s*\\[\\s*\\])*\\s+${n}\\s*=(?!=)([^;]*);`, "g"))) found = text.slice(m.index + m[0].length - 1 - m[1].length, m.index + m[0].length - 1).trim();
+  return found;
+}
+
+/** "cannot find symbol: variable getChildren, location: variable box of type VBox": a method of an FX class written without its parentheses. */
+function fxMethodAsVariable(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+variable ([\w$]+)\n\s*location: variable ([\w$]+) of type ([\w$.]+)/.exec(d.message);
+  const fx = m ? fxTypeOf(own, simple(m[3])) : null;
+  if (!m || !fx || !fxMethods(fx).includes(m[1])) return null;
+  const parens = /^(?:get|is)[A-Z]/.test(m[1]) && !/^get(?:Column|Row)Index$/.test(m[1]) ? "()" : "(...)";
+  return `${m[1]} is a method of ${fx}, so it needs parentheses: ${m[2]}.${m[1]}${parens}.${m[1] === "getChildren" ? " To change the children, use the list it gives, as in add, setAll or clear." : ""}`;
+}
+
+/** Whether a class that doesn't extend Application has the start(Stage) that JavaFX calls, and extends nothing, so it's meant to extend Application. */
+function fxMeantAsApp(own: OwnClasses, cls: string, file: string): boolean {
+  const t = typeNamed(own, cls, file);
+  return !!t && t.kind === "class" && !t.extends.length && t.members.some((x) => x.method && x.name === "start" && !x.static && x.params != null && /^(?:[\w$]+\.)*Stage$/.test(x.params));
+}
+/** " Or, to start CounterApp instead, ...": the program's other class that extends Application, as a second choice. */
+const fxOtherApp = (apps: OwnClass[]) => (apps.length ? ` Or, to start ${apps[0].name} instead, write Application.launch(${apps[0].name}.class, args).` : "");
+
+/** "no suitable method found for launch(Class<Helper>)": launch with a class that doesn't extend Application. */
+function fxLaunchClass(d: Diagnostic, own: OwnClasses): string | null {
+  const x = /^no suitable method found for launch\(Class<([\w$.]+)>/.exec(d.message)?.[1];
+  if (!x) return null;
+  const name = simple(x);
+  const apps = fxApps(own).filter((a) => a.name !== name);
+  const start = `launch(${name}.class) starts ${name} as a JavaFX program, so ${name} must extend Application, and it doesn't.`;
+  if (fxMeantAsApp(own, name, d.file)) return `${start} ${name} has start(Stage), so it's meant as one: write public class ${name} extends Application${importNote(own, d.file, "Application")}.${fxOtherApp(apps)}`;
+  if (apps.length) return `${start} Did you mean ${apps[0].name}.class? ${apps[0].name} extends Application.`;
+  return `${start} To make it one, write public class ${name} extends Application, with a method @Override public void start(Stage stage) { ... } that builds the window.`;
+}
+
+/** "cannot find symbol: method launch(String[]), location: class Main": launch called in a class that doesn't extend Application (or can't find it). */
+function fxLaunchMissing(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+method launch\((.*)\)\n\s*location: class ([\w$.]+)$/m.exec(d.message);
+  if (!m) return null;
+  const cls = simple(m[2]);
+  const t = typeNamed(own, cls, d.file);
+  if (t?.extends.includes("Application"))
+    return `${cls} extends Application, but Java can't find Application, so it doesn't know launch, Application's method, either. Add import javafx.application.Application; at the top of ${fileName(d.file)}, and this error goes away with the one about Application.`;
+  const start = `launch is a method of Application, and ${cls} doesn't extend Application, so ${cls} can't call it by its name alone.`;
+  if (fxMeantAsApp(own, cls, d.file)) return `${start} ${cls} has start(Stage), so it's meant as the JavaFX program: write public class ${cls} extends Application${importNote(own, d.file, "Application")}. Then launch(${cls}.class) in main starts it.${fxOtherApp(fxApps(own).filter((a) => a.name !== cls))}`;
+  const app = fxApps(own)[0];
+  if (app) return `${start} To start ${app.name}, the class that extends Application, write Application.launch(${app.name}.class, args)${importNote(own, d.file, "Application")}.`;
+  return `${start} Make ${cls} a JavaFX program: public class ${cls} extends Application, with a method @Override public void start(Stage stage) { ... } that builds the window. Then launch(${cls}.class) in main starts it.`;
+}
+
+/** "Main is not abstract and does not override abstract method start(Stage) in Application". */
+function fxNoStart(own: OwnClasses, cls: string, file: string): string {
+  const t = typeNamed(own, cls, file);
+  const methods = t?.members.filter((x) => x.method) ?? [];
+  const stage = (x: OwnMember) => x.params != null && /^(?:[\w$]+\.)*Stage$/.test(x.params);
+  const header = `@Override public void start(Stage stage) { ... }${importNote(own, file, "Stage")}`;
+  const base = `${cls} extends Application, so it must have the method start: JavaFX calls it with the window, a Stage, and the program builds what the window shows there. Write it as ${header}.`;
+  const same = methods.find((x) => x.name === "start");
+  if (same && stage(same) && same.type !== "void") return `${cls} has start(Stage), but it gives back ${anWord(same.type)}, and the start that JavaFX calls is void: write public void start(Stage stage).`;
+  if (same) return `${cls} has a method start, but it takes ${same.params ? `(${spaced(same.params)})` : "no parameters"}, and the start that JavaFX calls takes one Stage, the window: ${header}.`;
+  const near = methods.find((x) => x.name.toLowerCase() === "start" || editDistance(x.name.toLowerCase(), "start") <= 2 || (stage(x) && !x.static));
+  if (near) return `${cls} has a method ${near.name}, but JavaFX calls only a method named exactly start (upper and lower case matter): rename ${near.name} to start, as in ${header}.`;
+  return base;
+}
+
+/** "incompatible types: incompatible parameter types in lambda expression" for a handler or a listener with the wrong number of parameters. */
+function fxLambdaParams(d: Diagnostic, own: OwnClasses): string | null {
+  if (!usesFX(own)) return null;
+  const l = lambdaAt(d, own);
+  if (!l?.method) return null;
+  const n = l.params.length;
+  const count = n === 0 ? "none" : plural(n, "parameter", "parameters");
+  const body = l.block ? "{ ... }" : l.body.length <= 50 ? l.body : "...";
+  if (/^setOn[A-Z]/.test(l.method) && n !== 1)
+    return `${l.method} needs an event handler: a lambda with one parameter, the event (an ActionEvent), which it gets each time the event happens. This lambda has ${count}. Give it exactly one, even when the handler doesn't use it: e -> ${body}`;
+  if (l.method === "addListener" && n !== 3) {
+    const params = `(${n >= 2 ? l.params[0] : "observable"}, oldValue, ${n >= 1 ? l.params[n - 1] : "newValue"})`;
+    const invalidation = n === 1 ? " (Real JavaFX also takes a listener with one parameter, an InvalidationListener, which Java Arena's practice version of JavaFX doesn't have.)" : "";
+    return `addListener needs a change listener: a lambda with three parameters, the value it watches, its old value and its new value. This lambda has ${count}. Give it all three, even the ones it doesn't use: ${params} -> ${body}${invalidation}`;
+  }
+  return null;
+}
+
+/** "incompatible types: T cannot be converted to String" inside a listener with the wrong number of parameters: an error that follows from that one. */
+function fxListenerFollowOn(d: Diagnostic, own: OwnClasses): string | null {
+  if (!/declared in interface ObservableValue/.test(d.formatted)) return null;
+  const l = lambdaAt(d, own);
+  if (l?.method !== "addListener" || l.params.length === 3) return null;
+  return `This error follows from the listener's parameters: a change listener has three, (observable, oldValue, newValue), and with ${plural(l.params.length, "parameter", "parameters")} Java can't tell what each one is. Give the lambda all three, and this error goes away too.`;
+}
+
+/** "'void' type not allowed here" in the parentheses of setOnAction or addListener: code that runs right away, not a handler. */
+function fxHandlerValue(d: Diagnostic, own: OwnClasses): string | null {
+  if (!usesFX(own)) return null;
+  const call = callAt(d, own);
+  if (!call || !FX_HANDLER.test(call.name) || call.index < 0) return null;
+  const arg = call.args[call.index] ?? "...";
+  const recv = call.receiver || "button";
+  const value = `${arg} isn't one: Java runs it right away, while the window is being built, and it gives back nothing (it's void).`;
+  if (call.name === "addListener") return `addListener takes a change listener: code to run each time the value changes. ${value} To run it on each change, make it a lambda with three parameters: ${recv}.addListener((observable, oldValue, newValue) -> ${arg});`;
+  return `${call.name} takes an event handler: code to run later, ${fxWhen(typeOfName(d, own, recv), recv)}. ${value} To run it then, make it a lambda: ${recv}.${call.name}(e -> ${arg});`;
+}
+
+/** "incompatible types: Label cannot be converted to EventHandler<ActionEvent>": setOnAction (or addListener) given a value that isn't code to run. */
+function fxNotHandler(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: ([\w$.]+(?:<.*?>)?) cannot be converted to (EventHandler|ChangeListener)</.exec(d.message);
+  if (!m) return null;
+  const from = simple(m[1].replace(/<.*$/, ""));
+  const call = callAt(d, own);
+  const name = call?.name ?? (m[2] === "EventHandler" ? "setOnAction" : "addListener");
+  const recv = call?.receiver || (m[2] === "EventHandler" ? "button" : "field.textProperty()");
+  const arg = call && call.index >= 0 ? call.args[call.index] : null;
+  const it = arg && arg.length <= 40 ? `${arg} is ${anWord(from)}` : `This is ${anWord(from)}`;
+  if (m[2] === "ChangeListener") return `addListener takes a change listener: code to run each time the value changes, written as a lambda with three parameters, as in ${recv}.addListener((observable, oldValue, newValue) -> ...);. ${it}, not code to run.`;
+  const label = fxTypeOf(own, from) && arg && /^[\w$]+$/.test(arg) && fxMethods(fxTypeOf(own, from)!).includes("setText") ? ` To change ${arg} then, write the change in the lambda: ${recv}.${name}(e -> ${arg}.setText("..."));` : "";
+  return `${name} takes an event handler: code to run ${fxWhen(typeOfName(d, own, recv), recv)}, written as a lambda, as in ${recv}.${name}(e -> ...);. ${it}, not code to run.${label}`;
+}
+
+/** "incompatible types: invalid method reference ... method handle in class Main cannot be applied to given types": setOnAction(this::handle) with a method that doesn't take the event. */
+function fxMethodRef(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: invalid method reference\n\s*method ([\w$]+) in (?:class|interface) [\w$.<>]+ cannot be applied to given types\n\s*required: (.+)\n\s*found:\s+(.+)/.exec(d.message);
+  const call = m && usesFX(own) ? callAt(d, own) : null;
+  if (!m || !call || !/^setOn[A-Z]/.test(call.name)) return null;
+  const [, method, required, found] = m;
+  const ref = call.index >= 0 ? call.args[call.index] : `this::${method}`;
+  const takes = required === "no arguments" ? "takes no parameters" : `takes (${spaced(required)})`;
+  return `${ref} makes ${method} the event handler, and a handler gets one value, the event (${found.trim()}), but ${method} ${takes}. Give ${method} the event as its only parameter, as in private void ${method}(${found.trim()} event), or call it from a lambda instead: ${call.receiver || "button"}.${call.name}(e -> ${method}());`;
+}
+
+/** Methods of the practice version that take text. */
+const FX_TEXT = /^(?:setText|setTitle|setPromptText|appendText|setId|setStyle)$/;
+
+/** "incompatible types: VBox cannot be converted to Scene" and the like: a value of the wrong type for a JavaFX method or constructor. */
+function fxWrongValue(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: ([\w$.]+)(?:<.*>)? cannot be converted to ([\w$.]+)$/m.exec(d.message);
+  if (!m) return null;
+  const [from, to] = [simple(m[1]), simple(m[2])];
+  if (knows(own, to) || (to === "Node" && !usesFX(own))) return null;
+  const call = callAt(d, own);
+  if (!call || call.index < 0) return null;
+  const arg = call.args[call.index] ?? "";
+  const shown = arg && arg.length <= 40 ? arg : null;
+  const it = shown ? `${shown} is ${anWord(from)}` : `this is ${anWord(from)}`;
+  const recv = call.receiver;
+  const target = recv ? `${recv}.${call.name}` : call.name;
+  if (to === "Scene" && call.name === "setScene") {
+    const node = fxTypeOf(own, from);
+    return `setScene takes a Scene, and ${it}. ${node && fxIsKind(node, "Parent") ? `Put it in a Scene first: ${target}(new Scene(${shown ?? "root"}));` : "Create a Scene with the window's root pane, as in new Scene(root), and give that to setScene."}`;
+  }
+  if (to === "Parent" && (call.name === "Scene" || call.name === "setRoot")) {
+    const other = from === "Stage" ? " It's the other way round: the Stage gets the Scene, stage.setScene(new Scene(root))." : "";
+    return `A Scene's root is the node that holds everything the window shows, usually a pane such as a VBox with the other nodes in it, and ${it}.${other}`;
+  }
+  if (to === "Insets" && call.name === "setPadding")
+    return `setPadding takes an Insets, the space inside the edges, and ${it}. Write ${target}(new Insets(${shown && /^\d+(?:\.\d+)?$/.test(shown) ? shown : "10"})) for the same space on every side, or new Insets(top, right, bottom, left)${importNote(own, d.file, "Insets")}.`;
+  if (to === "Pos" && call.name === "setAlignment") {
+    const constant = /^"([A-Z_]+)"$/.exec(arg)?.[1];
+    return `setAlignment takes one of the constants of Pos, and ${it}. Write ${target}(Pos.${constant ?? "CENTER"})${constant ? ", without quotes" : ", or another constant such as Pos.TOP_LEFT"}${importNote(own, d.file, "Pos")}.`;
+  }
+  if (to === "Font" && call.name === "setFont") return `setFont takes a Font, and ${it}. Font.font(${shown && /^\d+(?:\.\d+)?$/.test(shown) ? shown : "20"}) is the default font in that size, as in ${target}(Font.font(${shown && /^\d+(?:\.\d+)?$/.test(shown) ? shown : "20"}))${importNote(own, d.file, "Font")}.`;
+  if (/^(?:int|double)$/.test(to) && call.name === "add" && recv && fxTypeOf(own, typeOfName(d, own, recv) ?? "") === "GridPane")
+    return `A GridPane's add takes the node and then its column and its row, as whole numbers, and ${it}. Write them without quotes, as in ${recv}.add(${call.args[0] || "node"}, 0, 1).`;
+  if (to === "String" && (FX_TEXT.test(call.name) || (call.newClass && FX[call.name] && fxMethods(call.name).includes("setText")))) {
+    const what = call.newClass ? `A ${call.name}'s text is a String` : `${call.name} takes text, a String`;
+    const v = shown ?? "value";
+    return `${what}, and ${it}. Turn it into text: ${call.newClass ? `new ${call.name}("" + ${v})` : `${target}("" + ${v})`}, or String.valueOf(${v}).`;
+  }
+  if (to === "Node" && (/^(?:add|addAll|setAll)$/.test(call.name) || (call.newClass && FX[call.name] && fxIsKind(call.name, "Pane")))) {
+    const text = from === "String" ? ` To show text, put it in a Label: new Label(${shown ?? '"..."'}).` : "";
+    return `A pane holds nodes, such as Labels, Buttons and other panes, and ${it}.${text}`;
+  }
+  return null;
+}
+
+/** add on a pane's children with several values: getChildren().add(button, label), or a GridPane's cell given to getChildren().add. */
+function fxChildrenAdd(d: Diagnostic, own: OwnClasses): string | null {
+  if (!usesFX(own)) return null;
+  const call = callAt(d, own);
+  if (!call || call.name !== "add" || !/\bgetChildren\s*\(\s*\)$/.test(call.receiver) || call.args.length < 2) return null;
+  const pane = call.receiver.replace(/\s*\.\s*getChildren\s*\(\s*\)$/, "");
+  const type = typeOfName(d, own, pane);
+  const grid = !!type && fxTypeOf(own, type) === "GridPane";
+  const args = call.args.join(", ");
+  // A column and a row (and spans) only when javac's types for the values after the node are numbers, as in add(Label,int,int).
+  const types = /found for add\(([^)]*)\)/.exec(d.message)?.[1].split(",").map((t) => t.trim());
+  const cell = (call.args.length === 3 || call.args.length === 5) && (!types || types.length !== call.args.length || types.slice(1).every((t) => /^(?:int|short|byte|char|long|float|double|Integer|Short|Byte|Character|Long|Float|Double)$/.test(t)));
+  if (!cell) return `add puts one node in the list of children (with two values, add(index, node), the first is the position, an int). To add several nodes at once, use addAll: ${pane || "pane"}.getChildren().addAll(${args}).`;
+  if (grid) return `A GridPane places a node in a cell with its own add, which takes the column and the row: ${pane}.add(${args}), on the GridPane itself, not on its getChildren().`;
+  return `The list of children has add(node) and add(index, node), and nothing with a column and a row: those are for a GridPane's own add, as in grid.add(node, column, row). To add several nodes at once, use addAll(...).`;
+}
+
+/** "incompatible types: ObservableList<Node> cannot be converted to ArrayList<Node>" (or List<Button>): the list getChildren() gives in a variable of another type. */
+function fxChildrenList(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: ObservableList<([\w$.]+)> cannot be converted to ((?:[\w$]+\.)*([\w$]+)(?:<(.+)>)?)$/m.exec(d.message);
+  if (!m || simple(m[1]) !== "Node") return null;
+  const [, , , base, arg] = m;
+  const c = atCaret(d);
+  const given = c && /getChildren(?:Unmodifiable)?\s*$/.test(beforeCaret(c)) ? "getChildren() gives" : "This is";
+  const declare = `Declare the variable as ObservableList<Node>${importNote(own, d.file, "ObservableList")}, or as List<Node>`;
+  if (arg && simple(arg) !== "Node")
+    return `${given} a list of Node, since a pane's children can be any kind of node, so it can't go in a variable for a list of ${simple(arg)}. ${declare}. To keep your ${simple(arg)}s apart, keep a list of them yourself, a List<${simple(arg)}>, and add each one to it as you create it.`;
+  if (/^(?:ArrayList|LinkedList)$/.test(base))
+    return `${given} an ObservableList<Node>, JavaFX's own kind of list (one that tells the pane when it changes), not ${anWord(base)}. ${declare}: it has add, get, remove and size like any list. (new ArrayList<>(...) would make a separate copy, and adding to the copy wouldn't change the window.)`;
+  return null;
+}
+
+/** "incompatible types: Node cannot be converted to Button": a Node, as getChildren().get(...) or lookup(...) gives, put in a variable of a kind of node. */
+function fxNarrowing(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: ([\w$.]+) cannot be converted to ([\w$.]+)$/m.exec(d.message);
+  if (!m) return null;
+  const [from, to] = [simple(m[1]), simple(m[2])];
+  const toFx = fxTypeOf(own, to);
+  if (!FX[from] || knows(own, from) || !toFx || from === to || !fxIsKind(toFx, from)) return null;
+  const loop = forEachAt(d, own);
+  const x = varFor(to, loop?.variable);
+  if (loop) {
+    const coll = loop.collection ?? "...";
+    return `Each element of ${loop.collection ?? "the list"} is ${anWord(from)} for Java (a pane's children can be any kind of node), so the loop variable can't be ${anWord(to)}. Loop with ${from}, and check and cast each one inside: for (${from} node : ${coll}) { if (node instanceof ${to}) { ${to} ${x} = (${to}) node; ... } }. Or keep your ${to}s in a list of their own, a List<${to}>, as you create them.`;
+  }
+  const c = atCaret(d);
+  const before = c ? beforeCaret(c) : "";
+  const source = /getChildren(?:Unmodifiable)?\s*\(\s*\)\s*\.\s*get\s*$/.test(before) ? `getChildren().get(...) gives ${anWord(from)}, since a pane's children can be any kind of node` : /\blookup\s*$/.test(before) ? `lookup(...) gives ${anWord(from)}, since the node it finds can be any kind of node` : `This value is ${anWord(from)} for Java`;
+  const value = assignedValue(d, own);
+  const cast = value ? `, as in (${to}) ${value}` : "";
+  return `${source}, and Java won't put ${anWord(from)} in ${anWord(to)} variable by itself, even when the node is ${anWord(to)}. Keep the ${to} in a variable of its own type when you create it, and use that variable. Or, if the node surely is ${anWord(to)}, cast it${cast} (if it isn't, the cast stops the program with a ClassCastException).`;
+}
+
+/** "no suitable constructor found for Scene(no arguments)". */
+function fxScene(d: Diagnostic, own: OwnClasses): string | null {
+  const got = /^no suitable constructor found for Scene\((.*?)\)/.exec(d.message)?.[1];
+  if (got == null || knows(own, "Scene")) return null;
+  const given = got === "no arguments" ? " Here it got nothing: give it the pane, as in new Scene(layout)." : "";
+  return `new Scene(...) takes the window's root, the pane that holds its nodes, and, if you want, the window's width and height: new Scene(root) or new Scene(root, 300, 200).${given}`;
+}
+
+/** "getChildren() has protected access in Parent": getChildren() on a node that isn't a pane, such as a Button, or on what getRoot() gives. */
+function fxProtectedChildren(d: Diagnostic, own: OwnClasses): string | null {
+  if (!/^getChildren\(\) has protected access in (?:javafx\.scene\.)?Parent$/.test(d.message) || knows(own, "Parent")) return null;
+  const p = caretIn(d, own);
+  const value = p && p.code[p.at] === "." ? p.text.slice(expressionStart(p.code, p.at), p.at).trim() : "";
+  const type = value ? typeOfName(d, own, value) : null;
+  const fx = type ? fxTypeOf(own, type) : null;
+  const panes = `only the panes (${FX_PANES}) have a list of children to add nodes to, getChildren()`;
+  if (fx && fxIsKind(fx, "Control"))
+    return `${value} is ${aNode(fx)}, and ${aNode(fx)} can't hold other nodes: ${panes}. To show ${value} together with other nodes, put them all in a pane, as in new HBox(${value}, ...).`;
+  const root = /getRoot\s*\(\s*\)$/.test(value) ? "getRoot() gives the root as a Parent, even when it's a VBox, and " : "";
+  return `${root}${value ? `${value} has the type ${type ?? "Parent"}, and ` : ""}a Parent doesn't let other code change its children: ${panes}. Keep the pane in a variable of its own type (VBox root = new VBox(); ... new Scene(root)) and use root.getChildren().`;
+}
+
+/** "method add in class GridPane cannot be applied to given types": a GridPane's add without the column and the row. */
+function fxGridAdd(d: Diagnostic, own: OwnClasses): string | null {
+  if (!/^(?:method add in class GridPane cannot be applied|no suitable method found for add\([^)]*\)[\s\S]*method GridPane\.add\()/.test(d.message)) return null;
+  const call = callAt(d, own);
+  const grid = call?.receiver || "grid";
+  const node = call?.args[0] || "node";
+  return `A GridPane places each node in a cell: ${grid}.add(${node}, column, row), as in ${grid}.add(${node}, 0, 0) for the top left cell, where the column and the row are whole numbers that start at 0.`;
+}
+
+/**
+ * A JavaFX event handler or change listener that holds the offset `at`: a lambda given to setOnAction (or
+ * another setOn... method) or addListener, or an inner class new EventHandler<...>() { ... } or new
+ * ChangeListener<...>() { ... } given to one: the method it's given to, and where it is in the code.
+ */
+function fxHandlerAround(code: string, at: number, inner: boolean): { method: string; from: number; to: number } | null {
+  if (!inner) {
+    const l = lambdaAround(code, at);
+    if (!l) return null;
+    const before = code.slice(Math.max(0, l.arrow - 500), l.arrow);
+    const p = /(\([^()]*\)|[\w$]+)\s*$/.exec(before);
+    const method = p ? /([\w$]+)\s*\(\s*$/.exec(before.slice(0, p.index))?.[1] : undefined;
+    return method && FX_HANDLER.test(method) ? { method, from: l.arrow, to: l.end } : null;
+  }
+  for (let open = blockAround(code, at); open >= 0; open = blockAround(code, open)) {
+    const m = /([\w$]+)\s*\(\s*new\s+(?:[\w$]+\.)*(?:EventHandler|ChangeListener)\s*(?:<[^;{}]*>)?\s*\(\s*\)\s*$/.exec(code.slice(Math.max(0, open - 300), open));
+    if (m && FX_HANDLER.test(m[1])) return { method: m[1], from: open, to: closeOf(code, open) };
+  }
+  return null;
+}
+
+/** A local variable that a JavaFX handler changes: keep it in an instance variable instead. */
+function fxHandlerChanges(code: string, text: string, name: string, at: number, type: string | null, handler: { method: string }, inner: boolean): string {
+  // The declaration: its text, and the method it's in.
+  const n = escapeRegExp(name);
+  let decl: { index: number; text: string } | null = null;
+  for (const m of code.slice(0, at).matchAll(new RegExp(`(?<![\\w$.])(?:final\\s+)?[\\w$.]+(?:\\s*<[^;{}()=]*>)?(?:\\s*\\[\\s*\\])*\\s+${n}\\s*(?:=(?!=)[^;]*)?;`, "g")))
+    if (!/^(?:return|new|throw|else|case|yield)\b/.test(m[0])) decl = { index: m.index, text: text.slice(m.index, m.index + m[0].length).replace(/\s+/g, " ").trim() };
+  const body = decl ? methodBodyAround(code, decl.index) : null;
+  const header = body ? HEADER_END.exec(code.slice(Math.max(0, body[0] - 1000), body[0])) : null;
+  const method = header?.[1] ?? "the method";
+  const headText = body ? code.slice(Math.max(0, body[0] - 1000), body[0]) : "";
+  const isStatic = /\bstatic\b[^;{}]*$/.test(headText);
+  const listener = handler.method === "addListener";
+  const who = `the ${listener ? "change listener" : "event handler"} given to ${handler.method}`;
+  const when = listener ? "each time the value changes" : "each time its event happens";
+  const declared = decl ? decl.text.replace(/^final\s+/, "") : null;
+  const field = declared && type ? `private ${isStatic ? "static " : ""}${declared}` : null;
+  const move = field ? `declare ${field} in the class, outside ${method}, and remove ${declared} from ${method}` : `declare ${name} in the class, outside ${method} (with its type, as an instance variable can't use var), and remove its declaration from ${method}`;
+  return `${name} is a local variable of ${method}, and ${who} changes it: ${inner ? "code in an inner class" : "a lambda"} can only use local variables that never change after they get their value (Java calls that effectively final). The ${listener ? "listener" : "handler"} runs later, ${when}, after ${method} has ended, so keep the value in ${isStatic ? "a static variable" : "an instance variable"} instead: ${move}. The ${listener ? "listener" : "handler"} can change it there, and it keeps its value from one ${listener ? "change" : "event"} to the next.`;
+}
+
+/** A JavaFX class's method that replaces another with a different return type, or a static one: start, init and stop of Application. */
+const FX_APP_METHODS = /^(?:start|init|stop)$/;
+
+/** "start(Stage) in Three cannot override start(Stage) in Application; overriding method is static". */
+function overrideStatic(d: Diagnostic): string | null {
+  const m = /^([\w$]+)\((.*?)\) in ([\w$.]+) cannot (?:override|implement) [\w$]+\(.*?\) in ([\w$.]+)\n\s*overriding method is static$/m.exec(d.message);
+  if (!m) return null;
+  const [method, cls, parent] = [m[1], simple(m[3]), simple(m[4])];
+  const fx = parent === "Application" && FX_APP_METHODS.test(method) ? ` JavaFX calls ${method} on the ${cls} object it creates.` : "";
+  return `${method} in ${parent} belongs to each object (it isn't static), and a static method can't replace it. Remove static from ${method} in ${cls}.${fx}`;
+}
+
+/** "start(Stage) in Two cannot override start(Stage) in Application; return type int is not compatible with void". */
+function overrideReturnType(d: Diagnostic): string | null {
+  const m = /^([\w$]+)\((.*?)\) in ([\w$.]+) cannot (?:override|implement) [\w$]+\(.*?\) in ([\w$.]+)\n\s*return type (.+) is not compatible with (.+)$/m.exec(d.message);
+  if (!m) return null;
+  const [method, cls, parent, mine, theirs] = [m[1], simple(m[3]), simple(m[4]), simple(m[5].trim()), simple(m[6].trim())];
+  const gives = theirs === "void" ? "is void: it gives back nothing" : `gives back ${anWord(theirs)}`;
+  const must = theirs === "void" ? "be void too" : `give back ${anWord(theirs)} too (or a kind of it)`;
+  return `${method} in ${cls} replaces the method ${method} of ${parent}, which ${gives}, so ${method} in ${cls} must ${must}: a method that replaces another must give back the same type. Change ${mine} to ${theirs} in its header.`;
+}
+
+/** Where the expression that starts at `from` ends: at the first ), ], ;, comma, && or || (or ? or :) outside its own brackets. */
+function expressionEnd(code: string, from: number): number {
+  let depth = 0;
+  for (let k = from; k < code.length; k++) {
+    const ch = code[k];
+    if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch)) {
+      if (depth-- === 0) return k;
+    } else if (depth === 0 && (ch === ";" || ch === "," || ch === "?" || ch === ":" || code.startsWith("&&", k) || code.startsWith("||", k))) return k;
+  }
+  return code.length;
+}
+
+/** Whether the code before `from` makes what starts there a condition or a true/false value: in if (...), while (...) or for (...), after return, in a boolean's initializer, or next to && || ! ?. */
+function inCondition(code: string, from: number): boolean {
+  const before = code.slice(Math.max(0, from - 300), from);
+  if (/(?:\breturn|\bboolean\s+[\w$]+\s*=|&&|\|\||!|\?)\s*$/.test(before)) return true;
+  let depth = 0;
+  for (let k = from - 1; k >= 0 && k > from - 2000; k--) {
+    const ch = code[k];
+    if (ch === ")" || ch === "]") depth++;
+    else if (ch === "[") depth--;
+    else if (ch === "(") {
+      if (depth-- > 0) continue;
+      return /\b(?:if|while|for)\s*$/.test(code.slice(Math.max(0, k - 20), k));
+    } else if (depth === 0 && (ch === "{" || ch === "}" || (ch === ";" && !/\bfor\s*\([^()]*$/.test(code.slice(Math.max(0, k - 200), k))))) return false;
+  }
+  return false;
+}
+
+/**
+ * "unexpected type, required: variable, found: value": =, a compound assignment such as +=, or ++ or --
+ * on something that isn't a variable: a == written as = (if (list.size() = 0), a + b = 3), a list's get(i)
+ * given a value (set(i, v) does that), or a method call's value.
+ */
+function notAVariable(d: Diagnostic, own: OwnClasses): string | null {
+  if (!/required: variable\n\s*found:\s+value/.test(d.message)) return null;
+  const children = /getChildren\s*\(\s*\)\s*=(?!=)/.test(atCaret(d)?.line ?? "");
+  if (children) return "getChildren() gives the pane's list of children, and a list a method gives can't be replaced with =. Change the list itself: getChildren().setAll(...) puts other nodes in it, getChildren().clear() empties it, and add(...) adds one.";
+  const general = "The left side of = must be a variable, and this is a value, such as what a method call gives, so it can't get a new value with =. If the method has a setter to go with it, use that.";
+  const p = caretIn(d, own);
+  if (!p) return general;
+  const { code, text, at } = p;
+  // The left side: a call (javac's caret is on its "("), or an operation such as a + b (the caret is on its operator).
+  const call = code[at] === "(";
+  const from = expressionStart(code, at);
+  let to = call ? pastClose(code, at) : at;
+  if (to < 0) return general;
+  const OP = /^\s*((?:<<|>>>?|[-+*/%&|^])?=(?!=)|\+\+|--)/;
+  if (!call) {
+    // Past the operation's right side, to the operator after it.
+    let depth = 0;
+    for (; to < code.length; to++) {
+      const ch = code[to];
+      if ("([".includes(ch)) depth++;
+      else if (")]".includes(ch)) depth--;
+      if (depth < 0 || ch === ";" || (depth === 0 && /^(?:(?:<<|>>>?|[-+*/%&|^])?=(?!=)|\+\+|--)/.test(code.slice(to, to + 4)) && !/[=!<>]$/.test(code.slice(0, to)))) break;
+    }
+  }
+  const after = OP.exec(code.slice(to));
+  const prefix = /(\+\+|--)\s*$/.exec(code.slice(Math.max(0, from - 10), from));
+  const op = after?.[1] ?? prefix?.[1];
+  if (!op) return general;
+  const left = text.slice(from, to).replace(/\s+/g, " ").trim();
+  if (!left || left.length > 60) return general;
+  const valueAt = after ? to + after[0].length : -1;
+  const right = valueAt >= 0 ? text.slice(valueAt, expressionEnd(code, valueAt)).replace(/\s+/g, " ").trim() : "";
+  const get = /^(.+)\.\s*get\s*\((.+)\)$/.exec(left);
+  const step = op === "++" || op === "--";
+  if (op === "=") {
+    const arithmetic = !call && /[-+*/%]/.test(code.slice(at, at + 1));
+    const asks = /\.\s*(?:size|length|equals|isEmpty|contains|indexOf|compareTo|charAt)\s*\($/.test(code.slice(from, at + 1));
+    if (arithmetic || asks || inCondition(code, from))
+      return `To compare, use ==: one = gives a variable a new value, and ${left} is a value, not a variable. Write ${left} == ${right || "..."}.`;
+    if (get) return `${left} gives the value at that index, not a place in the list that = can change. To put a value there, use set: ${get[1]}.set(${get[2]}, ${right || "..."});`;
+    if (call) return general;
+    return `The left side of = must be a variable, and ${left} is a value, so it can't get a new value with =.`;
+  }
+  if (get) {
+    const change = step ? `${left} ${op[0]} 1` : `${left} ${op.slice(0, -1)} ${right || "..."}`;
+    return `${left} gives the value at that index, not a place in the list that ${op} can change. To change the value there, use set: ${get[1]}.set(${get[2]}, ${change});`;
+  }
+  if (step) return `${op} changes a variable, and ${left} is a value${call ? " that a method call gives" : ""}, not a variable that keeps one, so ${op} can't change it. Keep the value in a variable of your own and use ${op} on that variable.`;
+  return `The left side of ${op} must be a variable, and ${left} is a value${call ? " that a method call gives" : ""}, so ${op} can't give it a new value.`;
+}
+
+/**
+ * JavaFX's launch stops the program with a RuntimeException when the application's constructor, init,
+ * start or stop throws: which one, from the first line of the trace, with the class for the constructor.
+ */
+const FX_WRAPPER = /^java\.lang\.RuntimeException: (?:Exception in Application (start|init|stop) method|Unable to construct Application instance: class ([\w$.]+))\s*$/;
+
+/** The start of the note for an exception that JavaFX's launch wrapped: what happened, and where the cause's line is. */
+function fxWrapped(c: CrashContext, ownThrow: boolean): string {
+  const fx = c.fx!;
+  const [first] = c.frames;
+  const stageFrame = c.frames.find((f) => (fx.stage === "constructor" ? f.method === "<init>" : f.method === fx.stage));
+  const called = first && stageFrame && stageFrame !== first && methodLabel(stageFrame) !== methodLabel(first) ? `, called from ${methodLabel(stageFrame)} on line ${stageFrame.line}` : "";
+  const cause = "with a RuntimeException whose cause (after \"Caused by:\") is this exception";
+  const real = ownThrow ? " The cause is the real problem." : first ? ` The cause is the real problem, and its first line in your code is ${placeOf(first)}, in ${methodLabel(first)}${called}.` : " The cause is the real problem.";
+  if (fx.stage === "constructor") return `JavaFX couldn't create your ${fx.cls ?? "application"} object, so it printed "Exception in Application constructor" and stopped the program ${cause}.${real}`;
+  const when = fx.stage === "start" ? " while it built the window" : fx.stage === "init" ? ", before start" : ", as the program ended";
+  return `Your ${fx.stage} method threw it${when}, so JavaFX printed "Exception in Application ${fx.stage} method" and stopped the program ${cause}.${real}`;
+}
+
+/** NoSuchMethodException "App.<init>()": JavaFX found no public constructor without parameters to create the application with. */
+function noSuchMethod(m: string, c: CrashContext): string {
+  const cls = /^([\w$.]+)\.<init>\(\)$/.exec(m)?.[1];
+  if (!c.fx || !cls) return c.handler ? notCaughtInHandler(m) : `The program stopped with NoSuchMethodException${m ? `: ${m}` : ""}.`;
+  const name = binarySimple(cls);
+  const t = c.own ? typeNamed(c.own, name) : undefined;
+  const start = `To create it, JavaFX calls ${name}'s public constructor without parameters, as new ${name}() would, and ${name} has none`;
+  if (t && !t.public) return `${start}: ${name} isn't public, so its constructors aren't either. Write public class ${name} extends Application${fileName(t.file) === `${name}.java` ? "" : `, in a file of its own, ${name}.java`}.`;
+  const lines = t ? (c.code.get(t.file) ?? []).slice(t.from - 1, t.to).join("\n") : "";
+  const ctor = t ? [...lines.matchAll(new RegExp(`(?:^|[;{}])\\s*((?:(?:public|protected|private)\\s+)?)${escapeRegExp(name)}\\s*\\(([^()]*)\\)\\s*(?:throws\\s[^{]*)?\\{`, "g"))] : [];
+  if (ctor.some((x) => !x[2].trim() && !/public/.test(x[1]))) return `${start}: its constructor without parameters isn't public. Write public in front of it: public ${name}() { ... }.`;
+  if (ctor.length) return `${start}: its constructor takes (${ctor[0][2].replace(/\s+/g, " ").trim()}). Remove the parameters, or the whole constructor, and set those values up in init or start instead.`;
+  return `${start}. Give it one, public ${name}() { ... }, or no constructor at all.`;
+}
+
+/** The node and its name, from the learner's line of a "Children:" error: the variable given twice, or what add(...) got. */
+function childOnLine(c: CrashContext): string | null {
+  const line = lineOf(c, c.frames[0]);
+  if (!line) return null;
+  const names = [...line.code.matchAll(/[(,]\s*([\w$]+)\s*(?=[,)])/g)].map((x) => x[1]);
+  return names.find((n, i) => names.indexOf(n) !== i) ?? /\.\s*add\s*\(\s*([\w$]+)\s*\)/.exec(line.code)?.[1] ?? null;
+}
+
+/** "a VBox", "an HBox": a or an before a class's name as it's read aloud. */
+const aNode = (name: string) => `${/^(?:[AEIOU]|H[A-Z])/.test(name) ? "an" : "a"} ${name}`;
+
+/** IllegalArgumentException "Children: duplicate children added: parent = HBox@1b6d3586": a node added twice to one pane. */
+function fxDuplicate(m: string, c: CrashContext): string {
+  const parent = /parent = ([\w$]+)@/.exec(m)?.[1];
+  const node = childOnLine(c);
+  // The node's class, from where the variable is created with new, for the example.
+  const all = [...c.code.values()].map((l) => l.join("\n")).join("\n");
+  const cls = node ? new RegExp(`(?<![\\w$.])${escapeRegExp(node)}\\s*=\\s*new\\s+([\\w$]+)`).exec(all)?.[1] : undefined;
+  // Only an exception that escaped an event handler (JavaFX printed it and went on): not one in start, nor in a lambda that start runs right away.
+  const handler = c.handler ? " This happened in an event handler, which runs again each time its event happens: add the node once, in start, or create a new node in the handler each time." : "";
+  return `The program added a node to ${parent ? aNode(parent) : "a pane"} that already holds it: ${node ? `${node} is` : "it's"} already one of its children (from the pane's constructor or an earlier add). A node is one thing on the screen, in one place, so a pane can't have it twice. To show two such things, create two nodes, as in two new ${cls ?? "Button"}(...). To add several nodes at once, list each one once, as in addAll(a, b, c).${handler}`;
+}
+
+/** IllegalArgumentException "Children: cycle detected: parent = VBox@..., node = VBox@...": a pane put inside itself. */
+function fxCycle(m: string): string {
+  const [, parent, node] = /parent = ([\w$]+)@[\s\S]*node = ([\w$]+)@/.exec(m) ?? [];
+  return `The program put a pane inside itself: it added ${node ? aNode(node) : "a pane"} to the children of ${parent ? aNode(parent) : "a node"} that is already inside it. A pane can hold other nodes, but not itself, not even through other panes. Check which pane goes inside which: the outer pane's getChildren() gets the inner one, not the other way round.`;
+}
+
+/** The class a node's toString starts with (VBox@59721f8[styleClass=root]): VBox, or a class of the program's own. */
+const nodeClassIn = (m: string) => binarySimple(/^([\w$.]+)@/.exec(m)?.[1] ?? "");
+
+/** IllegalArgumentException "VBox@59721f8[styleClass=root]is already set as root of another scene": one layout given to two scenes. */
+function fxRootOfAnother(m: string, c: CrashContext): string {
+  const cls = nodeClassIn(m);
+  const layout = cls ? aNode(cls) : "a layout";
+  const handler = c.handler ? " This happened in an event handler, which runs again each time its event happens: a new Scene(...) of the same layout there works at the first click and fails at the next." : "";
+  return `The program gave a scene a root, ${layout}, that is already the root of another scene. A layout can be the root of only one scene, so new Scene(sameLayout) works the first time and fails the second (and setRoot with it fails the same way). Make each scene once, in start, keep it in a variable, and switch the window to it with stage.setScene(thatScene).${handler}`;
+}
+
+/** IllegalArgumentException "VBox@4003b52bis already inside a scene-graph and cannot be set as root": a node in a pane made a scene's root. */
+function fxRootInPane(m: string): string {
+  const cls = nodeClassIn(m);
+  const node = cls ? aNode(cls) : "a node";
+  return `The program made ${node} the root of a scene (with new Scene(...) or setRoot), but it is already inside a pane: one of its children, or one of a BorderPane's regions, such as its center. A node is in one place only, so it can't also be a scene's root. Use the pane that holds it as the root, or the scene that pane is in, or remove it from that pane first.`;
+}
+
+/** NullPointerException "Children: child node is null": null added to a pane's children. */
+function fxNullChild(m: string, c: CrashContext): string {
+  const parent = /parent = ([\w$]+)@/.exec(m)?.[1];
+  const node = childOnLine(c);
+  return `The program added null to the children of ${parent ? aNode(parent) : "a pane"}: ${node ? `${node} holds` : "the value it added holds"} no node yet. Create the node with new before adding it, as in ${node ?? "button"} = new Button("..."). A variable declared without a value, such as an instance variable, is null until the code gives it one.`;
+}
+
+/** RuntimeException "Error: class Main is not a subclass of javafx.application.Application": launch(args) in a class that doesn't extend Application. */
+function fxNotApplication(cls: string, c: CrashContext): string {
+  const name = binarySimple(cls);
+  const app = c.own ? fxApps(c.own)[0] : undefined;
+  const other = app ? `, or start ${app.name}, which extends Application, with Application.launch(${app.name}.class, args)` : "";
+  return `launch(args) starts the class whose main calls it, here ${name}, as a JavaFX program, so ${name} must extend Application, and it doesn't. Make ${name} a JavaFX program, public class ${name} extends Application with a method public void start(Stage stage)${other}.`;
+}
+
 /**
  * A plain-English note for one javac diagnostic, or null when there is no rule for it. `sources`
  * are the learner's files: with them, a note can name the program's own classes, such as the
@@ -3417,7 +4411,8 @@ function nullThing(because: string): string {
   return /^[\w$]+$/.test(t) ? `the variable ${t}` : "a value";
 }
 
-function explainNull(m: string): string {
+function explainNull(m: string, c?: CrashContext): string {
+  if (c && /^Children: child node is null/.test(m)) return fxNullChild(m, c);
   const call = /^Cannot invoke "(?:[\w$]+\.)*([\w$]+)\.([\w$]+)\((.*?)\)" because (.+) is null$/.exec(m);
   if (call) {
     const [, type, method, , because] = call;
@@ -3435,11 +4430,37 @@ function explainNull(m: string): string {
   return `The program used a variable that holds null (no object) as if it held an object.${m ? " " + m + "." : ""}`;
 }
 
-function explainNumber(m: string): string {
-  if (m === "empty String") return "The program tried to turn empty text into a number. An empty line read with nextLine(), or an empty piece after split, can cause this.";
+/**
+ * Where the empty text a NumberFormatException got came from, by the learner's line it was thrown
+ * on: a text field (getText(), on the line or in the variable the line turns into a number), read in
+ * start (always empty: nobody has typed yet) or in a handler; a piece after split; or the input.
+ */
+function emptyNumberText(c?: CrashContext): string {
+  const empty = "The program tried to turn empty text into a number.";
+  const input = `${empty} An empty line read with nextLine(), or an empty piece after split, can cause this.`;
+  const f = c?.frames[0];
+  const line = c ? lineOf(c, f) : null;
+  if (!c || !f || !line) return c?.handler ? `${empty} In an event handler, it often comes from an empty text field: getText() gives "" until something is typed.` : input;
+  // The variable the line turns into a number (text, parts[0]), and whether the line or that variable's value (or for-each) has a call.
+  const arg = /\b(?:valueOf|parse(?:Int|Double|Long))\s*\(\s*([\w$]+)/.exec(line.code)?.[1];
+  const lines = c.code.get(f.file) ?? [];
+  const has = (call: string) =>
+    new RegExp(call).test(line.code) || (!!arg && lines.slice(0, f.line).some((l) => new RegExp(`(?<![\\w$.])${escapeRegExp(arg)}\\s*(?:=(?!=)|:)[^;]*${call}`).test(l)));
+  // A piece after split: in a handler too, a field that isn't empty can give one ("1,,2" split at ",").
+  if (has("\\.\\s*split\\s*\\(")) return c.handler || c.fx ? `${empty} An empty piece after split can cause this, as when "1,,2" is split at ",": check each piece, or skip the empty ones.` : input;
+  const fromField = has("\\bgetText\\s*\\(\\s*\\)");
+  if (fromField && c.fx?.stage === "start")
+    return `${empty} The text came from a text field, read in start: start runs before the user types anything, so a field read there is always empty (getText() gives "" until something is typed). Read the field in the event handler instead, as in button.setOnAction(e -> { int number = Integer.valueOf(field.getText()); ... }).`;
+  if (fromField) return `${empty} The text came from a text field, and getText() gives "" until something is typed. If the field can be empty, check it first, as in if (!text.isEmpty()) { ... }.`;
+  if (c.handler) return `${empty} In an event handler, it often comes from an empty text field: getText() gives "" until something is typed.`;
+  return input;
+}
+
+function explainNumber(m: string, c?: CrashContext): string {
+  if (m === "empty String") return emptyNumberText(c);
   const text = /^For input string: "(.*)"(?: under radix \d+)?$/s.exec(m)?.[1];
   if (text == null) return /null/.test(m) ? "The program tried to turn null into a number." : `The program tried to turn text into a number, but the text isn't a number: ${m}.`;
-  if (text === "") return "The program tried to turn empty text into a number. An empty line read with nextLine(), or an empty piece after split, can cause this.";
+  if (text === "") return emptyNumberText(c);
   const bare = text.trim();
   if (bare !== text && /^[-+]?\d+$/.test(bare)) return `The program tried to turn "${text}" into a number, but the text has a space at its start or end, and Integer.valueOf doesn't skip spaces. trim() removes them: Integer.valueOf(text.trim()).`;
   if (/^[-+]?\d+\.\d+$/.test(bare)) return `The program tried to turn "${text}" into a whole number, but it has a decimal point. Double.valueOf reads numbers with decimals.`;
@@ -3501,6 +4522,12 @@ type CrashContext = {
   texts: Map<string, string[]>;
   /** The same lines with comments and strings blanked out (see codeOnly). */
   code: Map<string, string[]>;
+  /** JavaFX's launch wrapped it: it was thrown by the application's constructor (of the class cls), init, start or stop. */
+  fx?: { stage: "constructor" | "init" | "start" | "stop"; cls?: string };
+  /** It escaped a JavaFX event handler: JavaFX printed it and went on, so the program didn't stop (see explainCrash's options). */
+  handler?: boolean;
+  /** The program's own classes, when the files' text is known. */
+  own?: OwnClasses;
 };
 
 type Wrapped = {
@@ -3512,10 +4539,14 @@ type Wrapped = {
   outer: string;
 };
 
-/** How a cause stopped the program: wrapped in another exception, which nothing caught. */
+/** How a cause stopped the program (or, in an event handler, left it): wrapped in another exception, which nothing caught. */
 function wrappedIn(c: CrashContext): string {
+  // JavaFX's launch wrapped it: the start of the note (fxWrapped) says so.
+  if (c.fx) return "";
   const w = c.cause!;
-  const stopped = w.outer === w.wrapper ? ", and nothing caught that, so the program stopped." : `, in turn the cause of ${w.outer}, and nothing caught ${w.outer}, so the program stopped.`;
+  const caught = c.handler ? "nothing in the handler caught" : "nothing caught";
+  const end = c.handler ? "." : ", so the program stopped.";
+  const stopped = w.outer === w.wrapper ? `, and ${caught} that${end}` : `, in turn the cause of ${w.outer}, and ${caught} ${w.outer}${end}`;
   if (w.wrapper === "ExceptionInInitializerError") {
     const cls = c.frames.find((f) => f.method === "<clinit>");
     return ` This happened while Java set up ${cls ? `the class ${binarySimple(cls.cls)}` : "a class"} (its static variables and static blocks), so Java threw ExceptionInInitializerError with it as its cause${stopped}`;
@@ -3532,6 +4563,12 @@ function methodLabel(f: Frame): string {
 
 /** A frame's place: "Main.java, line 5". */
 const placeOf = (f: Frame) => `${f.file}, line ${f.line}`;
+
+/** How an uncaught exception ended: the program stopped, or (in a JavaFX event handler) only the handler did. */
+const nothingCaught = (c: CrashContext) => (c.handler ? ", and nothing in the handler caught it." : ", and nothing caught it, so the program stopped.");
+
+/** An exception from Java's own code that escaped an event handler, with its message: JavaFX goes on, so nothing stopped. */
+const notCaughtInHandler = (m: string) => `Nothing in the handler caught it${m ? `. Its message: ${sentence(m)}` : "."}`;
 
 /** A message quoted at the end of a sentence, with a full stop unless it has one. */
 const sentence = (m: string) => (/[.!?]$/.test(m) ? m : `${m}.`);
@@ -3555,7 +4592,7 @@ function refused(m: string, c: CrashContext): string {
   // A cause was wrapped in another exception: the code around the call already handled it that way.
   const wrapped = c.cause ? wrappedIn(c) : "";
   const handle = c.cause ? "." : ` or, if that can happen, handle it where the call is: try { ... } catch (${short} e) { ... }.`;
-  if (!caller) return c.cause ? `${intro}.${why}${wrapped}` : `${intro}, and nothing caught it, so the program stopped.${why}`;
+  if (!caller) return c.cause ? `${intro}.${why}${wrapped}` : `${intro}${nothingCaught(c)}${why}`;
   const call = `the call in ${methodLabel(caller)} (${placeOf(caller)})`;
   if (state) return `${intro}: ${who} refuses to run while the object is in its current state, and ${call} came at such a time.${why}${wrapped} Check the object's state before that call${c.cause ? "" : ","}${handle}`;
   return `${intro}: ${who} refuses a value it was given, and ${call} passed it.${why}${wrapped} Pass a value it accepts there${c.cause ? "" : ","}${handle}`;
@@ -3658,6 +4695,12 @@ function explainIllegal(m: string, c: CrashContext): string {
     return "Sorting found that the program's compareTo or Comparator gives answers that contradict each other, such as that a comes before b and also that b comes before a. It must give a negative number when the first comes first, 0 when they're equal and a positive number when the second comes first, the same way every time. For numbers, Integer.compare(first, second) or Double.compare(first, second) does that.";
   const bound = badBound(m, c);
   if (bound) return bound;
+  if (/^Children: duplicate children added/.test(m)) return fxDuplicate(m, c);
+  if (/^Children: cycle detected/.test(m)) return fxCycle(m);
+  if (/is already set as root of another scene$/.test(m)) return fxRootOfAnother(m, c);
+  if (/is already inside a scene-graph and cannot be set as root$/.test(m)) return fxRootInPane(m);
+  if (m === "Application launch must not be called more than once")
+    return "launch runs a JavaFX program until its windows close, and it can run only once in a program: JavaFX can't start again after that. Call launch once, as the last thing main does.";
   // Otherwise the program's own throw, or a method of Java's own that refused a value or its object's state.
   return refused(m, c);
 }
@@ -3878,7 +4921,7 @@ function indexThrown(m: string, c: CrashContext): string {
   const intro = `Your own code threw it on purpose, with the throw in ${who} (${placeOf(thrower)})`;
   const why = m ? ` Its message says why: ${sentence(m)}` : "";
   if (c.cause) return `${intro}.${why}${wrappedIn(c)}`;
-  if (!caller) return `${intro}, and nothing caught it, so the program stopped.${why}`;
+  if (!caller) return `${intro}${nothingCaught(c)}${why}`;
   return `${intro}: the call in ${methodLabel(caller)} (${placeOf(caller)}) asked for an index that ${who} doesn't accept.${why} Check the index before that call: it must be 0 or more, and less than the number of values.`;
 }
 
@@ -4001,6 +5044,7 @@ const EXCEPTIONS: [RegExp, (message: string, c: CrashContext) => string][] = [
     },
   ],
   [/NullPointerException$/, explainNull],
+  [/NoSuchMethodException$/, noSuchMethod],
   [/NumberFormatException$/, explainNumber],
   [/InputMismatchException$/, () => "The program asked the Scanner for a number, but the next input wasn't one."],
   [/NoSuchElementException$/, (m, c) => explainNoSuchElement(m, c.library, c.javaFrames)],
@@ -4026,12 +5070,14 @@ const EXCEPTIONS: [RegExp, (message: string, c: CrashContext) => string][] = [
 
 /** An exception without an explanation of its own: one the learner's code threw (such as their own exception class), or another one. */
 function uncaught(short: string, m: string, c: CrashContext): string {
+  const notApp = /^Error: class ([\w$.]+) is not a subclass of javafx\.application\.Application$/.exec(m);
+  if (notApp && c.library) return fxNotApplication(notApp[1], c);
   const [thrower, caller] = c.frames;
-  if (c.library || !thrower) return `The program stopped with ${short}${m ? ": " + m : ""}.`;
+  if (c.library || !thrower) return c.handler ? notCaughtInHandler(m) : `The program stopped with ${short}${m ? ": " + m : ""}.`;
   const message = m ? ` Its message: ${sentence(m)}` : "";
   if (c.cause) return `Your own code threw it in ${methodLabel(thrower)} (${placeOf(thrower)}).${message}${wrappedIn(c)}`;
   const handle = caller ? ` To handle it, put the call in ${methodLabel(caller)} (${placeOf(caller)}) inside try { ... } catch (${short} e) { ... }.` : "";
-  return `Your own code threw it in ${methodLabel(thrower)} (${placeOf(thrower)}), and nothing caught it, so the program stopped.${message}${handle}`;
+  return `Your own code threw it in ${methodLabel(thrower)} (${placeOf(thrower)})${nothingCaught(c)}${message}${handle}`;
 }
 
 const LAUNCHER: [RegExp, (m: RegExpExecArray) => Crash][] = [
@@ -4042,6 +5088,20 @@ const LAUNCHER: [RegExp, (m: RegExpExecArray) => Crash][] = [
   [
     /^Error: Main method is not static in class ([\w.$]+)/,
     (m) => ({ exception: "main is not static", message: "", line: null, method: null, explanation: `The main method of ${m[1]} must be static: public static void main(String[] args).` }),
+  ],
+  [
+    // The JDK's launcher prints this for a main class that extends Application without a usable main
+    // (missing, misspelled, not public or not static, or without the String[] parameter): it then
+    // looks for real JavaFX, which isn't there. Java Arena's main class is always Main.
+    /^Error: JavaFX runtime components are missing, and are required to run this application/,
+    () => ({
+      exception: "no main method",
+      message: "",
+      line: null,
+      method: null,
+      explanation:
+        "Java Arena starts every program at public static void main(String[] args), and your Main class extends Application, so it needs one too, with launch(Main.class) in it: public static void main(String[] args) { launch(Main.class); }. Check the spelling of main, and that it is public static void with a String[] parameter. (Real JavaFX started from the module path can start an Application class without main, so some tutorials leave it out; that doesn't work here.)",
+    }),
   ],
   [
     /^Error: Could not find or load main class ([\w.$]+)/,
@@ -4055,9 +5115,11 @@ const LAUNCHER: [RegExp, (m: RegExpExecArray) => Crash][] = [
  * by path ("Main.java", "library/domain/Book.java") or with their text: the reported line is the
  * first stack frame in one of them, and `file` is its path. With the text, an explanation can
  * look at the line, such as which index of grid[y][x] was out of bounds. When the exception has a cause ("Caused by:"), the
- * innermost cause is explained.
+ * innermost cause is explained. `handler`: the exception escaped a JavaFX event handler (given here
+ * as if it had ended main), so JavaFX printed it and went on: the explanation doesn't say that the
+ * program stopped.
  */
-export function explainCrash(stderr: string, files: (string | SourceFile)[] = ["Main.java"]): Crash | null {
+export function explainCrash(stderr: string, files: (string | SourceFile)[] = ["Main.java"], options: { handler?: boolean } = {}): Crash | null {
   const sourceFiles = files.map((f) => (typeof f === "string" ? f : f.path));
   const texts = new Map<string, string[]>();
   const code = new Map<string, string[]>();
@@ -4066,6 +5128,7 @@ export function explainCrash(stderr: string, files: (string | SourceFile)[] = ["
     texts.set(f.path, f.text.split("\n"));
     code.set(f.path, codeOnly(f.text).split("\n"));
   }
+  const own = ownClasses(files.filter((f): f is SourceFile => typeof f !== "string"));
   const lines = stderr.split("\n");
   for (const [re, make] of LAUNCHER) {
     const m = re.exec(lines[0] ?? "");
@@ -4150,15 +5213,21 @@ export function explainCrash(stderr: string, files: (string | SourceFile)[] = ["
     const nameAt = (k: number) => lines[k].replace(/^Exception in thread "main" |^Caused by: /, "").split(": ")[0].trim().split(".").pop()!;
     cause = { wrapper: nameAt(w), ownWrapper: !!fileOf(lines[w + 1] ?? ""), outer: nameAt(start) };
   }
-  const c: CrashContext = { exception, library, frames, stack, javaFrames, more, caller, ...(cause ? { cause } : {}), texts, code };
+  // JavaFX's launch stopped the program with a RuntimeException around the exception the application's constructor, init, start or stop threw.
+  const wrapper = FX_WRAPPER.exec(lines[start].slice('Exception in thread "main" '.length));
+  const fx = wrapper && cause ? { stage: (wrapper[1] ?? "constructor") as "constructor" | "init" | "start" | "stop", ...(wrapper[2] ? { cls: binarySimple(wrapper[2]) } : {}) } : undefined;
+  const c: CrashContext = { exception, library, frames, stack, javaFrames, more, caller, ...(cause ? { cause } : {}), texts, code, ...(fx ? { fx } : {}), own, ...(options.handler ? { handler: true } : {}) };
   // An index error the learner's code threw with throw, as a list of their own does when asked for an index it doesn't have.
   // The line must throw this exception with throw new (not merely contain a throw whose message reads an array, as in throw new IllegalArgumentException("..." + limits[0])). A throw at the end of the line goes on on the next one.
   const throwLine = lineOf(c, first)?.code ?? "";
   const throwCode = /\bthrow\s*$/.test(throwLine) ? `${throwLine} ${lineOf(c, first && { ...first, line: first.line + 1 })?.code ?? ""}` : throwLine;
   const thrownIndex = !library && !!first && /IndexOutOfBoundsException$/.test(exception) && new RegExp(`\\bthrow\\s+new\\s+(?:[\\w$.]+\\.)?${escapeRegExp(binarySimple(exception))}\\b`).test(throwCode);
   const rule = thrownIndex ? ([/./, indexThrown] as const) : EXCEPTIONS.find(([re]) => re.test(exception));
-  const explanation = rule ? rule[1](message, c) : uncaught(short, message, c);
   // An exception the learner's code threw itself: its explanation names the throw's file, line and method.
-  const placed = !library && !!first && (!rule || rule[1] === explainIllegal || rule[1] === indexThrown);
+  const ownThrow = !library && !!first && (!rule || rule[1] === explainIllegal || rule[1] === indexThrown);
+  const explained = rule ? rule[1](message, c) : uncaught(short, message, c);
+  // Wrapped by JavaFX's launch: the note starts with what happened and where the cause's line is (and so names the place itself).
+  const explanation = fx ? `${fxWrapped(c, ownThrow)} ${explained}` : explained;
+  const placed = ownThrow || !!fx;
   return { exception: short, message, file: first?.file, line: first ? first.line : null, method: first ? methodLabel(first) : null, explanation, ...(placed ? { placed } : {}) };
 }

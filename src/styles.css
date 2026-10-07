@@ -408,7 +408,7 @@ code .nw { white-space: nowrap; }
 /* A path in a folder (vending/coffee/CoffeeMachine.java) may be wider than a phone: let it wrap. */
 .diag-line { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
 .diag-msg { display: block; background: none; border: 0; padding: 0.25rem 0; white-space: pre-wrap; word-break: break-word; }
-.diag-friendly { margin: 0.25rem 0 0; color: var(--text2); }
+.diag-friendly { margin: 0.25rem 0 0; color: var(--text2); overflow-wrap: anywhere; }
 .rules { background: var(--hint-bg); border: 1px solid var(--hint-line); color: var(--hint-fg); border-radius: 10px; padding: 0.65rem 0.9rem 0.65rem 1.8rem; margin: 0 0 0.75rem; }
 .tests { list-style: none; padding: 0; margin: 0 0 0.75rem; display: grid; gap: 0.45rem; }
 .tests li { display: flex; gap: 0.65rem; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.8rem; }
@@ -418,8 +418,8 @@ code .nw { white-space: nowrap; }
 .t-fail .t-icon { color: var(--bad); }
 .t-body { flex: 1; min-width: 0; }
 .t-name { font-weight: 600; font-size: 0.92rem; }
-.t-cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-.t-note { color: var(--note-fg); font-size: 0.875rem; margin-top: 0.3rem; }
+.t-cmp { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.t-note { color: var(--note-fg); font-size: 0.875rem; margin-top: 0.3rem; overflow-wrap: anywhere; }
 .warnings { margin-bottom: 0.75rem; }
 .warnings summary { cursor: pointer; color: var(--warn); font-size: 0.875rem; }
 .hints { margin-top: 1rem; }
@@ -527,7 +527,7 @@ select, input[type="text"], input[type="url"], input[type="password"], input[typ
   .container { padding: 0 1rem; }
   .module-head { grid-template-columns: auto 1fr auto; }
   .module-bar { display: none; }
-  .t-cmp { grid-template-columns: 1fr; }
+  .t-cmp { grid-template-columns: minmax(0, 1fr); }
   .codeview, .editor { font-size: 0.8125rem; }
   .footer-inner { padding: 2.5rem 1rem 2rem; }
   .topbar-right > .theme-toggle { display: none; }
@@ -753,7 +753,7 @@ select, input[type="text"], input[type="url"], input[type="password"], input[typ
 .task-checks li { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--text2); background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 0.15rem 0.6rem 0.15rem 0.45rem; }
 .task-checks li .icon { color: var(--good); width: 0.9rem; height: 0.9rem; }
 .task-io.two { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 0.75rem; }
-@media (max-width: 600px) { .task-io.two { grid-template-columns: 1fr; gap: 0; } }
+@media (max-width: 600px) { .task-io.two { grid-template-columns: minmax(0, 1fr); gap: 0; } }
 .step-work .actions { margin: 0.75rem 0 0.4rem; }
 .step-work .hints { margin-top: 0.4rem; }
 /* ==========================================================================
@@ -931,6 +931,8 @@ details.written-file > summary { cursor: pointer; width: fit-content; }
 button.bugline:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .bugline-off { cursor: default; }
 .bugline .ln { color: var(--muted); width: 1.6rem; text-align: right; flex: none; user-select: none; }
+/* Inside the line: the box around the lines would cut off the ring's sides. */
+button.bugline:focus-visible { outline-offset: -2px; }
 .yn { display: flex; gap: 0.8rem; margin-top: 1rem; flex-wrap: wrap; }
 .btn-yes { background: var(--pass-bg); border-color: var(--pass-line); color: var(--pass-fg); font-size: 1.05rem; padding: 0.8rem 1.4rem; }
 .btn-no { background: var(--fail-bg); border-color: var(--fail-line); color: var(--fail-fg); font-size: 1.05rem; padding: 0.8rem 1.4rem; }
@@ -991,6 +993,41 @@ p.answer-cmp { display: block; }
 .placement-results li.miss .res-icon { color: var(--bad); }
 /* Drill code is short: no tall minimum like the lesson editor's. */
 .rep .codeview, .death-card .codeview { min-height: 0; }
+/* On a phone, drill code (Deathmatch, the daily challenge, the placement quiz, and the code blocks
+   of a boss rep's task) wraps instead of scrolling sideways. A long line wraps under its own start,
+   half an indent step in, as the window as text does (.fx-line): each line is an element (.cl, or a
+   bug drill's line) indented by its padding, with the count of its leading spaces in --indent. The
+   spaces stay text (.ind) but take no room: the line then never breaks right after them, which
+   would leave a row that looks empty. One space of indent is drawn --step wide: a whole character,
+   or less in deeply indented code, so that the deepest line (--deep) starts at most about a third
+   of the way across the box. A string or char
+   literal (with the closing marks right after it) is one box, .lit, so it never breaks at its own
+   spaces (a line ending in a quote would hide one); a literal longer than the line wraps inside its
+   box. A line-ending " {" stays with what comes before it. A blank is never wider than the code
+   box. Wider screens keep one line per line. */
+@media (max-width: 640px) {
+  pre.wraps { white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre.wraps .cl { display: inline-block; width: 100%; vertical-align: top; }
+  pre.wraps .cl, .bugline code { --step: 1ch; --hang: max(1ch, 2 * var(--step)); padding-left: calc(var(--indent, 0) * var(--step) + var(--hang)); text-indent: calc(-1 * var(--hang)); }
+  pre.wraps .ind, .bugline .ind { font-size: 0; }
+  pre.wraps .blank { text-indent: 0; max-width: 100%; }
+  .buglines { font-size: 0.8125rem; }
+  .bugline { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bugline code { flex: 1 1 0; min-width: 0; }
+  pre.wraps .lit, .bugline .lit { display: inline-block; text-indent: 0; }
+  pre.wraps .keep, .bugline .keep { white-space: pre; }
+  @supports (width: 1cqi) {
+    pre.wraps, .buglines { container-type: inline-size; }
+    pre.wraps .cl { --step: min(1ch, 34cqi / max(var(--deep, 1), 1)); }
+    .bugline code { --step: min(1ch, 26cqi / max(var(--deep, 1), 1)); }
+  }
+}
+/* Chrome breaks at a <wbr> even in white-space: pre: wider screens don't use the break points. */
+@media (min-width: 641px) {
+  pre.wraps wbr, .bugline wbr { display: none; }
+}
+/* Drill text: a word longer than the line (a long exception name) breaks instead of sticking out. */
+.rep, .death { overflow-wrap: break-word; }
 .lobby-grid { align-items: start; }
 a.feature { text-decoration: none; }
 a.feature:hover { border-color: var(--line-strong); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
@@ -1036,3 +1073,90 @@ a.feature:hover h3 { text-decoration: underline; text-underline-offset: 3px; }
 .field-error { flex-basis: 100%; margin: 0; color: var(--bad); font-size: 0.85rem; }
 .task-versions { margin: 0.3rem 0 0; padding-left: 1.2rem; }
 .task-versions li { margin: 0.2rem 0; }
+
+/* ---------- JavaFX windows (src/components/window-drawing.ts and WindowView.tsx). A plain desktop
+   window in light colors in both site themes, close to JavaFX's default look; its colors are its
+   own, not the theme's, and keep 4.5:1 (a disabled control is drawn at 40%, as JavaFX does). A
+   window wider than the column scrolls sideways inside its frame, never the page. */
+.fx-frame { margin: 0.35rem 0 0.25rem; }
+.fx-scroll { max-width: 100%; overflow: auto; padding: 4px 4px 12px; border-radius: 10px; }
+/* A frame whose windows are wider than it (window-frame.ts sets data-wide): the note under it, and its right edge
+   fades until it is scrolled to the end (data-end) or something in it has the focus. A mask, not a cover, so a
+   button or field at the edge can still be clicked, whatever the background around the frame. */
+.fx-wide-note { display: none; margin: 0.1rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.fx-frame[data-wide] > .fx-wide-note { display: block; }
+.fx-frame[data-wide]:not([data-end]) > .fx-scroll:not(:focus-within) { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.75rem), rgb(0 0 0 / 0.12)); mask-image: linear-gradient(to right, #000 calc(100% - 2.75rem), rgb(0 0 0 / 0.12)); }
+.fx-desktop { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+.fx-window { flex: none; display: flex; flex-direction: column; color-scheme: light; background: #f4f4f4; color: #1d1d1d; border: 1px solid #8a8a8a; border-radius: 7px 7px 3px 3px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 8px 18px -8px rgb(0 0 0 / 0.4); overflow: hidden; font-family: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 13px; line-height: 1.23; letter-spacing: normal; text-align: left; font-variant-ligatures: normal; }
+.fx-titlebar { flex: none; display: flex; align-items: center; gap: 14px; min-height: 28px; padding: 0 9px 0 11px; background: linear-gradient(#f2f2f2, #dddddd); border-bottom: 1px solid #ababab; font-size: 12.5px; font-weight: 600; color: #222222; }
+.fx-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.fx-title-glyphs { display: flex; flex: none; }
+.fx-title-buttons { flex: none; fill: none; stroke: #444444; stroke-width: 1.3; }
+.fx-scene { flex: 1 0 auto; display: flex; flex-direction: column; background: #f4f4f4; }
+.fx-pane { box-sizing: border-box; min-width: 0; }
+.fx-vbox { display: flex; flex-direction: column; }
+.fx-hbox { display: flex; flex-direction: row; }
+.fx-flow { display: flex; flex-wrap: wrap; align-items: center; }
+.fx-vbox > *, .fx-hbox > *, .fx-flow > * { flex: none; }
+.fx-stack, .fx-plain { display: grid; grid-template-areas: "a"; }
+.fx-stack > *, .fx-plain > * { grid-area: a; }
+.fx-plain > * { justify-self: start; align-self: start; }
+.fx-border { display: grid; grid-template-areas: "top top top" "left center right" "bottom bottom bottom"; grid-template-columns: auto 1fr auto; grid-template-rows: auto 1fr auto; }
+.fx-grid { display: flex; }
+.fx-grid-cells { display: grid; flex: none; width: max-content; height: max-content; }
+.fx-label { box-sizing: border-box; display: flex; align-items: center; min-width: 0; color: #1d1d1d; }
+/* An empty label or button keeps its line, as JavaFX's does (a Label "" is 16 px tall). */
+.fx-text { white-space: pre; min-width: 0; min-height: 1.23em; overflow: hidden; text-overflow: ellipsis; }
+.fx-wrap > .fx-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.fx-button { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; margin: 0; padding: calc(0.3333em - 1px) calc(0.6667em - 1px); border: 1px solid #a2a2a2; border-radius: 3px; background: linear-gradient(#fdfdfd, #e1e1e1); color: #1d1d1d; font: inherit; line-height: 1.23; text-align: center; box-shadow: inset 0 1px 0 #ffffff; cursor: default; }
+button.fx-button:hover:not(:disabled) { background: linear-gradient(#ffffff, #eaeaea); border-color: #8a8a8a; }
+button.fx-button:active:not(:disabled) { background: linear-gradient(#d8d8d8, #e8e8e8); }
+.fx-input { box-sizing: border-box; display: block; margin: 0; padding: calc(0.3333em - 1px) calc(0.5833em - 1px); border: 1px solid #a2a2a2; border-radius: 3px; background: #ffffff; color: #1d1d1d; font: inherit; line-height: 1.23; min-height: calc(1.23em + 0.6667em); white-space: pre; overflow: hidden; text-overflow: clip; box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.1); }
+.fx-area { padding: 0.45em 0.6em; overflow: auto; resize: none; }
+.fx-area.fx-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+span.fx-area { overflow: hidden; }
+.fx-prompt, .fx-input::placeholder { color: #666666; opacity: 1; }
+.fx-disabled { opacity: 0.4; }
+/* The focus ring is drawn inside the control: the window clips what sticks out at its edges, and a
+   control right next to another is painted over by it. */
+.fx-window :focus-visible { outline: 2px solid #0a5fa6; outline-offset: -2px; }
+.fx-window input.fx-input:focus-visible, .fx-window textarea.fx-input:focus-visible { outline-offset: -2px; border-color: #0a5fa6; }
+.fx-no-scene { margin: 0; padding: 1rem 1.1rem; color: #4d4d4d; font-style: italic; }
+.fx-none { margin: 0.35rem 0; padding: 0.6rem 0.8rem; border: 1px dashed var(--line-strong); border-radius: 10px; color: var(--text2); font-size: 0.9rem; }
+details.fx-astext { margin-top: 0.15rem; font-size: 0.9rem; }
+details.fx-astext > summary { cursor: pointer; color: var(--muted); width: fit-content; }
+details.fx-astext > summary:hover { color: var(--text); }
+/* The window as text wraps a long line under its own start, one step (2 characters) in, so nothing is cut off on a
+   phone and the box never scrolls. Each line is an inline block (the "\n" between them stays text, so the box's text
+   is the outline); --indent is the line's leading spaces. */
+details.fx-astext pre { margin: 0.3rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; max-height: none; overflow: visible; }
+.fx-line { display: inline-block; box-sizing: border-box; width: 100%; vertical-align: top; padding-left: calc((var(--indent, 0) + 2) * 1ch); text-indent: calc((var(--indent, 0) + 2) * -1ch); }
+mark.fx-differs { background: color-mix(in srgb, var(--bad) 20%, transparent); color: inherit; border-radius: 3px; box-shadow: -3px 0 0 var(--bad); }
+.fx-figure { margin: 0.9rem 0; }
+.md .fx-figure figcaption { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--muted); }
+.fx-events { margin: 0.2rem 0 0.1rem; font-size: 0.9rem; color: var(--text2); }
+.md details.fx-astext pre { padding: 0.55rem 0.8rem; font-size: 0.8rem; line-height: 1.55; }
+/* The window panel of a free run. */
+.fx-panel { margin: 0.2rem 0 0.8rem; }
+.fx-panel-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.75rem; min-height: 2rem; }
+.fx-approx { text-transform: none; letter-spacing: normal; font-weight: 500; }
+.fx-busy { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 600; color: var(--accent-fg); }
+.fx-spinner { width: 0.8rem; height: 0.8rem; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent-fg) 30%, transparent); border-top-color: var(--accent-fg); animation: fx-spin 0.8s linear infinite; }
+@keyframes fx-spin { to { transform: rotate(360deg); } }
+.fx-start-over { margin-left: auto; }
+.btn[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+.fx-note { margin: 0.15rem 0 0.2rem; font-size: 0.85rem; color: var(--muted); }
+.fx-stale-note, .fx-message { margin: 0.3rem 0; font-size: 0.875rem; color: var(--note-fg); }
+.fx-stale .fx-scroll { outline: 2px dashed var(--line-strong); outline-offset: -2px; }
+/* An out-of-date drawing's frame can take the focus: the site's ring then replaces the dashed mark. */
+.fx-stale .fx-scroll:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+.fx-stale .fx-desktop { filter: grayscale(1); }
+.fx-panel[aria-busy="true"] .fx-desktop { cursor: progress; }
+/* A test's windows: side by side, one under the other on a phone. */
+.fx-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem 0.75rem; margin-top: 0.3rem; }
+.fx-compare > * { min-width: 0; }
+.fx-legend { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 640px) { .fx-compare { grid-template-columns: minmax(0, 1fr); } }
+.task-events { margin: 0.15rem 0 0.4rem; }
+.t-events { margin: 0.35rem 0 0.2rem; font-size: 0.9rem; }
+.task-expect .fx-figure, .t-detail .fx-figure { margin: 0.2rem 0 0; }

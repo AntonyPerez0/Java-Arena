@@ -1,13 +1,16 @@
 // Checks a learner's program: compile with javac 21, run every test in the browser's JVM, and
 // compare with the expected output (which came from a real JDK at build time).
-import { compile, runClasses, DEFAULT_TIME_LIMIT_MS, type Diagnostic, type RunResult, type SourceFile } from "../engine/client";
+import { compile, runClasses, DEFAULT_TIME_LIMIT_MS, type ClassFile, type Diagnostic, type RunResult, type SourceFile } from "../engine/client";
 import { explainCrash, explainDiagnostic } from "../engine/friendly";
 import type { Exercise } from "../content/types";
 import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, normalizeOutput } from "./assemble.js";
 import { explainCalls, withoutCheckFrames } from "./calls";
 import { splitFiles } from "./files.js";
-import { JUNIT_LIBRARY, TEST_RUNNER_CLASS, TEST_RUNNER_FILE, TEST_RUNNER_SOURCE, parseTestReport, testClassesOf, usesJUnit } from "./junit.js";
+import { JAVAFX_LIBRARY, WINDOW_FILE, withoutArenaFiles } from "./javafx.js";
+import { JUNIT_LIBRARY, TEST_RUNNER_CLASS, TEST_RUNNER_FILE, TEST_RUNNER_SOURCE, parseTestReport, testClassesOf } from "./junit.js";
+import { librariesFor } from "./libraries.js";
 import { indentMessages } from "./style.js";
+import { checkWindow, parseWindow, windowNote, withEventsFile, type WindowCheck, type WindowState } from "./window";
 import { changedFiles, compareWrites, writesNote } from "./writes.js";
 
 export type FriendlyDiagnostic = Diagnostic & { friendly: string | null };
@@ -17,6 +20,8 @@ export type TestResult = {
   pass: boolean;
   hidden?: boolean;
   stdin?: string;
+  /** The command-line arguments main got. */
+  args?: string[];
   /** The code the check ran to call the learner's methods. */
   call?: string;
   /** Files the program could read in this test. */
@@ -31,6 +36,13 @@ export type TestResult = {
   stderr?: string;
   /** A test that ran the learner's JUnit tests: what they had to do on this version of the program. */
   junit?: { outcome: "pass" | "fail" };
+  /**
+   * A test with clicks and typing (a JavaFX program): its events, the problems they met and, for a
+   * visible test, the expected window and the learner's, with their outlines and the lines that
+   * differ (see WindowCheck in ./window.ts). A hidden test gives only its events and whether the
+   * window is right.
+   */
+  window?: WindowCheck;
 };
 
 /** One file a test wanted written: its text as expected and as the program left it (normalized like output). */
@@ -77,8 +89,30 @@ export function describeRun(r: RunResult | undefined, sources: (string | SourceF
   }
   if (r.truncated) return "The program printed more than 64 KB, so it was stopped. Probably a loop that never stops printing.";
   if (r.exitCode !== 0 && r.exitCode != null) return `The program ended with exit code ${r.exitCode} (System.exit). A program that finishes normally ends with 0.`;
+  const handler = handlerException(r.stderr, sources);
+  if (handler) return handler;
   if (r.stderr.trim()) return "The program printed an error message.";
   return undefined;
+}
+
+/** How JavaFX prints an exception that escapes an event handler (the program then goes on). */
+const FX_THREAD_EXCEPTION = 'Exception in thread "JavaFX Application Thread" ';
+
+/**
+ * An exception that escaped a JavaFX event handler (a click or typing), explained as a crash is,
+ * with its line: JavaFX prints it and goes on with the next event, so the program still ends normally.
+ */
+function handlerException(stderr: string, sources: (string | SourceFile)[]): string | undefined {
+  const at = stderr.indexOf(FX_THREAD_EXCEPTION);
+  if (at < 0) return undefined;
+  // The first one, read as if it had ended main (that's the form explainCrash knows), explained as
+  // one that ended only the handler.
+  const next = stderr.indexOf(FX_THREAD_EXCEPTION, at + 1);
+  const crash = explainCrash('Exception in thread "main" ' + stderr.slice(at + FX_THREAD_EXCEPTION.length, next < 0 ? undefined : next), sources, { handler: true });
+  if (!crash) return undefined;
+  const file = sources.length > 1 && crash.file ? `${crash.file}, ` : "";
+  const where = crash.line && !crash.placed ? ` (${file}line ${crash.line})` : "";
+  return `An event handler threw ${crash.exception}${where}. ${crash.explanation} JavaFX printed it and went on with the next click or typing, as it does, so the window shows what the handler had done before it.`;
 }
 
 /** Indentation problems in each file, named by file when there are several. */
@@ -88,6 +122,11 @@ function indentProblems(files: { path: string; text: string }[]): string[] {
 
 /** A JUnit run gets longer than a plain program: JUnit's own classes load first. */
 const JUNIT_TIME_LIMIT_MS = 30_000;
+/** A JavaFX run loads Java Arena's JavaFX classes and starts two threads before the program's start method. */
+const JAVAFX_TIME_LIMIT_MS = 15_000;
+
+/** The time limit of a run with these libraries on its class path. */
+export const timeLimitFor = (libraries: string[]) => (libraries.includes(JUNIT_LIBRARY) ? JUNIT_TIME_LIMIT_MS : libraries.length ? JAVAFX_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS);
 
 export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   const own = splitFiles(code) as { path: string; text: string }[];
@@ -96,7 +135,7 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   const styleProblems = ex.style === "indent" ? style : [];
   const styleNotes = ex.style === "indent" ? [] : style;
   if (ex.tests.some((t) => t.junit)) return gradeJUnit(ex, own, { ruleProblems, styleProblems, styleNotes });
-  const libraries = usesJUnit(own) ? [JUNIT_LIBRARY] : [];
+  const libraries = librariesFor(own);
   // Tests that call methods run a hidden check program next to the learner's Main.
   const check = ex.tests.some((t) => t.call != null) ? checkSource(ex.tests, own) : null;
   let c = await compile(check ? [...own, { path: CHECK_FILE, text: check.text }] : own, { libraries });
@@ -113,17 +152,23 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   if (c.internalError) return { ...base, status: "internal-error", tests: [], internalError: c.internalError };
   if (callProblems.length) return { ...base, status: "call-error", tests: [] };
   if (!c.ok) return { ...base, status: "compile-error", tests: [] };
-  const runs = await runClasses(c.classes, check ? CHECK_CLASS : "Main", ex.tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : {}), ...(t.files ? { files: t.files } : {}) })), libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS, { libraries });
+  // A test with events gives a JavaFX program its clicks and typing in .arena/events.txt, next to its files.
+  const inputs = ex.tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : t.args ? { args: t.args } : {}), ...(t.events ? { files: withEventsFile(t.files, t.events) } : t.files ? { files: t.files } : {}) }));
+  const runs = await runClasses(c.classes, check ? CHECK_CLASS : "Main", inputs, timeLimitFor(libraries), { libraries });
   if (runs.every((r) => r.internalError)) return { ...base, status: "internal-error", tests: [], internalError: runs[0]?.internalError };
   const tests = ex.tests.map((t, i): TestResult => {
     const r = runs[i];
     const got = r ? normalizeOutput(r.stdout) : "";
     // The files the test wants written, once the run has ended by itself (a stopped run keeps none).
     const writes: WrittenFileCheck[] | undefined = t.writes && r && !r.internalError && !r.timedOut ? compareWrites(t.writes, r.files) : undefined;
-    const pass = !!r && !r.internalError && !r.timedOut && r.exitCode === 0 && got === t.expect && (!t.writes || !!writes?.every((f) => f.pass));
-    const note = pass ? undefined : (describeRun(r, own) ?? (writes && writesNote(writes, t.hidden)));
+    // The window a JavaFX program left after the test's clicks and typing (none when the run was stopped, which the check then says).
+    const window: WindowCheck | undefined = t.events && r && !r.internalError ? { ...checkWindow({ events: t.events, outline: t.outline ?? "", window: t.window, hidden: t.hidden }, r.timedOut ? null : r.files?.[WINDOW_FILE]), ...(r.timedOut ? { stopped: true } : {}) } : undefined;
+    const pass = !!r && !r.internalError && !r.timedOut && r.exitCode === 0 && got === t.expect && (!t.writes || !!writes?.every((f) => f.pass)) && (!t.events || !!window?.pass);
+    let note = pass ? undefined : (describeRun(r, own, timeLimitFor(libraries)) ?? (writes && writesNote(writes, t.hidden)));
+    // A run that ended normally (perhaps after a handler printed an exception) also says what is wrong with its window.
+    if (!pass && window && r && !r.timedOut && r.exitCode === 0) note = [note, windowNote(window, t.hidden)].filter(Boolean).join(" ") || undefined;
     const stderr = r?.stderr ? withoutCheckFrames(r.stderr) : "";
-    return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, call: t.call, files: t.files, writes, expected: t.expect, got, note, stderr: !pass && stderr ? stderr : undefined };
+    return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, ...(t.args ? { args: t.args } : {}), call: t.call, files: withoutArenaFiles(t.files), writes, expected: t.expect, got, note, stderr: !pass && stderr ? stderr : undefined, ...(window ? { window } : {}) };
   });
   const allPass = tests.every((t) => t.pass) && ruleProblems.length === 0 && styleProblems.length === 0;
   return { ...base, status: allPass ? "pass" : "fail", tests };
@@ -135,7 +180,7 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
  * least one to fail.
  */
 async function gradeJUnit(ex: Exercise, own: { path: string; text: string }[], rest: { ruleProblems: string[]; styleProblems: string[]; styleNotes: string[] }): Promise<GradeResult> {
-  const libraries = [JUNIT_LIBRARY];
+  const libraries = [JUNIT_LIBRARY, ...librariesFor(own).filter((l) => l !== JUNIT_LIBRARY)];
   // Files the challenge gives ready (the same in the starter code and the solution) are checked as
   // given: otherwise a learner could change the class under test to suit a wrong test.
   const solution = new Map((splitFiles(ex.solution) as { path: string; text: string }[]).map((f) => [f.path, f.text]));
@@ -191,6 +236,12 @@ async function gradeJUnit(ex: Exercise, own: { path: string; text: string }[], r
   return { ...base, status: allPass ? "pass" : "fail", tests };
 }
 
+/**
+ * A free run's program, compiled, with the input it got: the window panel runs it again from the
+ * start with more clicks and typing (rerun) without compiling it again.
+ */
+export type CompiledProgram = { classes: ClassFile[]; libraries: string[]; sources: SourceFile[]; stdin: string; files?: Record<string, string>; args?: string[] };
+
 export type FreeRun = {
   status: "ran" | "compile-error" | "internal-error";
   diagnostics: FriendlyDiagnostic[];
@@ -198,6 +249,15 @@ export type FreeRun = {
   run?: RunResult;
   /** The files the program created or changed in its folder (not the files it was given, unchanged). */
   written?: { name: string; text: string }[];
+  /**
+   * A JavaFX program's windows when its session ended (after the events given), as the library
+   * wrote them to .arena/window.json; null when it wrote none (no launch, start failed, stopped).
+   * Absent for a program that doesn't use JavaFX.
+   */
+  window?: WindowState | null;
+  /** A JavaFX program: the clicks and typing it ran with, and the program, to run it again with more (rerun). */
+  events?: string[];
+  program?: CompiledProgram;
   note?: string;
   internalError?: string;
   /** The program has several files, so each message names its file. */
@@ -206,24 +266,45 @@ export type FreeRun = {
 
 /**
  * Compile and run with the learner's own input (and any files the program reads), no grading. A
- * program with JUnit test classes and no main runs its tests instead.
+ * program with JUnit test classes and no main runs its tests instead. A JavaFX program gets
+ * `events` (clicks and typing, one event line each) in .arena/events.txt, and main gets `args`.
  */
-export async function runOnly(code: string, stdin: string, files?: Record<string, string>): Promise<FreeRun> {
+export async function runOnly(code: string, stdin: string, files?: Record<string, string>, options: { events?: string[]; args?: string[] } = {}): Promise<FreeRun> {
   const own = splitFiles(code) as { path: string; text: string }[];
-  const libraries = usesJUnit(own) ? [JUNIT_LIBRARY] : [];
+  const libraries = librariesFor(own);
   const noMain = !/\bstatic\s+void\s+main\s*\(/.test(code);
   const found = testClassesOf(own);
   // Without a @Test, the classes that use JUnit are run, so the report says why no test ran.
-  const testClasses = libraries.length && noMain ? (found.length ? found : own.filter((f) => /\borg\s*\.\s*junit\b/.test(f.text)).map((f) => f.path.replace(/\.java$/, "").replace(/\//g, "."))) : [];
+  const testClasses = libraries.includes(JUNIT_LIBRARY) && noMain ? (found.length ? found : own.filter((f) => /\borg\s*\.\s*junit\b/.test(f.text)).map((f) => f.path.replace(/\.java$/, "").replace(/\//g, "."))) : [];
   const c = await compile(testClasses.length ? [...own, { path: TEST_RUNNER_FILE, text: TEST_RUNNER_SOURCE }] : own, { libraries });
   const base = { diagnostics: friendlyDiagnostics(c.diagnostics, own), javacOutput: c.output ?? "", multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", internalError: c.internalError };
   if (!c.ok) return { ...base, status: "compile-error" };
-  const [run] = testClasses.length
-    ? await runClasses(c.classes, TEST_RUNNER_CLASS, [{ args: testClasses }], JUNIT_TIME_LIMIT_MS, { libraries })
-    : await runClasses(c.classes, "Main", [{ stdin, ...(files ? { files } : {}) }], libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS, { libraries });
-  if (run?.internalError) return { ...base, status: "internal-error", internalError: run.internalError };
-  return { ...base, status: "ran", run, written: changedFiles(files, run?.files), note: describeRun(run, own, libraries.length ? JUNIT_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS) };
+  if (testClasses.length) {
+    const [run] = await runClasses(c.classes, TEST_RUNNER_CLASS, [{ args: testClasses }], JUNIT_TIME_LIMIT_MS, { libraries });
+    if (run?.internalError) return { ...base, status: "internal-error", internalError: run.internalError };
+    return { ...base, status: "ran", run, written: changedFiles(files, run?.files), note: describeRun(run, own, JUNIT_TIME_LIMIT_MS) };
+  }
+  const program: CompiledProgram = { classes: c.classes, libraries, sources: own, stdin, ...(files ? { files } : {}), ...(options.args ? { args: options.args } : {}) };
+  return { ...base, ...(await runProgram(program, options.events)) };
+}
+
+/**
+ * Runs a free run's compiled program again from the start (the window panel does, with each click
+ * and typing added to the earlier ones), with the input it had. Nothing is compiled again.
+ */
+export async function rerun(program: CompiledProgram, events: string[]): Promise<FreeRun> {
+  return { diagnostics: [], javacOutput: "", multiFile: program.sources.length > 1, ...(await runProgram(program, events)) };
+}
+
+async function runProgram(p: CompiledProgram, events?: string[]): Promise<Omit<FreeRun, "diagnostics" | "javacOutput" | "multiFile">> {
+  const javafx = p.libraries.includes(JAVAFX_LIBRARY);
+  // A JavaFX program always gets an events file (an empty one: no clicks yet), so the page's runs are all alike.
+  const clicks = javafx ? (events ?? []) : undefined;
+  const [run] = await runClasses(p.classes, "Main", [{ stdin: p.stdin, ...(clicks ? { files: withEventsFile(p.files, clicks) } : p.files ? { files: p.files } : {}), ...(p.args ? { args: p.args } : {}) }], timeLimitFor(p.libraries), { libraries: p.libraries });
+  if (run?.internalError) return { status: "internal-error", internalError: run.internalError };
+  const fx = javafx ? { window: run?.timedOut ? null : parseWindow(run?.files?.[WINDOW_FILE]), events: clicks, program: p } : {};
+  return { status: "ran", run, written: changedFiles(p.files, run?.files), note: describeRun(run, p.sources, timeLimitFor(p.libraries)), ...fx };
 }
 
 export type PredictResult = { pass: boolean; lines: { pass: boolean; got: string }[] };

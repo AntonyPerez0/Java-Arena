@@ -18,15 +18,21 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { gunzipSync } from "node:zlib";
 import YAML from "yaml";
 import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, mainProgram, normalizeOutput, parseTemplate, templateSolution } from "../src/grader/assemble.js";
 import { indentMessages } from "../src/grader/style.js";
 import { FILE_MARK, RESERVED_WORDS, baseName, classOfPath, declaredPackage, folderOf, joinFiles, packageOfPath, splitFiles } from "../src/grader/files.js";
-import { JUNIT_LIBRARY, TEST_RUNNER_CLASS, TEST_RUNNER_FILE, TEST_RUNNER_SOURCE, parseTestReport, testClassesOf, usesJUnit } from "../src/grader/junit.js";
+import { TEST_RUNNER_CLASS, TEST_RUNNER_FILE, TEST_RUNNER_SOURCE, parseTestReport, testClassesOf, usesJUnit } from "../src/grader/junit.js";
+import { JAVAFX_LIBRARY, WINDOW_FILE, usesJavaFX, withoutArenaFiles } from "../src/grader/javafx.js";
+import { librariesFor } from "../src/grader/libraries.js";
 import { compareWrites, dataPathProblem } from "../src/grader/writes.js";
+// TypeScript, which Node runs as it is (it has only types to strip): shared with the browser's grader.
+import { checkWindow, eventLines, parseEventLine, parseWindow, windowOutline, withEventsFile } from "../src/grader/window.ts";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/suite.mjs";
+import { LAUNCHER_KEY, javaRunArgs } from "./javafx/reference.mjs";
+import { unpackLibrary } from "./libraries.mjs";
 import { ANY_CLASSES, drawClassDiagrams, UNDRAWN_CLASSES } from "./content/class-diagram.mjs";
+import { nondeterminism } from "./content/determinism.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const CACHE_FILE = path.join(ROOT, "node_modules", ".cache", "java-arena-content.json");
@@ -71,32 +77,16 @@ if (useCache && fs.existsSync(CACHE_FILE)) {
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "java-arena-content-"));
 
 /**
- * A library a program may use (such as JUnit), unpacked once from engine/dist/libraries for the
- * reference JDK's class path: the same class files the site's engine loads. `sha` identifies the
- * archive in cache keys.
+ * A library a program may use (JUnit, Java Arena's JavaFX), unpacked once from engine/dist/libraries
+ * for the reference JDK's class path: the same class files the site's engine loads. `sha`
+ * identifies the archive in cache keys. librariesFor (src/grader/libraries.js) says which a
+ * program needs, as it does for the browser's grader.
  */
 const libraryDirs = new Map();
 function library(name) {
-  if (!libraryDirs.has(name)) {
-    const archive = fs.readFileSync(path.join(ROOT, "engine", "dist", "libraries", `${name}.bin`));
-    const data = gunzipSync(archive);
-    const dir = path.join(TMP, "libraries", name);
-    for (let p = 0; p < data.length; ) {
-      const n = data.readUInt16BE(p);
-      const file = data.toString("utf8", p + 2, p + 2 + n);
-      p += 2 + n;
-      const length = data.readUInt32BE(p);
-      p += 4;
-      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
-      fs.writeFileSync(path.join(dir, file), data.subarray(p, p + length));
-      p += length;
-    }
-    libraryDirs.set(name, { dir, sha: crypto.createHash("sha256").update(archive).digest("hex").slice(0, 16) });
-  }
+  if (!libraryDirs.has(name)) libraryDirs.set(name, unpackLibrary(name, path.join(TMP, "libraries", name)));
   return libraryDirs.get(name);
 }
-/** The libraries a program needs: JUnit when it uses org.junit. */
-const librariesFor = (files) => (usesJUnit(files) ? [JUNIT_LIBRARY] : []);
 const errors = [];
 const warnings = [];
 const checks = []; // for the browser replay
@@ -218,7 +208,8 @@ function folderFiles(dir, prefix = "", out = {}) {
 
 async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files = null, writes = false } = {}) {
   const libraries = compiled.libraries ?? [];
-  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS, ...(files ? [files] : []), ...(writes ? ["writes"] : []), ...libraries.map((l) => library(l).sha)]);
+  // A JavaFX program runs through the launcher (scripts/javafx/reference.mjs): a change to how it runs runs it again.
+  const id = sha(["run", compiled.files, stdin, mainClass, args, REFERENCE_JVM_FLAGS, ...(files ? [files] : []), ...(writes ? ["writes"] : []), ...libraries.map((l) => library(l).sha), ...(libraries.includes(JAVAFX_LIBRARY) ? [LAUNCHER_KEY] : [])]);
   if (cache[id]) return cache[id];
   const { classes } = await javacBatch(compiled.files, libraries, compileId(compiled.files, libraries));
   const classPath = [classes, ...libraries.map((l) => library(l).dir)].join(path.delimiter);
@@ -231,7 +222,8 @@ async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files =
           fs.mkdirSync(path.dirname(path.join(cwd, name)), { recursive: true });
           fs.writeFileSync(path.join(cwd, name), text);
         }
-        const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, "-cp", classPath, mainClass, ...args], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
+        // A JavaFX program runs through the launcher that lets the JDK run it as the browser does (scripts/javafx/reference.mjs).
+        const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, ...javaRunArgs({ javaHome: JAVA_HOME, libraries, classPath, mainClass, args })], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
         let stdout = "";
         let stderr = "";
         let timedOut = false;
@@ -245,10 +237,13 @@ async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files =
         p.stdin.end(stdin);
         p.on("close", (code) => {
           clearTimeout(timer);
-          // The files the program left in its folder, read before the folder goes.
-          const written = writes && !timedOut ? folderFiles(cwd) : null;
+          // The files the program left in its folder, read before the folder goes (not Java Arena's own, in .arena/).
+          const written = writes && !timedOut ? withoutArenaFiles(folderFiles(cwd)) : null;
+          // The windows a JavaFX program had when its session ended (written by Java Arena's JavaFX).
+          const windowFile = path.join(cwd, WINDOW_FILE);
+          const window = libraries.includes(JAVAFX_LIBRARY) && !timedOut && fs.existsSync(windowFile) ? fs.readFileSync(windowFile, "utf8") : null;
           fs.rmSync(cwd, { recursive: true, force: true });
-          const res = { stdout, stderr, exitCode: timedOut ? null : code, timedOut, ...(written ? { written } : {}) };
+          const res = { stdout, stderr, exitCode: timedOut ? null : code, timedOut, ...(written ? { written } : {}), ...(window != null ? { window } : {}) };
           if (!timedOut && !JVM_LOG.test(stdout + stderr)) cache[id] = res;
           resolve(res);
         });
@@ -351,13 +346,47 @@ function importsFor(code) {
   return lines.length ? lines.join("") + "\n" : "";
 }
 
+/**
+ * Event lines (the clicks and typing a JavaFX program gets in .arena/events.txt), from a test's
+ * `events` (a list of lines, or a block of text) or an ```events block: one per line, blank lines
+ * and // comments left out. A line the library can't read is an error, in its own words.
+ */
+function readEvents(where, value) {
+  if (!(typeof value === "string" || (Array.isArray(value) && value.every((e) => typeof e === "string")))) {
+    errors.push(`${where}: events must be a list of event lines, or a block of text with one event per line (events: |)`);
+    return null;
+  }
+  const lines = eventLines(typeof value === "string" ? value : value.join("\n"));
+  for (const line of lines) {
+    const e = parseEventLine(line);
+    // In a YAML list, " #" starts a comment, so "- click #3" is read as "click".
+    const hint = Array.isArray(value) && /^(click|type|set|enter)$/.test(line) ? " (in a YAML list, # after a space starts a comment: write the events as a block, events: |, or quote the line)" : "";
+    if (e?.problem !== undefined) errors.push(`${where}: the event ${line} can't be read: ${e.problem}${hint}`);
+  }
+  return lines;
+}
+
+/**
+ * The window a program left after its events (the model solution's, or an example's), as the
+ * library wrote it: there must be one, and every event must have happened (a problem is a mistake
+ * in the events). Null after a run that failed (which has its own error).
+ */
+function solutionWindow(where, r, what = "the solution") {
+  if (r.timedOut || r.exitCode !== 0) return null;
+  const w = parseWindow(r.window);
+  if (!w) errors.push(`${where}: ${what} leaves no window (main must call launch, and nothing may end the program before the library writes its window: System.exit in start or a handler, or an exception from start that main catches)`);
+  else if (w.problems.length) errors.push(`${where}: some events can't happen in the window of ${what}:\n${w.problems.join("\n")}`);
+  else if (!w.windows.length && !w.closed) errors.push(`${where}: no window is showing at the end of ${what}'s run (start must call stage.show())`);
+  return w;
+}
+
 // Every key a lesson file may use. A misspelled key (for example "requires") is an error, not ignored.
 const KEYS = {
   module: ["id", "summary", "steps"],
   step: ["id", "slug", "title", "text", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass", "more"],
   challenge: ["task", "fill", "seed", "solution", "predict", "style", "hints", "tests", "require", "forbid", "seedMayPass"],
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
-  test: ["name", "stdin", "call", "files", "writes", "expect", "hidden", "junit", "replace", "outcome"],
+  test: ["name", "stdin", "args", "call", "files", "writes", "events", "expect", "hidden", "junit", "replace", "outcome"],
   drillFile: ["topic", "drills"],
   drill: ["id", "type", "prompt", "pre", "body", "classes", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
 };
@@ -402,32 +431,47 @@ function checkRuleShape(where, list, kind) {
  *   ```java run crash a complete program that must stop with an uncaught exception. After its
  *                     ```input and ```output blocks (both optional), a ```crash block must be what
  *                     Java prints: the exception line and the program's own "at" lines.
- *   ```file data.txt  a file that the next ```java run example reads (shown with its name). Several
- *                     can come before one example.
+ *   ```java window    a complete program that uses JavaFX and shows a window. An ```events block
+ *                     right after it holds the clicks and typing to replay (one event per line); then
+ *                     ```input and ```output blocks as for java run. The build stores the window the
+ *                     program shows after the events in a ```window block (one line of JSON: the
+ *                     events, the window JSON and its outline) in place of the events block, for
+ *                     the page to draw.
+ *   ```file data.txt  a file that the next ```java run (or java window) example reads (shown with
+ *                     its name). Several can come before one example.
  * A ```java run example can hold several files: each one after the first starts with a line such as
  * `// ==== Person.java ====` (the page shows it as the file's name), or `// ==== library/domain/Book.java ====`
  * for a class in a package (whose package line must match its folders).
  * A ```classes block describes a UML class diagram (scripts/content/class-diagram.mjs), which is
  * drawn here as HTML: an SVG and the same content as text.
- * Returns the text with plain ```java info strings and the class diagrams drawn.
+ * Returns the text with plain ```java info strings, the windows stored and the class diagrams drawn.
  */
 async function checkExamples(where, text) {
   if (!text) return text;
   const blocks = [...text.matchAll(/^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm)];
+  // The ```window blocks to write: after each java window example, in place of its ```events block.
+  const windows = [];
+  const eventsUsed = new Set();
   for (let i = 0; i < blocks.length; i++) {
     const info = blocks[i][1].trim();
     if (!/^java\b/.test(info)) continue;
     const [, kind, extra, ...rest] = info.split(/\s+/);
     const code = blocks[i][2];
     const w = `${where}, example ${i + 1}`;
-    if (!["run", "main", "error", "fragment", "test"].includes(kind) || (extra && !(kind === "run" && extra === "crash")) || rest.length) {
-      errors.push(`${w}: a java block must be "java run", "java run crash", "java main", "java error", "java test" or "java fragment"`);
+    if (!["run", "main", "error", "fragment", "test", "window"].includes(kind) || (extra && !(kind === "run" && extra === "crash")) || rest.length) {
+      errors.push(`${w}: a java block must be "java run", "java run crash", "java main", "java error", "java test", "java window" or "java fragment"`);
       continue;
     }
     const crash = extra === "crash";
     if (kind === "fragment") continue;
     if (kind === "test") {
       await checkTestExample(w, code, blocks[i + 1]);
+      continue;
+    }
+    if (kind === "window") {
+      if (blocks[i + 1]?.[1].trim() === "events") eventsUsed.add(blocks[i + 1]);
+      const shown = await checkWindowExample(w, code, blocks, i, exampleFiles(w, blocks, i));
+      if (shown) windows.push(shown);
       continue;
     }
     const source = kind === "main" ? mainProgram(code, importsFor(code)) : code;
@@ -453,16 +497,10 @@ async function checkExamples(where, text) {
     for (const m of fileProblems(mainFile(source))) errors.push(`${w}: ${m}`);
     const hasInput = blocks[i + 1]?.[1].trim() === "input";
     const stdin = hasInput ? blocks[i + 1][2] : "";
-    // The ```file blocks since the previous java block are files this example reads (in folders too:
-    // the run makes them).
-    let files = null;
-    for (let j = i - 1; j >= 0 && !/^java\b/.test(blocks[j][1].trim()); j--) {
-      const f = /^file\s+(\S+)$/.exec(blocks[j][1].trim());
-      if (!f) continue;
-      if (dataPathProblem(f[1])) errors.push(`${w}: the file block's name "${f[1]}" ${dataPathProblem(f[1])}`);
-      else (files ??= {})[f[1]] = blocks[j][2];
-    }
+    const files = exampleFiles(w, blocks, i);
     const r = await run(c, stdin, files ? { files } : {});
+    // A window is shown by a java window example, which stores it for the page to draw.
+    if (parseWindow(r.window)?.windows.length) errors.push(`${w}: shows a window, so it must be a "java window" example`);
     let key = null;
     if (crash) {
       key = stderrKey(r.stderr);
@@ -483,12 +521,81 @@ async function checkExamples(where, text) {
       if (!shown || shown[1].trim() !== "crash") errors.push(`${w}: a "java run crash" block needs a crash block after it (and after its output block), with what Java prints:\n${key}`);
       else if (normalizeOutput(shown[2]) !== normalizeOutput(key)) errors.push(`${w}: the crash block says\n${shown[2]}\nbut Java prints\n${key}`);
     }
-    checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, ...(files ? { files } : {}), stdout: r.stdout, exitCode: r.exitCode, ...(crash ? { stderrKey: key } : {}) }] });
+    checks.push({ where: w, kind: "run", files: mainFile(source), tests: [{ stdin, ...(files ? { files } : {}), stdout: r.stdout, exitCode: r.exitCode, ...(crash ? { stderrKey: key } : {}), ...(r.window != null ? { window: r.window } : {}) }] });
   }
-  const plain = text.replace(/^```java[ \t]+(run|main|error|fragment|test)([ \t]+crash)?[ \t]*$/gm, "```java");
+  // An ```events block belongs to the java window example right before it; the build writes the ```window blocks.
+  for (const b of blocks) {
+    if (b[1].trim() === "events" && !eventsUsed.has(b)) errors.push(`${where}: an events block must come right after a "java window" example`);
+    if (b[1].trim() === "window") errors.push(`${where}: a window block is written by the build (from a "java window" example and its events block), not by hand`);
+  }
+  // Each window goes in a ```window block of one line of JSON, in place of the example's events block or right after its code.
+  let withWindows = text;
+  for (const x of windows.reverse()) {
+    const block = "```window\n" + JSON.stringify(x.data) + "\n```";
+    const at = x.events ? x.events.index : x.code.index + x.code[0].length;
+    const end = x.events ? x.events.index + x.events[0].length : at;
+    withWindows = withWindows.slice(0, at) + (x.events ? block : "\n\n" + block) + withWindows.slice(end);
+  }
+  const plain = withWindows.replace(/^```java[ \t]+(run|main|error|fragment|test|window)([ \t]+crash)?[ \t]*$/gm, "```java");
   const drawn = drawClassDiagrams(plain, (m) => errors.push(`${where}: ${m}`));
   if (UNDRAWN_CLASSES.test(drawn)) errors.push(`${where}: a classes block is drawn only when its fence is three backticks at the start of a line (not indented in a list, not in a quote): \`\`\`classes`);
   return drawn;
+}
+
+/** The ```file blocks since the previous java block: files the example at block i reads (in folders too: the run makes them), or null. */
+function exampleFiles(w, blocks, i) {
+  let files = null;
+  for (let j = i - 1; j >= 0 && !/^java\b/.test(blocks[j][1].trim()); j--) {
+    const f = /^file\s+(\S+)$/.exec(blocks[j][1].trim());
+    if (!f) continue;
+    if (dataPathProblem(f[1])) errors.push(`${w}: the file block's name "${f[1]}" ${dataPathProblem(f[1])}`);
+    else (files ??= {})[f[1]] = blocks[j][2];
+  }
+  return files;
+}
+
+/**
+ * A ```java window example: a complete program that uses JavaFX, optionally followed by an
+ * ```events block (the clicks and typing to replay), an ```input block and an ```output block
+ * (exactly what it prints, as after java run). It runs on the JDK with the events, and must end
+ * normally, print no error and show a window that every event could reach. Returns the window for
+ * the page ({ code, events, data }: the example's block, its events block, and what the ```window
+ * block holds), or null.
+ */
+async function checkWindowExample(w, code, blocks, i, files) {
+  const own = mainFile(code);
+  if (!usesJavaFX(own)) {
+    errors.push(`${w}: a "java window" example must use JavaFX (import javafx...)`);
+    return null;
+  }
+  for (const m of indentProblems(code)) errors.push(`${w}: indentation: ${m}`);
+  for (const m of fileProblems(own)) errors.push(`${w}: ${m}`);
+  for (const m of nondeterminism(own)) errors.push(`${w}: ${m}`);
+  let next = i + 1;
+  const eventsBlock = blocks[next]?.[1].trim() === "events" ? blocks[next++] : null;
+  const events = eventsBlock ? (readEvents(`${w}, events block`, eventsBlock[2]) ?? []) : [];
+  const stdin = blocks[next]?.[1].trim() === "input" ? blocks[next++][2] : "";
+  const c = await compile(own);
+  if (!c.ok) {
+    errors.push(`${w}: does not compile:\n${c.output}`);
+    return null;
+  }
+  if (c.output) errors.push(`${w}: javac printed warnings:\n${c.output}`);
+  const r = await run(c, stdin, { files: withEventsFile(files, events) });
+  if (r.timedOut || r.exitCode !== 0) errors.push(`${w}: exits with ${r.timedOut ? "a time out" : r.exitCode}\n${r.stderr}`);
+  if (r.stderr) errors.push(`${w}: printed an error:\n${r.stderr}`);
+  const window = solutionWindow(w, r, "the example");
+  // (A window never shown is solutionWindow's error.)
+  if (window?.closed && !window.problems.length) errors.push(`${w}: a "java window" example must show a window${events.length ? " after its events" : ""}, but it ends with the windows closed`);
+  const out = blocks[next];
+  if (out && out[1].trim() === "output") {
+    next++;
+    if (normalizeOutput(out[2]) !== normalizeOutput(r.stdout)) errors.push(`${w}: the output block says\n${out[2]}\nbut it prints\n${r.stdout}`);
+  } else if (normalizeOutput(r.stdout)) warnings.push(`${w}: prints something but has no output block`);
+  if (blocks[next]?.[1].trim() === "crash") errors.push(`${w}: a crash block follows it, but only a "java run crash" example is checked against one`);
+  checks.push({ where: w, kind: "run", files: own, tests: [{ stdin, ...(files ? { files } : {}), events, stdout: r.stdout, exitCode: r.exitCode, window: r.window ?? null }] });
+  if (!window?.windows.length || window.problems.length) return null;
+  return { code: blocks[i], events: eventsBlock, data: { events, window, outline: windowOutline(window) } };
 }
 
 /** Hints and drills show no class diagrams: a ```classes block there would show as its raw description. */
@@ -597,6 +704,26 @@ async function buildExercise(where, raw) {
   if (testsRaw.every((t) => t.hidden)) errors.push(`${where}: at least one test must be visible`);
   if (testsRaw.some((t) => t.stdin) && !testsRaw.some((t) => t.hidden)) warnings.push(`${where}: reads input but has no hidden test`);
   for (const t of testsRaw) if (t.call != null && (typeof t.call !== "string" || !t.call.trim())) errors.push(`${where}: a test's call must be Java code (as text)`);
+  // Command-line arguments (main's args): a list of text, for a test that runs main.
+  const argsOf = testsRaw.map((t, i) => {
+    if (t.args == null) return null;
+    const n = `${where} test ${i + 1}`;
+    if (!Array.isArray(t.args) || t.args.some((a) => typeof a !== "string" && typeof a !== "number")) return errors.push(`${n}: args must be a list of text, such as [--name=Ada, extra]`), null;
+    if (t.call != null) return errors.push(`${n}: a test with call runs the check, not main, so it can't have args`), null;
+    return t.args.map(String);
+  });
+  // Clicks and typing for a JavaFX program (.arena/events.txt): its window after them is compared
+  // with the solution's, as its output is.
+  const eventsOf = testsRaw.map((t, i) => {
+    if (t.events == null) return null;
+    const n = `${where} test ${i + 1}`;
+    if (t.call != null) return errors.push(`${n}: a test with events runs main (the window's program), so it can't have call`), null;
+    return readEvents(n, t.events);
+  });
+  const windowed = eventsOf.some((e) => e);
+  if (windowed && !usesJavaFX(mainFile(solution))) errors.push(`${where}: a test with events needs a program that uses JavaFX (import javafx...)`);
+  if (windowed) for (const m of nondeterminism(mainFile(solution))) errors.push(`${where}: the solution ${m}`);
+  if (eventsOf.some((e) => e?.length) && !testsRaw.some((t) => t.hidden)) warnings.push(`${where}: replays clicks and typing but has no hidden test`);
   // Files a test's program reads: a map of file names (scores.txt, or data/scores.txt in a folder) to their text.
   const inputFiles = testsRaw.map((t, i) => {
     if (t.files == null) return null;
@@ -627,9 +754,12 @@ async function buildExercise(where, raw) {
   const check = calls.some((x) => x != null);
   // The check program imports the program's own classes in packages (see checkImports), so it's made for each version.
   const filesFor = (text) => (check ? [...mainFile(text), { path: CHECK_FILE, text: checkSource(calls.map((call) => ({ call })), mainFile(text)).text }] : mainFile(text));
-  const how = (i) => ({ ...(check ? { mainClass: CHECK_CLASS, args: [String(i)] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), ...(writesAsked[i] ? { writes: true } : {}) });
+  // A test with events gets them in .arena/events.txt, next to its files.
+  const how = (i) => ({ ...(check ? { mainClass: CHECK_CLASS, args: [String(i)] } : argsOf[i] ? { args: argsOf[i] } : {}), ...(eventsOf[i] ? { files: withEventsFile(inputFiles[i], eventsOf[i]) } : inputFiles[i] ? { files: inputFiles[i] } : {}), ...(writesAsked[i] ? { writes: true } : {}) });
   // Whether a run of another version (the starter code, a fill-in left empty) wrote a test's files as the solution did.
   const wroteAsWanted = (t, r) => !t.writes || compareWrites(t.writes, r.written).every((f) => f.pass);
+  // Whether its window after the test's events is the solution's (as the browser's grader checks it).
+  const windowAsWanted = (t, r) => !t.events || checkWindow(t, r.window).pass;
 
   const c = await compile(filesFor(solution));
   if (!c.ok) {
@@ -648,22 +778,27 @@ async function buildExercise(where, raw) {
     else if (r.stderr) errors.push(`${n}: the solution printed an error:\n${r.stderr}`);
     const actual = normalizeOutput(r.stdout);
     if (t.expect != null && normalizeOutput(String(t.expect)) !== actual) errors.push(`${n}: expected\n${t.expect}\nbut the solution prints\n${actual}`);
-    // A program whose result is the files it writes may print nothing.
-    if (!actual && !writesAsked[i]) errors.push(`${n}: the solution prints nothing`);
+    // A program whose result is the files it writes, or its window, may print nothing.
+    if (!actual && !writesAsked[i] && !eventsOf[i]) errors.push(`${n}: the solution prints nothing`);
     const writes = writesAsked[i] && !r.timedOut ? solutionWrites(n, writesAsked[i], r.written ?? {}, inputFiles[i]) : null;
+    const events = eventsOf[i];
+    const window = events ? solutionWindow(n, r) : null;
     const call = calls[i];
-    const name = t.name ?? (call && !call.trim().includes("\n") ? call.trim() : testsRaw.length > 1 ? `Test ${i + 1}` : writes ? (actual ? "Output and files" : "Files") : "Output");
-    return { name, stdin: stdins[i], ...(call ? { call } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), ...(writes ? { writes } : {}), expect: actual, hidden: !!t.hidden };
+    const name = t.name ?? (call && !call.trim().includes("\n") ? call.trim() : testsRaw.length > 1 ? `Test ${i + 1}` : events ? (actual ? "Window and output" : "Window") : writes ? (actual ? "Output and files" : "Files") : "Output");
+    // A test with events keeps the solution's window after them, and its outline, which the learner's is compared with.
+    const shown = events ? { events, window: window ?? { windows: [], problems: [] }, outline: windowOutline(window) } : {};
+    return { name, stdin: stdins[i], ...(argsOf[i] ? { args: argsOf[i] } : {}), ...(call ? { call } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), ...(writes ? { writes } : {}), expect: actual, hidden: !!t.hidden, ...shown };
   });
-  // The replay compares every file the run leaves in its folder, where a test checks written files.
-  checks.push({ where, kind: "run", files: filesFor(solution), ...(check ? { mainClass: CHECK_CLASS } : {}), tests: tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), stdout: runs[i].stdout, exitCode: 0, ...(runs[i].written ? { written: runs[i].written } : {}) })) });
+  // The replay compares every file the run leaves in its folder, where a test checks written files,
+  // and a JavaFX program's window JSON, byte for byte.
+  checks.push({ where, kind: "run", files: filesFor(solution), ...(check ? { mainClass: CHECK_CLASS } : {}), tests: tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : argsOf[i] ? { args: argsOf[i] } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), ...(eventsOf[i] ? { events: eventsOf[i] } : {}), stdout: runs[i].stdout, exitCode: 0, ...(runs[i].written ? { written: runs[i].written } : {}), ...(runs[i].window != null ? { window: runs[i].window } : {}) })) });
 
   // Starter code must not already pass, or the challenge would be free.
   if (kind === "code" && seed && !raw.seedMayPass) {
     const sc = await compile(filesFor(seed));
     if (sc.ok) {
       const sr = await Promise.all(tests.map((t, i) => run(sc, t.stdin, how(i))));
-      const passes = tests.every((t, i) => sr[i].exitCode === 0 && !sr[i].timedOut && normalizeOutput(sr[i].stdout) === t.expect && wroteAsWanted(t, sr[i]));
+      const passes = tests.every((t, i) => sr[i].exitCode === 0 && !sr[i].timedOut && normalizeOutput(sr[i].stdout) === t.expect && wroteAsWanted(t, sr[i]) && windowAsWanted(t, sr[i]));
       const styleOk = style !== "indent" || indentProblems(seed).length === 0;
       if (passes && styleOk && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: the starter code already passes`);
     }
@@ -674,7 +809,7 @@ async function buildExercise(where, raw) {
     const ec = await compile(filesFor(empty));
     if (ec.ok) {
       const er = await Promise.all(tests.map((t, i) => run(ec, t.stdin, how(i))));
-      if (tests.every((t, i) => er[i].exitCode === 0 && normalizeOutput(er[i].stdout) === t.expect && wroteAsWanted(t, er[i])) && checkRules(empty, require, forbid).length === 0) errors.push(`${where}: the program passes with every blank left empty`);
+      if (tests.every((t, i) => er[i].exitCode === 0 && normalizeOutput(er[i].stdout) === t.expect && wroteAsWanted(t, er[i]) && windowAsWanted(t, er[i])) && checkRules(empty, require, forbid).length === 0) errors.push(`${where}: the program passes with every blank left empty`);
     }
   }
   return { kind, seed, solution, hints, tests, require, forbid, ...(style ? { style } : {}) };
@@ -698,8 +833,9 @@ function solutionWrites(n, asked, written, given) {
 /**
  * A task shows the expected output in its last plain ``` block. It must be what the first visible
  * test really prints (the task card shows that test's output too, and drops the task's copy only
- * when the two are the same). In a challenge that checks written files, that's the first visible
- * test with `writes`, as the task card shows it.
+ * when the two are the same). In a challenge with a window, that's the first visible test with
+ * `events`; else, in a challenge that checks written files, the first visible test with `writes`,
+ * as the task card shows it.
  */
 /**
  * Tests that run the learner's JUnit tests (`junit: GardenTest`), on the program as written or with
@@ -713,7 +849,7 @@ async function buildJUnitTests(where, testsRaw, { kind, seed, solution, require,
   const specs = [];
   testsRaw.forEach((t, i) => {
     const n = `${where} test ${i + 1}`;
-    if (t.junit == null || t.stdin != null || t.call != null || t.files != null || t.writes != null || t.expect != null) return errors.push(`${n}: in a challenge with junit tests, every test has junit (and no stdin, call, files, writes or expect)`);
+    if (t.junit == null || t.stdin != null || t.call != null || t.files != null || t.writes != null || t.expect != null || t.events != null || t.args != null) return errors.push(`${n}: in a challenge with junit tests, every test has junit (and no stdin, args, call, files, writes, events or expect)`);
     // A test class in a package is named with it (garden.GardenTest), as JUnit's runner loads it.
     if (typeof t.junit !== "string" || !names.map(classOfPath).includes(t.junit)) return errors.push(`${n}: junit must name a test class of the program (one of ${names.map(classOfPath).join(", ")})`);
     const outcome = t.outcome ?? "pass";
@@ -761,12 +897,12 @@ function checkTaskOutput(where, task, ex) {
   if (!ex || ex.kind === "predict" || typeof task !== "string") return;
   // Fences are read in order (an info string such as "java" opens a block too), then the plain ones kept.
   const blocks = [...task.matchAll(/^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm)].filter((b) => !b[1].trim());
-  // The test the task card shows: the first visible one that checks written files, or else prints something.
-  const shown = ex.tests.find((t) => !t.hidden && t.writes) ?? ex.tests.find((t) => !t.hidden && t.expect);
+  // The test the task card shows: the first visible one with events (a window), or else that checks written files, or else prints something.
+  const shown = ex.tests.find((t) => !t.hidden && t.events) ?? ex.tests.find((t) => !t.hidden && t.writes) ?? ex.tests.find((t) => !t.hidden && t.expect);
   if (!blocks.length || !shown?.expect) return;
   const block = blocks[blocks.length - 1][2];
   const norm = (x) => normalizeOutput(x).trim();
-  if (norm(block) !== norm(shown.expect)) errors.push(`${where}: the task shows the output\n${block}but the test the task card shows (${shown.writes ? "the first visible one with writes" : "the first visible one"}) prints\n${shown.expect}`);
+  if (norm(block) !== norm(shown.expect)) errors.push(`${where}: the task shows the output\n${block}but the test the task card shows (${shown.events ? "the first visible one with events" : shown.writes ? "the first visible one with writes" : "the first visible one"}) prints\n${shown.expect}`);
 }
 
 function templateEmpty(template) {
@@ -871,18 +1007,30 @@ async function buildModules() {
 const DRILL_TYPES = ["predict", "fill", "bug", "compiles", "choice", "boss"];
 const indentBy = (s, n) => s.split("\n").map((l) => (l ? " ".repeat(n) + l : l)).join("\n");
 
+/**
+ * A drill that uses JavaFX runs its statements inside start, as its prompt says: real JavaFX started with JavaFX on
+ * the class path (as fx-check runs it) or from a main class that isn't the Application makes controls only after
+ * launch has started the toolkit, so statements in a plain main would only work on Java Arena's practice version.
+ * start ends with Platform.exit(), because real JavaFX keeps running while no window was shown.
+ */
+const drillUsesJavaFX = (pre, body, classes) => usesJavaFX([{ text: `${pre}\n${body}\n${classes}` }]);
+
 /** A drill's complete program: `classes` (classes of its own) go after Main in the same file. */
 function drillProgram(pre, body, classes = "") {
   const parts = [];
   if (pre) parts.push(indentBy(pre, 4));
-  parts.push(`    public static void main(String[] args) {\n${body ? indentBy(body, 8) + "\n" : ""}    }`);
-  return `${importsFor(`${pre}\n${body}\n${classes}`)}public class Main {\n${parts.join("\n\n")}\n}\n${classes ? `\n${classes}\n` : ""}`;
+  const fx = drillUsesJavaFX(pre, body, classes);
+  if (fx) {
+    parts.push("    public static void main(String[] args) {\n        launch(args);\n    }");
+    parts.push(`    @Override\n    public void start(javafx.stage.Stage stage) {\n${body ? indentBy(body, 8) + "\n" : ""}        javafx.application.Platform.exit();\n    }`);
+  } else parts.push(`    public static void main(String[] args) {\n${body ? indentBy(body, 8) + "\n" : ""}    }`);
+  return `${importsFor(`${pre}\n${body}\n${classes}`)}public class Main${fx ? " extends javafx.application.Application" : ""} {\n${parts.join("\n\n")}\n}\n${classes ? `\n${classes}\n` : ""}`;
 }
 
-/** What a drill shows: its classes, then Main's methods, then the statements run in main. */
+/** What a drill shows: its classes, then Main's methods, then the statements run in main (in start with JavaFX). */
 function drillDisplay(pre, body, classes = "") {
   const top = [classes, pre].filter(Boolean).join("\n\n");
-  if (top && body) return `${top}\n\n// inside main:\n${body}`;
+  if (top && body) return `${top}\n\n// inside ${drillUsesJavaFX(pre, body, classes) ? "start" : "main"}:\n${body}`;
   return top || body;
 }
 

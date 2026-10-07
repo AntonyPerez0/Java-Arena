@@ -1,0 +1,288 @@
+topic: gui-events
+drills:
+  - type: predict
+    after: button-actions
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Label score = new javafx.scene.control.Label("0");
+      javafx.scene.control.Button add = new javafx.scene.control.Button("Add");
+      add.setOnAction(event -> score.setText(score.getText() + "1"));
+      System.out.print(score.getText() + " ");
+      add.fire();
+      add.fire();
+      System.out.println(score.getText());
+    why: "`setOnAction` only gives the button its handler, so the label is still `0` when it's first printed. Each `fire()` runs the handler once, and the handler adds the text `1` to the end of the label's text (text, not a number): `01`, then `011`."
+
+  - type: predict
+    after: button-actions
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Button go = new javafx.scene.control.Button("Go");
+      go.setOnAction(event -> System.out.print("A"));
+      go.setOnAction(event -> System.out.print("B"));
+      go.fire();
+      go.fire();
+      System.out.println("!");
+    why: "A button has one handler for its action: the second `setOnAction` replaces the first one, it doesn't add another. Both clicks run the handler that prints `B`."
+
+  - type: predict
+    after: effectively-final
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.TextField city = new javafx.scene.control.TextField("Oslo");
+      String first = city.getText();
+      javafx.scene.control.Button show = new javafx.scene.control.Button("Show");
+      show.setOnAction(event -> System.out.println(first + " " + city.getText()));
+      city.setText("Rome");
+      show.fire();
+    why: "`first` got its value once, before the handler existed, and it never changes: `Oslo`. `city.getText()` in the handler reads the field when the handler runs, after `setText(\"Rome\")`."
+
+  - type: predict
+    after: reacting-to-typing
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.TextField field = new javafx.scene.control.TextField();
+      field.textProperty().addListener((observable, oldValue, newValue) -> System.out.print(newValue.length()));
+      field.appendText("hi");
+      field.setText("hi");
+      field.appendText("!");
+      field.clear();
+      System.out.println();
+    why: "The listener runs at every real change of the text. `appendText(\"hi\")` is one change, to 2 characters. `setText(\"hi\")` changes nothing, so the listener isn't called. Then 3 characters, and `clear()` makes it 0."
+
+  - type: predict
+    after: reacting-to-typing
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Button send = new javafx.scene.control.Button("Send");
+      send.setOnAction(event -> System.out.print("sent "));
+      send.setDisable(true);
+      send.fire();
+      send.setDisable(false);
+      send.fire();
+      System.out.println(send.isDisable());
+    why: "`fire()` on a disabled button does nothing, just as clicking it does. After `setDisable(false)` the button works again, so the handler runs once, and `isDisable()` is `false`."
+
+  - type: predict
+    after: logic-in-a-class
+    prompt: "This code runs inside `start`. `ServiceDesk` hands out numbered tickets and calls them in turn. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    classes: |
+      class ServiceDesk {
+          private int taken;
+          private int serving;
+
+          public int take() {
+              this.taken++;
+              return this.taken;
+          }
+
+          public void callNext() {
+              if (this.serving < this.taken) {
+                  this.serving++;
+              }
+          }
+
+          public int serving() {
+              return this.serving;
+          }
+      }
+    body: |
+      ServiceDesk desk = new ServiceDesk();
+      javafx.scene.control.Label board = new javafx.scene.control.Label("Now serving: -");
+      javafx.scene.control.Button call = new javafx.scene.control.Button("Call next");
+      call.setOnAction(event -> {
+          desk.callNext();
+          board.setText("Now serving: " + desk.serving());
+      });
+      desk.take();
+      desk.take();
+      call.fire();
+      call.fire();
+      call.fire();
+      System.out.println(board.getText());
+    why: "Two tickets are taken, so the desk can call two people. The third click calls `callNext()` once more, but with nobody waiting the number stays at 2, and the handler shows what the desk says."
+
+  - type: fill
+    after: button-actions
+    prompt: "This code runs inside `start`. Fill in the method that gives the button its handler. (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Button bell = new javafx.scene.control.Button("Ring");
+      bell.[[setOnAction]](event -> System.out.println("Ding dong"));
+      bell.fire();
+    why: "`setOnAction` gives a button the handler that runs at each click, and `fire()` clicks it from the code."
+
+  - type: fill
+    after: reacting-to-typing
+    prompt: "This code runs inside `start`. Fill in the method that adds a listener to the text. (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.TextField word = new javafx.scene.control.TextField();
+      word.textProperty().[[addListener]]((observable, oldValue, newValue) -> System.out.println(oldValue + " to " + newValue));
+      word.setText("tea");
+      word.appendText("s");
+    why: "`textProperty()` is the field's text as a property, and `addListener` gives it a ChangeListener, whose method gets the property, the old text and the new text."
+
+  - type: bug
+    after: effectively-final
+    prompt: "This code runs inside `start`. The button should add the item in the field to the list, but the program prints `To buy: ` with nothing after it. Which line has the bug? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.TextField item = new javafx.scene.control.TextField();
+      javafx.scene.control.Label list = new javafx.scene.control.Label("To buy:");
+      javafx.scene.control.Button add = new javafx.scene.control.Button("Add");
+      String text = item.getText();
+      add.setOnAction(event -> list.setText(list.getText() + " " + text)); // BUG
+      item.setText("milk");
+      add.fire();
+      System.out.println(list.getText());
+    fix: add.setOnAction(event -> list.setText(list.getText() + " " + item.getText()));
+    why: "`text` got the field's text when the field was still empty, and a lambda keeps that value. The handler must read the field itself, `item.getText()`, when the button is clicked."
+
+  - type: bug
+    after: reacting-to-typing
+    prompt: "This code runs inside `start`. The label should show the length of the text after each change, but it prints `0 characters`. Which line has the bug? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.TextField tag = new javafx.scene.control.TextField();
+      javafx.scene.control.Label count = new javafx.scene.control.Label("0 characters");
+      tag.textProperty().addListener((observable, oldValue, newValue) -> {
+          count.setText(oldValue.length() + " characters"); // BUG
+      });
+      tag.setText("hello");
+      System.out.println(count.getText());
+    fix: count.setText(newValue.length() + " characters");
+    why: "`oldValue` is the text before the change, which was empty. The text after the change is the third parameter, `newValue`."
+
+  - type: compiles
+    after: effectively-final
+    prompt: "This code runs inside `start`. Does it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Button plus = new javafx.scene.control.Button("+");
+      int clicks = 0;
+      plus.setOnAction(event -> clicks++);
+      System.out.println(clicks);
+    why: "A lambda can use a local variable of its method only when the variable is effectively final, never changed after it gets its value. `clicks++` changes it. Keep the count in an instance variable or an object instead."
+
+  - type: compiles
+    after: effectively-final
+    prompt: "This code runs inside `start`. Does it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    classes: |
+      class ClickCount {
+          private int value;
+
+          public void add() {
+              this.value++;
+          }
+
+          public int value() {
+              return this.value;
+          }
+      }
+    body: |
+      ClickCount counter = new ClickCount();
+      javafx.scene.control.Button plus = new javafx.scene.control.Button("+");
+      plus.setOnAction(event -> {
+          counter.add();
+      });
+      plus.fire();
+      System.out.println(counter.value());
+    why: "`counter` is effectively final: it refers to the same ClickCount object all the time. The lambda changes the object's instance variable, which the rule doesn't limit."
+
+  - type: choice
+    after: reacting-to-typing
+    prompt: "Which lambda can be given to `field.textProperty().addListener(...)`?"
+    choices:
+      - "`(observable, oldValue, newValue) -> System.out.println(newValue)`"
+      - "`(observable, oldValue, newValue, extra) -> System.out.println(newValue)`"
+      - "`(oldValue, newValue) -> System.out.println(newValue)`"
+      - "`() -> System.out.println(\"changed\")`"
+    answer: 1
+    why: "The lambda here is a ChangeListener, whose one method `changed` has three parameters: the property, the old value and the new value. A lambda for it must have three parameters too, even when it uses only one. No parameters, two or four match no listener."
+
+  - type: choice
+    after: launch-parameters
+    prompt: "A JavaFX program is started with `java Main --size=10 -mode=fast --verbose`, and `main` calls `launch(Main.class, args)`. What does `getParameters().getNamed()` hold?"
+    choices:
+      - "One key: `size`, with the value `10`"
+      - "Two keys: `size` and `mode`"
+      - "Three keys: `size`, `mode` and `verbose`"
+      - "Nothing: `getNamed()` holds only arguments without dashes"
+    answer: 1
+    why: "An argument is named when it starts with two dashes, then a key that begins with a letter (or `_`), then `=`. `-mode=fast` has one dash and `--verbose` has no `=`, so both are in `getUnnamed()`."
+
+  - type: boss
+    after: reacting-to-typing
+    prompt: |
+      A spelling game counts vowels while the player types. The window is built already: its title is `Vowels`, and it holds, in a VBox, a text field and the label `Vowels: 0`. Add a listener to the text field, so that after every change of its text the label shows how many of its letters are vowels (a, e, i, o and u, small or capital), like `Vowels: 3` for `Banana`.
+    seed: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.TextField;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              TextField word = new TextField();
+              Label vowels = new Label("Vowels: 0");
+
+              stage.setScene(new Scene(new VBox(word, vowels)));
+              stage.setTitle("Vowels");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.TextField;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              TextField word = new TextField();
+              Label vowels = new Label("Vowels: 0");
+              word.textProperty().addListener((observable, oldValue, newValue) -> {
+                  int count = 0;
+                  for (int i = 0; i < newValue.length(); i++) {
+                      String letter = newValue.substring(i, i + 1).toLowerCase();
+                      if ("aeiou".contains(letter)) {
+                          count++;
+                      }
+                  }
+                  vowels.setText("Vowels: " + count);
+              });
+
+              stage.setScene(new Scene(new VBox(word, vowels)));
+              stage.setTitle("Vowels");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "Add the listener with `word.textProperty().addListener((observable, oldValue, newValue) -> { ... });`, and count the vowels of `newValue` in it."
+      - "A count made inside the lambda is a new local variable at every call, so it may change. Go through the text with a loop: `newValue.substring(i, i + 1).toLowerCase()` is one letter, made small, and `\"aeiou\".contains(letter)` says whether it's a vowel."
+    tests:
+      - events: |
+          type TextField 1 "Banana"
+      - events: |
+          set TextField 1 "QUEUE"
+        hidden: true
+      - events: |
+          type TextField 1 "Rhythm"
+        hidden: true
+      - events: |
+          type TextField 1 "Ice"
+          set TextField 1 ""
+          type TextField 1 "Oat"
+        hidden: true

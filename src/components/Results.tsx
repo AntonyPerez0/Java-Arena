@@ -3,6 +3,7 @@ import { Check, CircleCheck, CircleX, X } from "lucide-react";
 import type { FriendlyDiagnostic, GradeResult } from "../grader/grade";
 import { InlineMd } from "./Markdown";
 import InputText from "./InputText";
+import { WindowCompare } from "./WindowView";
 
 /** javac's errors, each with its line and a plain-English explanation, then the full output on request. */
 export function DiagnosticList({ diagnostics, raw, multiFile }: { diagnostics: FriendlyDiagnostic[]; raw: string; multiFile?: boolean }) {
@@ -191,6 +192,14 @@ export default function Results({ result }: { result: GradeResult }) {
                         </pre>
                       </div>
                     ) : null}
+                    {t.args?.length ? (
+                      <div>
+                        <span className="lbl">command-line arguments</span>
+                        <pre tabIndex={0} className="console tiny">
+                          {t.args.map((a) => (/[\s"]/.test(a) || a === "" ? JSON.stringify(a) : a)).join(" ")}
+                        </pre>
+                      </div>
+                    ) : null}
                     {t.stdin ? (
                       <div>
                         <span className="lbl">input</span>
@@ -209,8 +218,8 @@ export default function Results({ result }: { result: GradeResult }) {
                         </pre>
                       </div>
                     ))}
-                    {/* When only a written file is wrong, the output (which is right) isn't compared again. */}
-                    {!(t.writes?.some((f) => !f.pass) && t.got === t.expected) && (
+                    {/* When only a written file or the window is wrong, the output (which is right) isn't compared again. */}
+                    {!((t.writes?.some((f) => !f.pass) || (t.window && !t.window.pass)) && t.got === t.expected) && (
                       <div className="t-cmp">
                         <div>
                           <span className="lbl">expected</span>
@@ -246,6 +255,22 @@ export default function Results({ result }: { result: GradeResult }) {
                           </div>
                         </div>
                       ))}
+                  </div>
+                )}
+                {/* A test with clicks and typing: which ones; for a visible test, the windows (a hidden test never shows the expected one). */}
+                {!t.pass && t.window && (
+                  <div className="t-detail">
+                    <p className="t-events">
+                      <span className="lbl">clicks and typing</span> {t.window.eventsInWords}
+                    </p>
+                    {t.window.expectedOutline != null && !t.window.matches && <WindowCompare check={t.window} />}
+                    {t.window.problems.length > 0 && (
+                      <ul className="rules" aria-label="Clicks and typing that couldn't happen">
+                        {t.window.problems.map((p, k) => (
+                          <li key={k}>{p.words ? `${p.words}: ${p.problem}` : p.problem}</li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
                 {!t.pass && t.note && <div className="t-note">{t.note}</div>}

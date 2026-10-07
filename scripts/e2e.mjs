@@ -12,6 +12,7 @@ import { launchChromium } from './browser.mjs';
 import { serve } from './serve.mjs';
 import { indentProblems } from '../src/grader/style.js';
 import { folderOf, joinFiles, splitFiles } from '../src/grader/files.js';
+import { describeEvents, parseEventLine } from '../src/grader/window.ts';
 
 const shotsIdx = process.argv.indexOf('--shots');
 const SHOTS = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
@@ -51,6 +52,46 @@ async function noOverflow(page, label) {
   // clientWidth, not innerWidth: with phone emulation innerWidth grows along with a too-wide page.
   const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
   expect(w[0] <= w[1], `${label}: page is ${w[0]} px wide in a ${w[1]} px window`);
+}
+/** No drill code box (a rep's or a review card's, a bug drill's lines, a boss task's code) scrolls sideways, and no blank sticks out of its box. */
+async function codeFits(page, label) {
+  const boxes = await page.locator('.rep pre, .rep .buglines, .rep .bugline, .death pre').evaluateAll((els) =>
+    els.map((e) => {
+      const pre = e.closest('pre');
+      const blanks = [...e.querySelectorAll('input.blank')].map((b) => b.getBoundingClientRect().right - (e.getBoundingClientRect().right - parseFloat(getComputedStyle(e).paddingRight)));
+      return { box: `${e.tagName.toLowerCase()}.${[...e.classList].join('.')}`, wide: e.scrollWidth > e.clientWidth + 1, blankOut: pre === e && blanks.some((d) => d > 1) };
+    }),
+  );
+  const bad = boxes.filter((b) => b.wide || b.blankOut);
+  expect(bad.length === 0, `${label}: drill code scrolls sideways: ${JSON.stringify(bad)}`);
+}
+/** Where each row of a line of drill code starts (its indentation left out), top row first. */
+const lineRows = (line) =>
+  line.evaluate((el) => {
+    const rows = new Map();
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (n.parentElement.closest('.ind') || !n.data.trim()) continue;
+      const r = document.createRange();
+      r.selectNodeContents(n);
+      for (const x of r.getClientRects()) if (x.width > 0) rows.set(Math.round(x.top), { left: Math.min(rows.get(Math.round(x.top))?.left ?? Infinity, x.left), right: Math.max(rows.get(Math.round(x.top))?.right ?? -Infinity, x.right), top: x.top, bottom: x.bottom });
+    }
+    return [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => row);
+  });
+/** Each window frame on the page: whether its windows are wider than it, and whether its note says so (visible). */
+async function frames(page) {
+  return page.locator('.fx-frame').evaluateAll((els) =>
+    els.map((f) => {
+      const s = f.querySelector(':scope > .fx-scroll');
+      const note = f.querySelector(':scope > .fx-wide-note');
+      return { wide: s.scrollWidth > s.clientWidth + 1, noted: !!note && getComputedStyle(note).display !== 'none' && note.getBoundingClientRect().height > 0, data: f.hasAttribute('data-wide'), end: f.hasAttribute('data-end') };
+    }),
+  );
+}
+/** No window as text scrolls sideways: its long lines wrap. */
+async function outlinesWrap(page, label) {
+  const boxes = await page.locator('details.fx-astext[open] pre').evaluateAll((els) => els.map((e) => [e.scrollWidth, e.clientWidth, e.scrollHeight, e.clientHeight]));
+  expect(boxes.length > 0 && boxes.every(([sw, cw, sh, ch]) => sw <= cw + 1 && sh <= ch + 1), `${label}: a window as text scrolls: ${JSON.stringify(boxes)}`);
 }
 async function newPage(opts = {}) {
   const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 }, ...opts });
@@ -993,6 +1034,535 @@ await test('part 12 mistakes are explained: a primitive in angle brackets, and a
   await ctx.close();
 });
 
+await test('part 13 mistakes are explained: an event handler that changes a local variable, and a node added twice, whose cause is the real problem; long notes wrap on a 320 px phone', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  const app = (body) =>
+    'import javafx.application.Application;\nimport javafx.scene.Scene;\nimport javafx.scene.control.Button;\nimport javafx.scene.layout.HBox;\nimport javafx.stage.Stage;\n\n' +
+    'public class Main extends Application {\n    @Override\n    public void start(Stage stage) {\n' + body + '\n        stage.setScene(new Scene(box));\n        stage.show();\n    }\n\n' +
+    '    public static void main(String[] args) {\n        launch(args);\n    }\n}\n';
+  // A handler that counts in a local variable of start: the note says the handler runs later, so the count belongs in an instance variable.
+  await setCode(page, app('        Button add = new Button("Add");\n        HBox box = new HBox(add);\n        int clicks = 0;\n        add.setOnAction(e -> {\n            clicks++;\n            add.setText("Clicks: " + clicks);\n        });'));
+  let out = await check(page);
+  expect(/line 14/i.test(out) && out.includes('local variables referenced from a lambda expression must be final or effectively final') && out.includes('clicks is a local variable of start, and the event handler given to setOnAction changes it') && out.includes('declare private int clicks = 0; in the class, outside start'), out);
+  // The same button twice in one pane: JavaFX's "Exception in Application start method", explained by its cause and the cause's line.
+  await setCode(page, app('        Button add = new Button("Add");\n        HBox box = new HBox(add, add);'));
+  out = await check(page);
+  expect(out.includes('crashed with IllegalArgumentException. Your start method threw it while it built the window, so JavaFX printed "Exception in Application start method"') && out.includes('its first line in your code is Main.java, line 11, in start') && out.includes('add is already one of its children'), out);
+  // Notes with long code that has no spaces to break at (a listener lambda, a class's full name) wrap on a 320 px phone instead of widening the page.
+  await page.setViewportSize({ width: 320, height: 700 });
+  await setCode(
+    page,
+    'import javafx.application.Application;\nimport javafx.beans.property.SimpleIntegerProperty;\nimport javafx.scene.Scene;\nimport javafx.scene.control.TextField;\nimport javafx.stage.Stage;\n\n' +
+      'public class Main extends Application {\n    @Override\n    public void start(Stage stage) {\n        TextField name = new TextField();\n        name.setOnKeyPressed(e -> System.out.println("key"));\n        stage.setScene(new Scene(name));\n        stage.show();\n    }\n\n    public static void main(String[] args) {\n        launch(args);\n    }\n}\n',
+  );
+  out = await check(page);
+  expect(out.includes('name.textProperty().addListener((observable,') && out.includes('(javafx.beans.property.SimpleIntegerProperty)'), out);
+  await noOverflow(page, 'part 13 notes at 320 px');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test("playground: a JavaFX program runs with Java Arena's JavaFX on the class path, and its .arena files aren't listed as files it wrote", async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(
+    page,
+    'import javafx.application.Application;\nimport javafx.scene.Scene;\nimport javafx.scene.control.Button;\nimport javafx.scene.layout.VBox;\nimport javafx.stage.Stage;\n\npublic class Main extends Application {\n' +
+      '    @Override\n    public void start(Stage stage) {\n        Button button = new Button("Hi");\n        stage.setScene(new Scene(new VBox(button)));\n        stage.show();\n        System.out.println("start on " + Thread.currentThread().getName());\n    }\n\n' +
+      '    @Override\n    public void stop() {\n        System.out.println("stop");\n    }\n\n    public static void main(String[] args) {\n        launch(Main.class);\n        System.out.println("launch returned");\n    }\n}\n',
+  );
+  const out = await check(page);
+  expect(/start on JavaFX Application Thread\s+stop\s+launch returned/.test(out) && /Exit code 0/i.test(out), out);
+  expect(!out.includes('.arena') && !out.includes('window.json') && !/files? it wrote/i.test(out), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// A JavaFX program for the window panel: a counter, a greeting from a text field (Enter greets too),
+// a handler that throws, and a disabled button.
+const FX_COUNTER =
+  'import javafx.application.Application;\nimport javafx.geometry.Insets;\nimport javafx.scene.Scene;\nimport javafx.scene.control.Button;\nimport javafx.scene.control.Label;\nimport javafx.scene.control.TextField;\nimport javafx.scene.layout.HBox;\nimport javafx.scene.layout.VBox;\nimport javafx.stage.Stage;\n\n' +
+  'public class Main extends Application {\n    private int clicks = 0;\n\n    @Override\n    public void start(Stage stage) {\n' +
+  '        Label count = new Label("Clicks: 0");\n        Label greeting = new Label("Hello!");\n        TextField name = new TextField();\n        name.setPromptText("Your name");\n' +
+  '        Button add = new Button("Add");\n        Button greet = new Button("Greet");\n        Button broken = new Button("Broken");\n        Button off = new Button("Off");\n        off.setDisable(true);\n' +
+  '        add.setOnAction(e -> {\n            clicks++;\n            count.setText("Clicks: " + clicks);\n            System.out.println("clicked " + clicks);\n        });\n' +
+  '        greet.setOnAction(e -> greeting.setText("Hello, " + name.getText() + "!"));\n        name.setOnAction(e -> greet.fire());\n' +
+  '        broken.setOnAction(e -> {\n            String text = null;\n            System.out.println(text.length());\n        });\n' +
+  '        VBox root = new VBox(10, count, new HBox(5, add, greet, broken, off), name, greeting);\n        root.setPadding(new Insets(10));\n' +
+  '        stage.setTitle("Counter");\n        stage.setScene(new Scene(root));\n        stage.show();\n    }\n\n    public static void main(String[] args) {\n        launch(args);\n    }\n}\n';
+/** Runs so far (the Playground counts every run, the window's own too). */
+const runCount = (page) => page.locator('.workbench').getAttribute('data-checks').then(Number);
+/** Waits for a run after `before` runs, and for the window panel to be done. */
+async function nextRun(page, before) {
+  await page.waitForFunction((n) => Number(document.querySelector('.workbench')?.getAttribute('data-checks')) > n && !document.querySelector('.fx-panel[aria-busy]'), before, { timeout: 120_000 });
+}
+const outputOf = (page) => page.locator('.results > pre.console').innerText();
+const outlineOf = (page) => page.locator('.fx-panel details.fx-astext pre').textContent();
+
+await test('playground: a JavaFX program draws its window; each click and typing runs it again with the events so far; Start over; a handler that throws shows in the console', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, FX_COUNTER);
+  await check(page);
+  const win = page.getByRole('group', { name: 'Window: Counter' });
+  await win.waitFor();
+  const panel = await page.locator('.fx-panel').innerText();
+  expect(panel.includes('Java Arena draws your window and runs your program again from the start for each click, with your earlier clicks and typing.') && /drawn approximately/i.test(panel), panel);
+  expect((await win.locator('.fx-title').innerText()) === 'Counter' && (await win.innerText()).includes('Clicks: 0'), await win.innerText());
+  // Real buttons and fields, with accessible names; a disabled button is disabled.
+  expect(await win.getByRole('button', { name: 'Off', exact: true }).isDisabled(), 'Off is disabled');
+  const name = win.getByRole('textbox', { name: 'Your name' });
+  expect((await name.getAttribute('placeholder')) === 'Your name', 'the prompt text is the placeholder');
+  // A click runs the program again from the start with all the clicks so far.
+  let n = await runCount(page);
+  await win.getByRole('button', { name: 'Add', exact: true }).click();
+  await nextRun(page, n);
+  await win.getByText('Clicks: 1').waitFor();
+  n = await runCount(page);
+  await win.getByRole('button', { name: 'Add', exact: true }).click();
+  await nextRun(page, n);
+  await win.getByText('Clicks: 2').waitFor();
+  expect((await outputOf(page)).trim() === 'clicked 1\nclicked 2', `the latest run printed both clicks: ${await outputOf(page)}`);
+  // Typing, then a click: one run, with the typing first.
+  n = await runCount(page);
+  await name.click();
+  await page.keyboard.type('Ada');
+  await win.getByRole('button', { name: 'Greet', exact: true }).click();
+  await nextRun(page, n);
+  await win.getByText('Hello, Ada!').waitFor();
+  await page.waitForTimeout(1500);
+  expect((await runCount(page)) === n + 1, `typing then a click ran the program once, not ${(await runCount(page)) - n} times`);
+  // Typing alone is sent once the learner pauses; then Enter fires the field's handler.
+  n = await runCount(page);
+  await name.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' L');
+  await nextRun(page, n);
+  expect((await outlineOf(page)).includes('TextField "Ada L", prompt "Your name"') && (await name.inputValue()) === 'Ada L', await outlineOf(page));
+  n = await runCount(page);
+  await page.keyboard.press('Enter');
+  await nextRun(page, n);
+  await win.getByText('Hello, Ada L!').waitFor();
+  expect((await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Your name', 'the field keeps the keyboard focus across runs');
+  // A handler that throws: printed in the console, explained, and the window goes on.
+  n = await runCount(page);
+  await win.getByRole('button', { name: 'Broken', exact: true }).click();
+  await nextRun(page, n);
+  const out = await outputOf(page);
+  expect(out.includes('Exception in thread "JavaFX Application Thread" java.lang.NullPointerException') && out.includes('clicked 2'), out);
+  const note = await page.locator('.results > .t-note').innerText();
+  expect(/An event handler threw NullPointerException \(line \d+\)/.test(note) && /went on/.test(note) && !/stopped/.test(note), note);
+  const heard = await page.locator('.workbench > p[role=status]').textContent();
+  expect(!heard || !/stopped/.test(heard), `a handler's exception isn't announced as a stop: ${heard}`);
+  expect((await win.innerText()).includes('Clicks: 2') && !(await page.locator('.fx-stale-note').count()), 'the window is still drawn and up to date');
+  await shot(page, 'playground-window');
+  // Keyboard focus is visible on the window's buttons.
+  await name.focus();
+  await page.keyboard.press('Shift+Tab');
+  const ring = await page.evaluate(() => {
+    const s = getComputedStyle(document.activeElement);
+    return [document.activeElement.textContent, s.outlineStyle, s.outlineWidth, s.outlineColor];
+  });
+  expect(ring[0] === 'Broken' && ring[1] === 'solid' && ring[2] === '2px' && ring[3] === 'rgb(10, 95, 166)', `focus ring: ${ring}`);
+  // Start over: no clicks or typing.
+  n = await runCount(page);
+  await page.getByRole('button', { name: 'Start over' }).click();
+  await nextRun(page, n);
+  await win.getByText('Clicks: 0').waitFor();
+  expect((await name.inputValue()) === '' && (await outputOf(page)) === '(no output)', `after Start over: ${await name.inputValue()} ${await outputOf(page)}`);
+  expect((await page.getByRole('button', { name: 'Start over' }).getAttribute('aria-disabled')) === 'true', 'Start over waits for a click');
+  // A click, then the code changes: the window is out of date until the next run, which starts with no clicks.
+  n = await runCount(page);
+  await win.getByRole('button', { name: 'Add', exact: true }).click();
+  await nextRun(page, n);
+  await win.getByText('Clicks: 1').waitFor();
+  await setCode(page, FX_COUNTER.replace('"Clicks: 0"', '"Count: 0"'));
+  await page.locator('.fx-stale-note', { hasText: 'your code changed' }).waitFor();
+  expect((await page.locator('.fx-panel button.fx-button').count()) === 0, 'an out-of-date window has no buttons to click');
+  await check(page);
+  await page.getByRole('group', { name: 'Window: Counter' }).getByText('Count: 0').waitFor();
+  expect(!(await page.locator('.fx-stale-note').count()), 'a new run is up to date');
+  // A compile error: the last window stays, marked out of date, and the note says why.
+  await setCode(page, FX_COUNTER.replace('stage.show();', 'stage.show()'));
+  const failed = await check(page);
+  expect(/didn't compile/i.test(failed) && (await page.locator('.fx-stale-note', { hasText: "your code didn't compile" }).count()) === 1 && (await page.locator('.fx-panel .fx-window').count()) === 1, failed);
+  // The out-of-date drawing's frame shows the keyboard focus (the site's ring, not the dashed mark).
+  await page.locator('.fx-panel details.fx-astext > summary').focus();
+  await page.keyboard.press('Shift+Tab');
+  const frameRing = await page.evaluate(() => {
+    const a = document.activeElement;
+    const s = getComputedStyle(a);
+    return [a.classList.contains('fx-scroll'), s.outlineStyle, s.outlineWidth];
+  });
+  expect(frameRing[0] && frameRing[1] === 'solid' && frameRing[2] === '2px', `the out-of-date frame's focus ring: ${frameRing}`);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// A JavaFX program for what happens while a run goes on: a counter, a shopping list whose field
+// Enter empties, a name field a button empties, and a button that adds a node before itself.
+const FX_BUSY =
+  'import javafx.application.Application;\nimport javafx.scene.Scene;\nimport javafx.scene.control.Button;\nimport javafx.scene.control.Label;\nimport javafx.scene.control.TextField;\nimport javafx.scene.layout.HBox;\nimport javafx.scene.layout.VBox;\nimport javafx.stage.Stage;\n\n' +
+  'public class Main extends Application {\n    private int clicks = 0;\n\n    @Override\n    public void start(Stage stage) {\n' +
+  '        Label count = new Label("Clicks: 0");\n        Label list = new Label("List:");\n        TextField item = new TextField();\n        item.setPromptText("Item");\n        TextField name = new TextField("Ada");\n        name.setPromptText("Name");\n' +
+  '        Button add = new Button("Add");\n        Button clear = new Button("Clear name");\n        Button mark = new Button("Mark");\n        HBox row = new HBox(5, add, clear, mark);\n' +
+  '        add.setOnAction(e -> {\n            clicks++;\n            count.setText("Clicks: " + clicks);\n        });\n' +
+  '        item.setOnAction(e -> {\n            list.setText(list.getText() + " [" + item.getText() + "]");\n            item.clear();\n        });\n' +
+  '        clear.setOnAction(e -> name.clear());\n        mark.setOnAction(e -> row.getChildren().add(0, new Label("*")));\n' +
+  '        stage.setTitle("Busy");\n        stage.setScene(new Scene(new VBox(8, count, row, item, list, name)));\n        stage.show();\n    }\n\n    public static void main(String[] args) {\n        launch(args);\n    }\n}\n';
+const busyPanel = (page) => page.locator('.fx-panel[aria-busy]').waitFor({ timeout: 30_000 });
+/** Waits until no run is going on and none starts for a while (queued clicks, typing sent after a pause). */
+async function settled(page) {
+  for (let quiet = 0; quiet < 3; ) {
+    await page.waitForTimeout(400);
+    quiet = (await page.locator('.fx-panel[aria-busy]').count()) ? 0 : quiet + 1;
+  }
+}
+
+await test('playground: the window during a run: clicks wait their turn, typing keeps what the run did to the field, Run waits, the focus stays on its button; a start that throws shows no window', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, FX_BUSY);
+  await check(page);
+  const win = page.getByRole('group', { name: 'Window: Busy' });
+  await win.waitFor();
+  // Three quick clicks: each one is sent, one run after another.
+  const add = win.getByRole('button', { name: 'Add', exact: true });
+  let n = await runCount(page);
+  await add.click();
+  await add.click();
+  await add.click();
+  await win.getByText('Clicks: 3').waitFor({ timeout: 60_000 });
+  await settled(page);
+  expect((await runCount(page)) === n + 3 && !(await page.locator('.fx-message').count()), `three clicks: ${(await runCount(page)) - n} runs, ${await win.innerText()}`);
+  // Enter empties the field; what is typed while that run goes on is sent on its own, not after the old text.
+  const item = win.getByRole('textbox', { name: 'Item' });
+  await item.click();
+  await page.keyboard.type('milk');
+  await page.keyboard.press('Enter');
+  await busyPanel(page);
+  await page.keyboard.type('eggs');
+  await settled(page);
+  await page.keyboard.press('Enter');
+  await win.getByText('List: [milk] [eggs]').waitFor({ timeout: 60_000 });
+  await settled(page);
+  // A button empties a field that had no typing; typing during that run is all the field gets.
+  const name = win.getByRole('textbox', { name: 'Name' });
+  await win.getByRole('button', { name: 'Clear name', exact: true }).click();
+  await busyPanel(page);
+  await name.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type('Bo');
+  await settled(page);
+  expect((await outlineOf(page)).includes('TextField "Bo", prompt "Name"') && (await name.inputValue()) === 'Bo', await outlineOf(page));
+  // Run pressed while the window runs the program for a click waits for it, then runs.
+  n = await runCount(page);
+  await add.click();
+  await busyPanel(page);
+  await page.click('#check');
+  expect((await page.locator('#check').innerText()).includes('Waiting'), await page.locator('#check').innerText());
+  await page.waitForFunction((k) => Number(document.querySelector('.workbench')?.getAttribute('data-checks')) >= k + 2, n, { timeout: 120_000 });
+  await settled(page);
+  await win.getByText('Clicks: 4').waitFor();
+  // A button whose handler adds a node before it keeps the keyboard focus.
+  n = await runCount(page);
+  await win.getByRole('button', { name: 'Mark', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await nextRun(page, n);
+  await settled(page);
+  expect((await win.innerText()).includes('*'), await win.innerText());
+  expect((await page.evaluate(() => document.activeElement?.textContent)) === 'Mark', `the focus after the click: ${await page.evaluate(() => document.activeElement?.outerHTML)}`);
+  expect(errors.length === 0, errors.join('\n'));
+  // A start that throws on the first run (after Example, which forgets the window): the panel says no window is open, and why.
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: 'Example' }).click();
+  await page.locator('.fx-panel').waitFor({ state: 'detached' });
+  await setCode(page, FX_BUSY.replace('stage.show();', 'stage.show();\n        throw new IllegalStateException("not yet");'));
+  await check(page);
+  await page.locator('.fx-panel .fx-none', { hasText: 'No window is open.' }).waitFor();
+  const panel = await page.locator('.fx-panel').innerText();
+  expect(panel.includes('ended before it left a window') && !(await page.locator('.fx-panel .fx-window').count()), panel);
+  // start did call show(): the panel doesn't ask for it.
+  expect(!panel.includes('stage.show()'), panel);
+  await axe(page, 'a window panel with no window');
+  // A program that never calls launch: the same.
+  await setCode(page, FX_BUSY.replace('launch(args);', 'System.out.println("no launch");'));
+  await check(page);
+  await page.locator('.fx-panel .fx-none', { hasText: 'No window is open.' }).waitFor();
+  expect((await page.locator('.fx-panel').innerText()).includes('main must call launch, as in launch(Main.class)'), await page.locator('.fx-panel').innerText());
+  // A start that never shows the stage leaves a window file with no window: the panel says start must call stage.show().
+  await setCode(page, FX_BUSY.replace('stage.show();', ''));
+  await check(page);
+  await page.locator('.fx-panel .fx-stale-note', { hasText: 'start must show the stage with stage.show()' }).waitFor();
+  expect(!(await page.locator('.fx-panel').innerText()).includes('ended before it left a window'), await page.locator('.fx-panel').innerText());
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// A wide window: a TextArea is 546 px wide by default, so it can't fit a phone.
+const FX_WIDE =
+  'import javafx.application.Application;\nimport javafx.geometry.Insets;\nimport javafx.scene.Scene;\nimport javafx.scene.control.*;\nimport javafx.scene.layout.*;\nimport javafx.stage.Stage;\n\n' +
+  'public class Main extends Application {\n    @Override\n    public void start(Stage stage) {\n        GridPane form = new GridPane();\n        form.setHgap(6);\n        form.setVgap(4);\n' +
+  '        form.add(new Label("Name"), 0, 0);\n        form.add(new TextField("Ada"), 1, 0);\n        form.add(new Label("Code"), 0, 1);\n        form.add(new PasswordField(), 1, 1);\n' +
+  '        TextArea notes = new TextArea("First line");\n        notes.setWrapText(true);\n        form.add(notes, 0, 2, 2, 1);\n        FlowPane tags = new FlowPane(new Button("java"), new Button("fx"), new Button("gui"));\n        tags.setHgap(4);\n' +
+  '        Button save = new Button("Save");\n        save.setDisable(true);\n        BorderPane root = new BorderPane(new VBox(6, form, tags));\n        root.setTop(new Label("Notes"));\n        root.setBottom(new HBox(6, save, new Label("Not saved")));\n' +
+  '        root.setRight(new StackPane(new Label("New")));\n        root.setPadding(new Insets(8));\n        stage.setTitle("Notes");\n        stage.setScene(new Scene(root));\n        stage.show();\n    }\n\n' +
+  '    public static void main(String[] args) {\n        launch(args);\n    }\n}\n';
+
+await test('playground: the window panel passes axe in both themes; on a 320 px phone a wide window scrolls inside its frame, not the page', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, FX_WIDE);
+  await check(page);
+  const win = page.getByRole('group', { name: 'Window: Notes' });
+  await win.waitFor();
+  // Every field has a name: the prompt text, else its kind and number as event lines count them.
+  for (const field of ['Text field 1', 'Password field 1', 'Text area 1']) expect((await win.getByRole('textbox', { name: field }).count()) === 1, `a field named ${field}`);
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    // The window keeps its own light colors in both themes.
+    const bg = await win.evaluate((w) => getComputedStyle(w).backgroundColor);
+    expect(bg === 'rgb(244, 244, 244)', `${colorScheme}: the window is ${bg}`);
+    await axe(page, `the window panel, ${colorScheme} theme`);
+    await shot(page, `playground-window-${colorScheme}`);
+  }
+  await page.setViewportSize({ width: 320, height: 800 });
+  await noOverflow(page, 'a wide window at 320 px');
+  const frame = await page.locator('.fx-panel .fx-scroll').evaluate((e) => [e.scrollWidth, e.clientWidth]);
+  expect(frame[0] > frame[1], `the window scrolls inside its frame: ${frame}`);
+  // The frame says so: the note under it shows, until the window fits again.
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForFunction(() => document.querySelector('.fx-panel .fx-frame')?.hasAttribute('data-wide'));
+    const [f] = await frames(page);
+    expect(f.wide && f.noted && !f.end, `${width} px: a wide window's frame doesn't say it scrolls: ${JSON.stringify(f)}`);
+    expect((await page.locator('.fx-panel .fx-wide-note').innerText()) === 'This window is wider than the screen: scroll it sideways, or read it as text below.', await page.locator('.fx-panel .fx-wide-note').innerText());
+    // Scrolled to the end, the fade goes (the note stays).
+    await page.locator('.fx-panel .fx-scroll').evaluate((e) => e.scrollTo({ left: e.scrollWidth }));
+    await page.waitForFunction(() => document.querySelector('.fx-panel .fx-frame')?.hasAttribute('data-end'));
+    await page.locator('.fx-panel .fx-scroll').evaluate((e) => e.scrollTo({ left: 0 }));
+    await page.waitForFunction(() => !document.querySelector('.fx-panel .fx-frame')?.hasAttribute('data-end'));
+    for (const colorScheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme });
+      await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+      await axe(page, `the window panel at ${width} px, ${colorScheme} theme`);
+    }
+  }
+  await shot(page, 'playground-window-320');
+  // A small window fits a 320 px phone: no note.
+  await page.setViewportSize({ width: 320, height: 800 });
+  await setCode(page, FX_COUNTER);
+  await check(page);
+  await page.getByRole('group', { name: 'Window: Counter' }).waitFor();
+  const [fits] = await frames(page);
+  expect(!fits.wide && !fits.noted && !fits.data, `a window that fits has the note: ${JSON.stringify(fits)}`);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// Part 13 lesson pages with windows, picked from the build's own module files by what they hold.
+/** The windows a step's lesson text shows (its ```window blocks, which the build wrote after each java window example). */
+const windowBlocks = (step) => [...step.text.matchAll(/```window\n([^\n]*)\n```/g)].map((m) => JSON.parse(m[1]));
+/** A GUI challenge to work on: a code challenge whose first visible test types in text fields and clicks a button. */
+const guiChallenge = (() => {
+  for (const id of ['gui-events', 'gui-views']) {
+    const found = challengesOf(moduleOf(id)).find(({ ex }) => {
+      const shown = ex.kind === 'code' && ex.tests.find((t) => !t.hidden && t.events);
+      const events = shown ? shown.events.map(parseEventLine) : [];
+      return events.length >= 2 && events.every((e) => (e.command === 'type' && e.target?.kind === 'index' && e.target.type === 'TextField') || (e.command === 'click' && e.target?.kind === 'text' && e.target.type === 'Button'));
+    });
+    if (found) return { moduleId: id, ...found, shown: found.ex.tests.find((t) => !t.hidden && t.events) };
+  }
+  return null;
+})();
+
+/** Puts a program in the editor: each file in its tab when the challenge has several. */
+async function setProgram(page, code) {
+  if ((await tabPaths(page)).length) await setFiles(page, code);
+  else await setCode(page, code);
+}
+
+await test('a java window example in a lesson: drawn after its clicks, with the window as text; the pre-rendered page has the same figures', async () => {
+  // The first step of module 49 whose lesson text has a window drawn after a click.
+  const step = moduleOf('gui-events').steps.find((s) => windowBlocks(s).some((b) => b.events.length > 0));
+  expect(step, 'no lesson text in module 49 has a window after clicks');
+  const blocks = windowBlocks(step);
+  const k = blocks.findIndex((b) => b.events.length > 0);
+  const block = blocks[k];
+  const labels = [...block.outline.matchAll(/^\s*(?:\w+: )?(?:Label|Button) "([^"]*)"/gm)].map((m) => m[1]).filter(Boolean);
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + `learn/gui-events/${step.slug}/`);
+  await lessonReady(page);
+  const figures = page.locator('article.step-text figure.fx-figure');
+  expect((await figures.count()) === blocks.length, `${await figures.count()} windows in the lesson text, not ${blocks.length}`);
+  const figure = figures.nth(k);
+  // The clicks in words, then the window drawn: its title bar and the texts of its labels and buttons.
+  expect((await figure.locator('.fx-events').innerText()) === `After: ${describeEvents(block.events)}`, await figure.locator('.fx-events').innerText());
+  const title = block.window.windows[0].title;
+  if (title) expect((await figure.locator('.fx-window .fx-title').first().innerText()) === title, `title bar: ${await figure.locator('.fx-title').first().innerText()}`);
+  const drawn = await figure.locator('.fx-window').first().innerText();
+  expect(labels.length > 0 && labels.every((l) => drawn.includes(l)), `drawn: ${drawn}; labels and buttons: ${labels}`);
+  // A drawing in the lesson text can't be clicked: no real buttons or fields in it.
+  expect((await figure.locator('.fx-window button, .fx-window input, .fx-window textarea').count()) === 0, 'a lesson window has controls');
+  // The window as text: closed, then the outline the build stored.
+  const details = figure.locator('details.fx-astext');
+  expect((await details.getAttribute('open')) === null, 'the window as text starts closed');
+  await details.locator('summary').click();
+  expect((await details.locator('pre').innerText()) === block.outline, `as text: ${await details.locator('pre').innerText()}`);
+  expect(errors.length === 0, errors.join('\n'));
+  // The pre-rendered page (before any script runs) has the same figures, with the same words and outline.
+  const html = await (await page.request.get(BASE + `learn/gui-events/${step.slug}/`)).text();
+  const decode = (t) => t.replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const prerendered = html.match(/<figure class="fx-figure">[\s\S]*?<\/figure>/g) ?? [];
+  expect(prerendered.length === blocks.length, `${prerendered.length} windows in the pre-rendered page, not ${blocks.length}`);
+  const fig = prerendered[k];
+  const after = decode(fig.match(/<p class="fx-events">([\s\S]*?)<\/p>/)?.[1] ?? '');
+  expect(after === `After: ${describeEvents(block.events)}`, `the pre-rendered figure's clicks: ${after}`);
+  expect(/class="fx-window/.test(fig) && /<details class="fx-astext"><summary>The window as text<\/summary>/.test(fig), `the pre-rendered figure: ${fig.slice(0, 300)}`);
+  const preText = decode(fig.match(/<pre[^>]*><code>([\s\S]*?)<\/code><\/pre>/)?.[1] ?? '');
+  expect(preText === block.outline, `the pre-rendered window as text: ${preText}`);
+  // On a phone: a window wider than the column says so under its frame (a window that fits doesn't), and the
+  // window as text wraps its long lines instead of cutting them off. Module 48 has windows with text areas.
+  for (const [moduleId, slug] of [['gui-events', step.slug], ...moduleOf('gui-basics').steps.filter((s) => windowBlocks(s).length).slice(0, 4).map((s) => ['gui-basics', s.slug])]) {
+    await page.goto(BASE + `learn/${moduleId}/${slug}/`);
+    await lessonReady(page);
+    for (const width of [390, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.waitForFunction(() => [...document.querySelectorAll('.fx-frame')].every((f) => { const s = f.querySelector('.fx-scroll'); return (s.scrollWidth > s.clientWidth + 1) === f.hasAttribute('data-wide'); }));
+      const fs = await frames(page);
+      expect(fs.length > 0 && fs.every((f) => f.wide === f.noted), `${moduleId}/${slug} at ${width} px: ${JSON.stringify(fs)}`);
+      const closed = page.locator('article.step-text details.fx-astext:not([open]) > summary');
+      while (await closed.count()) await closed.first().click();
+      await outlinesWrap(page, `${moduleId}/${slug} at ${width} px`);
+      expect((await page.locator('article.step-text details.fx-astext pre').first().innerText()) === windowBlocks(moduleOf(moduleId).steps.find((s) => s.slug === slug))[0].outline, 'the wrapped window as text is still the outline');
+      await noOverflow(page, `${moduleId}/${slug} at ${width} px`);
+    }
+  }
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('a window challenge: the task card shows the clicks and typing and the window; a wrong program shows both windows with the differing lines marked; axe in both themes and at 320 px; the model solution passes', async () => {
+  expect(guiChallenge, 'no code challenge in modules 49 and 50 types in text fields and clicks a button in its first visible test');
+  const { moduleId, ex, shown } = guiChallenge;
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, moduleId, guiChallenge);
+  // The task card: the clicks and typing in words, and the window the model solution leaves, drawn and as text.
+  const card = page.locator('.task-card');
+  expect((await card.locator('.task-events').innerText()) === describeEvents(shown.events), await card.locator('.task-events').innerText());
+  const expected = card.locator('.fx-figure');
+  expect((await expected.locator('.fx-window').count()) === shown.window.windows.length, `${await expected.locator('.fx-window').count()} windows drawn on the task card`);
+  if (shown.window.windows[0].title) expect((await expected.locator('.fx-title').first().innerText()) === shown.window.windows[0].title, await expected.locator('.fx-title').first().innerText());
+  expect((await expected.locator('details.fx-astext pre').textContent()) === shown.outline, `the task card's window as text: ${await expected.locator('details.fx-astext pre').textContent()}`);
+  // The starter program fails on the window: both windows drawn, and the lines that differ marked on each side.
+  const out = await check(page);
+  expect(out.includes('Not yet'), out);
+  const failed = page.locator('.t-fail', { hasText: shown.name }).first();
+  const cmp = failed.locator('.fx-compare');
+  expect((await cmp.count()) === 1, `no window comparison for ${shown.name}: ${out}`);
+  expect((await failed.locator('.t-events').innerText()).includes(describeEvents(shown.events)), await failed.locator('.t-events').innerText());
+  const [should, yours] = [cmp.locator(':scope > div').nth(0), cmp.locator(':scope > div').nth(1)];
+  expect((await should.locator('.lbl').first().innerText()).match(/the window should look like/i) && (await yours.locator('.lbl').first().innerText()).match(/your window/i), await cmp.innerText());
+  expect((await cmp.locator('.fx-window').count()) === 2, `${await cmp.locator('.fx-window').count()} windows drawn in the comparison`);
+  const marked = async (side) => (await side.locator('mark.fx-differs').allTextContents()).map((t) => t.replace(/^Differs: /, ''));
+  const shouldMarks = await marked(should);
+  const yourMarks = await marked(yours);
+  const outlineLines = shown.outline.split('\n');
+  expect(shouldMarks.length > 0 && shouldMarks.every((l) => outlineLines.includes(l)), `marked in the expected window: ${shouldMarks}`);
+  const yourLines = (await yours.locator('details.fx-astext pre').textContent()).replace(/Differs: /g, '').split('\n');
+  expect(yourMarks.length > 0 && yourMarks.every((l) => yourLines.includes(l) && !outlineLines.includes(l)), `marked in your window: ${yourMarks}`);
+  expect((await cmp.locator('.fx-legend').innerText()).includes('The lines that differ are highlighted.'), await cmp.innerText());
+  // A hidden test says only which clicks it made: never the window it expects.
+  const seen = new Set([...ex.tests.filter((t) => !t.hidden && t.outline).flatMap((t) => t.outline.split('\n')), ...yourLines]);
+  for (const t of ex.tests.filter((t) => t.hidden && t.outline)) {
+    for (const line of t.outline.split('\n').filter((l) => !seen.has(l) && /"/.test(l))) expect(!out.includes(line.trim()), `a hidden test's window is shown: ${line}`);
+  }
+  expect((await page.locator('.t-fail .fx-compare').count()) <= ex.tests.filter((t) => !t.hidden && t.events).length, 'a hidden test shows a window comparison');
+  // axe on the lesson's windows, the task card and the failed results, in both themes; then on a 320 px phone.
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `a failed window challenge, ${colorScheme} theme`);
+    await shot(page, `window-challenge-failed-${colorScheme}`);
+  }
+  await page.setViewportSize({ width: 320, height: 800 });
+  // Every window as text opened: a long outline line wraps under its own start, so its box never scrolls, nor the page.
+  const closed = page.locator('details.fx-astext:not([open]) > summary');
+  while (await closed.count()) await closed.first().click();
+  await noOverflow(page, 'a failed window challenge at 320 px, every window as text open');
+  await outlinesWrap(page, 'a failed window challenge at 320 px');
+  expect((await page.locator('.task-card details.fx-astext pre').textContent()) === shown.outline, 'the task card\'s wrapped window as text is still the outline');
+  // A frame says it scrolls exactly when its windows are wider than it.
+  const phoneFrames = await frames(page);
+  expect(phoneFrames.every((f) => f.wide === f.noted), `frames at 320 px: ${JSON.stringify(phoneFrames)}`);
+  const scrollers = await page.locator('.fx-scroll').evaluateAll((els) => els.map((e) => ({ scrolls: e.scrollWidth > e.clientWidth, tabindex: e.getAttribute('tabindex') })));
+  expect(scrollers.length > 0 && scrollers.filter((f) => f.scrolls).every((f) => f.tabindex === '0'), `a window frame scrolls but can't take the focus: ${JSON.stringify(scrollers)}`);
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `a failed window challenge at 320 px, ${colorScheme} theme`);
+  }
+  await shot(page, 'window-challenge-failed-320');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // The model solution passes every test, the windows included.
+  await setProgram(page, ex.solution);
+  const passed = await check(page);
+  expect(passed.includes('All tests passed') && !(await page.locator('.fx-compare').count()), passed);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('a window challenge\'s "Run with my input": the window takes the task\'s typing and clicks, each click runs the program again, and it ends as the task card shows', async () => {
+  expect(guiChallenge, 'no GUI challenge to run');
+  const { moduleId, ex, shown } = guiChallenge;
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, moduleId, guiChallenge);
+  await setProgram(page, ex.solution);
+  await page.getByRole('button', { name: 'Run with my input' }).click();
+  let n = await runCount(page);
+  await page.locator('.freerun button', { hasText: /^\s*Run\s*$/ }).click();
+  await nextRun(page, n);
+  const title = shown.window.windows[0].title;
+  const win = page.locator('.freerun').getByRole('group', { name: title ? `Window: ${title}` : 'Window without a title' });
+  await win.waitFor();
+  expect((await page.locator('.freerun .fx-panel').innerText()).includes('Java Arena draws your window and runs your program again from the start for each click, with your earlier clicks and typing.'), await page.locator('.freerun .fx-panel').innerText());
+  // The test's events, made by hand: typing goes into the K-th text field, a click on the button with that text.
+  for (const line of shown.events) {
+    const e = parseEventLine(line);
+    if (e.command === 'type') {
+      const field = win.getByRole('textbox').nth(e.target.index - 1);
+      await field.click();
+      await page.keyboard.type(e.text);
+    } else {
+      n = await runCount(page);
+      await win.getByRole('button', { name: e.target.text, exact: true }).click();
+      await nextRun(page, n);
+    }
+  }
+  await settled(page);
+  const outline = await page.locator('.freerun .fx-panel details.fx-astext pre').textContent();
+  expect(outline === shown.outline, `the window after the task's clicks and typing:\n${outline}\nnot\n${shown.outline}`);
+  const printed = (await page.locator('.freerun .results > pre.console').innerText()).trim();
+  expect(printed === (shown.expect.trim() || '(no output)'), `printed: ${printed}`);
+  expect(!(await page.locator('.freerun .fx-stale-note').count()), 'the window is up to date');
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `a lesson's window panel, ${colorScheme} theme`);
+    await shot(page, `lesson-window-panel-${colorScheme}`);
+  }
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('playground: run a program with input, share it, open the link elsewhere', async () => {
   const { ctx, page, errors } = await newPage();
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -1261,6 +1831,7 @@ await test('Deathmatch on a phone (360 px): reps of every type fit the screen', 
   for (let i = 1; i <= 15; i++) {
     await page.locator('.rep').waitFor();
     await noOverflow(page, `rep ${i} at 360`);
+    await codeFits(page, `rep ${i} at 360`);
     types.add((await answerRep(page, true)).type);
     await page.waitForFunction((n) => document.querySelector('.hud-n')?.textContent === String(n), i);
   }
@@ -1268,8 +1839,120 @@ await test('Deathmatch on a phone (360 px): reps of every type fit the screen', 
   await answerRep(page, false);
   await page.locator('.death').waitFor();
   await noOverflow(page, 'review at 360');
+  await codeFits(page, 'review at 360');
   await axe(page, 'review at 360');
   expect(types.size >= 3, `types: ${[...types]}`);
+  await ctx.close();
+});
+
+await test("drill code on a phone (390 px): a long GUI line wraps under its own start and no code box scrolls sideways (Deathmatch, a review card, the daily challenge, the placement quiz); a bug drill's wrapped lines stay tappable and keyboard-usable; axe passes in both themes", async () => {
+  const longest = (d) => Math.max(...d.display.split('\n').map((l) => l.length));
+  const gui = DRILLS.drills.filter((d) => d.topic.startsWith('gui-'));
+  const predict = gui.filter((d) => d.type === 'predict').sort((a, b) => longest(b) - longest(a))[0];
+  const fill = gui.filter((d) => d.type === 'fill').sort((a, b) => longest(b) - longest(a))[0];
+  // Bug drills whose wrong line is long enough to wrap (GUI ones first).
+  const wrongLine = (d) => d.display.split('\n')[Number(d.answer) - 1];
+  const bugs = DRILLS.drills.filter((d) => d.type === 'bug' && wrongLine(d).trim().length > 45).sort((a, b) => b.topic.startsWith('gui-') - a.topic.startsWith('gui-') || wrongLine(b).length - wrongLine(a).length);
+  expect(predict && fill && bugs.length >= 2 && longest(predict) > 60, 'no long GUI drills to wrap');
+  const due = Object.fromEntries([predict, fill, bugs[0], bugs[1]].map((d) => [d.id, { box: 1, right: 0, wrong: 1, last: 0, due: 0 }]));
+  const { ctx, page, errors } = await newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript((st) => localStorage.getItem('java-arena-v1') || localStorage.setItem('java-arena-v1', JSON.stringify(st)), practiceState({ settings: { unlockAll: true }, state: { drills: due } }));
+  await page.goto(BASE + 'deathmatch/');
+  await page.locator('.lobby .modes').waitFor();
+  // Warm-up shows exactly the due drills, in any order.
+  await page.locator('.mode:has(.mode-name:text-is("Warm-up"))').click();
+  let right = 0;
+  let tapped = false;
+  let keyboard = false;
+  for (let i = 0; i < 4; i++) {
+    await page.locator('.rep').waitFor();
+    const d = drillById.get(await page.locator('.rep').getAttribute('data-drill'));
+    await noOverflow(page, `${d.id} at 390`);
+    await codeFits(page, `${d.id} at 390`);
+    if (d === predict) {
+      // The longest line takes several rows, each later row starting right of where the line starts.
+      const lines = page.locator('.rep pre.codeview .cl');
+      const lengths = await lines.evaluateAll((els) => els.map((e) => e.textContent.length));
+      const rows = await lineRows(lines.nth(lengths.indexOf(Math.max(...lengths))));
+      expect(rows.length >= 2 && rows.slice(1).every((r) => r.left > rows[0].left + 1), `${d.id}: the longest line's rows start at ${JSON.stringify(rows.map((r) => Math.round(r.left)))}`);
+      // The code box's text is still exactly the code.
+      expect((await page.locator('.rep pre.codeview').textContent()) === d.display, `${d.id}: the code box's text isn't the code`);
+      for (const colorScheme of ['dark', 'light']) {
+        await page.emulateMedia({ colorScheme });
+        await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+        await axe(page, `a wrapped GUI predict drill at 390 px, ${colorScheme} theme`);
+      }
+      await shot(page, 'drill-wrapped-390');
+      await answerRep(page, true);
+      right++;
+    } else if (d === fill) {
+      // A wrong answer: the review card's code wraps too.
+      await answerRep(page, false);
+      await page.locator('.death').waitFor();
+      await codeFits(page, `${d.id} review at 390`);
+      await noOverflow(page, `${d.id} review at 390`);
+      await page.keyboard.press('Enter');
+      continue;
+    } else {
+      // A bug drill: its wrong line wraps; every line stays inside the box.
+      const target = page.locator(`button.bugline[aria-label^="Line ${d.answer}:"]`);
+      const rows = await lineRows(target.locator('code'));
+      expect(rows.length >= 2 && rows.slice(1).every((r) => r.left > rows[0].left + 1), `${d.id}: line ${d.answer} rows start at ${JSON.stringify(rows.map((r) => Math.round(r.left)))}`);
+      const widths = await page.locator('.rep .bugline').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).length);
+      expect(widths === 0, `${d.id}: ${widths} bug lines wider than the box`);
+      if (!tapped) {
+        // A tap on the line's last row picks that line.
+        await target.scrollIntoViewIfNeeded();
+        const last = (await lineRows(target.locator('code'))).at(-1);
+        const x = last.left + 4;
+        const y = (last.top + last.bottom) / 2;
+        expect(await page.evaluate(([x, y, n]) => !!document.elementFromPoint(x, y)?.closest(`button.bugline[aria-label^="Line ${n}:"]`), [x, y, d.answer]), `${d.id}: the last row of line ${d.answer} isn't part of its button`);
+        await page.touchscreen.tap(x, y);
+        tapped = true;
+      } else {
+        // The keyboard: Tab reaches the lines, goes from line to line in order, and Enter picks the focused line.
+        const order = await page.locator('.rep button.bugline').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+        const focused = () => page.evaluate(() => document.activeElement?.getAttribute('aria-label') ?? '');
+        await page.locator('#rep-prompt').focus();
+        for (let k = 0; k < 6 && (await focused()) !== order[0]; k++) await page.keyboard.press('Tab');
+        expect((await focused()) === order[0], `${d.id}: Tab didn't reach the first line`);
+        for (let k = 1; k < order.length; k++) {
+          if ((await focused()).startsWith(`Line ${d.answer}:`)) break;
+          await page.keyboard.press('Tab');
+          expect((await focused()) === order[k], `${d.id}: Tab went to ${await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80))}, not ${order[k]}`);
+        }
+        expect(await target.evaluate((e) => e === document.activeElement && e.matches(':focus-visible')), `${d.id}: line ${d.answer} isn't focused with a visible focus`);
+        for (const colorScheme of ['dark', 'light']) {
+          await page.emulateMedia({ colorScheme });
+          await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+          await axe(page, `a wrapped bug drill at 390 px, ${colorScheme} theme`);
+        }
+        await shot(page, 'bug-drill-wrapped-390');
+        await page.keyboard.press('Enter');
+        keyboard = true;
+      }
+      right++;
+    }
+    await page.waitForFunction((n) => document.querySelector('.hud-n')?.textContent === String(n), right);
+  }
+  expect(tapped && keyboard && right === 3, `tapped ${tapped}, keyboard ${keyboard}, ${right} right`);
+  // The daily challenge and its card after the answer.
+  await page.goto(BASE + 'daily/');
+  await page.locator('.rep').waitFor();
+  await codeFits(page, 'daily at 390');
+  await answerRep(page, true);
+  await page.locator('.death').waitFor();
+  await codeFits(page, 'daily answered at 390');
+  // The placement quiz's first questions.
+  await page.goto(BASE + 'placement/');
+  await page.click('text=Start the quiz');
+  for (let i = 0; i < 3; i++) {
+    await page.locator('#quiz-h', { hasText: `Question ${i + 1} of ${DRILLS.placement.length}` }).waitFor();
+    await page.locator('.rep').waitFor();
+    await codeFits(page, `placement question ${i + 1} at 390`);
+    await page.click("text=I don't know this yet");
+  }
+  expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
 

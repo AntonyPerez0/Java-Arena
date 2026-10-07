@@ -2,7 +2,7 @@
 
 A free, non-commercial site for learning Java in the browser, with **real compiling and running on your own device**. It follows the order and topics of the University of Helsinki's [Java Programming MOOC](https://java-programming.mooc.fi) (parts 1 to 14), with its own lessons and exercises, modeled on [C/C++ Arena](https://cpparena.com).
 
-Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.
+Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark and JavaFX a trademark of Oracle and/or its affiliates.
 
 ## Status
 
@@ -25,8 +25,8 @@ The site is built in batches, one pull request per batch.
 | 13 | MOOC part 10 (modules 37 to 39: streams and lambdas, Comparable and Comparator, StringBuilder, regular expressions, enums and iterators); plain-English explanations for part 10 mistakes | done |
 | 13b | Java colors: Java red and blue instead of orange, a new logo of our own (a red and blue tile with a white J, clearly not Oracle's cup logo), and small fixes found on the way | done |
 | 14 | MOOC part 11 (modules 40 to 43: class diagrams, packages, exceptions, writing files); class diagrams in lessons, package folders in the editor, checks on the files a program writes; plain-English explanations for part 11 mistakes, files written by a program shown after a run, output shown in the order it was printed | done |
-| 15 | MOOC part 12 (modules 44 to 47: generics, your own list and hash map, random numbers, two-dimensional arrays); plain-English explanations for part 12 mistakes, and a browser engine fix for grids of true and false values | this batch |
-| 16 | MOOC part 13 (modules 48 to 50: graphical user interfaces); what runs in the browser and what needs your own computer, decided and said plainly | planned |
+| 15 | MOOC part 12 (modules 44 to 47: generics, your own list and hash map, random numbers, two-dimensional arrays); plain-English explanations for part 12 mistakes, and a browser engine fix for grids of true and false values | done |
+| 16 | MOOC part 13 (modules 48 to 50: windows and layouts, events, multiple views) with Java Arena's own practice version of JavaFX: the page draws your window and runs your program again for each click; checked against real OpenJFX 21 on every model solution; plain-English explanations for part 13 mistakes | this batch |
 | 17 | MOOC part 14 (modules 51 to 54: charts, drawing and images, the Asteroids project, Maven and libraries) | planned |
 | 18 | Extra modules 55 to 59: recursion, records, switch and text blocks, pattern matching and sealed types, linked structures | planned |
 | 19 | Progress sync between devices (transfer link, file export and import, optional GitHub Gist), multi-step projects, certificates | planned |
@@ -50,7 +50,9 @@ The plan and the research behind it are in [`docs/research/`](docs/research/READ
 - **Compiler**: OpenJDK's javac 21 compiled to WebAssembly (Wasm GC) with [teavm-javac](https://github.com/konsoletyper/teavm-javac) and TeaVM. It compiles against the real Java 21 class library, so it accepts exactly the APIs a real JDK 21 has. See [`engine/compiler/`](engine/compiler/).
 - **Runner**: a fork of [Ristretto](https://github.com/theseus-rs/ristretto), a Java virtual machine written in Rust and compiled to WebAssembly, running the real OpenJDK 21 class library. See [`engine/runner/`](engine/runner/).
 - **In the page**: a persistent compile worker and a fresh run worker per run, killed when a test case exceeds the time limit. Engine files are downloaded once (asking first when the browser reports mobile data, and on phones and tablets whose browser can't tell), unpacked with `DecompressionStream`, and kept in Cache Storage, so the engine also works offline. See [`src/engine/`](src/engine/).
-- **Fidelity**: the site's expected outputs come from a real JDK 21 at build time, so the browser engine must behave identically. [`fidelity/`](fidelity/) holds 47 programs and 60 compile errors; CI runs them on the JDK and in the browser engine and fails on any difference, including cross-checks of each half (browser javac on HotSpot, and CLI javac on the browser runner).
+- **Libraries**: a program that uses `org.junit` gets JUnit 4.13.2 on its class path, and one that uses `javafx.` gets Java Arena's practice version of JavaFX: a small implementation written for this site (not OpenJFX's code) of only the classes and methods the GUI lessons use (real JavaFX doesn't run on Java Arena's engine, Ristretto, or on the other browser Java engines that [`docs/research/`](docs/research/) looked at). `Application.launch` builds the window, replays the clicks and typing listed in `.arena/events.txt`, writes the windows as JSON to `.arena/window.json` and ends the program as if its windows were closed. The page draws the windows approximately from that JSON, as a plain desktop window in light colors ([`src/components/window-drawing.ts`](src/components/window-drawing.ts), shared with the pre-rendered pages): in a lesson's `java window` example, on the task card and in the results (the expected window next to the learner's), and in a free run (the Playground, a lesson's "Run with my input"), where the buttons and fields work: each click or typing runs the compiled program again from the start with all the events so far. The browser downloads a library the first time a program uses it. See [`engine/libraries/`](engine/libraries/).
+- **Fidelity**: the site's expected outputs come from a real JDK 21 at build time, so the browser engine must behave identically. [`fidelity/`](fidelity/) holds 48 programs (one of them a JavaFX program whose window JSON must match byte for byte) and 68 compile errors; CI runs them on the JDK and in the browser engine and fails on any difference, including cross-checks of each half (browser javac on HotSpot, and CLI javac on the browser runner).
+- **Real JavaFX**: `npm run fx-check` runs every program that uses JavaFX (each lesson's model solutions and examples with their clicks and typing, the JavaFX fidelity program, and probes that go through the whole API) on real OpenJFX 21 without a screen and on Java Arena's JavaFX, and fails when the output or the window differs. CI runs it on every pull request. See [`scripts/fx-check/`](scripts/fx-check/).
 
 Measured locally when the engine was built in Batch 1 (CI runs the fidelity suite again on every pull request and keeps its report, `fidelity/out/report.md`, as a build artifact; see also the READMEs in `engine/`): all 35 fidelity programs and all 18 compile errors identical to JDK 21 (Temurin 21.0.10+7), also when each half of the engine is checked on its own; 118 of 118 runner checks pass in Node and Chromium; the engine download is about 15.2 MB compressed (then cached); in headless Chromium on a 4-core machine a warm compile takes about 10 to 90 ms and Hello World runs in about 0.4 s from click to output. On one real phone (Android, Firefox 155, 8 cores, the engine test page's benchmark, 29 September 2026): engine start 2.0 s on the first visit including the download, a warm compile about 20 ms, Hello World 0.5 s from tap to output, a typical lesson program 0.8 s from Check to output, 10 million loop steps 1.3 s, and an endless loop stopped 12 ms after the time limit. That is one device; other phones and browsers will differ.
 
@@ -58,7 +60,7 @@ Licenses and the source offer for the GPL parts are in [`engine/SOURCES.md`](eng
 
 ## Run locally
 
-Needs Node 22. The reference JDK (Eclipse Temurin 21.0.10+7) is fetched by `scripts/get-jdk.sh` when a script needs it; set `JAVA_HOME` to use another JDK 21.
+Needs Node 22.18 or newer (the build scripts import `src/grader/window.ts` and `src/components/window-drawing.ts` as they are, which Node runs by stripping their types). The reference JDK (Eclipse Temurin 21.0.10+7) is fetched by `scripts/get-jdk.sh` when a script needs it; set `JAVA_HOME` to use another JDK 21.
 
 ```bash
 npm install        # also copies the built engine into public/engine
@@ -72,8 +74,9 @@ npm run dev        # checks the lessons, then serves http://localhost:5173/
 | `npm run content:browser` | Replays every lesson program in the built site's engine in headless Chromium and compares with the JDK |
 | `npm run fidelity:jdk` | Runs the fidelity suite on the local JDK (`fidelity/out/jdk.json`) |
 | `npm run fidelity:browser` | Runs the suite through the built site's engine in headless Chromium and compares (`fidelity/out/report.md`) |
+| `npm run fx-check` | Runs every program that uses JavaFX on real OpenJFX 21 (headless) and on Java Arena's JavaFX and compares the output and the windows (after `npm run content`, which lists the lesson programs; downloads the pinned jars once) |
 | `npm run test:e2e` | Browser tests of the built site: pre-rendered pages, lessons (fill-ins, code, hidden tests, rules, hints, progress), the engine, errors and crashes, endless loops, the mobile-data question, offline, axe (WCAG 2.2 AA) on every page type in both themes and at phone widths. `-- --shots dir` saves screenshots |
-| `npm run test:unit` | Unit tests without a browser (`scripts/**/*.test.mjs`): the class diagrams drawn from lesson text, the check of the files a program writes, and the plain-English explanations of mistakes with exceptions, packages and files |
+| `npm run test:unit` | Unit tests without a browser (`scripts/**/*.test.mjs`): the class diagrams drawn from lesson text, the check of the files a program writes, and the plain-English explanations of mistakes with exceptions, packages and files and in JavaFX programs (with a check that their list of the practice version's classes and methods matches its class files) |
 
 Rebuilding the engine itself is only needed when changing it: see `engine/compiler/README.md` and `engine/runner/README.md`.
 

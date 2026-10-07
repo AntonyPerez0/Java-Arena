@@ -5,7 +5,8 @@
 // Run: npm run test:unit
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { parse } from "yaml";
 import { codeLinesHtml, codePieces, deepestIndent, indentOf, lineBits, pieceLines } from "../src/components/code-lines.ts";
 
 /** The text an HTML string shows (its tags removed, entities decoded). */
@@ -15,12 +16,35 @@ const breaks = (code) => textOf(codeLinesHtml(code).replace(/<wbr>/g, "|"));
 /** The literal boxes of a line, as text. */
 const boxes = (code) => [...codeLinesHtml(code).matchAll(/<span class="lit"><span class="tk-str">([^<]*)<\/span>([^<]*)<\/span>/g)].map((m) => textOf(m[1] + m[2]));
 
+/**
+ * Every drill and placement question as the page shows it, read from content/ (not from the build's
+ * output, so this runs before any build, as CI's unit tests do): the code is drawn as
+ * scripts/build-content.mjs's drillDisplay puts it together (classes, then pre, then the statements
+ * "inside main:" or, for JavaFX, "inside start:"), plus each solution file and each code block of a prompt.
+ */
+function drillCodes() {
+  const dir = new URL("../content/drills/", import.meta.url);
+  const drills = readdirSync(dir).filter((f) => f.endsWith(".yaml")).flatMap((f) => {
+    const doc = parse(readFileSync(new URL(f, dir), "utf8"));
+    return doc.drills ?? doc;
+  });
+  const placement = parse(readFileSync(new URL("../content/placement.yaml", import.meta.url), "utf8"));
+  const all = [...drills, ...(placement.questions ?? placement)];
+  return all.map((d) => {
+    const top = [d.classes, d.pre].map((x) => x?.replace(/\n$/, "")).filter(Boolean).join("\n\n");
+    const body = d.body?.replace(/\n$/, "");
+    const fx = /\bjavafx\./.test(`${d.pre ?? ""}\n${d.body ?? ""}\n${d.classes ?? ""}`);
+    const display = top && body ? `${top}\n\n// inside ${fx ? "start" : "main"}:\n${body}` : top || body;
+    const solutions = typeof d.solution === "string" ? [d.solution] : Object.values(d.solution ?? {});
+    const blocks = [...(d.prompt ?? "").matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map((m) => m[1]);
+    return { id: `${d.topic ?? d.module}: ${d.type}`, codes: [display, ...solutions, ...blocks].filter(Boolean).map((c) => c.replace(/\n$/, "")) };
+  });
+}
+
 test("every drill's code, solution and task code blocks: the lines drawn are exactly the code", () => {
-  const drills = JSON.parse(readFileSync(new URL("../src/generated/drills.json", import.meta.url), "utf8"));
   let n = 0;
-  for (const d of [...drills.drills, ...drills.placement]) {
-    const codes = [d.display, d.exercise?.solution, ...[...(d.prompt ?? "").matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map((m) => m[1].replace(/\n$/, ""))].filter(Boolean);
-    for (const code of codes) {
+  for (const d of drillCodes()) {
+    for (const code of d.codes) {
       for (const colors of [true, false]) assert.equal(textOf(codeLinesHtml(code, colors)), code, `${d.id}: ${code.slice(0, 60)}`);
       n++;
     }

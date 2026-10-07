@@ -880,3 +880,69 @@ questions:
       }
       System.out.println(grid.length + " " + grid[1][2] + " " + sum);
     why: "`new int[2][3]` is 2 rows of 3 columns, so `grid.length` is 2 and each row is an `int[]` of length 3. Each cell holds its row plus twice its column, so `grid[1][2]` is 1 + 4 = 5. The last loop adds the last value of each row, 4 and 5, which is 9."
+  - module: gui-basics
+    type: predict
+    prompt: "This code runs inside a JavaFX application's `start` method. What does it print? (JavaFX's classes are written with their full names, since there are no import lines.)"
+    body: |
+      javafx.scene.layout.GridPane keys = new javafx.scene.layout.GridPane();
+      javafx.scene.control.Button zero = new javafx.scene.control.Button("0");
+      keys.add(new javafx.scene.control.Button("8"), 1, 2);
+      keys.add(new javafx.scene.control.Button("9"), 2, 2);
+      keys.add(zero, 1, 3);
+      javafx.scene.layout.BorderPane frame = new javafx.scene.layout.BorderPane(keys);
+      frame.setTop(new javafx.scene.control.Label("Gate"));
+      System.out.println(javafx.scene.layout.GridPane.getColumnIndex(zero) + " " + frame.getChildren().size() + " " + keys.getChildren().size());
+    why: "`add` takes the column first and then the row, so `zero` is in column 1, row 3, and `getColumnIndex` returns 1. The grid is one node in the BorderPane's center and the label is in the top, so the frame holds 2 nodes. The three buttons are in the grid, not in the frame, so the grid holds 3."
+
+  - module: gui-events
+    type: predict
+    prompt: "This code runs inside a JavaFX application's `start` method. What does it print? (JavaFX's classes are written with their full names, since there are no import lines.)"
+    body: |
+      javafx.scene.control.TextField field = new javafx.scene.control.TextField();
+      javafx.scene.control.Button button = new javafx.scene.control.Button("Go");
+      field.textProperty().addListener((observable, oldValue, newValue) -> System.out.print(newValue.length() + " "));
+      button.setOnAction(event -> field.appendText("ab"));
+      button.fire();
+      field.setText("ab");
+      button.fire();
+      System.out.println("end");
+    why: "`setOnAction` only stores the handler, and each `fire()` runs it. `appendText(\"ab\")` is one change of the text, so the listener prints once: 2. `setText(\"ab\")` leaves the text as it is, so the listener isn't called. The second click makes the text `abab`: 4."
+
+  - module: gui-views
+    type: predict
+    prompt: "This code runs inside a JavaFX application's `start` method. What does it print? (JavaFX's classes are written with their full names, since there are no import lines.)"
+    classes: |
+      class NameView {
+          private javafx.scene.control.TextField name;
+
+          public NameView() {
+              this.name = new javafx.scene.control.TextField();
+          }
+
+          public javafx.scene.Node getView() {
+              return this.name;
+          }
+      }
+
+      class CityView {
+          public javafx.scene.Node getView() {
+              javafx.scene.control.TextField city = new javafx.scene.control.TextField();
+              return city;
+          }
+      }
+    body: |
+      javafx.scene.layout.BorderPane frame = new javafx.scene.layout.BorderPane();
+      NameView kept = new NameView();
+      CityView fresh = new CityView();
+      javafx.scene.control.TextField field = (javafx.scene.control.TextField) kept.getView();
+      frame.setCenter(field);
+      field.setText("Ada");
+      field = (javafx.scene.control.TextField) fresh.getView();
+      frame.setCenter(field);
+      field.setText("Oslo");
+      frame.setCenter(kept.getView());
+      String first = ((javafx.scene.control.TextField) frame.getCenter()).getText();
+      frame.setCenter(fresh.getView());
+      String second = ((javafx.scene.control.TextField) frame.getCenter()).getText();
+      System.out.println("(" + first + ") (" + second + ")");
+    why: "NameView makes its text field once, in the constructor, and `getView()` returns that same field every time, so `Ada` is still in it when the center switches back. CityView makes a new, empty field at each call of `getView()`, so `Oslo` went away with the old field. That prints `(Ada) ()`."

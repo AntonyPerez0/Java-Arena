@@ -1,11 +1,12 @@
 // One Deathmatch rep per drill type, and the review card after a miss. Instant types are checked in
 // the page; a boss rep is a real coding challenge, compiled and run by the Java engine.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Skull } from "lucide-react";
 import type { Drill } from "../content/types";
 import { getState, useStore } from "../state/store";
 import { checkAnswer, TYPE_LABEL, topicTitle } from "./engine";
-import { CodeView, highlight } from "../components/highlight";
+import { CodeView, lineNodes } from "../components/highlight";
+import { codePieces, deepestIndent, indentOf } from "../components/code-lines";
 import FillCode from "../components/FillCode";
 import FilesEditor from "../components/FilesEditor";
 import InputText from "../components/InputText";
@@ -17,6 +18,7 @@ import { DownloadCard, EngineErrorCard, UnsupportedCard, useEngineAutoload, useE
 import { engineSupported } from "../engine/client";
 import { grade, type GradeResult } from "../grader/grade";
 import { fillTemplate } from "../grader/assemble.js";
+import { usesJavaFX } from "../grader/javafx.js";
 
 type Answer = (given: string, ok: boolean) => void;
 
@@ -77,7 +79,7 @@ function PredictRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   const submit = () => v.trim() && onAnswer(v, checkAnswer(drill, v));
   return (
     <>
-      <CodeView code={drill.display} label="The code" />
+      <CodeView wrap code={drill.display} label="The code" />
       <InputBlock stdin={drill.stdin} />
       <form
         className="rep-answer"
@@ -104,7 +106,7 @@ function FillRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   const submit = () => v[0].trim() && onAnswer(v[0], checkAnswer(drill, v[0]));
   return (
     <>
-      <FillCode template={drill.display} values={v} onChange={setV} onSubmit={submit} autoFocus />
+      <FillCode wrap template={drill.display} values={v} onChange={setV} onSubmit={submit} autoFocus />
       <InputBlock stdin={drill.stdin} />
       {drill.output && (
         <div className="rep-io">
@@ -144,7 +146,7 @@ function ChoiceRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   });
   return (
     <>
-      {drill.display && <CodeView code={drill.display} label="The code" />}
+      {drill.display && <CodeView wrap code={drill.display} label="The code" />}
       <div className="choices" role="group" aria-label="Answers">
         {order.map((ci, k) => (
           <button type="button" key={ci} className="choice" data-choice={ci + 1} onClick={() => pick(k)}>
@@ -162,11 +164,15 @@ function ChoiceRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   );
 }
 
-const pickableLine = (l: string) => l.trim() !== "" && l.trim() !== "// inside main:" && !/^[{}]\s*;?$/.test(l.trim());
+/** A line of a bug drill: on a phone a long one wraps under its own start, as drill code does (see .bugline in styles.css). */
+const BugCode = ({ line, deep }: { line: string; deep: number }) => <code style={{ "--indent": indentOf(line), "--deep": deep } as CSSProperties}>{lineNodes(codePieces(line))}</code>;
+
+const pickableLine = (l: string) => l.trim() !== "" && !/^\/\/ inside (main|start):$/.test(l.trim()) && !/^[{}]\s*;?$/.test(l.trim());
 
 function BugRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   const lines = drill.display.split("\n");
   const pickable = lines.map(pickableLine);
+  const deep = deepestIndent(lines);
   const pick = (n: number) => onAnswer(String(n), checkAnswer(drill, String(n)));
   const keys = useStore((s) => s.settings.keys);
   // Line numbers are typed: with 10 lines or more, "1" waits a moment for a second digit.
@@ -202,12 +208,12 @@ function BugRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
           pickable[i] ? (
             <button type="button" key={i} className="bugline" aria-label={`Line ${i + 1}: ${l.trim()}`} onClick={() => pick(i + 1)}>
               <span className="ln">{i + 1}</span>
-              <code>{highlight(l)}</code>
+              <BugCode line={l} deep={deep} />
             </button>
           ) : (
             <div key={i} className="bugline bugline-off">
               <span className="ln">{i + 1}</span>
-              <code>{highlight(l)}</code>
+              <BugCode line={l} deep={deep} />
             </div>
           ),
         )}
@@ -226,7 +232,7 @@ function CompilesRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
   });
   return (
     <>
-      <CodeView code={drill.display} label="The code" />
+      <CodeView wrap code={drill.display} label="The code" />
       <div className="yn">
         <button type="button" className="btn btn-yes" onClick={() => say("yes")}>
           Compiles {keys && <kbd aria-hidden="true">Y</kbd>}
@@ -235,7 +241,7 @@ function CompilesRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
           Compile error {keys && <kbd aria-hidden="true">N</kbd>}
         </button>
       </div>
-      <p className="muted small">Statements shown on their own run inside a main method, with the imports they need. Warnings don't count as errors.</p>
+      <p className="muted small">Statements shown on their own run inside {usesJavaFX([{ text: drill.display }]) ? "the start method of a JavaFX application" : "a main method"}, with the imports they need. Warnings don't count as errors.</p>
     </>
   );
 }
@@ -282,7 +288,7 @@ function BossRep({ drill, onAnswer }: { drill: Drill; onAnswer: Answer }) {
       <h2 className="boss-banner" id="rep-prompt" tabIndex={-1}>
         <Skull className="icon" aria-hidden="true" /> Boss rep · {shots} {shots === 1 ? "shot" : "shots"} left
       </h2>
-      <Markdown text={drill.prompt} className="rep-task" />
+      <Markdown text={drill.prompt} className="rep-task" wrapCode />
       {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="A boss rep" now="read the task now" button="Fire" />}
       {engine.state === "error" && !unsupported && <EngineErrorCard message={engine.message} />}
       <FilesEditor value={code} onChange={setCode} onRun={fire} diagnostics={result?.status === "compile-error" ? result.diagnostics : undefined} minHeight="12rem" label="Java code editor" />
@@ -315,13 +321,13 @@ export function Death({ drill, given, title, sub, cleared = false, children }: {
         </div>
         {drill.type === "boss" ? (
           <>
-            <Markdown text={drill.prompt} className="rep-task" />
+            <Markdown text={drill.prompt} className="rep-task" wrapCode />
             <div className="lbl">a solution</div>
-            <CodeView code={drill.exercise!.solution} label="A solution" />
+            <CodeView wrap code={drill.exercise!.solution} label="A solution" />
           </>
         ) : drill.type === "bug" ? (
           <>
-            <CodeView code={drill.display.split("\n").map((l, i) => (String(i + 1) === drill.answer ? `${l}   // <- the bug` : l)).join("\n")} label="The code, with the bug marked" />
+            <CodeView wrap code={drill.display.split("\n").map((l, i) => (String(i + 1) === drill.answer ? `${l}   // <- the bug` : l)).join("\n")} label="The code, with the bug marked" />
             <p className="answer-cmp">
               {given ? (
                 <>
@@ -333,7 +339,7 @@ export function Death({ drill, given, title, sub, cleared = false, children }: {
           </>
         ) : drill.type === "choice" ? (
           <>
-            {drill.display && <CodeView code={drill.display} label="The code" />}
+            {drill.display && <CodeView wrap code={drill.display} label="The code" />}
             <p className="muted">
               <InlineMd text={drill.prompt} />
             </p>
@@ -354,7 +360,7 @@ export function Death({ drill, given, title, sub, cleared = false, children }: {
           </>
         ) : (
           <>
-            <CodeView code={drill.type === "fill" ? fillTemplate(drill.display, [drill.answer]) : drill.display} label="The code" />
+            <CodeView wrap code={drill.type === "fill" ? fillTemplate(drill.display, [drill.answer]) : drill.display} label="The code" />
             {drill.stdin && <InputBlock stdin={drill.stdin} />}
             <dl className="answer-cmp">
               {given && (
@@ -382,7 +388,7 @@ export function Death({ drill, given, title, sub, cleared = false, children }: {
         )}
         {drill.why && (
           <div className="why">
-            <Markdown text={drill.why} />
+            <Markdown text={drill.why} wrapCode />
           </div>
         )}
         <p className="report-row">

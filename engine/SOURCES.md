@@ -18,8 +18,11 @@ The Java engine that Java Arena serves contains software licensed under the GNU 
 | `junit4.bin` | JUnit: https://github.com/junit-team/junit4 (the jar https://repo1.maven.org/maven2/junit/junit/4.13.2/junit-4.13.2.jar, SHA-256 `8e495b634469d64fb8acfa3495a065cbacc8a0fff55ce1e31007be4c16dc57d3`) | tag `r4.13.2`; the source is also `junit-4.13.2-sources.jar` next to the jar on Maven Central |
 | | Hamcrest Core: https://github.com/hamcrest/JavaHamcrest (the jar https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar, SHA-256 `66fdef91e9739348df7a096aa384a5685f4e875584cce89386a7a47251c4d8e9`) | tag `hamcrest-java-1.3` |
 | | Java Arena's packing script (the class files are unchanged) | [`engine/libraries/build.mjs`](libraries/build.mjs) |
+| `javafx.bin` | Java Arena's own practice version of JavaFX (MIT, like the rest of the site; not OpenJFX's code): [`engine/libraries/javafx/src/`](libraries/javafx/src/) | compiled by [`engine/libraries/build.mjs`](libraries/build.mjs) with the reference JDK's javac (Temurin 21.0.10+7, `--release 21 -g`) |
 
 `engine/dist/compiler/manifest.json` and `engine/dist/runner/manifest.json` record the size and SHA-256 of every served file.
+
+Real OpenJFX is neither in the engine nor on the site: the check against it (`npm run fx-check`, [`scripts/fx-check/`](../scripts/fx-check/)) downloads pinned OpenJFX 21 and Monocle jars from Maven Central only to run programs with on a developer's machine or in CI.
 
 ## Rebuilding
 

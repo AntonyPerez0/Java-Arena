@@ -2,6 +2,7 @@
 // check of the files a test wants written (its `writes`). Shared by the browser grader and the
 // Node content build (scripts/build-content.mjs) and replay (scripts/content-browser.mjs).
 import { normalizeOutput } from "./assemble.js";
+import { isArenaFile } from "./javafx.js";
 
 /**
  * Why a name can't be used for a file in the program's folder, or null. A name is a plain file
@@ -13,6 +14,7 @@ export function dataPathProblem(name) {
   const parts = name.split("/");
   if (parts.some((p) => !/^[\w.-]+$/.test(p))) return "isn't a plain file name (like scores.txt, or reports/summary.txt in a folder)";
   if (parts.some((p) => /^\.+$/.test(p))) return "can't be . or .. (the file must be in the program's folder)";
+  if (isArenaFile(name)) return "is in .arena/, the folder Java Arena keeps for itself (clicks and typing go in a test's events)";
   return null;
 }
 
@@ -48,11 +50,12 @@ export function writesNote(results, hidden = false) {
 
 /**
  * The files a run created or changed: `after` (every file in the folder after the run) without the
- * ones given to the program (`before`) that it left as they were. Sorted by name.
+ * ones given to the program (`before`) that it left as they were, and without Java Arena's own
+ * files in .arena/ (such as the window of a JavaFX program). Sorted by name.
  */
 export function changedFiles(before, after) {
   return Object.entries(after ?? {})
-    .filter(([name, text]) => before?.[name] !== text)
+    .filter(([name, text]) => before?.[name] !== text && !isArenaFile(name))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([name, text]) => ({ name, text }));
 }

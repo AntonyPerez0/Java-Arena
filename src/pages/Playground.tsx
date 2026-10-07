@@ -7,6 +7,7 @@ import { DiagnosticList, WrittenFiles } from "../components/Results";
 import { DownloadCard, EngineErrorCard, UnsupportedCard, useEngineAutoload, useEngineStatus } from "../components/Engine";
 import { engineSupported } from "../engine/client";
 import { runOnly, type FreeRun } from "../grader/grade";
+import { WindowPanel, useWindowSession } from "../components/WindowView";
 import { decodeShare, encodeShare } from "../lib/share";
 import { useTitle } from "../lib/title";
 import { PLAYGROUND_KEY as KEY } from "../state/store";
@@ -47,7 +48,10 @@ function announce(r: FreeRun): string {
   if (r.status === "compile-error") return "It didn't compile. The errors are listed below.";
   if (r.status === "internal-error") return "The Java engine couldn't run this. Try again.";
   const files = r.written?.length ? ` and the ${r.written.length === 1 ? "file" : "files"} it wrote` : "";
-  return r.note ? `The program stopped with a problem. The output${files} and an explanation are below.` : `The program finished. Its output${files} ${files ? "are" : "is"} below.`;
+  if (!r.note) return `The program finished. Its output${files} ${files ? "are" : "is"} below.`;
+  // It ended normally but printed an error (an event handler's exception, or on System.err).
+  if (r.run && r.run.exitCode === 0 && !r.run.timedOut && !r.run.truncated) return `The program finished but printed an error. The output${files} and an explanation are below.`;
+  return `The program stopped with a problem. The output${files} and an explanation are below.`;
 }
 
 /** Write and run any Java program, with your own input; share it as a link. */
@@ -60,6 +64,8 @@ export default function Playground() {
   const [shareError, setShareError] = useState("");
   const [result, setResult] = useState<FreeRun | null>(null);
   const [busy, setBusy] = useState(false);
+  // Run was pressed while the window ran the program again for a click: it runs once that run ends.
+  const [queued, setQueued] = useState(false);
   const [runs, setRuns] = useState(0);
   const [link, setLink] = useState("");
   const [status, setStatus] = useState("");
@@ -74,6 +80,19 @@ export default function Playground() {
   const busyRef = useRef(false);
   const sharedRef = useRef(false);
   sharedRef.current = shared;
+  // A JavaFX program's window: each click in it runs the program again (the output below is the latest run's).
+  const showReplay = useCallback((r: FreeRun) => {
+    setResult(r);
+    setRuns((n) => n + 1);
+  }, []);
+  const fx = useWindowSession(busyRef, showReplay);
+  const { eventsFor, took, reset: forgetWindow, stamp, isCurrent } = fx;
+  // Another program in the editor: its window, and a Run waiting for the window's run, are forgotten.
+  const resetWindow = useCallback(() => {
+    forgetWindow();
+    setQueued(false);
+    setStatus("");
+  }, [forgetWindow]);
 
   const showOwn = useCallback(() => {
     const s = loadSaved();
@@ -98,6 +117,7 @@ export default function Playground() {
         setStdin(p.stdin);
         setShared(true);
         setResult(null);
+        resetWindow();
         setLive("You opened a shared program. Your own playground program is still saved.");
       },
       () => current && setShareError("This share link is damaged, so it couldn't be opened. Your own program is shown instead."),
@@ -105,7 +125,7 @@ export default function Playground() {
     return () => {
       current = false;
     };
-  }, [hash, showOwn]);
+  }, [hash, showOwn, resetWindow]);
 
   const dropHash = () => navigate({ pathname, search }, { replace: true });
 
@@ -122,13 +142,26 @@ export default function Playground() {
   };
 
   const run = useCallback(async () => {
-    if (busyRef.current) return;
+    if (busyRef.current) {
+      // The window is running the program again for a click: Run waits for it (the effect below).
+      if (fx.replaying && !queued) {
+        setQueued(true);
+        setStatus("Your program runs once the window's run for your click finishes.");
+        setLive("Your program runs once the window's run for your click finishes.");
+      }
+      return;
+    }
     busyRef.current = true;
     setBusy(true);
     setStatus("");
     setLive("Running your program.");
+    const g = stamp();
     try {
-      const r = await runOnly(code, stdin);
+      // A JavaFX program keeps its clicks and typing while its code stays the same.
+      const r = await runOnly(code, stdin, undefined, { events: eventsFor(code) });
+      // Example, a share link or "Back to my program" while it ran: this result is the old program's.
+      if (!isCurrent(g)) return;
+      took(code, r);
       setResult(r);
       setRuns((n) => n + 1);
       setLive(announce(r));
@@ -136,7 +169,14 @@ export default function Playground() {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [code, stdin]);
+  }, [code, stdin, eventsFor, took, stamp, isCurrent, fx.replaying, queued]);
+
+  // A Run that waited: once the window's run is drawn (and no click of it took the lock again).
+  useEffect(() => {
+    if (!queued || fx.replaying || busyRef.current) return;
+    setQueued(false);
+    void run();
+  }, [queued, fx.replaying, run]);
 
   const tell = (msg: string) => {
     setStatus(msg);
@@ -185,6 +225,7 @@ export default function Playground() {
             onClick={() => {
               showOwn();
               setResult(null);
+              resetWindow();
               dropHash();
               // The banner (and this button) goes away: keep the keyboard focus on the page.
               headingRef.current?.focus();
@@ -210,8 +251,10 @@ export default function Playground() {
         </label>
         <textarea id="pg-stdin" className="stdin" rows={3} value={stdin} onChange={(e) => edit({ stdin: e.target.value })} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off" />
         <div className="actions">
-          <button type="button" className="btn btn-primary" id="check" onClick={run} aria-busy={busy || undefined} aria-keyshortcuts="Control+Enter Meta+Enter" disabled={unsupported}>
-            {busy ? (
+          <button type="button" className="btn btn-primary" id="check" onClick={run} aria-busy={busy || queued || undefined} aria-keyshortcuts="Control+Enter Meta+Enter" disabled={unsupported}>
+            {queued && !busy ? (
+              "Waiting…"
+            ) : busy ? (
               waiting ? (
                 "Starting Java…"
               ) : (
@@ -233,6 +276,7 @@ export default function Playground() {
               if (!confirm("Replace your program with the example?")) return;
               edit({ code: EXAMPLE, stdin: "Ada\n" });
               setResult(null);
+              resetWindow();
             }}
           >
             <RotateCcw className="icon" aria-hidden="true" /> Example
@@ -261,7 +305,9 @@ export default function Playground() {
                 </div>
                 <DiagnosticList diagnostics={result.diagnostics} raw={result.javacOutput} multiFile={result.multiFile} />
               </>
-            ) : (
+            ) : null}
+            {fx.session && <WindowPanel session={fx.session} replaying={fx.replaying} replay={fx.replay} codeChanged={fx.session.code !== code} />}
+            {result.status === "ran" && (
               <>
                 <span className="lbl">Output</span>
                 <pre tabIndex={0} className="console">

@@ -2,6 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { librariesFor } from '../../src/grader/libraries.js';
 
 const ROOT = new URL('../../fidelity/', import.meta.url).pathname;
 
@@ -35,15 +36,21 @@ function loadCase(dir, id) {
     args: meta.args ?? [],
     files,
     mainClass: meta.mainClass ?? 'Main',
+    // Engine libraries on the class path (Java Arena's JavaFX for a program that uses javafx), as the site decides it.
+    libraries: librariesFor(sources),
     nondeterministic: meta.nondeterministic ?? false,
     note: meta.note ?? '',
   };
 }
 
+// FIDELITY_ONLY=<regular expression> loads only the programs and error cases whose folder name matches
+// (while working on something); run jdk.mjs and browser.mjs with the same value.
+const only = process.env.FIDELITY_ONLY ? new RegExp(process.env.FIDELITY_ONLY) : null;
+
 export function loadSuite() {
   const load = (sub) =>
     readdirSync(join(ROOT, sub))
-      .filter((d) => statSync(join(ROOT, sub, d)).isDirectory())
+      .filter((d) => statSync(join(ROOT, sub, d)).isDirectory() && (!only || only.test(d)))
       .sort()
       .map((d) => loadCase(join(ROOT, sub, d), d));
   return { programs: load('programs'), errors: load('errors') };

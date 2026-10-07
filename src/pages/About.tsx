@@ -35,6 +35,9 @@ export default function About() {
       <p>
         The expected outputs come from a real JDK ({course.jdk}) at build time, and every lesson program is run through the browser engine too, to check that both give the same result.
       </p>
+      <p>
+        The lessons on graphical user interfaces use Java Arena's practice version of JavaFX, written for this site (it isn't OpenJFX's code). It has only the classes and methods those lessons use. The page draws your window approximately, and each click or bit of typing runs your program again from the start with your earlier clicks and typing. A check, <code>npm run fx-check</code>, runs every model solution and example on real OpenJFX 21 too and confirms that they show the same window contents and print the same output. On your own computer, the same code runs with real JavaFX once JavaFX is installed, which the MOOC explains.
+      </p>
 
       <h2>Privacy</h2>
       <p>No account, no ads, no analytics. Your progress and code are saved in this browser's storage only. The Java engine is kept in the browser's cache so it works offline.</p>
@@ -52,7 +55,7 @@ export default function About() {
           The unit testing lessons run <A href="https://github.com/junit-team/junit4">JUnit</A> 4.13.2 (Eclipse Public License 1.0, <a href={import.meta.env.BASE_URL + "engine/licenses/libraries/JUnit-4.13.2-LICENSE.txt"}>license</a>; its source code is at the JUnit link) with <A href="https://github.com/hamcrest/JavaHamcrest">Hamcrest</A> Core 1.3 (BSD, <a href={import.meta.env.BASE_URL + "engine/licenses/libraries/Hamcrest-Core-1.3-LICENSE.txt"}>license</a>), unchanged. They're downloaded only when a program uses JUnit.
         </li>
       </ul>
-      <p>Java and OpenJDK are trademarks or registered trademarks of Oracle and/or its affiliates.</p>
+      <p>Java, JavaFX and OpenJDK are trademarks or registered trademarks of Oracle and/or its affiliates.</p>
 
       <h2>Source and problems</h2>
       <p>

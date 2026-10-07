@@ -1,18 +1,28 @@
-// Builds the libraries a program may use on top of java.base: JUnit 4 with Hamcrest
-// (for the unit testing lessons), as one archive of class files that both halves of the
-// engine read. The compiler puts them on javac's class path (javac-host loadLibrary), and
-// the runner loads them next to the program's own classes.
+// Builds the libraries a program may use on top of java.base, each as one archive of class files
+// that both halves of the engine read. The compiler puts them on javac's class path (javac-host
+// loadLibrary), and the runner loads them next to the program's own classes.
+//
+//   junit4.bin  JUnit 4 with Hamcrest (the unit testing lessons): the class files of the pinned
+//               jars from Maven Central, unchanged.
+//   javafx.bin  Java Arena's practice version of JavaFX (the GUI lessons): our own code, compiled
+//               from engine/libraries/javafx/src with the reference JDK's javac.
 //
 // Usage: node engine/libraries/build.mjs
-// Writes engine/dist/libraries/: junit4.bin, manifest.json and licenses/.
+// Writes engine/dist/libraries/: junit4.bin, javafx.bin, manifest.json and licenses/. The jars are
+// kept in node_modules/.cache/java-arena-libraries/ (checked by SHA-256), so a rebuild needn't
+// download them again.
 //
-// Archive format (the one the compiler's SDK uses): a gzip stream of entries sorted by
-// name, each "short nameLength, UTF-8 name, int dataLength, data", with a fixed gzip
-// header, so the output is the same for the same jars.
+// Archive format (the one the compiler's SDK uses): a gzip stream of entries sorted by name, each
+// "short nameLength, UTF-8 name, int dataLength, data", with a fixed gzip header, so the output is
+// the same for the same class files. javac writes the same class files for the same sources, so
+// javafx.bin is the same on every run with the same JDK (its version is checked).
 import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, relative } from 'node:path';
 import { gzipSync, inflateRawSync } from 'node:zlib';
+import { referenceJavaHome } from '../../scripts/fidelity/suite.mjs';
 
 // Pinned sources. The site's source offer must list these.
 const JARS = [
@@ -38,6 +48,10 @@ const JARS = [
 
 const root = new URL('../..', import.meta.url).pathname;
 const out = join(root, 'engine', 'dist', 'libraries');
+const jarCache = join(root, 'node_modules', '.cache', 'java-arena-libraries');
+const javafxSources = join(root, 'engine', 'libraries', 'javafx', 'src');
+// The JDK that compiles javafx.bin: the reference JDK, whose javac also checks the lessons.
+const JAVAC_VERSION = '21.0.10+7';
 const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 
 /** The entries of a zip file (stored or deflated), from its central directory. */
@@ -69,18 +83,84 @@ function unzip(zip) {
   return entries;
 }
 
-// Everything is downloaded and checked first, so a failed download leaves the old files in place.
-const downloads = [];
-for (const jar of JARS) {
+/** Every file under a folder, by its path in it with / between folders. */
+function filesUnder(dir) {
+  const found = [];
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) found.push(...filesUnder(full));
+    else found.push(full);
+  }
+  return found;
+}
+
+/** A pinned jar: from the cache when it's there with the right SHA-256, otherwise downloaded (and cached). */
+async function jarBytes(jar) {
+  const cached = join(jarCache, jar.url.split('/').pop());
+  if (existsSync(cached)) {
+    const bytes = new Uint8Array(readFileSync(cached));
+    if (sha256(bytes) === jar.sha256) return bytes;
+  }
   const res = await fetch(jar.url);
   if (!res.ok) throw new Error(`${jar.url}: HTTP ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   if (sha256(bytes) !== jar.sha256) throw new Error(`${jar.url}: SHA-256 is ${sha256(bytes)}, expected ${jar.sha256}`);
-  downloads.push(bytes);
+  mkdirSync(jarCache, { recursive: true });
+  writeFileSync(cached, bytes);
+  return bytes;
 }
 
+/**
+ * Compiles Java Arena's JavaFX with the reference JDK: --release 21 (the class library the engine
+ * runs), -g (line numbers and local names, as the learner's own code gets), and string
+ * concatenation as StringBuilder calls (-XDstringConcat=inline), which the browser's interpreter
+ * runs faster than the invokedynamic form. Returns the class files by path.
+ */
+function compileJavaFX() {
+  const javaHome = referenceJavaHome();
+  const release = readFileSync(join(javaHome, 'release'), 'utf8');
+  const version = /^JAVA_RUNTIME_VERSION="([^"]+)"/m.exec(release)?.[1] ?? 'unknown';
+  if (!version.startsWith(JAVAC_VERSION)) throw new Error(`javafx.bin is compiled with the reference JDK ${JAVAC_VERSION}, but ${javaHome} is ${version} (set JAVA_HOME, or unset it to use scripts/get-jdk.sh)`);
+  const sources = filesUnder(javafxSources).filter((f) => f.endsWith('.java')).map((f) => relative(javafxSources, f)).sort();
+  const classesDir = mkdtempSync(join(tmpdir(), 'java-arena-javafx-'));
+  const env = { ...process.env, LC_ALL: 'C.UTF-8' };
+  delete env.JAVA_TOOL_OPTIONS;
+  const r = spawnSync(join(javaHome, 'bin', 'javac'), ['--release', '21', '-g', '-XDstringConcat=inline', '-encoding', 'UTF-8', '-Xlint:-this-escape', '-Werror', '-d', classesDir, ...sources], { cwd: javafxSources, env, encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`javac failed on engine/libraries/javafx/src:\n${r.stdout}${r.stderr}`);
+  const classes = new Map();
+  for (const f of filesUnder(classesDir)) classes.set(relative(classesDir, f).split('\\').join('/'), new Uint8Array(readFileSync(f)));
+  rmSync(classesDir, { recursive: true, force: true });
+  return { classes, sources: sources.length, version };
+}
+
+/** Writes an archive of class files (see the top of this file) and returns its manifest entry. */
+function writeArchive(name, classes) {
+  const names = [...classes.keys()].sort();
+  const parts = [];
+  for (const path of names) {
+    const nameBytes = new TextEncoder().encode(path);
+    const head = new Uint8Array(2 + nameBytes.length + 4);
+    const v = new DataView(head.buffer);
+    v.setUint16(0, nameBytes.length);
+    head.set(nameBytes, 2);
+    v.setUint32(2 + nameBytes.length, classes.get(path).length);
+    parts.push(head, classes.get(path));
+  }
+  const payload = Buffer.concat(parts);
+  const archive = gzipSync(payload, { level: 9 });
+  archive[9] = 255; // gzip header "OS": unknown, the same on every system
+  writeFileSync(join(out, name), archive);
+  console.log(`${name}: ${names.length} classes, ${payload.length} bytes, ${archive.length} bytes gzip`);
+  return { name, size: archive.length, sha256: sha256(archive), classes: names.length, payload: payload.length };
+}
+
+// Everything is downloaded, checked and compiled first, so a failure leaves the old files in place.
+const downloads = [];
+for (const jar of JARS) downloads.push(await jarBytes(jar));
+const javafx = compileJavaFX();
+
 const classes = new Map();
-const manifest = { files: [], sources: [] };
+const manifest = { files: [], sources: [], own: [] };
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'licenses'), { recursive: true });
 for (const [k, jar] of JARS.entries()) {
@@ -100,21 +180,14 @@ for (const [k, jar] of JARS.entries()) {
   console.log(`${jar.name} ${jar.version}: ${n} classes`);
 }
 
-const names = [...classes.keys()].sort();
-const parts = [];
-for (const name of names) {
-  const nameBytes = new TextEncoder().encode(name);
-  const head = new Uint8Array(2 + nameBytes.length + 4);
-  const v = new DataView(head.buffer);
-  v.setUint16(0, nameBytes.length);
-  head.set(nameBytes, 2);
-  v.setUint32(2 + nameBytes.length, classes.get(name).length);
-  parts.push(head, classes.get(name));
-}
-const payload = Buffer.concat(parts);
-const archive = gzipSync(payload, { level: 9 });
-archive[9] = 255; // gzip header "OS": unknown, the same on every system
-writeFileSync(join(out, 'junit4.bin'), archive);
-manifest.files.push({ name: 'junit4.bin', size: archive.length, sha256: sha256(archive), classes: names.length, payload: payload.length });
+manifest.files.push(writeArchive('junit4.bin', classes));
+manifest.files.push({ ...writeArchive('javafx.bin', javafx.classes), note: "Java Arena's own code (MIT, like the rest of the site): no third-party license" });
+manifest.own.push({
+  name: "Java Arena's practice version of JavaFX",
+  file: 'javafx.bin',
+  source: 'engine/libraries/javafx/src',
+  sourceFiles: javafx.sources,
+  javac: `${javafx.version} (--release 21 -g -XDstringConcat=inline)`,
+  license: "MIT: Java Arena's own code, written for this site (not OpenJFX's code)",
+});
 writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-console.log(`junit4.bin: ${names.length} classes, ${payload.length} bytes, ${archive.length} bytes gzip`);

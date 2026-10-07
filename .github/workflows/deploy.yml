@@ -23,7 +23,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The slowest runs on main took about 47 minutes before fx-check (6 to 8 more), and pull requests
+    # also run Lighthouse (about 4): 90 leaves room for a slow runner and for more lessons.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +51,7 @@ jobs:
       - name: Install dependencies (also copies the Java engine into public/engine)
         run: npm ci
 
-      - name: Unit tests (class diagrams in lesson text, checks of written files, explanations of mistakes)
+      - name: Unit tests (class diagrams in lesson text, checks of written files, explanations of mistakes, Java Arena's JavaFX on the reference JDK)
         run: npm run test:unit
 
       - name: Work out the site address
@@ -71,6 +73,17 @@ jobs:
 
       - name: Install Chromium for the browser tests
         run: npx playwright install --with-deps chromium
+
+      # After npm ci (which empties node_modules) and after the system libraries the step above
+      # installs (real JavaFX's text needs fontconfig and pango). Keyed by the pinned versions.
+      - name: Cache the OpenJFX and Monocle jars for the real-JavaFX check
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/java-arena-fx
+          key: fx-check-jars-${{ hashFiles('scripts/fx-check/jars.json') }}
+
+      - name: Run every JavaFX program (lessons, fidelity, probes) on real OpenJFX 21 without a screen and compare with Java Arena's JavaFX
+        run: npm run fx-check
 
       - name: Run the fidelity suite in the browser engine and compare with the JDK
         run: npm run fidelity:browser

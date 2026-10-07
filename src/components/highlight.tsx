@@ -1,33 +1,11 @@
-// A small regex-based Java highlighter for read-only code (lesson examples, fill-in challenges).
-import type { ReactNode } from "react";
+// A small regex-based Java highlighter for read-only code (lesson examples, fill-in challenges, drills).
+// The tokens, and the lines of drill code that wraps on a phone, come from code-lines.ts.
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { FILE_MARK, splitFiles } from "../grader/files.js";
+import { TOKEN, classify, codePieces, deepestIndent, esc, indentOf, lineBits, lineText, pieceLines, type CodePiece } from "./code-lines";
 
 /** A file marker on any line (such as `// ==== library/domain/Book.java ====`). */
 const FILE_MARK_ANY = new RegExp(FILE_MARK.source, "m");
-
-const KEYWORDS = new Set(
-  "abstract assert break case catch class const continue default do else enum extends final finally for goto if implements import instanceof interface native new package private protected public return static strictfp super switch synchronized this throw throws transient try volatile while var record yield sealed permits non-sealed true false null".split(
-    " ",
-  ),
-);
-const TYPES = new Set(
-  "void int long short byte char boolean float double String Scanner Integer Double Boolean Character Long Math System ArrayList List HashMap Map HashSet Set Random Arrays Collections Object StringBuilder Files Paths Path LocalDate".split(" "),
-);
-
-// Comments, text blocks and strings, chars, annotations, numbers, words.
-const TOKEN = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|(@[A-Za-z_]\w*)|(\b\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?[lLfFdD]?\b|\b0[xX][0-9a-fA-F_]+\b)|([A-Za-z_$][\w$]*)/g;
-
-function classify(m: RegExpMatchArray, code: string): string {
-  if (m[1]) return "tk-com";
-  if (m[2]) return "tk-str";
-  if (m[3]) return "tk-pre";
-  if (m[4]) return "tk-num";
-  const word = m[5];
-  if (KEYWORDS.has(word)) return "tk-kw";
-  if (TYPES.has(word) || /^[A-Z][a-z]\w*$/.test(word)) return "tk-type";
-  if (/^\s*\(/.test(code.slice(m.index! + word.length))) return "tk-fn";
-  return "";
-}
 
 export function highlight(code: string, keyPrefix = ""): ReactNode[] {
   const out: ReactNode[] = [];
@@ -49,7 +27,70 @@ export function highlight(code: string, keyPrefix = ""): ReactNode[] {
   return out;
 }
 
-export function CodeView({ code, className = "", label }: { code: string; className?: string; label?: string }) {
+/** One line of code, highlighted, with its break points (see lineBits). */
+export function lineNodes(line: CodePiece[], keyPrefix = ""): ReactNode[] {
+  return lineBits(line).map((b, i) => {
+    const key = keyPrefix + i;
+    if ("node" in b) return <Fragment key={key}>{b.node}</Fragment>;
+    if ("glue" in b)
+      return (
+        <span key={key} className="keep">
+          {b.glue}
+        </span>
+      );
+    if ("ind" in b)
+      return (
+        <span key={key} className="keep">
+          <span className="ind">{b.ind}</span>
+          {b.cls ? <span className={b.cls}>{b.ch}</span> : b.ch}
+        </span>
+      );
+    if ("lit" in b)
+      return (
+        <span key={key} className="lit">
+          <span className="tk-str">{b.lit}</span>
+          {b.close}
+        </span>
+      );
+    const parts = b.parts.map((s, j) => (s === null ? <wbr key={j} /> : s));
+    return b.cls ? (
+      <span key={key} className={b.cls}>
+        {parts}
+      </span>
+    ) : (
+      <Fragment key={key}>{parts}</Fragment>
+    );
+  });
+}
+
+/**
+ * Code drawn one element per line (.cl, with its indent in --indent and the code's deepest in
+ * --deep), so drill code can wrap on a phone with each wrapped line under its own start (see
+ * pre.wraps in styles.css). The "\n" between lines stays text: the box's text is exactly the code.
+ * An empty line is just its "\n".
+ */
+export function codeLines(pieces: CodePiece[], keyPrefix = ""): ReactNode[] {
+  const lines = pieceLines(pieces);
+  const deep = deepestIndent(lines.map(lineText));
+  return lines.map((line, i) => (
+    <Fragment key={keyPrefix + i}>
+      {line.length > 0 && (
+        <span className="cl" style={{ "--indent": indentOf(lineText(line)), "--deep": deep } as CSSProperties}>
+          {lineNodes(line, `${keyPrefix}${i}-`)}
+        </span>
+      )}
+      {i < lines.length - 1 ? "\n" : ""}
+    </Fragment>
+  ));
+}
+
+/**
+ * Read-only code. With `wrap` (drills), long lines wrap on a phone instead of scrolling sideways,
+ * each wrapped line under its own start; wider screens show it as before.
+ */
+export function CodeView({ code, className = "", label, wrap = false }: { code: string; className?: string; label?: string; wrap?: boolean }) {
+  const cls = "codeview " + (wrap ? "wraps " : "") + className;
+  const body = (text: string) => (wrap ? codeLines(codePieces(text)) : highlight(text));
   // A program of several files shows each one under its name.
   if (FILE_MARK_ANY.test(code))
     return (
@@ -57,21 +98,19 @@ export function CodeView({ code, className = "", label }: { code: string; classN
         {(splitFiles(code) as { path: string; text: string }[]).map((f) => (
           <figure className="code-file" key={f.path}>
             <figcaption>{f.path}</figcaption>
-            <pre tabIndex={0} className={"codeview " + className} aria-label={label ? `${label}, ${f.path}` : f.path}>
-              {highlight(f.text)}
+            <pre tabIndex={0} className={cls} aria-label={label ? `${label}, ${f.path}` : f.path}>
+              {body(f.text)}
             </pre>
           </figure>
         ))}
       </div>
     );
   return (
-    <pre tabIndex={0} className={"codeview " + className} aria-label={label}>
-      {highlight(code)}
+    <pre tabIndex={0} className={cls} aria-label={label}>
+      {body(code)}
     </pre>
   );
 }
-
-const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** The same highlighting as an HTML string, for code blocks inside lesson Markdown. */
 export function highlightHtml(code: string): string {

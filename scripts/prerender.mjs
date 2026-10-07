@@ -8,6 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { marked } from "marked";
 import { FILE_MARK, splitFiles } from "../src/grader/files.js";
+import { windowExample } from "../src/grader/window.ts";
+import { windowFigureHtml } from "../src/components/window-drawing.ts";
 import { withoutClassDiagrams } from "./content/class-diagram.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -36,6 +38,9 @@ const LABELS = { output: "Output", input: "Input", javac: "What javac prints", c
 marked.use({
   renderer: {
     code({ text, lang }) {
+      // A java window example's window (stored by the build): drawn, with the window as text, as the page shows it.
+      const shown = lang === "window" ? windowExample(text) : null;
+      if (shown) return windowFigureHtml(shown);
       const file = lang ? /^file\s+(\S+)$/.exec(lang) : null;
       if (file) return `<figure class="io io-file"><figcaption>The file ${esc(file[1])}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       if (lang === "java" && new RegExp(FILE_MARK.source, "m").test(text))

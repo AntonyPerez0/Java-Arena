@@ -1,8 +1,11 @@
 import { Target } from "lucide-react";
+import { otherTestsUse } from "../content/otherTests";
 import type { Exercise } from "../content/types";
+import { describeEvents } from "../grader/window";
 import Markdown from "./Markdown";
 import InputText from "./InputText";
 import { FileName } from "./Results";
+import { WindowFigure } from "./WindowView";
 
 /**
  * What the challenge asks for, set apart from the lesson so it's obvious: the task, then the exact
@@ -13,15 +16,15 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
   const junitTests = ex.tests.filter((t) => t.junit);
   const hiddenBuggy = junitTests.filter((t) => t.hidden && t.outcome === "fail").length;
   const hiddenPassing = junitTests.filter((t) => t.hidden && t.outcome !== "fail").length;
-  // A "What does it print?" challenge must not show its answer. A challenge whose program writes
-  // files shows the first visible test that checks them (scripts/build-content.mjs checkTaskOutput picks the same).
-  const shown = ex.kind === "predict" ? undefined : (ex.tests.find((t) => !t.hidden && t.writes) ?? ex.tests.find((t) => !t.hidden && t.expect));
+  // A "What does it print?" challenge must not show its answer. A challenge with a window shows the
+  // first visible test with clicks and typing (events), and one whose program writes files the first
+  // visible test that checks them (scripts/build-content.mjs checkTaskOutput picks the same).
+  const shown = ex.kind === "predict" ? undefined : (ex.tests.find((t) => !t.hidden && t.events) ?? ex.tests.find((t) => !t.hidden && t.writes) ?? ex.tests.find((t) => !t.hidden && t.expect));
   const others = ex.tests.filter((t) => t !== shown);
   const moreTests = others.length;
   const hiddenCount = others.filter((t) => t.hidden).length;
-  const calls = others.filter((t) => t.call).length;
-  const files = others.filter((t) => t.files).length;
-  const what = calls === 0 ? (files ? "input or files" : "input") : calls === others.length ? "calls" : "input or calls";
+  // What they use instead: "other input", "other command-line arguments", "other clicks and typing"...
+  const what = otherTestsUse(shown, others);
   // The expected output (and the check's code) get boxes of their own below, so copies in the task text are dropped.
   const text = shown?.expect ? withoutBlock(task, shown.expect, shown.call) : task;
   return (
@@ -65,7 +68,7 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
       {ex.kind === "predict" && <p className="task-note">Read the program below and type each line it prints. The answers are what Java really prints for it.</p>}
       {shown && (
         <div className="task-expect">
-          <div className={"task-io" + (shown.stdin || shown.call || shown.files ? " two" : "")}>
+          <div className={"task-io" + (shown.stdin || shown.call || shown.files || shown.events || shown.args ? " two" : "")}>
             {shown.call ? (
               <div>
                 <div className="lbl">The check runs</div>
@@ -80,6 +83,20 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
                 <pre className="console tiny" tabIndex={0}>
                   <InputText text={shown.stdin} />
                 </pre>
+              </div>
+            ) : null}
+            {shown.args?.length ? (
+              <div>
+                <div className="lbl">Command-line arguments</div>
+                <pre className="console tiny" tabIndex={0}>
+                  {shown.args.map((a) => (/[\s"]/.test(a) || a === "" ? JSON.stringify(a) : a)).join(" ")}
+                </pre>
+              </div>
+            ) : null}
+            {shown.events ? (
+              <div>
+                <div className="lbl">Clicks and typing</div>
+                <p className="task-events">{describeEvents(shown.events)}</p>
               </div>
             ) : null}
             {Object.entries(shown.files ?? {}).map(([name, text]) => (
@@ -97,6 +114,12 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
               <pre className="console task-output" tabIndex={0}>
                 {shown.expect || <em className="muted">(nothing)</em>}
               </pre>
+              {shown.outline != null && (
+                <div>
+                  <div className="lbl">The window should look like</div>
+                  <WindowFigure window={shown.window ?? null} outline={shown.outline} />
+                </div>
+              )}
               {Object.entries(shown.writes ?? {}).map(([name, text]) => (
                 <div key={name}>
                   <div className="lbl">

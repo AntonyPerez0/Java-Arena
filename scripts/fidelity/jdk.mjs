@@ -3,7 +3,9 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { delimiter, join, dirname } from 'node:path';
+import { javaRunArgs } from '../javafx/reference.mjs';
+import { libraryDir } from '../libraries.mjs';
 import { loadSuite, REFERENCE_JVM_FLAGS, referenceJavaHome } from './suite.mjs';
 
 const bin = (tool) => join(referenceJavaHome(), 'bin', tool);
@@ -37,12 +39,13 @@ export function writeDataFiles(dir, files) {
 }
 
 // javac runs in the sources' folder, with that folder as its class path (as the browser's compiler
-// has it). It's given by its full path, which is taken out of the messages, so a file javac finds by
-// itself there (such as one whose package line doesn't match its folder) is named as the browser names it.
-function javac(src, out, sources) {
+// has it), followed by the engine libraries the program uses. It's given by its full path, which is
+// taken out of the messages, so a file javac finds by itself there (such as one whose package line
+// doesn't match its folder) is named as the browser names it.
+function javac(src, out, sources, libraries = []) {
   mkdirSync(out, { recursive: true });
   const t = Date.now();
-  const r = spawnSync(bin('javac'), ['-encoding', 'UTF-8', '-d', out, '-cp', src, ...sources.map((s) => s.path)], {
+  const r = spawnSync(bin('javac'), ['-encoding', 'UTF-8', '-d', out, '-cp', [src, ...libraries.map(libraryDir)].join(delimiter), ...sources.map((s) => s.path)], {
     cwd: src,
     env,
     encoding: 'utf8',
@@ -62,14 +65,15 @@ export function runOnJdk(suite = loadSuite()) {
     mkdirSync(work);
     writeSources(src, p.sources);
     writeDataFiles(work, p.files);
-    const c = javac(src, classes, p.sources);
+    const c = javac(src, classes, p.sources, p.libraries);
     if (c.exitCode !== 0) {
       result.programs[p.id] = { compileError: c.output };
       rmSync(tmp, { recursive: true, force: true });
       continue;
     }
     const t = Date.now();
-    const r = spawnSync(bin('java'), [...REFERENCE_JVM_FLAGS, '-cp', classes, p.mainClass, ...p.args], {
+    const classPath = [classes, ...p.libraries.map(libraryDir)].join(delimiter);
+    const r = spawnSync(bin('java'), [...REFERENCE_JVM_FLAGS, ...javaRunArgs({ javaHome: referenceJavaHome(), libraries: p.libraries, classPath, mainClass: p.mainClass, args: p.args })], {
       cwd: work,
       env,
       input: p.stdin,
@@ -90,7 +94,7 @@ export function runOnJdk(suite = loadSuite()) {
   for (const e of suite.errors) {
     const tmp = mkdtempSync(join(tmpdir(), 'fid-'));
     writeSources(tmp, e.sources);
-    const c = javac(tmp, join(tmp, 'classes'), e.sources);
+    const c = javac(tmp, join(tmp, 'classes'), e.sources, e.libraries);
     result.errors[e.id] = { exitCode: c.exitCode, output: c.output };
     rmSync(tmp, { recursive: true, force: true });
   }

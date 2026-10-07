@@ -1,0 +1,2092 @@
+id: gui-events
+summary: Windows that react. Event handlers for buttons with setOnAction and a lambda, reading text fields and changing labels in a handler, why a handler can't change a local variable and what to use instead, listeners that react to every change of a text field's text, switching buttons on and off, logic in a plain class that the handlers call, and launch parameters. MOOC sections 13.3 and 13.4.
+steps:
+  - id: gui-events-button-actions
+    slug: button-actions
+    title: Buttons that do something
+    text: |
+      The windows of module 48 looked right, but their buttons did nothing when clicked. This module makes windows react: a click runs code that you write, and so can typing. As in module 48, each click or bit of typing on this page runs your program again from the start, with everything you did before it, and the code is ordinary JavaFX code.
+
+      ### An event handler
+
+      When the user clicks a button, JavaFX makes an **event**: an object that describes what happened. It hands the event to the button's **event handler**, if the button has one. A handler is given to a button with `setOnAction`. A town's drawbridge gets a control panel:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Label status = new Label("The bridge is down.");
+              Button raise = new Button("Raise the bridge");
+              raise.setOnAction(event -> status.setText("The bridge is up."));
+
+              stage.setScene(new Scene(new VBox(status, raise)));
+              stage.setTitle("Drawbridge");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      click Button "Raise the bridge"
+      ```
+
+      The window is drawn as it is after the clicks listed with it: here, one click on the button.
+
+      - `setOnAction` takes an `EventHandler<ActionEvent>`. **EventHandler** is an interface of JavaFX with one method, `handle`, and a click on a button is an **ActionEvent**, so here the method is `void handle(ActionEvent event)`. An interface with one method can be implemented with a lambda (module 37), so the handler here is `event -> status.setText("The bridge is up.")`: the lambda's body is what `handle` does.
+      - The parameter `event` is the ActionEvent. This handler doesn't need it, but it must be there, since `handle` has that parameter. The name is yours to choose; `e` is common too.
+      - Writing a lambda needs no import for EventHandler or ActionEvent: Java works out the lambda's type from `setOnAction`.
+      - `start` runs once and builds the window. The line with `setOnAction` doesn't change the label: it only gives the button its handler, and the handler's code runs later, each time the button is clicked.
+      - The lambda uses `status`, a variable of `start`. Step 2 looks at which variables a lambda can use.
+
+      ### A handler runs at every click
+
+      The front desk of a hotel gets a bell. Its handler prints, and so does `start`:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Button bell = new Button("Ring the bell");
+              bell.setOnAction(event -> System.out.println("Ding!"));
+
+              stage.setScene(new Scene(new VBox(bell)));
+              stage.setTitle("Front desk");
+              stage.show();
+              System.out.println("start is done");
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      click Button "Ring the bell"
+      click Button "Ring the bell"
+      ```
+
+      ```output
+      start is done
+      Ding!
+      Ding!
+      ```
+
+      `start is done` comes first: `start` sets up the window and returns. Only then can the user click, and each click runs the handler once more.
+
+      ### Reading a text field in a handler
+
+      A handler can use the other parts of the window: read a text field, set a label. A converter for a kitchen timer turns seconds into minutes:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.TextField;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              TextField seconds = new TextField();
+              seconds.setPromptText("Seconds");
+              Button convert = new Button("Convert");
+              Label result = new Label("");
+              convert.setOnAction(event -> {
+                  int total = Integer.valueOf(seconds.getText());
+                  result.setText(total / 60 + " min " + total % 60 + " s");
+              });
+
+              stage.setScene(new Scene(new VBox(8, seconds, convert, result)));
+              stage.setTitle("Timer");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      type TextField 1 "135"
+      click Button "Convert"
+      ```
+
+      - A handler of several statements has its body in braces, as a lambda in module 37 can.
+      - `seconds.getText()` runs when the button is clicked, so it reads what the user has typed by then. Type another number and click again, and the handler reads the new one.
+      - With the field empty, `Integer.valueOf("")` throws a NumberFormatException. An exception in a handler doesn't end the program: JavaFX prints it (`Exception in thread "JavaFX Application Thread"` and the stack trace), and the window stays open for the next click. The checks in this module always type a number before they click.
+
+      ### Clicking from code
+
+      A program can click its own buttons: `button.fire()` runs the button's handler, as a click does. Some programs in this module use it, so that you can see what their handlers do without clicking.
+
+      **Your turn:** a study room has a screen by its door. Fill in the three blanks, so that `Book` changes the label to `Room 4 is booked` and `Leave` changes it back to `Room 4 is free`. The task card shows the window after a click on Book.
+    fill: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Label sign = new Label("Room 4 is free");
+              Button book = new Button("Book");
+              Button leave = new Button("Leave");
+              book.[[setOnAction]](event [[->]] sign.setText("Room 4 is booked"));
+              leave.setOnAction(event -> sign.[[setText]]("Room 4 is free"));
+
+              stage.setScene(new Scene(new VBox(sign, new HBox(book, leave))));
+              stage.setTitle("Study room 4");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "A button gets its handler with `setOnAction`, and a lambda has an arrow, `->`, between its parameter and its body."
+      - "The handler of Leave changes the label's text, as the one of Book does: `sign.setText(...)`."
+    tests:
+      - events: |
+          click Button "Book"
+      - events: |
+          click Button "Book"
+          click Button "Leave"
+        hidden: true
+      - events: |
+          click Button "Leave"
+          click Button "Book"
+          click Button "Book"
+        hidden: true
+    more:
+      - task: |
+          A club votes by a show of hands, and its secretary tries out a window for counting them. The program clicks its own buttons with `fire()`. What does it print?
+        predict: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.layout.HBox;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Label tally = new Label("Votes:");
+                  Button yes = new Button("Yes");
+                  Button no = new Button("No");
+                  yes.setOnAction(event -> tally.setText(tally.getText() + " Y"));
+                  no.setOnAction(event -> tally.setText(tally.getText() + " N"));
+                  System.out.println(tally.getText());
+                  yes.fire();
+                  no.fire();
+                  yes.fire();
+                  System.out.println(tally.getText());
+                  no.setOnAction(event -> tally.setText("Votes: none"));
+                  no.fire();
+                  yes.fire();
+                  System.out.println(tally.getText());
+
+                  stage.setScene(new Scene(new VBox(tally, new HBox(yes, no))));
+                  stage.setTitle("Club vote");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "`setOnAction` only gives the button its handler: the label changes when the button fires, not before. Each handler adds to the end of the label's text."
+          - "A button has one handler for its action. The second `setOnAction` on `no` replaces the first one, so from then on `no` sets the text to `Votes: none`, and `yes` still adds ` Y` after it."
+      - task: |
+          A children's party hands out candy. The window is built already: a text field for the number of candies (the prompt text `Candies`), one for the number of children (`Children`), the buttons `Share` and `Clear`, and an empty label. Give the buttons their handlers:
+
+          - **Share** reads both numbers and sets the label to how many candies each child gets and how many are left over, like `Each child gets 7, and 3 are left over` for 45 candies and 6 children.
+          - **Clear** empties both text fields and the label. `clear()` empties a text field.
+
+          The checks always type whole numbers, and at least 1 child, before they click Share. The task card shows the window after typing 45 and 6 and clicking Share.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.TextField;
+          import javafx.scene.layout.HBox;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  TextField candies = new TextField();
+                  candies.setPromptText("Candies");
+                  TextField children = new TextField();
+                  children.setPromptText("Children");
+                  Button share = new Button("Share");
+                  Button clear = new Button("Clear");
+                  Label result = new Label("");
+
+                  stage.setScene(new Scene(new VBox(candies, children, new HBox(share, clear), result)));
+                  stage.setTitle("Sharing candy");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.TextField;
+          import javafx.scene.layout.HBox;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  TextField candies = new TextField();
+                  candies.setPromptText("Candies");
+                  TextField children = new TextField();
+                  children.setPromptText("Children");
+                  Button share = new Button("Share");
+                  Button clear = new Button("Clear");
+                  Label result = new Label("");
+                  share.setOnAction(event -> {
+                      int total = Integer.valueOf(candies.getText());
+                      int kids = Integer.valueOf(children.getText());
+                      result.setText("Each child gets " + total / kids + ", and " + total % kids + " are left over");
+                  });
+                  clear.setOnAction(event -> {
+                      candies.clear();
+                      children.clear();
+                      result.setText("");
+                  });
+
+                  stage.setScene(new Scene(new VBox(candies, children, new HBox(share, clear), result)));
+                  stage.setTitle("Sharing candy");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "In Share's handler, read both fields with `getText()` and turn them into numbers with `Integer.valueOf(...)`. Integer division `/` gives each child's share, and `%` what's left over."
+          - "Clear's handler has three statements, so its body goes in braces: `candies.clear();`, `children.clear();` and `result.setText(\"\");`."
+        tests:
+          - events: |
+              type TextField 1 "45"
+              type TextField 2 "6"
+              click Button "Share"
+          - events: |
+              type TextField 1 "20"
+              type TextField 2 "4"
+              click Button "Share"
+              set TextField 2 "3"
+              click Button "Share"
+            hidden: true
+          - events: |
+              type TextField 1 "7"
+              type TextField 2 "9"
+              click Button "Share"
+              click Button "Clear"
+              type TextField 1 "31"
+              type TextField 2 "5"
+            hidden: true
+          - events: |
+              type TextField 1 "12"
+              type TextField 2 "5"
+              click Button "Share"
+              click Button "Clear"
+            hidden: true
+
+  - id: gui-events-effectively-final
+    slug: effectively-final
+    title: Handlers that remember
+    text: |
+      A pomodoro is 25 minutes of focused work, then a short break. A window counts the pomodoros finished today: a label with the count, and a button to add one. The first try keeps the count in a variable of `start`:
+
+      ```java error
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Label done = new Label("Pomodoros today: 0");
+              Button finish = new Button("Finished one");
+              int count = 0;
+              finish.setOnAction(event -> {
+                  count++;
+                  done.setText("Pomodoros today: " + count);
+              });
+
+              stage.setScene(new Scene(new VBox(done, finish)));
+              stage.setTitle("Pomodoros");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:16: error: local variables referenced from a lambda expression must be final or effectively final
+                  count++;
+                  ^
+      Main.java:17: error: local variables referenced from a lambda expression must be final or effectively final
+                  done.setText("Pomodoros today: " + count);
+                                                     ^
+      2 errors
+      ```
+
+      javac complains twice: once where the lambda changes `count`, and once where it reads it. Module 37 met this message: a lambda may use the local variables of its method (and its parameters) only when they are **effectively final**, which means never changed after they get their value. `count++` changes `count`.
+
+      Here's why Java has the rule. `start` runs once and returns before anyone clicks, and its local variables are gone after that. So a lambda doesn't keep the variable itself: it keeps a copy of its value, made when the lambda was made. If the variable could change later, the copy and the variable would disagree. A variable that never changes has a copy that is always right.
+
+      The lambda uses `done` too, and javac doesn't mind: `done` never changes, since it always refers to the same Label. The label's text changes, but that's a change inside the Label object, not a change of the variable.
+
+      A count that changes needs a place that outlives `start`. There are three usual ones.
+
+      ### An instance variable
+
+      An instance variable belongs to the Main object, which JavaFX made before it called `start`, and which lives as long as the program does. The rule about effectively final variables is only for local variables and parameters, so a lambda can change an instance variable:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+          private int pomodoros;
+
+          @Override
+          public void start(Stage stage) {
+              Label done = new Label("Pomodoros today: 0");
+              Button finish = new Button("Finished one");
+              Button reset = new Button("Reset");
+              finish.setOnAction(event -> {
+                  this.pomodoros++;
+                  done.setText("Pomodoros today: " + this.pomodoros);
+              });
+              reset.setOnAction(event -> {
+                  this.pomodoros = 0;
+                  done.setText("Pomodoros today: 0");
+              });
+
+              stage.setScene(new Scene(new VBox(done, new HBox(finish, reset))));
+              stage.setTitle("Pomodoros");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      click Button "Finished one"
+      click Button "Finished one"
+      click Button "Finished one"
+      ```
+
+      The lambdas are written inside `start`, so `this` in them is the object whose `start` is running: the Main object. `this.pomodoros` is the same variable at every click, and it keeps its value between them.
+
+      ### An object that counts
+
+      An object can hold the count instead. `PomodoroLog` is a small class of its own, and `start` makes one:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              PomodoroLog log = new PomodoroLog();
+              Label done = new Label("Pomodoros today: 0");
+              Button finish = new Button("Finished one");
+              Button reset = new Button("Reset");
+              finish.setOnAction(event -> {
+                  log.finishOne();
+                  done.setText("Pomodoros today: " + log.count());
+              });
+              reset.setOnAction(event -> {
+                  log.reset();
+                  done.setText("Pomodoros today: " + log.count());
+              });
+
+              stage.setScene(new Scene(new VBox(done, new HBox(finish, reset))));
+              stage.setTitle("Pomodoros");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      // ==== PomodoroLog.java ====
+      public class PomodoroLog {
+          private int count;
+
+          public void finishOne() {
+              this.count++;
+          }
+
+          public void reset() {
+              this.count = 0;
+          }
+
+          public int count() {
+              return this.count;
+          }
+      }
+      ```
+
+      ```events
+      click Button "Finished one"
+      click Button "Finished one"
+      click Button "Reset"
+      click Button "Finished one"
+      ```
+
+      `log` is a local variable, but an effectively final one: it refers to the same PomodoroLog object all the time. What changes is the object's instance variable, as with the label's text. Step 4 builds on this: a class of its own that does the work, and handlers that only call it.
+
+      ### The window itself
+
+      When a label shows nothing but the number, the handler can read the number back from the label:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.HBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Label visitors = new Label("0");
+              Button plus = new Button("+1");
+              plus.setOnAction(event -> {
+                  int now = Integer.valueOf(visitors.getText());
+                  visitors.setText("" + (now + 1));
+              });
+
+              stage.setScene(new Scene(new HBox(10, plus, visitors)));
+              stage.setTitle("Door counter");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      click Button "+1"
+      click Button "+1"
+      click Button "+1"
+      click Button "+1"
+      ```
+
+      That's fine for a small window like this one. When the label says more than the number, or several handlers share the count, an instance variable or an object is clearer.
+
+      ### A value read too early
+
+      A lambda's copy of a variable has the value the variable had when the lambda was made. That matters when the value comes from the window. A hotel's wake-up call service:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.TextField;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              TextField room = new TextField();
+              room.setPromptText("Room number");
+              Button book = new Button("Wake me at 7");
+              Label booked = new Label("");
+              String number = room.getText();
+              book.setOnAction(event -> booked.setText("Wake-up call at 7 for room " + number));
+
+              stage.setScene(new Scene(new VBox(booked, room, book)));
+              stage.setTitle("Wake-up calls");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      type TextField 1 "214"
+      click Button "Wake me at 7"
+      ```
+
+      The room number is missing. `number` got its value once, when `start` ran, and the field was empty then. To use what the user typed, read the field inside the handler: `booked.setText("Wake-up call at 7 for room " + room.getText())`.
+
+      **Your turn:** a water tracker doesn't compile: it keeps the number of glasses in a local variable, which its lambdas change. Keep the count in a `private` instance variable of Main instead, so that `Drink one` adds a glass and `New day` starts again from 0. Don't change the window or the texts. The task card shows the window after two clicks on Drink one.
+    seed: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Label glasses = new Label("Glasses of water: 0");
+              Button drink = new Button("Drink one");
+              Button newDay = new Button("New day");
+              int count = 0;
+              drink.setOnAction(event -> {
+                  count++;
+                  glasses.setText("Glasses of water: " + count);
+              });
+              newDay.setOnAction(event -> {
+                  count = 0;
+                  glasses.setText("Glasses of water: " + count);
+              });
+
+              stage.setScene(new Scene(new VBox(glasses, new HBox(drink, newDay))));
+              stage.setTitle("Water tracker");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+          private int count;
+
+          @Override
+          public void start(Stage stage) {
+              Label glasses = new Label("Glasses of water: 0");
+              Button drink = new Button("Drink one");
+              Button newDay = new Button("New day");
+              drink.setOnAction(event -> {
+                  this.count++;
+                  glasses.setText("Glasses of water: " + this.count);
+              });
+              newDay.setOnAction(event -> {
+                  this.count = 0;
+                  glasses.setText("Glasses of water: " + this.count);
+              });
+
+              stage.setScene(new Scene(new VBox(glasses, new HBox(drink, newDay))));
+              stage.setTitle("Water tracker");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "A lambda can change an instance variable of Main but not a local variable of `start`, so move the count out of `start`."
+      - "Declare the count in the class, above `start`: `private int count;`. Then remove the line `int count = 0;` from `start`. In the lambdas, `this.count` is the instance variable: `this.count++;` and `this.count = 0;`."
+    require:
+      - pattern: \bprivate\s+int\s+\w+\s*(=\s*0\s*)?;
+        message: "Keep the count in a private instance variable of Main, such as `private int count;`."
+    tests:
+      - events: |
+          click Button "Drink one"
+          click Button "Drink one"
+      - events: |
+          click Button "Drink one"
+          click Button "Drink one"
+          click Button "Drink one"
+          click Button "New day"
+          click Button "Drink one"
+        hidden: true
+      - events: |
+          click Button "New day"
+          click Button "Drink one"
+          click Button "Drink one"
+          click Button "Drink one"
+          click Button "Drink one"
+          click Button "Drink one"
+        hidden: true
+    more:
+      - task: |
+          A delivery note gets the name of whoever signs for a parcel. Watch which value each part of the handler uses, and when the label changes. What does the program print?
+        predict: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.TextField;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  TextField name = new TextField("Ada");
+                  Label note = new Label("");
+                  Button sign = new Button("Sign");
+                  String early = name.getText();
+                  sign.setOnAction(event -> note.setText(early + " / " + name.getText()));
+                  name.setText("Grace");
+                  sign.fire();
+                  System.out.println(note.getText());
+                  name.appendText(" Hopper");
+                  System.out.println(note.getText());
+                  sign.fire();
+                  System.out.println(note.getText());
+
+                  stage.setScene(new Scene(new VBox(name, sign, note)));
+                  stage.setTitle("Delivery note");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "`early` got its value once, before the handler was even set: `Ada`. `name.getText()` in the handler reads the field each time the handler runs."
+          - "The label changes only when the handler runs. Changing the field after a `fire()` doesn't change the label until the next `fire()`."
+      - task: |
+          A bike's handlebar display shows its gear. The window is built already: the label `Gear 1`, and under it the buttons `Down` and `Up`. Give the buttons their handlers. **Up** shifts one gear up and **Down** one gear down, and the label shows the gear, like `Gear 4`. The bike has gears 1 to 7: Up does nothing in gear 7, and Down does nothing in gear 1 (keep both buttons enabled). The task card shows the window after three clicks on Up.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.layout.HBox;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Label gear = new Label("Gear 1");
+                  Button down = new Button("Down");
+                  Button up = new Button("Up");
+
+                  stage.setScene(new Scene(new VBox(gear, new HBox(down, up))));
+                  stage.setTitle("Gears");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.layout.HBox;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+              private int current = 1;
+
+              @Override
+              public void start(Stage stage) {
+                  Label gear = new Label("Gear 1");
+                  Button down = new Button("Down");
+                  Button up = new Button("Up");
+                  up.setOnAction(event -> {
+                      if (this.current < 7) {
+                          this.current++;
+                      }
+                      gear.setText("Gear " + this.current);
+                  });
+                  down.setOnAction(event -> {
+                      if (this.current > 1) {
+                          this.current--;
+                      }
+                      gear.setText("Gear " + this.current);
+                  });
+
+                  stage.setScene(new Scene(new VBox(gear, new HBox(down, up))));
+                  stage.setTitle("Gears");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The gear changes at every click, so keep it in an instance variable that starts at 1: `private int current = 1;`."
+          - "In Up's handler, add one only while the gear is below 7: `if (this.current < 7) { this.current++; }`, then set the label to `\"Gear \" + this.current`. Down is the same the other way around."
+        tests:
+          - events: |
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+          - events: |
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+            hidden: true
+          - events: |
+              click Button "Down"
+              click Button "Up"
+              click Button "Up"
+              click Button "Down"
+              click Button "Down"
+              click Button "Down"
+              click Button "Up"
+            hidden: true
+          - events: |
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Up"
+              click Button "Down"
+              click Button "Up"
+              click Button "Up"
+            hidden: true
+
+  - id: gui-events-listeners
+    slug: reacting-to-typing
+    title: Reacting to typing
+    text: |
+      A button's handler runs when the button is clicked. Often a window should react while the user types: show how many characters are left, say whether a name is free, switch a button on once a field is filled in. For that, a program listens to the text itself.
+
+      ### The text as a property
+
+      A text field keeps its text in a **property**: an object that holds a value and tells others when the value changes. `field.textProperty()` returns it. Its method `addListener` takes a **ChangeListener**, an interface with one method, `changed`, which has three parameters: the property that changed, the old value and the new value. A lambda with three parameters needs parentheses around them, as module 37's lambdas with two did:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.TextField;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              TextField word = new TextField();
+              word.textProperty().addListener((observable, oldValue, newValue) -> {
+                  System.out.println("\"" + oldValue + "\" to \"" + newValue + "\"");
+              });
+
+              stage.setScene(new Scene(new VBox(word)));
+              stage.setTitle("Listening");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      type TextField 1 "cat"
+      set TextField 1 "dog"
+      ```
+
+      ```output
+      "" to "c"
+      "c" to "ca"
+      "ca" to "cat"
+      "cat" to "dog"
+      ```
+
+      - Typing changes the text one character at a time, so typing `cat` calls the listener three times.
+      - The last event replaces the whole text at once, as pasting `dog` over `cat` would: that's one change, and one call.
+      - The listener hears every change of the text, whoever makes it: the user's typing, and the program's own `setText`, `appendText` and `clear`.
+      - It hears only real changes. `setText` with the text that's already there changes nothing, and the listener isn't called.
+      - The first parameter, here called `observable`, is the property itself. The listeners in this module don't need it, but the lambda must have it, since `changed` has three parameters.
+
+      ### A sign that counts its characters
+
+      A sign maker prints shop signs of up to 20 characters. The window shows how many are left while the customer types:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.TextField;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              TextField text = new TextField();
+              text.setPromptText("Text of the sign");
+              Label left = new Label("20 characters left");
+              text.textProperty().addListener((observable, oldValue, newValue) -> {
+                  left.setText((20 - newValue.length()) + " characters left");
+              });
+
+              stage.setScene(new Scene(new VBox(text, left)));
+              stage.setTitle("Sign maker");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      type TextField 1 "FRESH BREAD"
+      ```
+
+      The label is set from `newValue`, the text after the change. `text.getText()` would give the same text inside the listener, since the change has already happened when the listener runs.
+
+      ### Switching a button on and off
+
+      `setDisable(true)` disables a button: it's drawn pale, and clicking it does nothing. `setDisable(false)` enables it again. The sign maker's `Order` button should work only when there's a text, and one that fits. The button starts disabled, and the listener switches it on and off as the text changes:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.TextField;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              TextField text = new TextField();
+              text.setPromptText("Text of the sign");
+              Label left = new Label("20 characters left");
+              Button order = new Button("Order");
+              order.setDisable(true);
+              text.textProperty().addListener((observable, oldValue, newValue) -> {
+                  left.setText((20 - newValue.length()) + " characters left");
+                  order.setDisable(newValue.isEmpty() || newValue.length() > 20);
+              });
+              order.setOnAction(event -> System.out.println("Ordered a sign: " + text.getText()));
+
+              stage.setScene(new Scene(new VBox(text, left, order)));
+              stage.setTitle("Sign maker");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      click Button "Order"
+      type TextField 1 "OPEN LATE ON FRIDAYS!"
+      click Button "Order"
+      set TextField 1 "OPEN LATE FRIDAYS"
+      click Button "Order"
+      set TextField 1 ""
+      ```
+
+      ```output
+      Ordered a sign: OPEN LATE FRIDAYS
+      ```
+
+      The first click comes before any typing, while the button is disabled, so nothing happens. The 21 characters of the first text are one too many, so the second click does nothing either. After the shorter text, the button is enabled, and the third click orders the sign. The last event clears the text, so the button is disabled again: in "The window as text", it's marked `(disabled)`.
+
+      `setDisable` works on any part of a window: a disabled text field can't be typed in, and disabling a pane (a VBox, say) disables everything in it.
+
+      **Your turn:** a name badge printer shows a preview while the name is typed. Fill in the three blanks, so that the label shows `Badge: ` and the name in capital letters after every change of the text. The task card shows the window after typing `Ada Lovelace`.
+    fill: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.TextField;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              TextField name = new TextField();
+              name.setPromptText("Name");
+              Label preview = new Label("Badge: ");
+              name.[[textProperty]]().[[addListener]]((observable, oldValue, newValue) -> {
+                  preview.setText("Badge: " + [[newValue‖name.getText()]].toUpperCase());
+              });
+
+              stage.setScene(new Scene(new VBox(name, preview)));
+              stage.setTitle("Name badge");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "The text field's text is a property, returned by `textProperty()`, and a listener is added to it with `addListener`."
+      - "The last blank is the text after the change: the listener's third parameter, `newValue`."
+    tests:
+      - events: |
+          type TextField 1 "Ada Lovelace"
+      - events: |
+          type TextField 1 "grace"
+          set TextField 1 "Linus Torvalds"
+        hidden: true
+      - events: |
+          type TextField 1 "Ka"
+          set TextField 1 ""
+          type TextField 1 "Ju"
+        hidden: true
+    more:
+      - task: |
+          A shop's checkout has a field for a discount code, with a listener that prints the length of the text before and after each change. `appendText` adds a whole text with one change, and `clear()` empties the field. What does the program print?
+        predict: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.TextField;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  TextField code = new TextField();
+                  code.textProperty().addListener((observable, oldValue, newValue) -> {
+                      System.out.println(oldValue.length() + " to " + newValue.length());
+                  });
+                  code.setText("SPRING");
+                  code.appendText("25");
+                  code.setText("SPRING25");
+                  code.clear();
+                  code.clear();
+                  System.out.println("Done: " + code.getText().length());
+
+                  stage.setScene(new Scene(new VBox(code)));
+                  stage.setTitle("Checkout");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The listener runs only when the text really changes: `setText(\"SPRING25\")` when the text already is `SPRING25` changes nothing, and neither does clearing an empty field."
+          - "`appendText(\"25\")` is a single change from 6 characters to 8, unlike typing, which adds one character at a time."
+      - task: |
+          A website's invite page asks for a friend's email address. The window is built already: a text field with the prompt text `Email address`, the label `Not an email address yet`, and the disabled button `Send invite`. Make it work:
+
+          - After every change of the text, if it contains `@`, the label says `Ready to send` and the button is enabled; if not, the label says `Not an email address yet` and the button is disabled.
+          - **Send invite** sets the label to `Invite sent to ` and the address, like `Invite sent to sam@example.com`.
+
+          The task card shows the window after typing `sam@example.com` and clicking Send invite.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.TextField;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  TextField email = new TextField();
+                  email.setPromptText("Email address");
+                  Label status = new Label("Not an email address yet");
+                  Button send = new Button("Send invite");
+                  send.setDisable(true);
+
+                  stage.setScene(new Scene(new VBox(email, status, send)));
+                  stage.setTitle("Invite a friend");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.TextField;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  TextField email = new TextField();
+                  email.setPromptText("Email address");
+                  Label status = new Label("Not an email address yet");
+                  Button send = new Button("Send invite");
+                  send.setDisable(true);
+                  email.textProperty().addListener((observable, oldValue, newValue) -> {
+                      if (newValue.contains("@")) {
+                          status.setText("Ready to send");
+                          send.setDisable(false);
+                      } else {
+                          status.setText("Not an email address yet");
+                          send.setDisable(true);
+                      }
+                  });
+                  send.setOnAction(event -> status.setText("Invite sent to " + email.getText()));
+
+                  stage.setScene(new Scene(new VBox(email, status, send)));
+                  stage.setTitle("Invite a friend");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "Add a listener to `email.textProperty()`. In it, `newValue.contains(\"@\")` tells which of the two cases it is; each case sets the label's text and calls `send.setDisable(...)`."
+          - "The button's handler is one line: `send.setOnAction(event -> status.setText(\"Invite sent to \" + email.getText()));`."
+        tests:
+          - events: |
+              type TextField 1 "sam@example.com"
+              click Button "Send invite"
+          - events: |
+              type TextField 1 "kim"
+            hidden: true
+          - events: |
+              type TextField 1 "lee@"
+              set TextField 1 "lee"
+              click Button "Send invite"
+            hidden: true
+          - events: |
+              set TextField 1 "max@mail.org"
+              click Button "Send invite"
+              set TextField 1 "nope"
+            hidden: true
+
+  - id: gui-events-logic
+    slug: logic-in-a-class
+    title: Logic in a class of its own
+    text: |
+      The handlers so far did small things. In a bigger program, a handler that works everything out by itself gets long, and the only way to try what it computes is to click through the window. A better shape, common in programs of every size: a plain class does the work and knows nothing about windows, and the handlers only read the window, call the class, and show what it answers.
+
+      ### A color mixer
+
+      A paint shop's window mixes the three primary colors. The mixing is in `ColorMixer`, a class without a single import from JavaFX:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              ColorMixer mixer = new ColorMixer();
+              Label mix = new Label("Mix: nothing yet");
+              Button red = new Button("Red");
+              Button yellow = new Button("Yellow");
+              Button blue = new Button("Blue");
+              Button clear = new Button("Clear");
+              red.setOnAction(event -> {
+                  mixer.add("red");
+                  mix.setText("Mix: " + mixer.result());
+              });
+              yellow.setOnAction(event -> {
+                  mixer.add("yellow");
+                  mix.setText("Mix: " + mixer.result());
+              });
+              blue.setOnAction(event -> {
+                  mixer.add("blue");
+                  mix.setText("Mix: " + mixer.result());
+              });
+              clear.setOnAction(event -> {
+                  mixer.clear();
+                  mix.setText("Mix: " + mixer.result());
+              });
+
+              stage.setScene(new Scene(new VBox(10, new HBox(5, red, yellow, blue), clear, mix)));
+              stage.setTitle("Color mixer");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      // ==== ColorMixer.java ====
+      public class ColorMixer {
+          private boolean red;
+          private boolean yellow;
+          private boolean blue;
+
+          public void add(String color) {
+              if (color.equals("red")) {
+                  this.red = true;
+              } else if (color.equals("yellow")) {
+                  this.yellow = true;
+              } else if (color.equals("blue")) {
+                  this.blue = true;
+              }
+          }
+
+          public void clear() {
+              this.red = false;
+              this.yellow = false;
+              this.blue = false;
+          }
+
+          public String result() {
+              if (this.red && this.yellow && this.blue) {
+                  return "brown";
+              }
+              if (this.red && this.yellow) {
+                  return "orange";
+              }
+              if (this.yellow && this.blue) {
+                  return "green";
+              }
+              if (this.red && this.blue) {
+                  return "purple";
+              }
+              if (this.red) {
+                  return "red";
+              }
+              if (this.yellow) {
+                  return "yellow";
+              }
+              if (this.blue) {
+                  return "blue";
+              }
+              return "nothing yet";
+          }
+      }
+      ```
+
+      ```events
+      click Button "Red"
+      click Button "Yellow"
+      ```
+
+      - `start` makes one ColorMixer, and every handler uses it. `mixer` never changes, so the lambdas may use it (step 2); the mixer object's own variables change.
+      - Each handler does the same two things: it tells the mixer what happened, and it shows the mixer's answer in the label. None of them knows how colors mix.
+      - ColorMixer knows nothing about buttons or labels. It takes a color's name and answers with a name.
+
+      ### Logic you can check without a window
+
+      Since ColorMixer doesn't need a window, a program can use it without one:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              ColorMixer mixer = new ColorMixer();
+              System.out.println(mixer.result());
+              mixer.add("blue");
+              mixer.add("yellow");
+              System.out.println(mixer.result());
+              mixer.add("red");
+              System.out.println(mixer.result());
+          }
+      }
+      // ==== ColorMixer.java ====
+      public class ColorMixer {
+          private boolean red;
+          private boolean yellow;
+          private boolean blue;
+
+          public void add(String color) {
+              if (color.equals("red")) {
+                  this.red = true;
+              } else if (color.equals("yellow")) {
+                  this.yellow = true;
+              } else if (color.equals("blue")) {
+                  this.blue = true;
+              }
+          }
+
+          public void clear() {
+              this.red = false;
+              this.yellow = false;
+              this.blue = false;
+          }
+
+          public String result() {
+              if (this.red && this.yellow && this.blue) {
+                  return "brown";
+              }
+              if (this.red && this.yellow) {
+                  return "orange";
+              }
+              if (this.yellow && this.blue) {
+                  return "green";
+              }
+              if (this.red && this.blue) {
+                  return "purple";
+              }
+              if (this.red) {
+                  return "red";
+              }
+              if (this.yellow) {
+                  return "yellow";
+              }
+              if (this.blue) {
+                  return "blue";
+              }
+              return "nothing yet";
+          }
+      }
+      ```
+
+      ```output
+      nothing yet
+      green
+      brown
+      ```
+
+      That's what makes the shape worth it. Every case of the mixing can be tried by calling methods, as the checks of the next challenge do, or with JUnit tests (module 26), with no clicking. The window then needs only a few clicks to show that its handlers call the right methods. And the same ColorMixer could serve a text user interface (module 25) or a different window, unchanged.
+
+      ### One handler for several buttons
+
+      The three color buttons do the same thing with a different color. A handler is an object, so one handler can be kept in a variable and given to all three. The event tells which button was clicked: `event.getSource()` returns it. Its type is Object, so the handler casts it to a Button (module 36):
+
+      ```java fragment
+      EventHandler<ActionEvent> addColor = event -> {
+          Button clicked = (Button) event.getSource();
+          mixer.add(clicked.getText().toLowerCase());
+          mix.setText("Mix: " + mixer.result());
+      };
+      red.setOnAction(addColor);
+      yellow.setOnAction(addColor);
+      blue.setOnAction(addColor);
+      ```
+
+      Naming the handler's type, `EventHandler<ActionEvent>`, needs two more imports: `javafx.event.ActionEvent` and `javafx.event.EventHandler`. The buttons' texts `Red`, `Yellow` and `Blue` turn into the mixer's names with `toLowerCase()`.
+
+      **Your turn:** a sign-up page checks whether a username is free, against the names already taken. Write the class `UsernameChecker`, without anything from JavaFX, with:
+
+      - a constructor that takes no parameters: at first, no name is taken
+      - `addTaken(String name)`, which marks a name as taken
+      - `isFree(String name)`, which returns `true` when the name has at least 3 characters and isn't taken
+      - `message(String name)`, which returns `At least 3 characters` for a name of fewer than 3 characters, the name and ` is taken` for a taken one (`ada is taken`), and the name and ` is free` otherwise (`ada_l is free`)
+
+      Capital letters don't matter when comparing names: after `addTaken("Ada")`, `ADA` and `ada` are taken too. The message shows the name as it was given. The check runs:
+
+      ```java fragment
+      UsernameChecker checker = new UsernameChecker();
+      checker.addTaken("admin");
+      checker.addTaken("Ada");
+      System.out.println(checker.message("ad"));
+      System.out.println(checker.message("ADA"));
+      System.out.println(checker.message("ada_l"));
+      System.out.println(checker.isFree("Admin") + " " + checker.isFree("linus"));
+      ```
+
+      and expects:
+
+      ```
+      At least 3 characters
+      ADA is taken
+      ada_l is free
+      false true
+      ```
+    seed:
+      UsernameChecker.java: |
+        public class UsernameChecker {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                UsernameChecker checker = new UsernameChecker();
+                checker.addTaken("admin");
+                checker.addTaken("Ada");
+                System.out.println(checker.message("ad"));
+                System.out.println(checker.message("ADA"));
+                System.out.println(checker.message("ada_l"));
+                System.out.println(checker.isFree("Admin") + " " + checker.isFree("linus"));
+            }
+        }
+    solution:
+      UsernameChecker.java: |
+        import java.util.ArrayList;
+
+        public class UsernameChecker {
+            private ArrayList<String> taken;
+
+            public UsernameChecker() {
+                this.taken = new ArrayList<>();
+            }
+
+            public void addTaken(String name) {
+                this.taken.add(name.toLowerCase());
+            }
+
+            public boolean isFree(String name) {
+                return name.length() >= 3 && !this.taken.contains(name.toLowerCase());
+            }
+
+            public String message(String name) {
+                if (name.length() < 3) {
+                    return "At least 3 characters";
+                }
+                if (this.taken.contains(name.toLowerCase())) {
+                    return name + " is taken";
+                }
+                return name + " is free";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                UsernameChecker checker = new UsernameChecker();
+                checker.addTaken("admin");
+                checker.addTaken("Ada");
+                System.out.println(checker.message("ad"));
+                System.out.println(checker.message("ADA"));
+                System.out.println(checker.message("ada_l"));
+                System.out.println(checker.isFree("Admin") + " " + checker.isFree("linus"));
+            }
+        }
+    hints:
+      - "Keep the taken names in an `ArrayList<String>`, made in the constructor. Store each name in small letters (`name.toLowerCase()`), and compare in small letters too: `this.taken.contains(name.toLowerCase())`."
+      - "`message` checks the length first, then whether the name is taken: `return name + \" is taken\";`. `isFree` is `true` when both checks pass."
+    tests:
+      - call: |
+          UsernameChecker checker = new UsernameChecker();
+          checker.addTaken("admin");
+          checker.addTaken("Ada");
+          System.out.println(checker.message("ad"));
+          System.out.println(checker.message("ADA"));
+          System.out.println(checker.message("ada_l"));
+          System.out.println(checker.isFree("Admin") + " " + checker.isFree("linus"));
+      - call: |
+          UsernameChecker checker = new UsernameChecker();
+          System.out.println(checker.message("kim") + ", " + checker.isFree("kim"));
+          System.out.println(checker.message("") + ", " + checker.isFree(""));
+          System.out.println(checker.message("Jo") + ", " + checker.isFree("Jo"));
+          checker.addTaken("KIM");
+          checker.addTaken("grace");
+          System.out.println(checker.message("Kim") + ", " + checker.isFree("kIm"));
+          System.out.println(checker.message("GRACE") + ", " + checker.isFree("Grace"));
+          System.out.println(checker.message("graces") + ", " + checker.isFree("graces"));
+        hidden: true
+    more:
+      - task: |
+          Now the sign-up window, with `UsernameChecker` from the last challenge ready in its own file. The window is built already: a text field with the prompt text `Username`, the label `At least 3 characters`, and the disabled button `Sign up`. The names `admin`, `ada` and `linus` are taken. Make it work, with the checker doing the checking:
+
+          - After every change of the text, the label shows the checker's message for the text, and the button is enabled only when the checker says the name is free.
+          - **Sign up** marks the name in the field as taken, sets the label to `Signed up: ` and the name (`Signed up: grace`), and disables the button.
+
+          The task card shows the window after typing `grace` and clicking Sign up.
+        seed:
+          Main.java: |
+            import javafx.application.Application;
+            import javafx.scene.Scene;
+            import javafx.scene.control.Button;
+            import javafx.scene.control.Label;
+            import javafx.scene.control.TextField;
+            import javafx.scene.layout.VBox;
+            import javafx.stage.Stage;
+
+            public class Main extends Application {
+
+                @Override
+                public void start(Stage stage) {
+                    UsernameChecker checker = new UsernameChecker();
+                    checker.addTaken("admin");
+                    checker.addTaken("ada");
+                    checker.addTaken("linus");
+
+                    TextField username = new TextField();
+                    username.setPromptText("Username");
+                    Label status = new Label("At least 3 characters");
+                    Button signUp = new Button("Sign up");
+                    signUp.setDisable(true);
+
+                    stage.setScene(new Scene(new VBox(username, status, signUp)));
+                    stage.setTitle("Sign up");
+                    stage.show();
+                }
+
+                public static void main(String[] args) {
+                    launch(Main.class);
+                }
+            }
+          UsernameChecker.java: |
+            import java.util.ArrayList;
+
+            public class UsernameChecker {
+                private ArrayList<String> taken;
+
+                public UsernameChecker() {
+                    this.taken = new ArrayList<>();
+                }
+
+                public void addTaken(String name) {
+                    this.taken.add(name.toLowerCase());
+                }
+
+                public boolean isFree(String name) {
+                    return name.length() >= 3 && !this.taken.contains(name.toLowerCase());
+                }
+
+                public String message(String name) {
+                    if (name.length() < 3) {
+                        return "At least 3 characters";
+                    }
+                    if (this.taken.contains(name.toLowerCase())) {
+                        return name + " is taken";
+                    }
+                    return name + " is free";
+                }
+            }
+        solution:
+          Main.java: |
+            import javafx.application.Application;
+            import javafx.scene.Scene;
+            import javafx.scene.control.Button;
+            import javafx.scene.control.Label;
+            import javafx.scene.control.TextField;
+            import javafx.scene.layout.VBox;
+            import javafx.stage.Stage;
+
+            public class Main extends Application {
+
+                @Override
+                public void start(Stage stage) {
+                    UsernameChecker checker = new UsernameChecker();
+                    checker.addTaken("admin");
+                    checker.addTaken("ada");
+                    checker.addTaken("linus");
+
+                    TextField username = new TextField();
+                    username.setPromptText("Username");
+                    Label status = new Label("At least 3 characters");
+                    Button signUp = new Button("Sign up");
+                    signUp.setDisable(true);
+                    username.textProperty().addListener((observable, oldValue, newValue) -> {
+                        status.setText(checker.message(newValue));
+                        signUp.setDisable(!checker.isFree(newValue));
+                    });
+                    signUp.setOnAction(event -> {
+                        String name = username.getText();
+                        checker.addTaken(name);
+                        status.setText("Signed up: " + name);
+                        signUp.setDisable(true);
+                    });
+
+                    stage.setScene(new Scene(new VBox(username, status, signUp)));
+                    stage.setTitle("Sign up");
+                    stage.show();
+                }
+
+                public static void main(String[] args) {
+                    launch(Main.class);
+                }
+            }
+          UsernameChecker.java: |
+            import java.util.ArrayList;
+
+            public class UsernameChecker {
+                private ArrayList<String> taken;
+
+                public UsernameChecker() {
+                    this.taken = new ArrayList<>();
+                }
+
+                public void addTaken(String name) {
+                    this.taken.add(name.toLowerCase());
+                }
+
+                public boolean isFree(String name) {
+                    return name.length() >= 3 && !this.taken.contains(name.toLowerCase());
+                }
+
+                public String message(String name) {
+                    if (name.length() < 3) {
+                        return "At least 3 characters";
+                    }
+                    if (this.taken.contains(name.toLowerCase())) {
+                        return name + " is taken";
+                    }
+                    return name + " is free";
+                }
+            }
+        hints:
+          - "The listener asks the checker twice: once with `message` for the label's text, and once with `isFree`, negated, for whether the button is disabled."
+          - "The listener is two lines: `status.setText(checker.message(newValue));` and `signUp.setDisable(!checker.isFree(newValue));`. In Sign up's handler, read the name with `username.getText()`, then call `checker.addTaken(name)`, set the label and disable the button."
+        require:
+          - pattern: \.message\s*\(
+            message: "Let the checker write the label's text: `checker.message(...)`."
+          - pattern: \.isFree\s*\(
+            message: "Let the checker say whether the name is free: `checker.isFree(...)`."
+        tests:
+          - events: |
+              type TextField 1 "grace"
+              click Button "Sign up"
+          - events: |
+              type TextField 1 "Ada"
+              click Button "Sign up"
+            hidden: true
+          - events: |
+              type TextField 1 "lin"
+              click Button "Sign up"
+              type TextField 1 "a"
+              set TextField 1 "lin"
+            hidden: true
+          - events: |
+              type TextField 1 "admins"
+              set TextField 1 "ma"
+            hidden: true
+      - task: |
+          A pomodoro timer goes through a fixed plan of steps: `Work 1`, `Short break`, `Work 2`, `Short break`, `Work 3`, `Short break`, `Work 4`, `Long break`, and then from `Work 1` again. Write both parts:
+
+          - In `PomodoroCycle.java`, the class `PomodoroCycle`, without anything from JavaFX: a constructor that starts at `Work 1`, `current()`, which returns the name of the current step, `next()`, which moves to the next step, and `restart()`, which goes back to `Work 1`.
+          - In `Main.java`, the window is built already: the label `Now: Work 1`, and under it the buttons `Next` and `Start over`. Make a PomodoroCycle in `start`. **Next** moves the cycle to its next step and **Start over** restarts it; after either one, the label shows `Now: ` and the current step, like `Now: Short break`.
+
+          The task card shows the window after seven clicks on Next.
+        seed:
+          PomodoroCycle.java: |
+            public class PomodoroCycle {
+
+            }
+          Main.java: |
+            import javafx.application.Application;
+            import javafx.scene.Scene;
+            import javafx.scene.control.Button;
+            import javafx.scene.control.Label;
+            import javafx.scene.layout.HBox;
+            import javafx.scene.layout.VBox;
+            import javafx.stage.Stage;
+
+            public class Main extends Application {
+
+                @Override
+                public void start(Stage stage) {
+                    Label now = new Label("Now: Work 1");
+                    Button next = new Button("Next");
+                    Button startOver = new Button("Start over");
+
+                    stage.setScene(new Scene(new VBox(now, new HBox(next, startOver))));
+                    stage.setTitle("Pomodoro plan");
+                    stage.show();
+                }
+
+                public static void main(String[] args) {
+                    launch(Main.class);
+                }
+            }
+        solution:
+          PomodoroCycle.java: |
+            public class PomodoroCycle {
+                private int step;
+
+                public PomodoroCycle() {
+                    this.step = 0;
+                }
+
+                public String current() {
+                    if (this.step == 7) {
+                        return "Long break";
+                    }
+                    if (this.step % 2 == 1) {
+                        return "Short break";
+                    }
+                    return "Work " + (this.step / 2 + 1);
+                }
+
+                public void next() {
+                    this.step = (this.step + 1) % 8;
+                }
+
+                public void restart() {
+                    this.step = 0;
+                }
+            }
+          Main.java: |
+            import javafx.application.Application;
+            import javafx.scene.Scene;
+            import javafx.scene.control.Button;
+            import javafx.scene.control.Label;
+            import javafx.scene.layout.HBox;
+            import javafx.scene.layout.VBox;
+            import javafx.stage.Stage;
+
+            public class Main extends Application {
+
+                @Override
+                public void start(Stage stage) {
+                    PomodoroCycle cycle = new PomodoroCycle();
+                    Label now = new Label("Now: Work 1");
+                    Button next = new Button("Next");
+                    Button startOver = new Button("Start over");
+                    next.setOnAction(event -> {
+                        cycle.next();
+                        now.setText("Now: " + cycle.current());
+                    });
+                    startOver.setOnAction(event -> {
+                        cycle.restart();
+                        now.setText("Now: " + cycle.current());
+                    });
+
+                    stage.setScene(new Scene(new VBox(now, new HBox(next, startOver))));
+                    stage.setTitle("Pomodoro plan");
+                    stage.show();
+                }
+
+                public static void main(String[] args) {
+                    launch(Main.class);
+                }
+            }
+        hints:
+          - "PomodoroCycle can keep the number of the step, 0 to 7: the even steps 0, 2, 4 and 6 are `Work 1` to `Work 4` (`\"Work \" + (step / 2 + 1)`), step 7 is the long break, and the other odd steps are short breaks. `next()` adds one, and goes from 7 back to 0."
+          - "In `start`, make the cycle with `PomodoroCycle cycle = new PomodoroCycle();`. Each handler calls the cycle's method, then sets the label: `now.setText(\"Now: \" + cycle.current());`."
+        require:
+          - pattern: \bnew\s+PomodoroCycle\s*\(
+            message: "Make a PomodoroCycle in `start`, and let the handlers use it."
+          - pattern: \.current\s*\(\s*\)
+            message: "Show the step that the cycle's `current()` returns."
+        tests:
+          - events: |
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+          - events: |
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+            hidden: true
+          - events: |
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+            hidden: true
+          - events: |
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Next"
+              click Button "Start over"
+              click Button "Next"
+              click Button "Next"
+            hidden: true
+          - events: |
+              click Button "Start over"
+            hidden: true
+
+  - id: gui-events-launch-parameters
+    slug: launch-parameters
+    title: Launch parameters
+    text: |
+      A program started from a terminal can be given **command-line arguments**: words after the class's name, as in `java Main --name=Noor --candles=30`. They arrive in `main`'s parameter, `String[] args`, which every `main` has had since module 1. Here `args` would hold two Strings, `--name=Noor` and `--candles=30`. Programs use them for settings that change from one run to the next: a name, a size, a file to open.
+
+      ### From main to start
+
+      A JavaFX program hands its arguments on to the application: `launch(Main.class, args)`. After the class, `launch` takes any number of Strings (its parameter is written `String... args`): an array of them, as here, Strings written one after another, as in `launch(Main.class, "--name=Noor", "--candles=30")`, or none at all, as in `launch(Main.class)`.
+
+      In `start`, `getParameters()`, a method that Main inherits from Application, returns them as a `Parameters` object with three methods:
+
+      | Method | Returns |
+      | --- | --- |
+      | `getRaw()` | every argument, in order, as a `List<String>` |
+      | `getNamed()` | the arguments written `--key=value`, as a `Map<String, String>` from each key to its value |
+      | `getUnnamed()` | the other arguments, in order, as a `List<String>` |
+
+      An argument is named when it starts with two dashes, then a key that begins with a letter (or `_`), then `=`: `--name=Noor` is the key `name` with the value `Noor`. `-name=Noor` (one dash), `--quiet` (no `=`) and `--3d=yes` (the key starts with a digit) are unnamed. A key given twice keeps its last value.
+
+      A party has a banner that shows whose birthday it is. To try it without a terminal, this `main` gives `launch` the arguments itself:
+
+      ```java window
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.VBox;
+      import javafx.scene.text.Font;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Map<String, String> named = getParameters().getNamed();
+              Label banner = new Label("Happy birthday, " + named.get("name") + "!");
+              banner.setFont(Font.font("Serif", 28));
+              Label cake = new Label("Candles: " + named.get("candles"));
+              System.out.println(getParameters().getRaw());
+              System.out.println(getParameters().getUnnamed());
+
+              stage.setScene(new Scene(new VBox(banner, cake)));
+              stage.setTitle("Party");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class, "--name=Noor", "--candles=30", "balloons");
+          }
+      }
+      ```
+
+      ```output
+      [--name=Noor, --candles=30, balloons]
+      [balloons]
+      ```
+
+      `getNamed()` is a Map, so `get("name")` finds the value by its key (module 31). The values are Strings, even `30`: for a number to calculate with, convert it, as with input, `Integer.valueOf(named.get("candles"))`.
+
+      ### A default for a missing argument
+
+      `get` returns `null` for a key that isn't there. Started without arguments, the banner would say `Happy birthday, null!`. `getOrDefault` (module 31) gives a value of your own instead. This version passes on `main`'s own arguments, as a real program does, and on this page it runs without any:
+
+      ```java window
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.VBox;
+      import javafx.scene.text.Font;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Map<String, String> named = getParameters().getNamed();
+              Label banner = new Label("Happy birthday, " + named.getOrDefault("name", "friend") + "!");
+              banner.setFont(Font.font("Serif", 28));
+              Label cake = new Label("Candles: " + named.getOrDefault("candles", "plenty"));
+
+              stage.setScene(new Scene(new VBox(banner, cake)));
+              stage.setTitle("Party");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class, args);
+          }
+      }
+      ```
+
+      ### The application in a class of its own
+
+      The class with `main` doesn't have to be the application. `Main` can stay a plain class whose `main` starts another class, one that extends Application. Here `main` also gives only one of the two arguments:
+
+      ```java window
+      import javafx.application.Application;
+
+      public class Main {
+          public static void main(String[] args) {
+              Application.launch(PartyBanner.class, "--name=Kai");
+          }
+      }
+      // ==== PartyBanner.java ====
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.VBox;
+      import javafx.scene.text.Font;
+      import javafx.stage.Stage;
+
+      public class PartyBanner extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Map<String, String> named = getParameters().getNamed();
+              Label banner = new Label("Happy birthday, " + named.getOrDefault("name", "friend") + "!");
+              banner.setFont(Font.font("Serif", 28));
+              Label cake = new Label("Candles: " + named.getOrDefault("candles", "plenty"));
+
+              stage.setScene(new Scene(new VBox(banner, cake)));
+              stage.setTitle("Party");
+              stage.show();
+          }
+      }
+      ```
+
+      - `launch` is a static method of Application. Inside a class that extends Application it can be called by its name alone; anywhere else it's called with the class's name, `Application.launch(...)`, as `Math.max(...)` is.
+      - JavaFX makes the PartyBanner object itself, so PartyBanner must be `public`, with a constructor that takes no parameters, as module 48 said of Main.
+
+      ### Arguments here and on your computer
+
+      - On your own computer, the arguments go after the class's name in the command that starts the program, or in your editor's settings for running it.
+      - In Java Arena, the checks of a challenge give the arguments, and the task card shows them under "Command-line arguments". "Run with my input" starts your program without arguments, so it shows what your program does when they're missing.
+
+      **Your turn:** a screen at an airport's gate shows a flight and its gate, given as launch parameters such as `--flight=AY123 --gate=12`. When there's no gate yet, the screen says `Gate: not yet known`. Fill in the three blanks. The task card shows the window for the arguments `--flight=AY123 --gate=12`.
+    fill: |
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Map<String, String> named = getParameters().[[getNamed]]();
+              Label flight = new Label("Flight " + named.get("flight"));
+              Label gate = new Label("Gate: " + named.[[getOrDefault]]("gate", "not yet known"));
+
+              stage.setScene(new Scene(new VBox(flight, gate)));
+              stage.setTitle("Boarding");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class, [[args]]);
+          }
+      }
+    hints:
+      - "The `--key=value` arguments come from `getParameters().getNamed()`, a Map. For a key that may be missing, a Map has `getOrDefault(key, fallback)`."
+      - "`main` hands its own arguments on to the application: `launch(Main.class, args)`."
+    tests:
+      - args: [--flight=AY123, --gate=12]
+        events: []
+      - args: [--gate=3, --flight=SK901]
+        events: []
+        hidden: true
+      - args: [--flight=LH77]
+        events: []
+        hidden: true
+    more:
+      - task: |
+          A print shop's program is started with a few arguments, some of them not quite as the shop meant. What does it print?
+        predict: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Label;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  System.out.println(getParameters().getNamed().get("copies"));
+                  System.out.println(getParameters().getNamed().size());
+                  System.out.println(getParameters().getUnnamed());
+                  System.out.println(getParameters().getRaw().size());
+
+                  stage.setScene(new Scene(new Label("Printing")));
+                  stage.setTitle("Print shop");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class, "--copies=3", "poster.pdf", "--copies=5", "-color=red", "--draft");
+              }
+          }
+        hints:
+          - "An argument is named when it starts with two dashes, then a key that begins with a letter (or `_`), then `=`. `-color=red` has one dash, and `--draft` has no `=`."
+          - "`copies` is given twice, and the last value wins, so the Map has one key. `getRaw()` keeps every argument."
+      - task: |
+          A tip calculator's percent is a launch parameter, `--percent=20`, and 15 when it isn't given. The window is built already: the label `Tip percent: 15`, a text field with the prompt text `Bill in euros`, the button `Tip`, and an empty label. Make it work:
+
+          - Read the percent in `start`, and show it in the first label, like `Tip percent: 20`.
+          - **Tip** reads the bill, a whole number of euros, and sets the last label to the tip, `bill * percent / 100.0`, like `Tip: 9.0 euros` for a bill of 45 at 20 percent.
+          - `main` hands its arguments on to the application.
+
+          The task card shows the window for the arguments `--percent=20`, after typing 45 and clicking Tip.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.TextField;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Label rate = new Label("Tip percent: 15");
+                  TextField bill = new TextField();
+                  bill.setPromptText("Bill in euros");
+                  Button tip = new Button("Tip");
+                  Label result = new Label("");
+
+                  stage.setScene(new Scene(new VBox(rate, bill, tip, result)));
+                  stage.setTitle("Tip calculator");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Button;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.TextField;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  int percent = Integer.valueOf(getParameters().getNamed().getOrDefault("percent", "15"));
+                  Label rate = new Label("Tip percent: " + percent);
+                  TextField bill = new TextField();
+                  bill.setPromptText("Bill in euros");
+                  Button tip = new Button("Tip");
+                  Label result = new Label("");
+                  tip.setOnAction(event -> {
+                      int amount = Integer.valueOf(bill.getText());
+                      result.setText("Tip: " + amount * percent / 100.0 + " euros");
+                  });
+
+                  stage.setScene(new Scene(new VBox(rate, bill, tip, result)));
+                  stage.setTitle("Tip calculator");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class, args);
+              }
+          }
+        hints:
+          - "Read the percent from the named parameters at the top of `start`, with `getOrDefault` and \"15\" when it's missing, and make the first label's text from it."
+          - "The percent is `Integer.valueOf(getParameters().getNamed().getOrDefault(\"percent\", \"15\"))`. The handler can use `percent`: it's a local variable, but it never changes (step 2). Read the bill with `Integer.valueOf(bill.getText())`, and remember `launch(Main.class, args)` in `main`."
+        tests:
+          - args: [--percent=20]
+            events: |
+              type TextField 1 "45"
+              click Button "Tip"
+          - events: |
+              type TextField 1 "40"
+              click Button "Tip"
+            hidden: true
+          - args: [--percent=12, --currency=EUR]
+            events: |
+              type TextField 1 "50"
+              click Button "Tip"
+            hidden: true
+          - args: [--percent=10]
+            events: |
+              type TextField 1 "37"
+              click Button "Tip"
+              set TextField 1 "120"
+              click Button "Tip"
+            hidden: true

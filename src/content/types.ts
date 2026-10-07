@@ -1,5 +1,6 @@
 // The shape of src/generated/course.json, src/generated/modules/<id>.json and the lesson files in
 // public/lessons (made by scripts/build-content.mjs).
+import type { WindowState } from "../grader/window";
 
 /**
  * One test: the program's input, or `call`, code the check runs to call the learner's methods, or
@@ -7,10 +8,15 @@
  * `replace` swapped for other versions), which must give `outcome`: every test passes, or at least
  * one fails. `files` are files in the program's folder it can read; `writes` are files it must
  * leave there, with their text as the reference solution wrote them (compared like output).
+ * `args` are main's command-line arguments. `events` (a JavaFX program) are the clicks and typing
+ * replayed after start, one event line each ([] checks the window as start leaves it); `window` is
+ * the reference solution's window after them and `outline` its outline (windowOutline), which is
+ * what the learner's window is compared with.
  */
 export type TestCase = {
   name: string;
   stdin: string;
+  args?: string[];
   call?: string;
   files?: Record<string, string>;
   writes?: Record<string, string>;
@@ -19,6 +25,9 @@ export type TestCase = {
   junit?: string;
   replace?: Record<string, string>;
   outcome?: "pass" | "fail";
+  events?: string[];
+  window?: WindowState;
+  outline?: string;
 };
 export type Rule = { pattern: string; flags?: string; message: string; min?: number; max?: number; raw?: boolean };
 

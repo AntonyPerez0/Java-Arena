@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, CircleCheck, CircleX, X } from "lucide-react";
-import type { FriendlyDiagnostic, GradeResult } from "../grader/grade";
+import type { FriendlyDiagnostic, GradeResult, WrittenFile } from "../grader/grade";
+import { BinaryFile, GivenFileView } from "./AssetImage";
 import { InlineMd } from "./Markdown";
 import InputText from "./InputText";
 import { WindowCompare } from "./WindowView";
@@ -65,13 +66,22 @@ export function FileName({ name }: { name: string }) {
 const LONG_FILE_LINES = 15;
 const LONG_FILE_CHARS = 1500;
 
-/** The files a free run created or changed, each under its name; a long one starts folded. */
-export function WrittenFiles({ files }: { files?: { name: string; text: string }[] }) {
+/** The files a free run created or changed, each under its name; a long one starts folded, and one that isn't text is described, never shown as text. */
+export function WrittenFiles({ files }: { files?: WrittenFile[] }) {
   if (!files?.length) return null;
   return (
     <div className="written-files">
       {files.map((f) => {
-        const text = f.text.replace(/\n$/, "");
+        if (f.bytes)
+          return (
+            <div key={f.name} className="written-file">
+              <span className="lbl">
+                the file <FileName name={f.name} /> after the run
+              </span>
+              <BinaryFile bytes={f.bytes} />
+            </div>
+          );
+        const text = (f.text ?? "").replace(/\n$/, "");
         const lines = text === "" ? 0 : text.split("\n").length;
         const label = (
           <span className="lbl">
@@ -147,7 +157,7 @@ export default function Results({ result }: { result: GradeResult }) {
       )}
       {result.status === "internal-error" && (
         <div className="banner banner-fail">
-          <span>The Java engine couldn't check this ({result.internalError}). Try again; if it keeps happening, reload the page.</span>
+          <span>{result.assetError ?? `The Java engine couldn't check this (${result.internalError}). Try again; if it keeps happening, reload the page.`}</span>
         </div>
       )}
       {result.ruleProblems.length > 0 && result.status !== "compile-error" && (
@@ -208,14 +218,12 @@ export default function Results({ result }: { result: GradeResult }) {
                         </pre>
                       </div>
                     ) : null}
-                    {Object.entries(t.files ?? {}).map(([name, text]) => (
+                    {Object.entries(t.files ?? {}).map(([name, value]) => (
                       <div key={name}>
                         <span className="lbl">
-                          the file <FileName name={name} />
+                          {typeof value === "string" ? "the file" : "the image"} <FileName name={name} />
                         </span>
-                        <pre tabIndex={0} className="console tiny">
-                          {text.replace(/\n$/, "")}
-                        </pre>
+                        <GivenFileView value={value} />
                       </div>
                     ))}
                     {/* When only a written file or the window is wrong, the output (which is right) isn't compared again. */}
@@ -257,20 +265,25 @@ export default function Results({ result }: { result: GradeResult }) {
                       ))}
                   </div>
                 )}
-                {/* A test with clicks and typing: which ones; for a visible test, the windows (a hidden test never shows the expected one). */}
+                {/* A test with events (what the user does): which ones; for a visible test, the windows (a hidden test never shows the expected one). */}
                 {!t.pass && t.window && (
                   <div className="t-detail">
                     <p className="t-events">
-                      <span className="lbl">clicks and typing</span> {t.window.eventsInWords}
+                      <span className="lbl">what the user does</span> {t.window.eventsInWords}
                     </p>
                     {t.window.expectedOutline != null && !t.window.matches && <WindowCompare check={t.window} />}
                     {t.window.problems.length > 0 && (
-                      <ul className="rules" aria-label="Clicks and typing that couldn't happen">
+                      <ul className="rules" aria-label="What the user does that couldn't happen">
                         {t.window.problems.map((p, k) => (
                           <li key={k}>{p.words ? `${p.words}: ${p.problem}` : p.problem}</li>
                         ))}
                       </ul>
                     )}
+                    {t.window.mouseNotices?.map((m, k) => (
+                      <p key={k} className="t-note">
+                        {m}
+                      </p>
+                    ))}
                   </div>
                 )}
                 {!t.pass && t.note && <div className="t-note">{t.note}</div>}

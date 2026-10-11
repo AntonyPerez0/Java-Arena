@@ -26,7 +26,7 @@ function loadCase(dir, id) {
   const filesDir = join(dir, 'files');
   const files = {};
   if (existsSync(filesDir)) {
-    for (const f of listFiles(filesDir)) files[relative(filesDir, f)] = readFileSync(f, 'utf8');
+    for (const f of listFiles(filesDir)) files[relative(filesDir, f)] = fileValue(readFileSync(f));
   }
   const meta = existsSync(metaFile) ? JSON.parse(readFileSync(metaFile, 'utf8')) : {};
   return {
@@ -39,8 +39,31 @@ function loadCase(dir, id) {
     // Engine libraries on the class path (Java Arena's JavaFX for a program that uses javafx), as the site decides it.
     libraries: librariesFor(sources),
     nondeterministic: meta.nondeterministic ?? false,
+    // The longest the browser run may take (ms), for a program that guards the engine's speed: more is a failure.
+    maxRunMs: meta.maxRunMs ?? null,
     note: meta.note ?? '',
   };
+}
+
+/**
+ * A data file's content for a run: its text when it is UTF-8, otherwise its bytes (a Uint8Array,
+ * such as a PNG image that a program reads), which the runs write unchanged.
+ */
+export function fileValue(bytes) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new Uint8Array(bytes);
+  }
+}
+
+/**
+ * A file the JDK run left, as fidelity/out/jdk.json keeps it: its text when it is UTF-8, otherwise
+ * { binary: base64 of its bytes }.
+ */
+export function snapshotValue(bytes) {
+  const v = fileValue(bytes);
+  return typeof v === 'string' ? v : { binary: Buffer.from(v).toString('base64') };
 }
 
 // FIDELITY_ONLY=<regular expression> loads only the programs and error cases whose folder name matches

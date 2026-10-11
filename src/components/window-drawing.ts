@@ -7,19 +7,32 @@
 // TextArea 546 by 173, as headless OpenJFX 21 lays them out with its default 13 px font), and a
 // window never cuts off what it holds.
 //
+// The nodes of part 14: a chart is inline SVG (window-charts.ts); a canvas replays its recorded
+// calls (window-canvas.ts: on an HTML canvas in React, as SVG in HTML); an image view shows its
+// pixels as a PNG, several times larger when small, with its pixels kept crisp and the scale said
+// under it; a slider is drawn with its track, thumb, tick marks and tick labels (in the window
+// panel, a real range input). Canvases, image views and charts keep their own size; a slider is
+// 140 px wide and fills a column's width, as JavaFX's does.
+//
 // The drawing is a tree of plain element descriptions (Drawn), so that one function decides the
 // look and two render it: windowDrawingHtml (an HTML string, for lesson text, which
 // scripts/prerender.mjs also uses) and the React components in WindowView.tsx (the task card, the
-// results and the window panel, where the buttons and fields are real ones). Node runs this file
-// as it is (types are stripped), so it must not need compiling: no enums, namespaces or JSX.
-import { describeEvents, quoteText, windowOutline, type WindowExample, type WindowNode, type WindowNumber, type WindowStage, type WindowState } from "../grader/window.ts";
+// results and the window panel, where the buttons, fields, sliders and canvases with mouse
+// handlers are real ones). Node runs this file as it is (types are stripped), so it must not need
+// compiling: no enums, namespaces or JSX.
+import { describeEvents, quoteText, windowOutline, type DrawCall, type WindowExample, type WindowNode, type WindowNumber, type WindowStage, type WindowState } from "../grader/window.ts";
+import { canvasSvg, cssFamily, imageScale, pngDataUrl } from "./window-canvas.ts";
+import { chartSize, chartSvg, textWidth, tickLabel, tickValues, unitDecimals } from "./window-charts.ts";
 
 /** CSS properties, camelCase (as React takes them). */
 export type Css = Record<string, string>;
 
-/** A control the learner can use in the window panel: a button, a text field or a text area. */
+/**
+ * A control the learner can use in the window panel: a button, a text field, a text area, a slider,
+ * or a canvas or image view with mouse handlers (drawn on with the mouse, a finger or the keyboard).
+ */
 export type DrawnControl = {
-  kind: "button" | "field" | "password" | "area";
+  kind: "button" | "field" | "password" | "area" | "slider" | "canvas" | "image";
   /** The node's number in the window JSON (click #4). */
   n: number;
   /**
@@ -36,7 +49,7 @@ export type DrawnControl = {
   path: string;
   text: string;
   prompt: string;
-  /** Its accessible name: a button's text, a field's prompt text, else "Text field 2" (as an event line counts them). */
+  /** Its accessible name: a button's text, a field's prompt text, else "Text field 2" (as an event line counts them); "Slider 1", "Canvas 1, 220 x 140". */
   name: string;
   /** It, or a pane it is in, is disabled. */
   disabled: boolean;
@@ -46,11 +59,23 @@ export type DrawnControl = {
   wrap: boolean;
   /** Its text box's own style (width, font), for the real element that replaces the drawn one. */
   style: Css;
+  /**
+   * A slider: its range and value, its block increment (how far the keys move it: see sliderKey in WindowView.tsx), the step
+   * the page rounds a value to before it sends it (a hundredth of the range, as a power of ten),
+   * and, when it snaps to ticks, their spacing (where a value the learner moves it to goes).
+   */
+  slider?: { min: number; max: number; value: number; block: number; precision: number; snap?: number };
+  /**
+   * A canvas or image view with mouse handlers: its size in its own coordinates (an image's pixels),
+   * how many times larger it is drawn, and whether it takes a press, drag or release (so the learner
+   * draws on it; false: only clicks).
+   */
+  pointer?: { width: number; height: number; scale: number; draws: boolean };
 };
 
 /** One element of the drawing. */
 export type Drawn = {
-  tag: "div" | "span";
+  tag: "div" | "span" | "img";
   cls: string;
   /** Unique among its siblings, and the same for the same place in the next run's window (React reuses the element). */
   key: string;
@@ -59,6 +84,10 @@ export type Drawn = {
   text?: string;
   kids?: Drawn[];
   control?: DrawnControl;
+  /** Markup made here and put in as it is: a chart's SVG. */
+  markup?: string;
+  /** A canvas's size and calls: React replays them on an HTML canvas, the HTML has them as SVG. */
+  canvas?: { width: number; height: number; calls: DrawCall[] };
 };
 
 /** One window: its title bar's text and the frame's size, and the scene (null: the window has no scene). */
@@ -75,22 +104,15 @@ const px = (v: number) => `${Math.round(v * 100) / 100}px`;
 
 /** JavaFX's default font: System, 13. */
 export const DEFAULT_FONT_SIZE = 13;
-/** JavaFX's logical families as CSS families; another family is asked for by name, with the system font after it. */
-const SYSTEM_FONT = 'system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-const FAMILIES: Record<string, string> = { system: SYSTEM_FONT, serif: 'Georgia, "Times New Roman", serif', sansserif: 'Arial, "Helvetica Neue", sans-serif', monospaced: 'ui-monospace, Menlo, Consolas, "Liberation Mono", monospace', monospace: 'ui-monospace, Menlo, Consolas, "Liberation Mono", monospace' };
 
 function fontStyle(font: WindowNode["font"]): Css {
   if (!font) return {};
   const out: Css = {};
   const s = typeof font.size === "number" && Number.isFinite(font.size) && font.size > 0 ? Math.min(font.size, 200) : undefined;
   if (s != null) out.fontSize = px(s);
-  const f = font.family;
-  if (f) {
-    const known = FAMILIES[f.toLowerCase().replace(/[\s_-]/g, "")];
-    // A family's name goes into CSS only when it is plain letters, digits and spaces.
-    if (known) out.fontFamily = known;
-    else if (/^[A-Za-z0-9 ]{1,60}$/.test(f)) out.fontFamily = `"${f}", ${SYSTEM_FONT}`;
-  }
+  // JavaFX's logical families as CSS families; another family by name, when CSS can take it.
+  const family = cssFamily(font.family);
+  if (family) out.fontFamily = family;
   return out;
 }
 
@@ -109,8 +131,12 @@ const flexAxis = (a: Axis) => (a === "start" ? "flex-start" : a === "end" ? "fle
 const PANES = new Set(["Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Region", "Parent", "Node"]);
 const isPane = (n: WindowNode) => PANES.has(n.type) || n.children != null || n.top != null || n.left != null || n.center != null || n.right != null || n.bottom != null;
 const isField = (t: string) => t === "TextField" || t === "PasswordField" || t === "TextInputControl";
-/** JavaFX resizes panes and text inputs to fill the width their pane gives them; buttons and labels keep their own size. */
-const growsWide = (n: WindowNode) => isPane(n) || isField(n.type) || n.type === "TextArea";
+/**
+ * JavaFX resizes panes, text inputs and sliders to fill the width their pane gives them; buttons
+ * and labels keep their own size, and so do canvases and image views. A chart would grow too, but
+ * its drawing is made for its own size, so it keeps it.
+ */
+const growsWide = (n: WindowNode) => isPane(n) || isField(n.type) || n.type === "TextArea" || n.type === "Slider";
 /** Only panes and text areas grow taller. */
 const growsTall = (n: WindowNode) => isPane(n) || n.type === "TextArea";
 
@@ -123,13 +149,20 @@ type Place = { wide: boolean; tall: boolean; css?: Css };
  * 10 rows). A bigger font asks for more.
  */
 const INPUT_SIZE: Record<string, [number, number | undefined]> = { TextField: [170, undefined], PasswordField: [170, undefined], TextInputControl: [170, undefined], TextArea: [546, 173] };
+/** A slider asks for 140 px (its height is its own: see drawSlider). */
+const SLIDER_WIDTH = 140;
+
+/** The kinds of node whose size the drawing decides itself (a slider only its height). */
+const FIXED = new Set(["Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart"]);
 
 /** The size a node asks for (setPrefWidth, setPrefHeight, or a text input's own): exact, or the least when its pane stretches it. */
 function sizeCss(node: WindowNode, place: Place): Css {
   const out: Css = {};
   const fontSize = typeof node.font?.size === "number" && Number.isFinite(node.font.size) && node.font.size > 0 ? Math.min(node.font.size, 200) : DEFAULT_FONT_SIZE;
   const own = INPUT_SIZE[node.type]?.map((v) => (v == null ? undefined : (v * fontSize) / DEFAULT_FONT_SIZE));
-  const w = size(node.prefWidth) ?? own?.[0];
+  const w = size(node.prefWidth) ?? own?.[0] ?? (node.type === "Slider" ? SLIDER_WIDTH : undefined);
+  // A slider's height is its track, thumb and ticks; a canvas's, image view's and chart's size is their own.
+  if (FIXED.has(node.type)) return node.type === "Slider" && w != null ? sizeCss({ ...node, type: "Region", prefWidth: w, prefHeight: undefined }, place) : out;
   const h = size(node.prefHeight) ?? own?.[1];
   if (w != null) {
     out.minWidth = px(w);
@@ -150,7 +183,7 @@ const paddingCss = (p: WindowNumber[] | undefined): Css => {
 
 // ------------------------------------------------------------------ counting controls for their names
 
-type Counts = { field: number; password: number; area: number; button: number; names: Names };
+type Counts = { field: number; password: number; area: number; button: number; names: Names; kinds: Map<string, number> };
 
 /** How many buttons have each text, and how many nodes each id, in all the windows (for DrawnControl's target). */
 type Names = { texts: Map<string, number>; ids: Map<string, number> };
@@ -169,11 +202,22 @@ function namesIn(w: WindowState): Names {
   return names;
 }
 
-/** What an event line names a control by (see DrawnControl's target). */
-function targetOf(node: WindowNode, names: Names): string {
+/**
+ * What an event line names a control by (see DrawnControl's target). A slider, canvas or image
+ * view without an id of its own is named by its class and which one it is (Slider 1, Canvas 2:
+ * the library counts them in outline order too), when `index` is given.
+ */
+function targetOf(node: WindowNode, names: Names, index?: number): string {
   if (node.type === "Button" && typeof node.text === "string" && names.texts.get(node.text) === 1) return `Button ${quoteText(node.text)}`;
   if (typeof node.id === "string" && /^[A-Za-z_][A-Za-z0-9_-]*$/.test(node.id) && names.ids.get(node.id) === 1) return `#${node.id}`;
-  return `#${node.n}`;
+  return index != null ? `${node.type} ${index}` : `#${node.n}`;
+}
+
+/** Counts one more node of a class (Canvas, ImageView, Slider) in outline order: which one this is. */
+function countKind(counts: Counts, type: string): number {
+  const k = (counts.kinds.get(type) ?? 0) + 1;
+  counts.kinds.set(type, k);
+  return k;
 }
 
 const NAMES = { field: "Text field", password: "Password field", area: "Text area", button: "Button" };
@@ -289,6 +333,10 @@ function drawNode(node: WindowNode, place: Place, key: string, path: string, cou
 }
 
 function drawControl(node: WindowNode, style: Css, attrs: Record<string, string>, key: string, path: string, counts: Counts, disabled: boolean): Drawn {
+  if (node.type === "Canvas" && node.calls) return drawCanvas(node, style, attrs, key, path, counts, disabled);
+  if (node.type === "ImageView" && node.image !== undefined) return drawImageView(node, style, attrs, key, path, counts, disabled);
+  if (node.type === "Slider" && node.min !== undefined) return drawSlider(node, style, attrs, key, path, counts, disabled);
+  if (CHARTS.has(node.type) && node.xAxis) return drawChart(node, style, attrs, key, disabled);
   const text = node.text ?? "";
   const font = fontStyle(node.font);
   Object.assign(style, font);
@@ -333,10 +381,188 @@ function drawControl(node: WindowNode, style: Css, attrs: Record<string, string>
   return { tag: "span", cls: `fx-label${node.wrapText ? " fx-wrap" : ""}${off}`, key, style, attrs, kids: [{ tag: "span", cls: "fx-text", key: "t", text }] };
 }
 
+// ------------------------------------------------------------------ the nodes of part 14
+
+const CHARTS = new Set(["LineChart", "BarChart", "ScatterChart"]);
+const CHART_NAMES: Record<string, string> = { LineChart: "Line chart", BarChart: "Bar chart", ScatterChart: "Scatter chart" };
+/** A number of the JSON when it is a finite one. */
+const finite = (v: WindowNumber | undefined): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+/** Whether a canvas or image view has a mouse handler, so the window panel lets the learner use the mouse on it. */
+const hasMouse = (n: WindowNode) => !!(n.onMousePressed || n.onMouseDragged || n.onMouseReleased || n.onMouseClicked);
+/** Whether it has a handler for more than clicks (pressed, dragged or released), so the learner draws on it. */
+const drawsOn = (n: WindowNode) => !!(n.onMousePressed || n.onMouseDragged || n.onMouseReleased);
+const off = (disabled: boolean) => (disabled ? " fx-disabled" : "");
+
+/** A canvas: its calls replayed (see window-canvas.ts); with mouse handlers, a control the window panel lets the learner draw on. */
+function drawCanvas(node: WindowNode, style: Css, attrs: Record<string, string>, key: string, path: string, counts: Counts, disabled: boolean): Drawn {
+  const k = countKind(counts, "Canvas");
+  const width = size(node.width) ?? 0;
+  const height = size(node.height) ?? 0;
+  Object.assign(style, { width: px(width), height: px(height) });
+  const d: Drawn = { tag: "span", cls: "fx-canvas" + off(disabled), key, style, attrs, canvas: { width, height, calls: node.calls ?? [] } };
+  if (disabled) attrs["aria-disabled"] = "true";
+  if (hasMouse(node)) {
+    const name = `Canvas ${k}, ${javaSize(width)} x ${javaSize(height)}`;
+    d.control = { kind: "canvas", n: node.n, target: targetOf(node, counts.names, k), path, text: "", prompt: "", name, disabled, editable: true, onAction: true, wrap: false, style: {}, pointer: { width, height, scale: 1, draws: drawsOn(node) } };
+  }
+  return d;
+}
+
+/** A size for people: 220, 2.5. */
+const javaSize = (v: number) => String(Math.round(v * 100) / 100);
+
+/** The words under an image view's image drawn larger: "drawn 8 times larger". */
+export const scaleWords = (k: number) => `drawn ${k} times larger`;
+
+/**
+ * An image view: its image from its pixels, drawn larger when small (crisp), with the scale under
+ * it; no image, an image that failed to load, or one too big for the JSON to carry its pixels
+ * (over 512 x 512) is a gray box that says so.
+ */
+function drawImageView(node: WindowNode, style: Css, attrs: Record<string, string>, key: string, path: string, counts: Counts, disabled: boolean): Drawn {
+  const k = countKind(counts, "ImageView");
+  const img = node.image;
+  const cls = "fx-imageview" + off(disabled);
+  if (disabled) attrs["aria-disabled"] = "true";
+  if (img == null) return { tag: "span", cls: cls + " fx-image-none", key, style, attrs, text: "no image" };
+  if ("error" in img) return { tag: "span", cls: cls + " fx-image-none", key, style, attrs, text: "image error" };
+  const w = Math.round(finite(img.width) ?? 0);
+  const h = Math.round(finite(img.height) ?? 0);
+  const url = img.pixels != null ? pngDataUrl(w, h, img.pixels) : null;
+  if (!url) {
+    Object.assign(style, { width: px(Math.min(Math.max(w, 60), 512)), height: px(Math.min(Math.max(h, 30), 512)) });
+    return { tag: "span", cls: cls + " fx-image-big", key, style, attrs, text: `${w} x ${h} image, too big to draw here` };
+  }
+  const scale = imageScale(w, h, hasMouse(node));
+  const kids: Drawn[] = [{ tag: "img", cls: "fx-image", key: "img", attrs: { src: url, width: String(w * scale), height: String(h * scale), alt: `Image view ${k}: an image of ${w} x ${h} pixels`, draggable: "false" } }];
+  if (scale > 1) kids.push({ tag: "span", cls: "fx-image-scale", key: "scale", text: scaleWords(scale) });
+  const d: Drawn = { tag: "span", cls, key, style, attrs, kids };
+  if (hasMouse(node)) {
+    d.control = { kind: "image", n: node.n, target: targetOf(node, counts.names, k), path, text: "", prompt: "", name: `Image view ${k}, ${w} x ${h} pixels`, disabled, editable: true, onAction: true, wrap: false, style: {}, pointer: { width: w, height: h, scale, draws: drawsOn(node) } };
+  }
+  return d;
+}
+
+/** Where a value sits along a slider, as CSS: the thumb's middle goes from 8 px in to 8 px from the end. */
+export const sliderLeft = (p: number) => `calc(8px + ${Math.round(Math.min(Math.max(p, 0), 1) * 10000) / 10000} * (100% - 16px))`;
+
+/**
+ * The step the page rounds a slider's value to before it sends it: a hundredth of its range, as a
+ * power of ten (0 to 100: 1; 0 to 1: 0.01; 0 to 255: 1).
+ */
+export function sliderPrecision(min: number, max: number): number {
+  const range = max - min;
+  return range > 0 && Number.isFinite(range) ? 10 ** Math.floor(Math.log10(range / 100)) : 1;
+}
+
+/** A number written plainly, as an event line takes it (no exponent, no float noise, no -0): 25, 2.5, -0.01. */
+function plainNumber(v: number): string {
+  const s = v.toFixed(10).replace(/\.?0+$/, "");
+  return s === "-0" ? "0" : s;
+}
+
+/**
+ * A slider's value as the page sends it (set Slider 1 25): rounded to the slider's precision (see
+ * sliderPrecision), kept between its min and max (written as they are when it is at one of them).
+ * A slider that snaps to ticks goes to the nearest tick from min (halfway goes up), as the library
+ * moves it (and JavaFX's thumb, let go).
+ */
+export function sliderValueText(v: number, s: { min: number; max: number; precision: number; snap?: number }): string {
+  if (!Number.isFinite(v)) return plainNumber(s.min);
+  if (s.snap) {
+    const below = Math.floor((v - s.min) / s.snap);
+    const lower = below * s.snap + s.min;
+    const upper = (below + 1) * s.snap + s.min;
+    const t = v - lower < upper - v ? lower : upper;
+    if (t <= s.min) return plainNumber(s.min);
+    if (t >= s.max) return plainNumber(s.max);
+    return plainNumber(Number(t.toFixed(Math.min(10, Math.max(unitDecimals(s.snap), unitDecimals(s.min))))));
+  }
+  const r = Math.round(v / s.precision) * s.precision;
+  if (r <= s.min) return plainNumber(s.min);
+  if (r >= s.max) return plainNumber(s.max);
+  const decimals = Math.max(0, -Math.floor(Math.log10(s.precision)));
+  return plainNumber(Number(r.toFixed(Math.min(decimals, 10))));
+}
+
+/**
+ * A slider: its track and thumb, then (when shown) its tick marks, major ones every majorTickUnit
+ * from min and minorTickCount between them, and the major ticks' labels, as JavaFX's axis writes
+ * them (fewer when they wouldn't fit). In the window panel the track and thumb are a real range input.
+ */
+function drawSlider(node: WindowNode, style: Css, attrs: Record<string, string>, key: string, path: string, counts: Counts, disabled: boolean): Drawn {
+  const k = countKind(counts, "Slider");
+  const min = finite(node.min) ?? 0;
+  const max = finite(node.max) ?? 100;
+  const value = finite(node.value) ?? min;
+  const major = finite(node.majorTickUnit) ?? 25;
+  const minorCount = Math.max(0, Math.min(Math.floor(finite(node.minorTickCount) ?? 3), 20));
+  const range = max - min;
+  const p = (v: number) => (range > 0 ? (v - min) / range : 0);
+  const kids: Drawn[] = [
+    { tag: "span", cls: "fx-slider-track", key: "track" },
+    { tag: "span", cls: "fx-slider-thumb", key: "thumb", style: { left: sliderLeft(p(value)) } },
+  ];
+  const majors = range > 0 && major > 0 ? tickValues({ lower: min, upper: max, unit: major }) : [];
+  if (node.showTickMarks && majors.length) {
+    const marks: Drawn[] = majors.map((v, i) => ({ tag: "span", cls: "fx-tick fx-tick-major", key: `M${i}`, style: { left: sliderLeft(p(v)) } }));
+    // Minor ticks only when they leave room between them.
+    if (minorCount && majors.length * (minorCount + 1) <= 160) {
+      majors.forEach((v, i) => {
+        for (let m = 1; m <= minorCount; m++) {
+          const at = v + (major * m) / (minorCount + 1);
+          if (at < max) marks.push({ tag: "span", cls: "fx-tick", key: `m${i}.${m}`, style: { left: sliderLeft(p(at)) } });
+        }
+      });
+    }
+    kids.push({ tag: "span", cls: "fx-slider-marks", key: "marks", kids: marks });
+  }
+  if (node.showTickLabels && majors.length) {
+    const width = size(node.prefWidth) ?? SLIDER_WIDTH;
+    const labels = majors.map((v) => tickLabel(v, major));
+    const widest = Math.max(...labels.map((l) => textWidth(l, 10.8))) + 6;
+    // Every major tick's label when they fit the slider's own width, else every second, third...
+    const every = Math.max(1, Math.ceil((labels.length * widest) / Math.max(width - 16, 1)));
+    const shown = labels.flatMap((l, i) => (i % every === 0 ? [{ tag: "span" as const, cls: "fx-tick-label", key: `L${i}`, style: { left: sliderLeft(p(majors[i])) }, text: l }] : []));
+    kids.push({ tag: "span", cls: "fx-slider-labels", key: "labels", kids: shown });
+  }
+  const cls = `fx-slider${node.showTickMarks && majors.length ? " fx-slider-with-marks" : ""}${node.showTickLabels && majors.length ? " fx-slider-with-labels" : ""}${off(disabled)}`;
+  if (disabled) attrs["aria-disabled"] = "true";
+  const block = finite(node.blockIncrement);
+  // Snapping: the spacing of the ticks (minor ones too), as the library counts them; none when it is unusable.
+  const spacing = major / (Math.max(Math.floor(finite(node.minorTickCount) ?? 3), 0) + 1);
+  const snap = node.snapToTicks && spacing > 0 && range > 0 && range / spacing <= 10000 ? spacing : undefined;
+  const control: DrawnControl = {
+    kind: "slider",
+    n: node.n,
+    target: targetOf(node, counts.names, k),
+    path,
+    text: "",
+    prompt: "",
+    name: `Slider ${k}`,
+    disabled,
+    editable: true,
+    onAction: true,
+    wrap: false,
+    style: {},
+    slider: { min, max, value, block: block != null && block > 0 ? block : 10, precision: sliderPrecision(min, max), ...(snap ? { snap } : {}) },
+  };
+  return { tag: "span", cls, key, style, attrs, kids, control };
+}
+
+/** A chart as SVG of its own size (see window-charts.ts). Its text alternative is the window as text. */
+function drawChart(node: WindowNode, style: Css, attrs: Record<string, string>, key: string, disabled: boolean): Drawn {
+  const { width, height } = chartSize(node);
+  Object.assign(style, { width: px(width), height: px(height) });
+  if (disabled) attrs["aria-disabled"] = "true";
+  const name = `${CHART_NAMES[node.type]}${node.title ? ` ${quoteText(node.title)}` : ""}: its points are in the window as text`;
+  return { tag: "span", cls: "fx-chart" + off(disabled), key, style, attrs: { ...attrs, role: "img", "aria-label": name }, markup: chartSvg(node) };
+}
+
 /** The windows of a window JSON, drawn: each with its title and scene. */
 export function drawWindows(w: WindowState | null | undefined): DrawnWindow[] {
   if (!w) return [];
-  const counts: Counts = { field: 0, password: 0, area: 0, button: 0, names: namesIn(w) };
+  const counts: Counts = { field: 0, password: 0, area: 0, button: 0, names: namesIn(w), kinds: new Map() };
   return w.windows.map((stage: WindowStage, i) => {
     const style: Css = {};
     const sw = size(stage.width);
@@ -369,8 +595,12 @@ function html(d: Drawn): string {
   const attrs = Object.entries(d.attrs ?? {})
     .map(([k, v]) => ` ${k}="${esc(v)}"`)
     .join("");
-  const inner = d.text != null ? esc(d.text) : (d.kids ?? []).map(html).join("");
-  return `<${d.tag} class="${d.cls}"${style ? ` style="${esc(style)}"` : ""}${attrs}>${inner}</${d.tag}>`;
+  const open = `<${d.tag} class="${d.cls}"${style ? ` style="${esc(style)}"` : ""}${attrs}>`;
+  if (d.tag === "img") return open;
+  // HTML can't run code: a canvas's calls are drawn as SVG.
+  // A line break in a text is a character reference, so a blank line in it doesn't end the HTML block Markdown keeps whole.
+  const inner = d.markup ?? (d.canvas ? canvasSvg(d.canvas.calls, d.canvas.width, d.canvas.height) : d.text != null ? esc(d.text).replace(/\n/g, "&#10;") : (d.kids ?? []).map(html).join(""));
+  return `${open}${inner}</${d.tag}>`;
 }
 
 /** The title bar's minimize, maximize and close glyphs (drawn only). */

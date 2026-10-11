@@ -10,7 +10,7 @@ const argsOf = (t?: TestCase) => (t?.args?.length ? t.args : undefined);
  * in words for its note "2 more hidden tests use other ...". A challenge whose tests have no clicks
  * and typing and all the same arguments keeps the older words (input, files, calls). Otherwise the
  * words name only what some other test changes: input (standard input), files, calls, command-line
- * arguments, clicks and typing (a test with none checks the window as it opens).
+ * arguments, things the user does (its events; a test with none checks the window as it opens).
  */
 export function otherTestsUse(shown: TestCase | undefined, others: TestCase[]): string {
   const calls = others.filter((t) => t.call).length;
@@ -23,7 +23,7 @@ export function otherTestsUse(shown: TestCase | undefined, others: TestCase[]): 
     others.some((t) => t.files && !same(t.files, shown?.files)) && "files",
     calls > 0 && "calls",
     args && "command-line arguments",
-    others.some((t) => !same(t.events, shown?.events)) && "clicks and typing",
+    others.some((t) => !same(t.events, shown?.events)) && "things the user does",
   ].filter((p): p is string => !!p);
   return parts.length ? parts.join(" or ") : plain;
 }

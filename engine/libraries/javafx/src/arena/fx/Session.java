@@ -328,6 +328,7 @@ public final class Session {
     /** Applies the events, and knows when the session has ended. */
     private static final class Replay {
         final List<String> problems = new ArrayList<String>();
+        final Mouse mouse = new Mouse();
         boolean ended;
         boolean closed;
 
@@ -336,6 +337,8 @@ public final class Session {
             if (ended) {
                 return;
             }
+            // Where JavaFX's next pulse would lay the showing windows out.
+            Charts.layoutShowing(showingWindows());
             boolean none = showingWindows().isEmpty();
             synchronized (LOCK) {
                 if (exitCalled || (lastWindowClosed && none)) {
@@ -349,7 +352,7 @@ public final class Session {
             String problem = event.problem;
             if (problem == null) {
                 try {
-                    problem = Targets.apply(event, showingWindows(), primary);
+                    problem = Targets.apply(event, showingWindows(), primary, mouse);
                 } catch (Throwable t) {
                     uncaught(t);
                 }

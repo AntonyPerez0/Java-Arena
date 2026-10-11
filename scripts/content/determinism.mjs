@@ -10,7 +10,9 @@
  * SecureRandom), no Math.random(), no clock, no identity hash codes, and no Set.of or Map.of (whose
  * order changes from run to run). Comments and strings don't count. A node's toString has its
  * identity hash too (Label@1b6d3586), which a pattern can't see: the JDK-versus-browser check of
- * every lesson program (scripts/content-browser.mjs) finds a program that prints one.
+ * every lesson program (scripts/content-browser.mjs) finds a program that prints one (and the
+ * text of a MouseEvent, an Image, a GraphicsContext or a PixelReader has one too). A program that
+ * reads an image from the internet (new Image("https://...")) is rejected as well.
  */
 export function nondeterminism(files) {
   const code = files.map((f) => f.text.replace(/"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, " ")).join("\n");
@@ -36,5 +38,11 @@ export function nondeterminism(files) {
   ]
     .filter(([re]) => re.test(code))
     .map(([, what]) => what);
-  return found.length ? [`uses ${found.join(", ")}, but a program with a window must show the same window on every run (give a Random a seed, new Random(42), and shuffle with one: Collections.shuffle(list, new Random(42)))`] : [];
+  const messages = found.length ? [`uses ${found.join(", ")}, but a program with a window must show the same window on every run (give a Random a seed, new Random(42), and shuffle with one: Collections.shuffle(list, new Random(42)))`] : [];
+  // An image from the internet depends on the network: real JavaFX downloads it, and Java Arena's
+  // JavaFX reads only files in the program's folder (giving an error image). Comments don't count; strings do.
+  const withStrings = files.map((f) => f.text.replace(/"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) => (m.startsWith("/") ? " " : m))).join("\n");
+  if (/\bnew\s+(?:javafx\s*\.\s*scene\s*\.\s*image\s*\.\s*)?(?:Image|ImageView)\s*\(\s*"\s*(?:https?|ftp|jar):/i.test(withStrings))
+    messages.push('reads an image from the internet (new Image("https:...")), which depends on the network: give the program an image file of content/assets instead (files: { landscape.png: { asset: landscape.png } } in a test, an asset block before an example) and read it with new Image("file:landscape.png")');
+  return messages;
 }

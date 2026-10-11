@@ -36,7 +36,7 @@ export default function About() {
         The expected outputs come from a real JDK ({course.jdk}) at build time, and every lesson program is run through the browser engine too, to check that both give the same result.
       </p>
       <p>
-        The lessons on graphical user interfaces use Java Arena's practice version of JavaFX, written for this site (it isn't OpenJFX's code). It has only the classes and methods those lessons use. The page draws your window approximately, and each click or bit of typing runs your program again from the start with your earlier clicks and typing. A check, <code>npm run fx-check</code>, runs every model solution and example on real OpenJFX 21 too and confirms that they show the same window contents and print the same output. On your own computer, the same code runs with real JavaFX once JavaFX is installed, which the MOOC explains.
+        The lessons on graphical user interfaces use Java Arena's practice version of JavaFX, written for this site (it isn't OpenJFX's code). It has only the classes and methods those lessons use. The page draws your window approximately, and each click, bit of typing, slider move or use of the mouse runs your program again from the start with everything done before it. A check, <code>npm run fx-check</code>, runs every model solution and example on real OpenJFX 21 too and confirms that they show the same window contents and print the same output. On your own computer, the same code runs with real JavaFX once JavaFX is installed, which the MOOC explains.
       </p>
 
       <h2>Privacy</h2>

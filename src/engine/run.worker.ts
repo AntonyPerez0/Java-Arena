@@ -7,10 +7,10 @@
 import { createRunner as createRunnerJs } from "../../engine/dist/runner/runner-host.mjs";
 import { fetchCached, libraryClasses, type Manifest } from "./manifest";
 import type { RunInput, RunResult } from "./types";
+import { textOrBytes } from "../grader/assets";
 
 // runner-host.mjs is plain JavaScript; its options are documented at the top of the file.
 const createRunner = createRunnerJs as (options: { fetchAsset: (name: string) => Promise<Uint8Array>; modules?: Record<string, WebAssembly.Module> }) => Promise<any>;
-const decoder = new TextDecoder();
 const post = (msg: unknown) => (self as unknown as Worker).postMessage(msg);
 
 let runnerPromise: Promise<any> | null = null;
@@ -71,8 +71,9 @@ self.onmessage = async (e: MessageEvent) => {
         files: inputs[i].files ?? {},
         onOutput: (stream: "stdout" | "stderr", text: string) => post({ type: "output", index: i, stream, text }),
       });
-      const files: Record<string, string> = {};
-      for (const [name, bytes] of Object.entries(r.files ?? {})) files[name] = decoder.decode(bytes as Uint8Array);
+      // Each file as text, or as its bytes when it isn't text (a PNG the program was given, say), which the page never shows as text.
+      const files: Record<string, string | Uint8Array> = {};
+      for (const [name, bytes] of Object.entries(r.files ?? {})) files[name] = textOrBytes(bytes as Uint8Array);
       result = { stdout: r.stdout, stderr: r.stderr, output: r.output ?? r.stdout + r.stderr, exitCode: r.exitCode, timedOut: false, truncated: !!r.outputTruncated, ms: r.durationMs ?? performance.now() - t, files, internalError: r.error ? String(r.error) : undefined };
     } catch (err: any) {
       result = { stdout: "", stderr: "", output: "", exitCode: null, timedOut: false, truncated: false, ms: performance.now() - t, files: {}, internalError: String(err?.message ?? err) };

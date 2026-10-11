@@ -8,6 +8,7 @@ import { DownloadCard, EngineErrorCard, UnsupportedCard, useEngineAutoload, useE
 import { engineSupported } from "../engine/client";
 import { runOnly, type FreeRun } from "../grader/grade";
 import { WindowPanel, useWindowSession } from "../components/WindowView";
+import SampleImages, { sampleAssets, sampleFiles } from "../components/SampleImages";
 import { decodeShare, encodeShare } from "../lib/share";
 import { useTitle } from "../lib/title";
 import { PLAYGROUND_KEY as KEY } from "../state/store";
@@ -24,16 +25,20 @@ public class Main {
 }
 `;
 
-type Saved = { code: string; stdin: string };
+/** `samples`: the sample images (content/assets) in the program's folder, by name. */
+type Saved = { code: string; stdin: string; samples: string[] };
+
+/** The names of known sample images, from saved or shared data. */
+const knownSamples = (v: unknown) => (Array.isArray(v) ? v.filter((n): n is string => typeof n === "string" && sampleAssets.has(n)) : []);
 
 function loadSaved(): Saved {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? "null");
-    if (s && typeof s.code === "string") return { code: s.code, stdin: typeof s.stdin === "string" ? s.stdin : "" };
+    if (s && typeof s.code === "string") return { code: s.code, stdin: typeof s.stdin === "string" ? s.stdin : "", samples: knownSamples(s.samples) };
   } catch {
     /* ignore */
   }
-  return { code: EXAMPLE, stdin: "Ada\n" };
+  return { code: EXAMPLE, stdin: "Ada\n", samples: [] };
 }
 
 function save(s: Saved) {
@@ -46,7 +51,7 @@ function save(s: Saved) {
 
 function announce(r: FreeRun): string {
   if (r.status === "compile-error") return "It didn't compile. The errors are listed below.";
-  if (r.status === "internal-error") return "The Java engine couldn't run this. Try again.";
+  if (r.status === "internal-error") return r.assetError ?? "The Java engine couldn't run this. Try again.";
   const files = r.written?.length ? ` and the ${r.written.length === 1 ? "file" : "files"} it wrote` : "";
   if (!r.note) return `The program finished. Its output${files} ${files ? "are" : "is"} below.`;
   // It ended normally but printed an error (an event handler's exception, or on System.err).
@@ -59,6 +64,7 @@ export default function Playground() {
   useTitle("Playground");
   const [code, setCode] = useState(() => loadSaved().code);
   const [stdin, setStdin] = useState(() => loadSaved().stdin);
+  const [samples, setSamples] = useState(() => loadSaved().samples);
   // Opened from a share link: the learner's own saved program stays untouched until they edit.
   const [shared, setShared] = useState(false);
   const [shareError, setShareError] = useState("");
@@ -98,6 +104,7 @@ export default function Playground() {
     const s = loadSaved();
     setCode(s.code);
     setStdin(s.stdin);
+    setSamples(s.samples);
     setShared(false);
   }, []);
 
@@ -115,6 +122,7 @@ export default function Playground() {
         if (!current || !p) return;
         setCode(p.code);
         setStdin(p.stdin);
+        setSamples(knownSamples(p.samples));
         setShared(true);
         setResult(null);
         resetWindow();
@@ -130,9 +138,10 @@ export default function Playground() {
   const dropHash = () => navigate({ pathname, search }, { replace: true });
 
   const edit = (next: Partial<Saved>) => {
-    const s = { code, stdin, ...next };
+    const s = { code, stdin, samples, ...next };
     if (next.code !== undefined) setCode(next.code);
     if (next.stdin !== undefined) setStdin(next.stdin);
+    if (next.samples !== undefined) setSamples(next.samples);
     // Editing a shared program makes it this learner's own.
     if (shared) {
       setShared(false);
@@ -158,7 +167,8 @@ export default function Playground() {
     const g = stamp();
     try {
       // A JavaFX program keeps its clicks and typing while its code stays the same.
-      const r = await runOnly(code, stdin, undefined, { events: eventsFor(code) });
+      // The sample images in its folder come from the site (the grader fetches them).
+      const r = await runOnly(code, stdin, sampleFiles(samples), { events: eventsFor(code) });
       // Example, a share link or "Back to my program" while it ran: this result is the old program's.
       if (!isCurrent(g)) return;
       took(code, r);
@@ -169,7 +179,7 @@ export default function Playground() {
       busyRef.current = false;
       setBusy(false);
     }
-  }, [code, stdin, eventsFor, took, stamp, isCurrent, fx.replaying, queued]);
+  }, [code, stdin, samples, eventsFor, took, stamp, isCurrent, fx.replaying, queued]);
 
   // A Run that waited: once the window's run is drawn (and no click of it took the lock again).
   useEffect(() => {
@@ -184,7 +194,7 @@ export default function Playground() {
   };
 
   const share = async () => {
-    const url = new URL(location.pathname, location.origin).href + "#" + (await encodeShare({ code, stdin }));
+    const url = new URL(location.pathname, location.origin).href + "#" + (await encodeShare({ code, stdin, samples }));
     setLink(url);
     if (navigator.share && matchMedia("(pointer: coarse)").matches) {
       try {
@@ -195,11 +205,12 @@ export default function Playground() {
         /* cancelled: the link is still shown below */
       }
     }
+    const what = samples.length ? "this program, its input and its sample images" : "this program and its input";
     try {
       await navigator.clipboard.writeText(url);
-      tell("Link copied. Anyone who opens it sees this program and its input.");
+      tell(`Link copied. Anyone who opens it sees ${what}.`);
     } catch {
-      tell("Copy the link below. Anyone who opens it sees this program and its input.");
+      tell(`Copy the link below. Anyone who opens it sees ${what}.`);
     }
   };
 
@@ -250,6 +261,7 @@ export default function Playground() {
           Input (what the program reads)
         </label>
         <textarea id="pg-stdin" className="stdin" rows={3} value={stdin} onChange={(e) => edit({ stdin: e.target.value })} spellCheck={false} autoCapitalize="off" autoCorrect="off" wrap="off" />
+        <SampleImages names={samples} onChange={(names) => edit({ samples: names })} say={setLive} />
         <div className="actions">
           <button type="button" className="btn btn-primary" id="check" onClick={run} aria-busy={busy || queued || undefined} aria-keyshortcuts="Control+Enter Meta+Enter" disabled={unsupported}>
             {queued && !busy ? (
@@ -297,7 +309,7 @@ export default function Playground() {
         {result && (
           <div className="results">
             {result.status === "internal-error" ? (
-              <div className="banner banner-fail">The Java engine couldn't run this ({result.internalError}). Try again.</div>
+              <div className="banner banner-fail">{result.assetError ?? `The Java engine couldn't run this (${result.internalError}). Try again.`}</div>
             ) : result.status === "compile-error" ? (
               <>
                 <div className="banner banner-fail">

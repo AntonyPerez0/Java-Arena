@@ -26,6 +26,7 @@ const RULES: Rule[] = [
   // A name that this method created in a block that has ended is stronger evidence than an enum constant of the same name.
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: outOfScope },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable [\w$]+\n\s*location: (?:class|interface|enum|record) /, explain: enumConstant },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class [\w$]+\n/, explain: fxNested },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class [\w$]+\n\s*location: package javafx/, explain: fxNotInPackage },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class [\w$]+\n\s*location: package /, explain: notInPackage },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: classElsewhere },
@@ -36,6 +37,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: () => "Java doesn't know a class with this name. Check the spelling and capital letters, and whether it needs an import at the top of the file." },
   { code: "compiler.err.doesnt.exist", when: /^package system does not exist/, explain: () => "System needs a capital S. With a small s, Java reads system as the name of a package (a folder of classes), and there is no such package." },
   { code: "compiler.err.doesnt.exist", when: /^package javafx\b/, explain: fxPackage },
+  { code: "compiler.err.doesnt.exist", when: /^package [A-Z][\w$]* does not exist/, explain: fxOuterAsPackage },
   { code: "compiler.err.doesnt.exist", explain: unknownPackage },
   { code: "compiler.err.doesnt.exist", explain: () => "Java can't find this package. Check the spelling of the import or name before the dot, for example java.util.Scanner." },
   { code: "compiler.err.cant.resolve.location.args", when: /symbol:\s+method [A-Z]/, explain: missingNew },
@@ -45,6 +47,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.resolve.location.args", explain: libraryMethod },
   { code: "compiler.err.cant.resolve.location.args", explain: () =>"There is no method with this name that takes these arguments. Check the spelling, and which methods this type really has." },
   { code: "compiler.err.cant.resolve.location", explain: () => "Java can't find this name. Check the spelling and capital letters." },
+  { code: "compiler.err.cant.resolve", when: /symbol:\s+class [\w$]+$/m, explain: fxNested },
   { code: "compiler.err.cant.resolve", when: /symbol:\s+class [\w$]+$/m, explain: importFor },
   { code: "compiler.err.cant.resolve", when: /symbol:\s+class [A-Z][\w$]*$/m, explain: fxMissingClass },
   { code: "compiler.err.cant.resolve", explain: () => "Java can't find this name. Check the spelling and capital letters." },
@@ -56,6 +59,15 @@ const RULES: Rule[] = [
   { code: "compiler.err.prob.found.req", when: /^incompatible types: Optional(?:Double|Int|Long)?(?:<.*>)? cannot be converted to /, explain: optionalAsValue },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: (?:no instance\(s\) of type variable\(s\) [\w$, ]+ exist so that )?(?:Stream|IntStream|DoubleStream|LongStream)(?:<.*?>)? (?:conforms to|cannot be converted to) /, explain: streamAsValue },
   { code: "compiler.err.prob.found.req", when: /no instance\(s\) of type variable\(s\) .* exist so that Collector<.*> conforms to Supplier<R>/, explain: numberStreamCollect },
+  // Charts (MOOC part 14): axes and data points of other types than the chart's, a slider's listener written for Double.
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: cannot infer type arguments for [\w$.]+<>\n\s*reason: inference variable [XY] has incompatible equality constraints/, explain: fxChartAxes },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: (?:CategoryAxis|NumberAxis) cannot be converted to Axis</, explain: fxChartAxes },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: cannot infer type arguments for (?:[\w$]+\.)*Data<>\n/, explain: fxDataDiamond },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: (?:[\w$]+\.)*(?:Series|Data)<.*> cannot be converted to /, explain: fxSeriesTypes },
+  { code: "compiler.err.prob.found.req", when: /cannot be converted to ChangeListener<\? super Number>$/m, explain: fxNumberListener },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: Number cannot be converted to /, explain: fxNumberValue },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: Object cannot be converted to /, explain: fxRawObject },
+  { code: "compiler.err.prob.found.req", when: /possible lossy conversion from double to /, explain: fxLossy },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: cannot infer type arguments for [\w$.]+<>\n\s*reason: inference variable/, explain: diamondValue },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: Object(?:\[\])? cannot be converted to [\w$]+(?:\[\])?$/, explain: objectForTypeParameter },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: Object cannot be converted to [\w$.]+$/, explain: rawGeneric },
@@ -192,6 +204,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.deref", when: /^void cannot be dereferenced/, explain: voidDereferenced },
   { code: "compiler.err.cant.deref", explain: () => "Primitive values like int, double and boolean have no methods, so you can't put a dot after them. Use a wrapper or a helper, for example String.valueOf(number)." },
   { code: "compiler.err.operator.cant.be.applied.1", when: /^\s*(?:first|second) type:\s+Optional/m, explain: optionalInArithmetic },
+  { code: "compiler.err.operator.cant.be.applied.1", when: /^\s*(?:first|second) type:\s+Number$/m, explain: fxNumberArithmetic },
   { code: "compiler.err.operator.cant.be.applied.1", explain: () => "This operator doesn't work with these two types, for example subtracting a String, or comparing a String with <." },
   { code: "compiler.err.operator.cant.be.applied", explain: () => "This operator doesn't work with this type, for example ! on a number." },
   { code: "compiler.err.incomparable.types", explain: () => "These two values have types that can never be equal, so comparing them with == makes no sense." },
@@ -241,8 +254,8 @@ const RULES: Rule[] = [
   { code: "compiler.err.generic.array.creation", explain: genericArray },
   { code: "compiler.err.unexpected.type", explain: notAVariable },
   { code: "compiler.err.array.req.but.found", explain: arrayRequired },
-  { code: "compiler.note.unchecked.filename", explain: uncheckedNote },
-  { code: "compiler.note.unchecked.plural", explain: uncheckedNote },
+  { code: "compiler.note.unchecked.filename", explain: (_d, own) => fxRawNote(own) ?? uncheckedNote() },
+  { code: "compiler.note.unchecked.plural", explain: (_d, own) => fxRawNote(own) ?? uncheckedNote() },
   { code: "compiler.note.unchecked.recompile", explain: () => "Part of the note about unchecked or unsafe operations. You don't need to do this: the note doesn't stop the program from compiling." },
 ];
 
@@ -3422,13 +3435,17 @@ const FX: Record<string, { pkg: string; parent: string; methods: string }> = {
   ChangeListener: { pkg: "javafx.beans.value", parent: "", methods: "changed" },
   StringProperty: { pkg: "javafx.beans.property", parent: "ObservableValue", methods: "get set getValue setValue" },
   SimpleStringProperty: { pkg: "javafx.beans.property", parent: "StringProperty", methods: "get set addListener removeListener" },
+  DoubleProperty: { pkg: "javafx.beans.property", parent: "ObservableValue", methods: "get set getValue setValue" },
+  SimpleDoubleProperty: { pkg: "javafx.beans.property", parent: "DoubleProperty", methods: "get set addListener removeListener" },
   ObservableList: { pkg: "javafx.collections", parent: "", methods: "addAll setAll removeAll remove" },
+  FXCollections: { pkg: "javafx.collections", parent: "", methods: "observableArrayList" },
   Event: { pkg: "javafx.event", parent: "", methods: "" },
   ActionEvent: { pkg: "javafx.event", parent: "Event", methods: "" },
   EventHandler: { pkg: "javafx.event", parent: "", methods: "handle" },
+  EventType: { pkg: "javafx.event", parent: "", methods: "getName" },
   Insets: { pkg: "javafx.geometry", parent: "", methods: "getTop getRight getBottom getLeft" },
   Pos: { pkg: "javafx.geometry", parent: "", methods: "" },
-  Node: { pkg: "javafx.scene", parent: "", methods: "setId getId setDisable isDisable isDisabled setVisible isVisible getParent getScene setStyle getStyle lookup" },
+  Node: { pkg: "javafx.scene", parent: "", methods: "setId getId setDisable isDisable isDisabled setVisible isVisible getParent getScene setStyle getStyle lookup setOnMousePressed getOnMousePressed setOnMouseDragged getOnMouseDragged setOnMouseReleased getOnMouseReleased setOnMouseClicked getOnMouseClicked" },
   Parent: { pkg: "javafx.scene", parent: "Node", methods: "getChildrenUnmodifiable lookup" },
   Scene: { pkg: "javafx.scene", parent: "", methods: "getRoot setRoot getWidth getHeight" },
   Region: { pkg: "javafx.scene.layout", parent: "Parent", methods: "setPadding getPadding setPrefWidth getPrefWidth setPrefHeight getPrefHeight setPrefSize setMinSize setMaxSize" },
@@ -3448,7 +3465,28 @@ const FX: Record<string, { pkg: string; parent: string; methods: string }> = {
   TextField: { pkg: "javafx.scene.control", parent: "TextInputControl", methods: "setOnAction getOnAction" },
   PasswordField: { pkg: "javafx.scene.control", parent: "TextField", methods: "" },
   TextArea: { pkg: "javafx.scene.control", parent: "TextInputControl", methods: "setWrapText isWrapText" },
-  Font: { pkg: "javafx.scene.text", parent: "", methods: "getDefault font getName getFamily getSize" },
+  Slider: { pkg: "javafx.scene.control", parent: "Control", methods: "setMin getMin setMax getMax setValue getValue valueProperty setShowTickLabels isShowTickLabels setShowTickMarks isShowTickMarks setMajorTickUnit getMajorTickUnit setMinorTickCount getMinorTickCount setBlockIncrement getBlockIncrement setSnapToTicks isSnapToTicks" },
+  Font: { pkg: "javafx.scene.text", parent: "", methods: "getDefault font getName getFamily getStyle getSize" },
+  Paint: { pkg: "javafx.scene.paint", parent: "", methods: "" },
+  Color: { pkg: "javafx.scene.paint", parent: "Paint", methods: "color rgb web brighter darker grayscale invert getRed getGreen getBlue getOpacity" },
+  Canvas: { pkg: "javafx.scene.canvas", parent: "Node", methods: "getGraphicsContext2D setWidth getWidth setHeight getHeight" },
+  GraphicsContext: { pkg: "javafx.scene.canvas", parent: "", methods: "getCanvas setFill getFill setStroke getStroke setLineWidth getLineWidth setFont getFont fillRect strokeRect clearRect fillOval strokeOval strokeLine fillText strokeText fillPolygon strokePolygon" },
+  InputEvent: { pkg: "javafx.scene.input", parent: "Event", methods: "" },
+  MouseEvent: { pkg: "javafx.scene.input", parent: "InputEvent", methods: "getEventType getX getY getSceneX getSceneY" },
+  Image: { pkg: "javafx.scene.image", parent: "", methods: "getWidth getHeight isError getException getPixelReader" },
+  WritableImage: { pkg: "javafx.scene.image", parent: "Image", methods: "getPixelWriter" },
+  PixelReader: { pkg: "javafx.scene.image", parent: "", methods: "getArgb getColor" },
+  PixelWriter: { pkg: "javafx.scene.image", parent: "", methods: "setArgb setColor" },
+  ImageView: { pkg: "javafx.scene.image", parent: "Node", methods: "setImage getImage" },
+  Chart: { pkg: "javafx.scene.chart", parent: "Region", methods: "setTitle getTitle setLegendVisible isLegendVisible setAnimated getAnimated" },
+  XYChart: { pkg: "javafx.scene.chart", parent: "Chart", methods: "getXAxis getYAxis getData setData" },
+  LineChart: { pkg: "javafx.scene.chart", parent: "XYChart", methods: "setCreateSymbols getCreateSymbols" },
+  BarChart: { pkg: "javafx.scene.chart", parent: "XYChart", methods: "" },
+  ScatterChart: { pkg: "javafx.scene.chart", parent: "XYChart", methods: "" },
+  Axis: { pkg: "javafx.scene.chart", parent: "Region", methods: "setLabel getLabel setAutoRanging isAutoRanging" },
+  ValueAxis: { pkg: "javafx.scene.chart", parent: "Axis", methods: "setLowerBound getLowerBound setUpperBound getUpperBound setMinorTickVisible isMinorTickVisible" },
+  NumberAxis: { pkg: "javafx.scene.chart", parent: "ValueAxis", methods: "setTickUnit getTickUnit setForceZeroInRange isForceZeroInRange" },
+  CategoryAxis: { pkg: "javafx.scene.chart", parent: "Axis", methods: "getCategories" },
   Window: { pkg: "javafx.stage", parent: "", methods: "getWidth setWidth getHeight setHeight getScene isShowing hide" },
   Stage: { pkg: "javafx.stage", parent: "Window", methods: "setTitle getTitle setScene show close setResizable isResizable" },
 };
@@ -3458,9 +3496,11 @@ export { FX as PRACTICE_JAVAFX };
 
 /** The practice version's packages, in the order of the table. */
 const FX_PACKAGES = [...new Set(Object.values(FX).map((c) => c.pkg))];
+/** The events the practice version has, in a sentence's words. */
+const FX_EVENTS = "setOnAction (a click on a Button, or Enter in a TextField) and the mouse events of a Canvas or an ImageView, setOnMousePressed, setOnMouseDragged, setOnMouseReleased and setOnMouseClicked";
 /** The nodes a program creates with new: the controls and the panes. */
-const FX_NODES = ["Label", "Button", "TextField", "PasswordField", "TextArea", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Pane"];
-const FX_CONTROLS = "Label, Button, TextField, PasswordField and TextArea";
+const FX_NODES = ["Label", "Button", "TextField", "PasswordField", "TextArea", "Slider", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Pane", "Canvas", "ImageView", "LineChart", "BarChart", "ScatterChart"];
+const FX_CONTROLS = "Label, Button, TextField, PasswordField, TextArea and Slider";
 const FX_PANES = "FlowPane, HBox, VBox, StackPane, BorderPane, GridPane and Pane";
 
 /**
@@ -3470,30 +3510,29 @@ const FX_PANES = "FlowPane, HBox, VBox, StackPane, BorderPane, GridPane and Pane
  */
 const REAL_FX: Record<string, string> = Object.fromEntries(
   Object.entries({
-    "javafx.scene.control": "CheckBox RadioButton ToggleButton ToggleGroup Slider ComboBox ChoiceBox ListView TableView TableColumn Spinner ProgressBar ProgressIndicator Hyperlink MenuBar Menu MenuItem ScrollPane TabPane Tab Separator Tooltip Alert ButtonType Dialog TextInputDialog DatePicker ColorPicker TitledPane SplitPane",
+    "javafx.scene.control": "CheckBox RadioButton ToggleButton ToggleGroup ComboBox ChoiceBox ListView TableView TableColumn Spinner ProgressBar ProgressIndicator Hyperlink MenuBar Menu MenuItem ScrollPane TabPane Tab Separator Tooltip Alert ButtonType Dialog TextInputDialog DatePicker ColorPicker TitledPane SplitPane",
     "javafx.scene.layout": "AnchorPane TilePane Background BackgroundFill Border Priority ColumnConstraints RowConstraints CornerRadii",
     "javafx.scene": "Group Cursor",
     "javafx.scene.shape": "Rectangle Circle Line Ellipse Polygon Polyline Arc Shape Path",
-    "javafx.scene.paint": "Color Paint LinearGradient",
-    "javafx.scene.canvas": "Canvas GraphicsContext",
+    "javafx.scene.paint": "LinearGradient RadialGradient ImagePattern",
     "javafx.scene.text": "Text TextFlow FontWeight FontPosture TextAlignment",
-    "javafx.scene.input": "KeyEvent MouseEvent KeyCode MouseButton ScrollEvent",
-    "javafx.scene.image": "Image ImageView",
-    "javafx.scene.chart": "LineChart BarChart PieChart ScatterChart AreaChart NumberAxis CategoryAxis XYChart",
+    "javafx.scene.input": "KeyEvent KeyCode MouseButton ScrollEvent",
+    "javafx.scene.image": "PixelFormat",
+    "javafx.scene.chart": "PieChart AreaChart StackedBarChart BubbleChart",
+    "javafx.scene.media": "AudioClip Media MediaPlayer MediaView",
     "javafx.animation": "Timeline KeyFrame KeyValue AnimationTimer FadeTransition TranslateTransition RotateTransition PauseTransition Animation Interpolator",
     "javafx.util": "Duration Pair Callback StringConverter",
     "javafx.geometry": "HPos VPos Orientation Side",
     "javafx.stage": "FileChooser DirectoryChooser Modality StageStyle Screen WindowEvent",
-    "javafx.beans.property": "SimpleIntegerProperty IntegerProperty SimpleDoubleProperty DoubleProperty SimpleBooleanProperty BooleanProperty SimpleObjectProperty ObjectProperty ReadOnlyStringProperty",
+    "javafx.beans.property": "SimpleIntegerProperty IntegerProperty SimpleBooleanProperty BooleanProperty SimpleObjectProperty ObjectProperty ReadOnlyStringProperty",
     "javafx.beans.binding": "Bindings",
     "javafx.beans": "InvalidationListener Observable",
-    "javafx.collections": "FXCollections ListChangeListener",
-    "javafx.event": "EventType",
+    "javafx.collections": "ListChangeListener ObservableMap",
   }).flatMap(([pkg, names]) => names.split(" ").map((name) => [name, pkg])),
 );
 /** Packages of real JavaFX (its modules base, graphics, controls, fxml, media, web and swing) that the practice version has nothing of. */
 const REAL_FX_PACKAGES = new Set(
-  "javafx.animation javafx.beans javafx.beans.binding javafx.beans.property.adapter javafx.collections.transformation javafx.concurrent javafx.css javafx.print javafx.scene.canvas javafx.scene.chart javafx.scene.control.cell javafx.scene.effect javafx.scene.image javafx.scene.input javafx.scene.paint javafx.scene.robot javafx.scene.shape javafx.scene.transform javafx.util javafx.util.converter javafx.fxml javafx.scene.media javafx.scene.web javafx.embed.swing".split(" "),
+  "javafx.animation javafx.beans javafx.beans.binding javafx.beans.property.adapter javafx.collections.transformation javafx.concurrent javafx.css javafx.print javafx.scene.control.cell javafx.scene.effect javafx.scene.robot javafx.scene.shape javafx.scene.transform javafx.util javafx.util.converter javafx.fxml javafx.scene.media javafx.scene.web javafx.embed.swing".split(" "),
 );
 
 /** An FX class's parents, nearest first. */
@@ -3536,20 +3575,33 @@ const importNote = (own: OwnClasses, file: string, name: string) => (FX[name] &&
 function fxInstead(pkg: string, name?: string): string {
   if (pkg === "javafx.scene.control") return `Its controls are ${FX_CONTROLS}.`;
   if (pkg === "javafx.scene.layout" || (pkg === "javafx.scene" && name === "Group")) return `Its panes are ${FX_PANES}.`;
-  if (pkg === "javafx.scene.input" || /Event$/.test(name ?? "")) return "Of the events, it has only setOnAction: a click on a Button, or Enter in a TextField.";
+  if (pkg === "javafx.scene.input" || /Event$/.test(name ?? "")) return `Of the events, it has ${FX_EVENTS}.`;
   if (pkg === "javafx.scene.text") return "For text, use a Label; of javafx.scene.text it has only Font, with a family and a size, as in Font.font(20).";
-  if (/^javafx\.scene\.(?:shape|paint|canvas|image|chart|effect|transform)$/.test(pkg)) return `It doesn't draw shapes, colors, pictures or charts: it has the controls (${FX_CONTROLS}) and the panes that hold them.`;
-  if (pkg === "javafx.animation") return "It has no animations: each click runs the program again from the start.";
-  if (pkg === "javafx.beans.property" || pkg === "javafx.beans" || pkg === "javafx.beans.binding") return "Of the properties, it has StringProperty and SimpleStringProperty (a label's or a text field's textProperty()), with change listeners.";
-  if (pkg === "javafx.collections") return "Of javafx.collections, it has ObservableList, the list that getChildren() gives.";
+  if (pkg === "javafx.scene.paint") return "Of javafx.scene.paint, it has Color (and Paint, what a color is).";
+  if (pkg === "javafx.scene.image") return "Of javafx.scene.image, it has Image, WritableImage, PixelReader, PixelWriter and ImageView: pixels are read and written one at a time, with getArgb, getColor, setArgb and setColor.";
+  if (pkg === "javafx.scene.chart") return "Of the charts, it has LineChart, BarChart and ScatterChart, with NumberAxis and CategoryAxis.";
+  if (pkg === "javafx.scene.media") return fxNoSound(name);
+  if (/^javafx\.scene\.(?:shape|effect|transform)$/.test(pkg)) return "It doesn't have shapes as nodes: to draw, use a Canvas and its GraphicsContext (fillRect, fillOval, strokeLine, fillPolygon, fillText).";
+  if (pkg === "javafx.animation") return "It has no animations: each click, slider move or use of the mouse runs the program again from the start.";
+  if (pkg === "javafx.beans.property" || pkg === "javafx.beans" || pkg === "javafx.beans.binding") return "Of the properties, it has StringProperty and SimpleStringProperty (a label's or a text field's textProperty()) and DoubleProperty and SimpleDoubleProperty (a slider's valueProperty()), with change listeners.";
+  if (pkg === "javafx.collections") return "Of javafx.collections, it has ObservableList, the list that getChildren() gives, and FXCollections.observableArrayList(...).";
   if (pkg === "javafx.stage") return "Of javafx.stage, it has Stage, the window.";
   if (pkg === "javafx.geometry") return "Of javafx.geometry, it has Insets and Pos.";
-  if (pkg === "javafx.event") return "Of javafx.event, it has Event, ActionEvent and EventHandler.";
+  if (pkg === "javafx.event") return "Of javafx.event, it has Event, ActionEvent, EventHandler and EventType.";
   return `Its packages are ${list(FX_PACKAGES)}.`;
 }
 
+/** Why sound (and video, for every class of javafx.scene.media but AudioClip) can't play here, and where it can. */
+const fxNoSound = (name?: string) =>
+  name === "AudioClip"
+    ? "Sound can't play in this page: the browser engine that runs your program here has no way to play it, so the practice version has nothing of javafx.scene.media (AudioClip, Media, MediaPlayer, MediaView). The sound step is for reading; to hear it, run the program with real JavaFX on your own computer."
+    : "Sound and video can't play in this page: the browser engine that runs your program here has no way to play them, so the practice version has nothing of javafx.scene.media (AudioClip, Media, MediaPlayer, MediaView). The sound step is for reading; to hear or see it, run the program with real JavaFX on your own computer.";
+/** What a class of javafx.scene.media (or the package, without a name) is for: AudioClip plays sound, Media, MediaPlayer and MediaView sound and video. */
+const fxMediaFor = (name?: string) => (name === "AudioClip" ? "for sound" : "for sound and video");
+
 /** The start of a note about a class of real JavaFX that the practice version doesn't have. */
-const fxMissing = (name: string, pkg: string) => `${name} is part of real JavaFX (${pkg}.${name}), but Java Arena's practice version of JavaFX doesn't have it: it has only the classes and methods its lessons use. ${fxInstead(pkg, name)}`;
+const fxMissing = (name: string, pkg: string) =>
+  pkg === "javafx.scene.media" ? `${name} is part of real JavaFX (${pkg}.${name}), ${fxMediaFor(name)}. ${fxNoSound(name)}` : `${name} is part of real JavaFX (${pkg}.${name}), but Java Arena's practice version of JavaFX doesn't have it: it has only the classes and methods its lessons use. ${fxInstead(pkg, name)}`;
 
 /** An FX class whose name is close to this one (Buton for Button, Vbox for VBox), or undefined. */
 function fxNear(name: string, among = Object.keys(FX)): string | undefined {
@@ -3597,6 +3649,7 @@ function fxPackage(d: Diagnostic): string | null {
   }
   // A class of the practice version, imported from the wrong package.
   if (cls && FX[cls]) return `${cls} isn't in ${pkg}: it's in ${FX[cls].pkg}. Write import ${FX[cls].pkg}.${cls};`;
+  if (pkg === "javafx.scene.media") return `${cls ? `${cls} (${pkg}.${cls}) is part of real JavaFX` : `The package ${pkg} is part of real JavaFX`}, ${fxMediaFor(cls)}. ${fxNoSound(cls)}`;
   if (REAL_FX_PACKAGES.has(pkg) || (cls && REAL_FX[cls] === pkg)) {
     const what = cls ? `${cls} (${pkg}.${cls}) is part of real JavaFX` : `The package ${pkg} is part of real JavaFX`;
     return `${what}, but Java Arena's practice version of JavaFX doesn't have the package ${pkg}: it has only the classes and methods its lessons use. ${fxInstead(pkg, cls)}`;
@@ -3730,7 +3783,7 @@ function fxMethodList(fx: string): string {
 }
 
 /** The static methods of the practice version's classes (the others' methods belong to each object). scripts/explanations.test.mjs checks them against the library's class files. */
-const FX_STATIC: Record<string, string> = { Application: "launch", Platform: "runLater exit isFxApplicationThread", Font: "getDefault font", GridPane: "getColumnIndex getRowIndex" };
+const FX_STATIC: Record<string, string> = { Application: "launch", Platform: "runLater exit isFxApplicationThread", Font: "getDefault font", GridPane: "getColumnIndex getRowIndex", Color: "color rgb web", FXCollections: "observableArrayList" };
 export { FX_STATIC as PRACTICE_JAVAFX_STATIC };
 
 /** The methods of a list, such as the children list that getChildren() gives. */
@@ -3806,9 +3859,9 @@ function fxMethod(d: Diagnostic, own: OwnClasses): string | null {
       return `${has}: in Java Arena's practice version of JavaFX, only buttons and text fields have setOnAction (a click on a Button, or Enter in a TextField), and in real JavaFX ${aNode(fx)} doesn't have it either. ${tip}`;
     if (FX_WINDOW_EVENT.test(method) && fxIsKind(fx, "Window"))
       return `${holder}, and Java Arena's practice version of JavaFX has no ${method}: its windows have no events of their own, such as setOnCloseRequest and setOnShown, which are part of real JavaFX. To do something as the program ends, after the last window closes, override stop() in your class that extends Application: JavaFX calls it then.`;
-    const of = `${holder}, and Java Arena's practice version of JavaFX has no ${method}: of the events, it has only setOnAction, for a click on a Button or Enter in a TextField.`;
+    const of = `${holder}, and Java Arena's practice version of JavaFX has no ${method}: of the events, it has ${FX_EVENTS}.`;
     if (FX_NODE_EVENT.test(method) && (fxIsKind(fx, "Node") || fx === "Scene"))
-      return `${of} Mouse, keyboard, scroll and drag events, such as setOnMouseClicked and setOnKeyPressed, are part of real JavaFX but not of this version. ${tip}`;
+      return `${of} Keyboard, scroll and drag-and-drop events and the other mouse events, such as setOnKeyPressed and setOnMouseMoved, are part of real JavaFX but not of this version. ${tip}`;
     return `${of} ${tip}`;
   }
   const elsewhere = FX_NODES.concat(Object.keys(FX).filter((k) => !FX_NODES.includes(k))).filter((k) => !fxIsKind(fx, k) && !fxIsKind(k, fx) && fxMethods(k).includes(method));
@@ -3919,6 +3972,9 @@ function fxLambdaParams(d: Diagnostic, own: OwnClasses): string | null {
   const body = l.block ? "{ ... }" : l.body.length <= 50 ? l.body : "...";
   if (/^setOn[A-Z]/.test(l.method) && n !== 1)
     return `${l.method} needs an event handler: a lambda with one parameter, the event (an ActionEvent), which it gets each time the event happens. This lambda has ${count}. Give it exactly one, even when the handler doesn't use it: e -> ${body}`;
+  // A slider's listener with Double (or Integer) for its values: its valueProperty() is an ObservableValue<Number>.
+  const typed = /\b(Double|Integer|Long|Float)\s+[\w$]+\s*[,)]/.exec(atCaret(d)?.line ?? "");
+  if (l.method === "addListener" && n === 3 && typed) return `${FX_NUMBER_LISTENER} ${typed[1]} (Number oldValue, Number newValue). Then newValue.doubleValue() gives the value as a double, and newValue.intValue() as a whole number.`;
   if (l.method === "addListener" && n !== 3) {
     const params = `(${n >= 2 ? l.params[0] : "observable"}, oldValue, ${n >= 1 ? l.params[n - 1] : "newValue"})`;
     const invalidation = n === 1 ? " (Real JavaFX also takes a listener with one parameter, an InvalidationListener, which Java Arena's practice version of JavaFX doesn't have.)" : "";
@@ -3989,6 +4045,7 @@ function fxWrongValue(d: Diagnostic, own: OwnClasses): string | null {
   const it = shown ? `${shown} is ${anWord(from)}` : `this is ${anWord(from)}`;
   const recv = call.receiver;
   const target = recv ? `${recv}.${call.name}` : call.name;
+  if ((call.newClass || /(?:^|\.)XYChart$/.test(call.receiver.replace(/^new\s+/, ""))) && call.name === "Data" && call.index <= 1 && !knows(own, "Data") && usesFX(own)) return fxDataText(call.index === 0, to, from, arg);
   if (to === "Scene" && call.name === "setScene") {
     const node = fxTypeOf(own, from);
     return `setScene takes a Scene, and ${it}. ${node && fxIsKind(node, "Parent") ? `Put it in a Scene first: ${target}(new Scene(${shown ?? "root"}));` : "Create a Scene with the window's root pane, as in new Scene(root), and give that to setScene."}`;
@@ -4299,6 +4356,9 @@ const aNode = (name: string) => `${/^(?:[AEIOU]|H[A-Z])/.test(name) ? "an" : "a"
 
 /** IllegalArgumentException "Children: duplicate children added: parent = HBox@1b6d3586": a node added twice to one pane. */
 function fxDuplicate(m: string, c: CrashContext): string {
+  // A chart's own panes (as JavaFX names them): the same axis given twice, or the same point in two series.
+  if (/\[styleClass=chart-content\]$/.test(m)) return "The program gave a chart the same axis twice, as in new LineChart<>(axis, axis): each axis is a node in the window, in one place only. Give the chart two axes of its own, as in new LineChart<>(new NumberAxis(), new NumberAxis()).";
+  if (/\[styleClass=plot-content\]$/.test(m)) return "The program put the same data point in two series of one chart: each XYChart.Data is one point, drawn in one place. Create a new XYChart.Data<>(x, y) for each series, even when the values are the same.";
   const parent = /parent = ([\w$]+)@/.exec(m)?.[1];
   const node = childOnLine(c);
   // The node's class, from where the variable is created with new, for the example.
@@ -4346,6 +4406,532 @@ function fxNotApplication(cls: string, c: CrashContext): string {
   const app = c.own ? fxApps(c.own)[0] : undefined;
   const other = app ? `, or start ${app.name}, which extends Application, with Application.launch(${app.name}.class, args)` : "";
   return `launch(args) starts the class whose main calls it, here ${name}, as a JavaFX program, so ${name} must extend Application, and it doesn't. Make ${name} a JavaFX program, public class ${name} extends Application with a method public void start(Stage stage)${other}.`;
+}
+
+// ---- Charts, drawing and images with JavaFX (MOOC part 14, sections 14.1 and 14.2) ----
+
+/** The classes inside a class of the practice version: XYChart.Series and XYChart.Data, with what each is and an example. */
+const FX_NESTED: Record<string, { outer: string; what: string; example: string }> = {
+  Series: { outer: "XYChart", what: "a line of data points with a name", example: "XYChart.Series<Number, Number> series = new XYChart.Series<>();" },
+  Data: { outer: "XYChart", what: "one data point, an x value and a y value", example: "series.getData().add(new XYChart.Data<>(2020, 15));" },
+};
+/** "XYChart has two classes inside it: ...", for a name that isn't one of them. */
+const FX_XYCHART_INSIDE = `XYChart has two classes inside it, Series (${FX_NESTED.Series.what}) and Data (${FX_NESTED.Data.what}), written XYChart.Series and XYChart.Data`;
+
+/**
+ * "cannot find symbol: class Series" (or Data) in a JavaFX program: a class inside XYChart written
+ * without XYChart in front, or imported from javafx.scene.chart as if it were a class of its own;
+ * or a class XYChart doesn't have inside it (XYChart.Point).
+ */
+function fxNested(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+class ([\w$]+)(?:\n\s*location: (class|interface|package) ([\w$.]+))?/.exec(d.message);
+  if (!m || !fxProgram(own)) return null;
+  const [, name, kind, where] = m;
+  if (kind && kind !== "package" && simple(where) === "XYChart" && !knows(own, "XYChart")) {
+    const near = fxNear(name, Object.keys(FX_NESTED));
+    return `${FX_XYCHART_INSIDE}, and it has no class ${name}.${near ? ` Did you mean XYChart.${near}? Upper and lower case matter.` : ""}`;
+  }
+  const nested = FX_NESTED[name];
+  if (!nested || knows(own, name)) return null;
+  const outer = `${FX[nested.outer].pkg}.${nested.outer}`;
+  if (kind === "package")
+    return where === FX[nested.outer].pkg
+      ? `${name} isn't a class of ${where} of its own: it's a class inside ${nested.outer}, so import ${nested.outer} instead, import ${outer};, and write ${nested.outer}.${name} in the code. (import ${outer}.${name}; works too, and then ${name} alone is enough.)`
+      : null;
+  const imported = fxImported(own, d.file, FX[nested.outer].pkg, nested.outer) ? "" : ` (with import ${outer}; at the top of the file)`;
+  return `${name} is a class inside ${nested.outer}: ${nested.what}. Outside ${nested.outer}, its name is ${nested.outer}.${name}, so write ${nested.outer}.${name}${imported}, as in ${nested.example}`;
+}
+
+/** "package XYChart does not exist": XYChart.Series (or another class's name and a dot) when the class isn't imported, so Java reads it as a package. */
+function fxOuterAsPackage(d: Diagnostic, own: OwnClasses): string | null {
+  const name = /^package ([A-Z][\w$]*) does not exist/.exec(d.message)?.[1];
+  if (!name || !FX[name] || knows(own, name) || !fxProgram(own)) return null;
+  const inner = new RegExp(`(?<![\\w$.])${escapeRegExp(name)}\\s*\\.\\s*([A-Z][\\w$]*)`).exec(atCaret(d)?.line ?? "")?.[1];
+  const what = inner ? `${name}.${inner} is the class ${inner} inside ${name}` : `The name before the dot is the class ${name}`;
+  return `${what}, and Java doesn't know ${name} here because it isn't imported, so it reads ${name} as the name of a package, and there is no such package. Import ${name} at the top of the file: import ${FX[name].pkg}.${name};`;
+}
+
+/** The charts of the practice version: their axes decide the types of their values. */
+const FX_CHART = /^(?:LineChart|BarChart|ScatterChart)$/;
+/** The axis class whose values are of a type: CategoryAxis for String, NumberAxis for Number. */
+const fxAxisFor = (type: string) => (type === "String" ? "CategoryAxis" : type === "Number" ? "NumberAxis" : null);
+
+/**
+ * "cannot infer type arguments for LineChart<> (inference variable X has incompatible equality
+ * constraints Number,String)" or "CategoryAxis cannot be converted to Axis<Number>": a chart given
+ * an axis for other values than its angle brackets say, as a CategoryAxis where the values are numbers.
+ */
+function fxChartAxes(d: Diagnostic, own: OwnClasses): string | null {
+  if (!usesFX(own)) return null;
+  const inferred = /^incompatible types: cannot infer type arguments for (?:[\w$]+\.)*([\w$]+)<>\n\s*reason: inference variable ([XY]) has incompatible equality constraints ([\w$.]+),([\w$.]+)/.exec(d.message);
+  const given = /^incompatible types: (CategoryAxis|NumberAxis) cannot be converted to Axis<([\w$.]+)>/.exec(d.message);
+  const call = callAt(d, own);
+  let chart: string, x: boolean, want: string, axis: string | null;
+  if (inferred) [chart, x, want, axis] = [inferred[1], inferred[2] === "X", simple(inferred[3]), fxAxisFor(simple(inferred[4]))];
+  else if (given && call?.newClass && call.index >= 0) [chart, x, want, axis] = [call.name, call.index === 0, simple(given[2]), given[1]];
+  else return null;
+  if (!FX_CHART.test(chart) || knows(own, chart) || !axis || !fxAxisFor(want) || fxAxisFor(want) === axis) return null;
+  const has = axis === "CategoryAxis" ? "String" : "Number";
+  const which = x ? "x" : "y";
+  // The new chart's arguments, when the caret is on its <> (javac's place for a diamond) or in its parentheses.
+  const p = caretIn(d, own);
+  const open = p ? /^\s*<\s*>\s*\(/.exec(p.code.slice(p.at)) : null;
+  const args = open && p ? argumentsOf(p.code, p.text, p.at + open[0].length - 1) : call?.newClass && call.name === chart ? call.args : [];
+  const arg = args[x ? 0 : 1];
+  const shown = arg && arg.length <= 40 ? ` (${arg})` : "";
+  // The chart's angle brackets as the line declares them, with the value type that fits the axis instead.
+  const declared = new RegExp(`\\b${chart}\\s*<\\s*([\\w$.]+)\\s*,\\s*([\\w$.]+)\\s*>`).exec(atCaret(d)?.line ?? "");
+  const [tx, ty] = declared ? [simple(declared[1]), simple(declared[2])] : [x ? want : "String", x ? "Number" : want];
+  const fitting = `${chart}<${x ? has : tx}, ${x ? ty : has}>`;
+  const what = has === "String" ? "names, such as \"Helsinki\" or \"2020\" in quotes" : "numbers";
+  const series = `XYChart.Series<${x ? has : tx}, ${x ? ty : has}>`;
+  const replace = `give the chart a ${fxAxisFor(want)} there: new ${fxAxisFor(want)}()`;
+  const head = `A chart's axes decide the types of its values: ${chart}<X, Y> takes an axis for X values first and one for Y values second. A NumberAxis is for numbers (Number), and a CategoryAxis is for names (String). Here the ${which} axis${shown} is a ${axis}, for ${what}, but the angle brackets say the ${which} values are ${want}s.`;
+  if (chart !== "BarChart") {
+    const fix =
+      has === "String"
+        ? `If the ${which} values are numbers, ${replace}. If they are names, write String for them in the angle brackets, ${fitting}, and in its series' too, ${series}.`
+        : `If the ${which} values are names (text in quotes), ${replace}. If they are numbers, write Number for them in the angle brackets, ${fitting}, and in its series' too, ${series}.`;
+    return `${head} ${fix}`;
+  }
+  // A BarChart needs one axis of each kind: no advice may leave it two of the same, which compiles and then throws.
+  const bar = "A BarChart needs one of each: a CategoryAxis for the bars' names and a NumberAxis for their heights.";
+  const otherArg = args[x ? 1 : 0];
+  const otherAxis = fxAxisOf(d, own, otherArg);
+  const otherType = declared ? (x ? ty : tx) : null;
+  // The two axes the wrong way round for the angle brackets: each would fit the other place.
+  if (otherAxis && otherAxis !== axis && otherType && fxAxisFor(otherType) === axis) {
+    const [ax, ay] = x ? [arg, otherArg] : [otherArg, arg];
+    const swappedAxes = ax && ay && ax.length <= 40 && ay.length <= 40 ? `new BarChart<>(${ay}, ${ax})` : `new BarChart<>(new ${x ? otherAxis : axis}(), new ${x ? axis : otherAxis}())`;
+    const opposite = has === "String" ? "Number" : "String";
+    const [kx, ky] = x ? [has, opposite] : [opposite, has];
+    const sideways = kx === "Number" ? "lie sideways, with their names on the y axis" : "stand up, with their names on the x axis";
+    return `${head} ${bar} Here the two axes are the wrong way round for the angle brackets: swap them so they fit, ${swappedAxes}. Or, if you want the bars to ${sideways}, swap the types in the angle brackets instead so they match the axes: BarChart<${kx}, ${ky}>, and in its series' too, XYChart.Series<${kx}, ${ky}>.`;
+  }
+  // Another axis there fits only when the other axis isn't of the same kind; other angle brackets only when the other type isn't.
+  const byAxis = !otherAxis || otherAxis !== fxAxisFor(want);
+  const byTypes = !!declared && fxAxisFor(otherType ?? "") !== axis;
+  const fix =
+    byAxis && byTypes
+      ? `If the ${which} values are ${has === "String" ? "numbers" : "names (text in quotes)"}, ${replace}. If they are ${has === "String" ? "names" : "numbers"}, write ${has} for them in the angle brackets, ${fitting}, and in its series' too, ${series}.`
+      : byTypes
+        ? `Write ${has} for the ${which} values in the angle brackets, ${fitting}, and in its series' too, ${series}.`
+        : byAxis
+          ? `As the ${which} values are ${want}s, ${replace}.`
+          : `The other axis${otherArg && otherArg.length <= 40 ? ` (${otherArg})` : ""} is already a ${otherAxis}: if the two are the wrong way round, swap them.`;
+  return `${head} ${fix} (${bar})`;
+}
+
+/** The kind of axis an argument is, as written (new NumberAxis(...), or a variable declared as one), or null. */
+function fxAxisOf(d: Diagnostic, own: OwnClasses, arg: string | undefined): string | null {
+  if (!arg) return null;
+  const made = /^new\s+(?:javafx\.scene\.chart\.)?(CategoryAxis|NumberAxis)\s*\(/.exec(arg)?.[1];
+  if (made) return knows(own, made) ? null : made;
+  const type = typeOfName(d, own, arg);
+  const fx = type ? fxTypeOf(own, type) : null;
+  return fx === "CategoryAxis" || fx === "NumberAxis" ? fx : null;
+}
+
+/** The values of new XYChart.Data<>(x, y) (or new XYChart.Data<Number, Number>(...)) whose caret is on the class's name or its <>, as written. */
+function fxDataArguments(d: Diagnostic, own: OwnClasses): string[] {
+  const p = caretIn(d, own);
+  if (!p) return [];
+  const m = /^(?:\.\s*)?(?:Data\s*)?<[^<>]*>\s*\(/.exec(p.code.slice(p.at));
+  return m ? argumentsOf(p.code, p.text, p.at + m[0].length - 1) : [];
+}
+
+/** A value of the wrong type for a data point: `x` says which of its two values, `arg` is the value as written. */
+function fxDataText(x: boolean, want: string, got: string, arg: string | undefined): string {
+  const which = x ? "x" : "y";
+  const it = arg && arg.length <= 40 ? `${arg} is ${anWord(got)}` : `it's ${anWord(got)}`;
+  const head = `new XYChart.Data<>(x, y) takes the x value first and the y value second, and their types must be the series' types, the ones in its angle brackets. Here the ${which} value must be ${anWord(want)}, and ${it}.`;
+  const unquoted = arg && /^"-?\d+(?:\.\d+)?"$/.test(arg) ? arg.slice(1, -1) : null;
+  if (got === "String" && want === "Number")
+    return `${head} Text in quotes is a String, even when it looks like a number: write the number without quotes${unquoted ? `, ${unquoted}` : ""}.${x ? " If the x values are names, such as years written \"2020\" for a CategoryAxis, write String for them in the series' and the chart's angle brackets: XYChart.Series<String, Number>." : ""}`;
+  if (want === "String" && /^(?:Integer|Double|Long|Float|Short|Byte|Number)$/.test(got))
+    return `${head} A number isn't text. If the ${which} values are names on a CategoryAxis, write this one in quotes${arg && /^-?\d+(?:\.\d+)?$/.test(arg) ? `, "${arg}"` : ""}. If they are numbers, write Number for them in the series' and the chart's angle brackets, and give the chart a NumberAxis.`;
+  return `${head} Pass ${anWord(want)} there, or change the types in the series' angle brackets.`;
+}
+
+/** "cannot infer type arguments for Data<> (inference variable Y has incompatible bounds ...)": new XYChart.Data<>(...) with a value of another type than its series'. */
+function fxDataDiamond(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: cannot infer type arguments for (?:[\w$]+\.)*Data<>\n\s*reason: inference variable ([XY]) has incompatible bounds\n\s*equality constraints: ([\w$.]+)\n\s*lower bounds: ([\w$.]+)$/m.exec(d.message);
+  if (!m || !usesFX(own) || knows(own, "Data")) return null;
+  const x = m[1] === "X";
+  return fxDataText(x, simple(m[2]), simple(m[3]), fxDataArguments(d, own)[x ? 0 : 1]);
+}
+
+/** Whether a piece of code opens as many parentheses and angle brackets as it closes (an argument not cut at a comma inside them). */
+const balanced = (code: string) => [..."(<"].every((o, i) => code.split(o).length === code.split(")>"[i]).length);
+
+/** "Series<String,Number> cannot be converted to Series<Number,Number>": a series of other types than the chart's (or a point of other types than the series'). */
+function fxSeriesTypes(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: (?:[\w$]+\.)*(Series|Data)<([\w$.]+),\s*([\w$.]+)> cannot be converted to (?:[\w$]+\.)*\1<([\w$.]+),\s*([\w$.]+)>$/m.exec(d.message);
+  if (!m || !usesFX(own) || knows(own, m[1])) return null;
+  const [, cls, gx, gy, wx, wy] = m.map((s) => simple(s));
+  const call = callAt(d, own);
+  const arg = call && call.index >= 0 ? call.args[call.index] : "";
+  // The argument as split at its commas, which don't skip those inside angle brackets: shown only when whole.
+  const it = arg && arg.length <= 40 && balanced(arg) ? `${arg} is` : "This is";
+  const series = cls === "Series";
+  const holder = series ? "a chart" : "a series";
+  const differs = gx !== wx ? `x values (${gx} and ${wx})` : `y values (${gy} and ${wy})`;
+  const axes = series ? ` The chart's axes show values of its types: a NumberAxis shows Numbers, a CategoryAxis Strings.` : "";
+  return `${it} an XYChart.${cls}<${gx}, ${gy}>, and ${holder} of ${wx} and ${wy} values takes only XYChart.${cls}<${wx}, ${wy}>: the types in the angle brackets must be the same, and here the ${differs} differ.${axes} Declare the ${series ? "series" : "point"} with the same types as the ${series ? "chart" : "series"}, as in XYChart.${cls}<${wx}, ${wy}>, or change the ${series ? "chart's types (and its axis)" : "series' types"} to ${gx} and ${gy}.`;
+}
+
+/**
+ * A chart class written without its types in angle brackets, as in XYChart.Series series = new
+ * XYChart.Series(); (Java calls that a raw type): the first one in the program, as written, or null.
+ */
+function fxRawChart(own: OwnClasses): { name: string; written: string; variable?: string } | null {
+  if (!usesFX(own)) return null;
+  const raw = /(?<![\w$.])((?:XYChart\s*\.\s*)?(Series|Data)|(LineChart|BarChart|ScatterChart))(?=\s*(?:\(|[A-Za-z_$]))(?:\s+([\w$]+))?/g;
+  for (const lines of own.code.values())
+    for (const line of lines)
+      for (const m of line.matchAll(raw)) {
+        const name = m[2] ?? m[3];
+        // XYChart.Series(...) needs new in front, and a class of the program's own of that name isn't JavaFX's.
+        if (knows(own, name) || (m[2] && !/XYChart/.test(m[1]) && !FX_NESTED[name]) || /^(?:extends|implements|instanceof)$/.test(m[4] ?? "")) continue;
+        const call = line.slice(m.index + m[1].length).trimStart().startsWith("(");
+        if (call && !/\bnew\s+$/.test(line.slice(0, m.index))) continue;
+        return { name, written: m[1].replace(/\s+/g, ""), variable: call ? undefined : m[4] };
+      }
+  return null;
+}
+
+/** How a chart class is written with its types: the example for the note about raw types. */
+function fxWithTypes(name: string): string {
+  if (name === "Series") return "XYChart.Series<Number, Number> series = new XYChart.Series<>();";
+  if (name === "Data") return "new XYChart.Data<>(2020, 15) in a series of XYChart.Series<Number, Number>";
+  return `${name}<Number, Number> chart = new ${name}<>(new NumberAxis(), new NumberAxis());`;
+}
+
+/** javac's note about unchecked operations in a JavaFX program with a chart class written without its types, or null. */
+function fxRawNote(own: OwnClasses): string | null {
+  const raw = fxRawChart(own);
+  if (!raw) return null;
+  return `This is a note, not an error: the program compiles and runs. Java says it can't check some types for you, and here that's because ${raw.written} is written without its types in angle brackets. Then Java can't check that the values fit the chart, such as a number given to a chart whose x axis is a CategoryAxis. Write the types in, as in ${fxWithTypes(raw.name)} (new ...<>() takes them from the variable), and the note goes away.`;
+}
+
+/** "incompatible types: Object cannot be converted to Data<Number,Number>": the data of a series declared without its types. */
+function fxRawObject(d: Diagnostic, own: OwnClasses): string | null {
+  const to = /^incompatible types: Object cannot be converted to (?:[\w$]+\.)*(Series|Data)<(.*)>$/m.exec(d.message);
+  const raw = to ? fxRawChart(own) : null;
+  if (!to || !raw) return null;
+  const from = /([\w$]+)\s*\.\s*getData\s*\(\s*\)/.exec(atCaret(d)?.line ?? "")?.[1];
+  const named = from ?? raw.variable;
+  return `${named ? `${named} is` : `${raw.written} is`} declared without its types in angle brackets, so for Java its getData() holds plain Objects, and an Object can't go in a variable of type XYChart.${to[1]}<${to[2].replace(/,(?! )/g, ", ")}>. Declare it with its types, as in ${fxWithTypes(raw.name)}`;
+}
+
+/** Methods of the practice version that give a double: sizes, positions and a slider's values. */
+const FX_DOUBLE = /\b(getWidth|getHeight|getValue|getX|getY|getSceneX|getSceneY|getMin|getMax|getLowerBound|getUpperBound|getTickUnit|getMajorTickUnit|getLineWidth|getRed|getGreen|getBlue|getOpacity)\s*\(\s*\)/;
+
+/** "possible lossy conversion from double to int" for a JavaFX method that gives a double, such as an image's getWidth() or a slider's getValue(). */
+function fxLossy(d: Diagnostic, own: OwnClasses): string | null {
+  if (!usesFX(own)) return null;
+  const c = atCaret(d);
+  if (!c) return null;
+  // The call javac means: the last one that ends at the caret or before it (javac's caret is on its parenthesis), or else the first after it.
+  const caret = c.line.length - c.at.length;
+  const calls = [...c.line.matchAll(new RegExp(FX_DOUBLE.source, "g"))];
+  const m = calls.filter((x) => x.index <= caret).pop() ?? calls[0];
+  if (!m) return null;
+  const method = m[1];
+  // A method of the program's own of that name (a Point's getX) may be the one called.
+  if ([...own.types.values()].some((t) => t.members.some((x) => x.method && x.name === method))) return null;
+  const end = m.index + m[0].length;
+  const value = c.line.slice(expressionStart(c.line, end), end).replace(/\s+/g, "");
+  const to = /possible lossy conversion from double to (\w+)/.exec(d.message)?.[1] ?? "int";
+  // What the method is called on: its declared type (where it's in scope) says whose method it is. An
+  // untyped lambda parameter (event -> ...), a chain or a cast leaves it unknown, and then it's JavaFX's.
+  const receiver = value.slice(0, value.length - m[0].replace(/\s+/g, "").length).replace(/\.$/, "");
+  const type = scopedTypeOf(d, own, receiver);
+  const fx = type ? fxTypeOf(own, type) : null;
+  const known = type != null;
+  // A DoubleProperty's getValue() gives a Double, which a cast to int doesn't take: its get() gives the double.
+  const property = method === "getValue" && ((fx && fxIsKind(fx, "DoubleProperty")) || /valueProperty\(\)$/.test(receiver));
+  const number = property ? `${receiver}.get()` : value;
+  const cast = `(${to}) ${number}`;
+  if (/^(?:getWidth|getHeight)$/.test(method) && (!known || fx))
+    return `${value} gives a double: JavaFX measures sizes in doubles, even an image's width and height in pixels. Where a whole number is needed, as for a loop's bound, a pixel's x and y or new WritableImage(...), cast it: ${cast}.`;
+  if (/^(?:getX|getY|getSceneX|getSceneY)$/.test(method) && (!known || (fx && fxIsKind(fx, "MouseEvent"))))
+    return `${value} gives a double: the mouse's position can be between two pixels, such as 12.5. Where a whole number is needed, as for a pixel's x and y, cast it: ${cast} drops the decimals.`;
+  if (/^(?:getValue|getMin|getMax)$/.test(method) && (!known || (fx && (fxIsKind(fx, "Slider") || property))))
+    return `${value} gives a double, such as 25.0 or 25.4 (a slider moves smoothly between its min and max). For a whole number, cast it: ${cast} drops the decimals, and (${to}) Math.round(${number}) rounds it to the nearest one.`;
+  // Not JavaFX's: the method may give a double or a Double (as a Map.Entry<String, Double>'s getValue()), and a cast such as (int) takes only the first.
+  if (known && !fx)
+    return `${value} gives a decimal number. Where a whole number is needed, round it: (${to}) Math.round(${value}) gives the nearest one, whether ${value} gives a double or a Double.`;
+  return `${value} gives a double. Where a whole number is needed, cast it: ${cast} drops the decimals.`;
+}
+
+/** The ( or { that the code at `at` is inside, or -1. */
+function openAround(code: string, at: number): number {
+  let depth = 0;
+  for (let k = at - 1; k >= 0; k--) {
+    const ch = code[k];
+    if (")]}".includes(ch)) depth++;
+    else if ("([{".includes(ch) && depth-- === 0) return k;
+  }
+  return -1;
+}
+
+/** Where the bracket that opens at `open` ((, [ or {) closes, or the code's length. */
+function bracketClose(code: string, open: number): number {
+  const [o, c] = code[open] === "{" ? ["{", "}"] : code[open] === "(" ? ["(", ")"] : ["[", "]"];
+  let depth = 0;
+  for (let k = open; k < code.length; k++) {
+    if (code[k] === o) depth++;
+    else if (code[k] === c && --depth === 0) return k;
+  }
+  return code.length;
+}
+
+/**
+ * Where the body that starts at `from` ends: a block in { } (after an optional -> or a throws clause),
+ * or else one statement or a lambda's expression, up to its ; or , or the bracket that closes around it.
+ */
+function bodyEnd(code: string, from: number): number {
+  const head = /^\s*(?:->\s*)?(?:throws\s+[\w$.\s,]+?(?=\{))?\s*/.exec(code.slice(from));
+  const k = from + (head ? head[0].length : 0);
+  if (code[k] === "{") return bracketClose(code, k);
+  let depth = 0;
+  for (let j = k; j < code.length; j++) {
+    const ch = code[j];
+    if ("([{".includes(ch)) depth++;
+    else if (")]}".includes(ch) && depth-- === 0) return j;
+    else if ((ch === ";" || ch === ",") && depth === 0) return j;
+  }
+  return code.length;
+}
+
+/** Whether a variable declared at `from` (a local, a field, a parameter of a method, a lambda, a catch or a for) still exists at `at`. */
+function inScopeAt(code: string, from: number, at: number): boolean {
+  const open = openAround(code, from);
+  if (open < 0) return true;
+  if (code[open] === "{") return at < bracketClose(code, open);
+  if (code[open] === "[") return false;
+  const close = bracketClose(code, open);
+  return at < close || at < bodyEnd(code, close + 1);
+}
+
+/**
+ * The declared type of a variable at javac's caret, minding where each declaration of the name holds:
+ * the nearest one in scope there, or null when that's var or an untyped lambda parameter (event -> ...),
+ * or there is none. (typeOfName takes the last declaration before the caret, wherever its block ended.)
+ */
+function scopedTypeOf(d: Diagnostic, own: OwnClasses, name: string): string | null {
+  const p = caretIn(d, own);
+  if (!p || !/^(?:this\s*\.\s*)?[\w$]+$/.test(name)) return null;
+  const n = escapeRegExp(name.replace(/^this\s*\.\s*/, ""));
+  const before = p.code.slice(0, p.at);
+  let best: { at: number; type: string | null } | null = null;
+  const typed = new RegExp(`(?<![\\w$.])((?:[\\w$]+\\.)*[\\w$]+(?:\\s*<[^;{}()=]*>)?(?:\\s*\\[\\s*\\])*)\\s+${n}(?![\\w$])(?=\\s*[=;:,)])`, "g");
+  for (const m of before.matchAll(typed))
+    if (!/^(?:return|new|throw|else|case|yield|assert|instanceof)$/.test(m[1]) && inScopeAt(p.code, m.index, p.at)) best = { at: m.index, type: m[1].replace(/\s+/g, "") };
+  // Lambda parameters without types: e -> ..., (a, e) -> ...; each holds in its lambda's body.
+  const untyped = new RegExp(`(?:(?<![\\w$.])${n}|\\(\\s*(?:[\\w$]+\\s*,\\s*)*${n}\\s*(?:,\\s*[\\w$]+\\s*)*\\))\\s*->`, "g");
+  for (const m of before.matchAll(untyped)) {
+    const body = m.index + m[0].length;
+    if (p.at >= body && p.at < bodyEnd(p.code, body) && (!best || m.index > best.at)) best = { at: m.index, type: null };
+  }
+  const type = best?.type;
+  return type && type !== "var" ? simple(type.replace(/<.*$/, "")) : null;
+}
+
+/** What a slider's listener gets, in a sentence, and how to write it. */
+const FX_NUMBER_LISTENER =
+  "A slider's valueProperty() is a DoubleProperty, and JavaFX makes it an ObservableValue<Number>, not <Double>: its change listeners get Numbers. Write the listener for Number, as in slider.valueProperty().addListener((observable, oldValue, newValue) -> ...) without types, or with Number where this says";
+
+/** "ChangeListener<Double> cannot be converted to ChangeListener<? super Number>": a slider's listener written for Doubles. */
+function fxNumberListener(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^incompatible types: (?:<anonymous )?ChangeListener<(Double|Integer|Long|Float)>>? cannot be converted to ChangeListener<\? super Number>$/m.exec(d.message);
+  if (!m || !usesFX(own)) return null;
+  return `${FX_NUMBER_LISTENER} ${m[1]} (ChangeListener<Number>, ObservableValue<? extends Number> and Number oldValue, Number newValue). Then newValue.doubleValue() gives the value as a double, and newValue.intValue() as a whole number.`;
+}
+
+/** The expression that javac's caret marks, as written: a name, or a call (the caret on its parenthesis), or null when it can't tell or it's long. */
+function numberAt(d: Diagnostic, own: OwnClasses): { text: string; name: boolean } | null {
+  const p = caretIn(d, own);
+  if (!p) return null;
+  const { code, text, at } = p;
+  let end = -1;
+  if (code[at] === "(") end = pastClose(code, at);
+  else if (code[at] === "[") end = pastClose(code, at);
+  else {
+    const name = /^[\w$]+/.exec(code.slice(at))?.[0];
+    if (name && /^[A-Za-z_$]/.test(name)) end = at + name.length;
+  }
+  if (end < 0) return null;
+  const shown = text.slice(expressionStart(code, end), end).replace(/\s+/g, " ").trim();
+  return shown && shown.length <= 40 ? { text: shown, name: /^[\w$]+$/.test(shown) } : null;
+}
+
+/** The operand right after a binary operator that ends at `from`, as written: a name, a number or a chain of calls, or null. */
+function operandAfter(code: string, text: string, from: number): string | null {
+  const head = /^\s*(-?[\w$.]+)/.exec(code.slice(from));
+  if (!head) return null;
+  let end = from + head[0].length;
+  for (let n = 0; n < 20; n++) {
+    const next = /^\s*(?:\.\s*[\w$]+|[(\[])/.exec(code.slice(end));
+    if (!next) break;
+    const last = next[0][next[0].length - 1];
+    if (last === "(" || last === "[") {
+      const close = pastClose(code, end + next[0].length - 1);
+      if (close < 0) return null;
+      end = close;
+    } else end += next[0].length;
+  }
+  const shown = text.slice(from, end).replace(/\s+/g, " ").trim();
+  return shown.length <= 40 ? shown : null;
+}
+
+/** Whether a name is a parameter of a change listener at javac's caret: of a lambda given to addListener, or of an anonymous ChangeListener's changed. */
+function listenerParameter(d: Diagnostic, own: OwnClasses, name: string): boolean {
+  const p = caretIn(d, own);
+  if (!p) return false;
+  const names = (list: string) => list.split(",").map((x) => /([\w$]+)\s*$/.exec(x.trim())?.[1]);
+  for (const m of p.code.slice(0, p.at).matchAll(/\baddListener\s*\(\s*(?:\(([^()]*)\)|([\w$]+))\s*->/g)) {
+    const body = m.index + m[0].length;
+    if (names(m[1] ?? m[2]).includes(name) && p.at < bodyEnd(p.code, body)) return true;
+  }
+  for (const m of p.code.slice(0, p.at).matchAll(/\bchanged\s*\(([^()]*)\)\s*\{/g)) {
+    const open = m.index + m[0].length - 1;
+    if (names(m[1]).includes(name) && p.at < bracketClose(p.code, open)) return true;
+  }
+  return false;
+}
+
+/** What a slider's change listener gets, in a parenthesis after a Number's name. */
+const FX_LISTENER_NUMBERS = "a slider's change listener gets its old and new value as Numbers (a slider's value is a DoubleProperty, an ObservableValue<Number>)";
+
+/** "incompatible types: Number cannot be converted to int": a Number (as a slider listener's newValue) used as a number of a primitive type. */
+function fxNumberValue(d: Diagnostic, own: OwnClasses): string | null {
+  const to = /^incompatible types: Number cannot be converted to (int|double|long|float|short|byte|Integer|Double|Long|Float)$/m.exec(d.message)?.[1];
+  if (!to || !usesFX(own)) return null;
+  const v = numberAt(d, own);
+  const method = /^(?:double|Double)$/.test(to) ? "doubleValue" : /^(?:long|Long)$/.test(to) ? "longValue" : /^(?:float|Float)$/.test(to) ? "floatValue" : "intValue";
+  const why = v?.name && listenerParameter(d, own, v.text) ? `: ${FX_LISTENER_NUMBERS}` : ", an object that holds a number";
+  if (!v) return `This is a Number, an object that holds a number, and Java won't turn a Number into ${anWord(to)} by itself: take the number out of it with its ${method}()${method === "intValue" ? ", which drops the decimals (or doubleValue() for the double)" : ""}.`;
+  return `${v.text} is a Number${why}. Java won't turn a Number into ${anWord(to)} by itself: write ${v.text}.${method}()${method === "intValue" ? `, which drops the decimals (or ${v.text}.doubleValue() for the double)` : ""}.`;
+}
+
+/** "bad operand types for binary operator '*'" with a Number: arithmetic on a Number, such as a slider listener's newValue. */
+function fxNumberArithmetic(d: Diagnostic, own: OwnClasses): string | null {
+  if (!usesFX(own)) return null;
+  const op = /binary operator '([^']+)'/.exec(d.message)?.[1] ?? "+";
+  // javac's caret is on the operator; the side whose type is Number is the one to take the number out of.
+  const left = /^\s*first type:\s+Number$/m.test(d.message);
+  const p = caretIn(d, own);
+  const before = p ? p.text.slice(expressionStart(p.code, p.at), p.at).replace(/\s+/g, " ").trim() : "";
+  const after = p && p.code.startsWith(op, p.at) ? operandAfter(p.code, p.text, p.at + op.length) : null;
+  const v = left ? (before && before.length <= 40 ? before : null) : after;
+  if (!v) return `This is a Number, an object that holds a number, and ${op} doesn't work on it. Take the number out of it first: its doubleValue() gives it as a double, and its intValue() as a whole number.`;
+  const listener = /^[\w$]+$/.test(v) && listenerParameter(d, own, v) ? ` (${FX_LISTENER_NUMBERS})` : "";
+  const other = left ? after : before;
+  const example = other && other.length <= 40 ? ` as in ${left ? `${v}.doubleValue() ${op} ${other}` : `${other} ${op} ${v}.doubleValue()`}` : "";
+  return `${v} is a Number${listener}, an object that holds a number, and ${op} doesn't work on it. Take the number out of it first: ${v}.doubleValue() gives it as a double, and ${v}.intValue() as a whole number${example ? `,${example}` : ""}.`;
+}
+
+/** Color's errors: a value outside 0 to 255 for Color.rgb, outside 0.0 to 1.0 for Color.color and new Color, and text Color.web can't read. */
+function fxColor(m: string, c: CrashContext): string | null {
+  // The Color method the program called: the outermost of Color's own frames.
+  const called = /^javafx\.scene\.paint\.Color\.([\w<>]+)$/.exec([...c.javaFrames].reverse().find((f) => f.startsWith("javafx.scene.paint.Color.")) ?? "")?.[1];
+  if (!called) return null;
+  const line = lineOf(c, c.frames[0]);
+  const rgb = /^Color\.rgb's (red|green|blue) parameter \((-?\d+)\) expects color values 0-255$/.exec(m);
+  const unit = /^Color's (red|green|blue|opacity) value \((.+)\) must be in the range 0\.0-1\.0$/.exec(m);
+  if (called === "web") {
+    const text = argumentsOn(line, /web/)?.args;
+    const shown = text && text.length <= 40 ? ` Here it got ${text}.` : "";
+    if (m === "Invalid color specification" || rgb || unit)
+      return `Color.web(text) reads a color written as on a web page: a name such as "red" or "darkgreen", or # and hexadecimal digits, as in "#ff0000" (red, green and blue, two digits each, 0 to 9 and a to f) or "#f00", and it couldn't read this text as one.${shown} Check its spelling and its digits.`;
+    return null;
+  }
+  if (rgb) {
+    const [, part, value] = rgb;
+    const fix = Number(value) > 255 ? " If it's calculated, as when brightening a pixel, keep it at most 255 with Math.min(255, value)." : " If it's calculated, keep it at least 0 with Math.max(0, value).";
+    return `Color.rgb(red, green, blue) takes each part of the color as a whole number from 0 to 255, and its ${part} was ${value}.${fix}`;
+  }
+  if (!unit) return null;
+  const [, part, value] = unit;
+  const n = Number(value);
+  if (part === "opacity")
+    return `The opacity, the last value of ${called === "rgb" ? "Color.rgb(red, green, blue, opacity)" : called === "color" ? "Color.color(red, green, blue, opacity)" : "new Color(red, green, blue, opacity)"}, is a decimal number from 0.0 (fully see-through) to 1.0 (solid), and it was ${value}.`;
+  const how = called === "<init>" ? "new Color(red, green, blue, opacity)" : "Color.color(red, green, blue)";
+  const whole = n > 1 && n <= 255 && Number.isInteger(n) ? ` For parts from 0 to 255, use Color.rgb(...) instead, as in Color.rgb(255, 0, 0) for red.` : " If it's calculated, keep it between 0.0 and 1.0, as with Math.min(1.0, value).";
+  return `${how} takes each part of the color as a decimal number from 0.0 to 1.0, not from 0 to 255, and its ${part} was ${value}.${whole}`;
+}
+
+/** The text in new Image("...") (or new ImageView("...")) on a line, or null. */
+const fxImageUrl = (line: { text: string } | null) => (line ? /\bnew\s+(?:Image|ImageView)\s*\(\s*("(?:[^"\\]|\\.)*")/.exec(line.text)?.[1] ?? null : null);
+
+/** Image's errors: an address without file:, an image of size 0. */
+function fxImage(m: string, c: CrashContext): string | null {
+  if (!c.javaFrames.some((f) => /^(?:javafx\.scene\.image\.|arena\.fx\.Images\.)/.test(f))) return null;
+  const line = lineOf(c, c.frames[0]);
+  if (m === "Invalid URL: Invalid URL or resource not found") {
+    const url = fxImageUrl(line);
+    const name = url ? url.slice(1, -1) : "";
+    const fixed = name ? ` For a file in the program's folder, write new Image("file:${name}").` : ` For a file in the program's folder, write file: in front of its name, as in new Image("file:landscape.png").`;
+    return `new Image(...) got ${url ? url : "a name"} without file: in front. Without it, JavaFX looks for the image among the program's classes, not in its folder, and throws this when it isn't there.${fixed}`;
+  }
+  if (/^Invalid URL: /.test(m))
+    return `new Image(...) takes the image's address, such as "file:landscape.png" for a file in the program's folder, and it couldn't read ${fxImageUrl(line) ?? "this one"} as one: ${sentence(m.slice("Invalid URL: ".length))}`;
+  if (m === "URL must not be empty") return `new Image("") got empty text: give it the image's address, such as "file:landscape.png" for a file in the program's folder.`;
+  if (m === "Image dimensions must be positive (w,h > 0)")
+    return "new WritableImage(width, height) needs a width and a height of at least 1 pixel. If they come from another image's getWidth() and getHeight(), check that image: they're 0 when it couldn't be loaded (its isError() is true then), as for a file that isn't there.";
+  return null;
+}
+
+/** IndexOutOfBoundsException "10, 0": a pixel read or written outside an image, its x and y. */
+function fxPixel(m: string, c: CrashContext): string | null {
+  const xy = /^(-?\d+), (-?\d+)$/.exec(m);
+  if (!xy || !c.javaFrames.some((f) => f.startsWith("javafx.scene.image."))) return null;
+  const [x, y] = [Number(xy[1]), Number(xy[2])];
+  const write = c.javaFrames.some((f) => /Writer\.set\w+$/.test(f));
+  const negative = x < 0 || y < 0 ? " Positions start at 0, so a negative x or y is never in the image." : "";
+  return `The program ${write ? "wrote" : "read"} the pixel at x ${x}, y ${y}, and that's outside the image. An image's pixels go from x 0 to getWidth() - 1 across and from y 0 to getHeight() - 1 down, so in an image 10 pixels wide, x goes from 0 to 9.${negative} A loop with <= instead of <, or x and y swapped (x goes with the width, y with the height), is a common cause; so is a new image of another size than the one the pixels come from.`;
+}
+
+/** Where a chart's series or data are: frames of the practice version's charts, or of real JavaFX's. */
+const fxInCharts = (c: CrashContext) => c.stack.some((f) => /\barena\.fx\.Charts\b|\bjavafx\.scene\.chart\./.test(f));
+
+/** IllegalArgumentException from a chart: a series or a point added twice, a bar chart without a category axis, a category twice. */
+function fxChartArgument(m: string, c: CrashContext): string | null {
+  if (!fxInCharts(c)) return null;
+  if (m === "Duplicate series added")
+    return `The program added a series to a chart that already has it: the same XYChart.Series twice, with two add calls or twice in one addAll. A series is one line (or one set of bars) of one chart. To show the same values again, create another XYChart.Series; to change a series that's shown, change its getData().`;
+  if (m === "Duplicate data added")
+    return `The program added a data point to a series that already has it: the same XYChart.Data object twice. Each point of a series is one object: create a new XYChart.Data<>(x, y) for each point, even when two have the same values.`;
+  if (m === "Axis type incorrect, one of X,Y should be CategoryAxis and the other NumberAxis")
+    return "A BarChart needs one CategoryAxis, for the bars' names, and one NumberAxis, for their heights, as in new BarChart<>(new CategoryAxis(), new NumberAxis()) for bars that stand up (or the other way round for bars that lie down). For numbers on both axes, use a LineChart or a ScatterChart.";
+  const category = /^Duplicate category(?: added)? ?; (.*) already present$/.exec(m);
+  if (category) return `A CategoryAxis's categories must all be different, and "${category[1]}" is in its list twice. Give each category once.`;
+  return null;
+}
+
+/** NullPointerException from a chart, a color or an image: a null series, point, value, axis or color. */
+function fxNull(m: string, c: CrashContext): string | null {
+  if (/^Cannot invoke "(?:[\w$]+\.)*PixelReader\.\w+\(.*?\)" because .+ is null$/.test(m) || m === "Reader cannot be null")
+    return `getPixelReader() gave null: the image has no pixels to read, because it couldn't be loaded, for example from a file that isn't there or isn't a PNG image. new Image(...) doesn't throw then: the image is empty (its getWidth() is 0) and its isError() is true. Check the file's name (upper and lower case matter) and that the file is in the program's folder. To see what went wrong, print image.getException() when image.isError() is true.`;
+  if (m === "Color cannot be null") {
+    const color = argumentsOn(lineOf(c, c.frames[0]), /setColor/)?.args.split(",").pop()?.trim();
+    return `The program gave setColor null instead of a color${color && color !== "null" && color.length <= 40 ? `: ${color} holds no Color` : ""}. Give it a color, such as Color.RED or Color.rgb(255, 0, 0).`;
+  }
+  if (m === "The color components or name must be specified") return "Color.web(text) got null instead of text. Give it a color's name or digits, such as \"red\" or \"#ff0000\".";
+  if (!fxInCharts(c)) return null;
+  if (/^Cannot read field "setToRemove" because "<local5>" is null$/.test(m))
+    return `The program added null to a chart's series, as in chart.getData().add(series) with a series variable that holds no series yet. Create the series first: XYChart.Series<Number, Number> series = new XYChart.Series<>();`;
+  if (/^Cannot read field "setToRemove" because "<local6>" is null$|^Cannot invoke "javafx\.scene\.chart\.XYChart\$Data\.setSeries/.test(m))
+    return `The program added null to a series' data points, as in series.getData().add(point) with a variable that holds no point yet. Create each point with new XYChart.Data<>(x, y).`;
+  if (/^Cannot invoke "java\.lang\.Number\.doubleValue\(\)"/.test(m) || /^Cannot invoke "String\.equals\(Object\)" because the return value of "javafx\.collections\.ObservableList\.get\(int\)" is null$/.test(m))
+    return `A data point of the chart has null for its x or y value, so the chart can't place it. A variable of type Integer or Double that was never given a value is null, and so is a map's get(...) for a key that isn't there. Give every new XYChart.Data<>(x, y) both of its values.`;
+  if (/^Cannot invoke "javafx\.scene\.chart\.Axis\.getSide\(\)" because "<parameter[12]>" is null$/.test(m))
+    return `The program created a chart with null for its ${/parameter1/.test(m) ? "x" : "y"} axis. Give it an axis object, as in new LineChart<>(new NumberAxis(), new NumberAxis()), or create the axis before the chart.`;
+  if (/^Cannot invoke "javafx\.collections\.ObservableList\.iterator\(\)" because "<parameter1>" is null$/.test(m))
+    return "new XYChart.Series<>(...) got null for its list of data points. Give it a list, as in FXCollections.observableArrayList(), or create it empty, new XYChart.Series<>(), and add the points to its getData().";
+  return null;
 }
 
 /**
@@ -4413,6 +4999,8 @@ function nullThing(because: string): string {
 
 function explainNull(m: string, c?: CrashContext): string {
   if (c && /^Children: child node is null/.test(m)) return fxNullChild(m, c);
+  const fx = c ? fxNull(m, c) : null;
+  if (fx) return fx;
   const call = /^Cannot invoke "(?:[\w$]+\.)*([\w$]+)\.([\w$]+)\((.*?)\)" because (.+) is null$/.exec(m);
   if (call) {
     const [, type, method, , because] = call;
@@ -4695,6 +5283,8 @@ function explainIllegal(m: string, c: CrashContext): string {
     return "Sorting found that the program's compareTo or Comparator gives answers that contradict each other, such as that a comes before b and also that b comes before a. It must give a negative number when the first comes first, 0 when they're equal and a positive number when the second comes first, the same way every time. For numbers, Integer.compare(first, second) or Double.compare(first, second) does that.";
   const bound = badBound(m, c);
   if (bound) return bound;
+  const chart = fxChartArgument(m, c) ?? fxColor(m, c) ?? fxImage(m, c);
+  if (chart) return chart;
   if (/^Children: duplicate children added/.test(m)) return fxDuplicate(m, c);
   if (/^Children: cycle detected/.test(m)) return fxCycle(m);
   if (/is already set as root of another scene$/.test(m)) return fxRootOfAnother(m, c);
@@ -5037,7 +5627,9 @@ const EXCEPTIONS: [RegExp, (message: string, c: CrashContext) => string][] = [
   [/StringIndexOutOfBoundsException$/, (m, c) => explainStringIndex(m, c.library, c.javaFrames)],
   [
     /IndexOutOfBoundsException$/,
-    (m) => {
+    (m, c) => {
+      const pixel = fxPixel(m, c);
+      if (pixel) return pixel;
       const add = /^Index: (-?\d+), Size: (\d+)$/.exec(m);
       if (add) return `The program used index ${add[1]} of a list with ${plural(Number(add[2]), "value", "values")}. Its indexes go from 0 to size() - 1; add(index, value) can also add at index size(), the end.`;
       return outOfBounds(m, "list") ?? `The program asked a list for an index it doesn't have. ${m}. Indexes go from 0 to size() - 1.`;

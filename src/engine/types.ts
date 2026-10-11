@@ -27,8 +27,8 @@ export type CompileResult = {
   internalError?: string;
 };
 
-/** One run's input: stdin text, plus optional starter files and command-line arguments. */
-export type RunInput = { stdin?: string; args?: string[]; files?: Record<string, string> };
+/** One run's input: stdin text, plus optional starter files (text, or the bytes of a binary file such as a PNG) and command-line arguments. */
+export type RunInput = { stdin?: string; args?: string[]; files?: Record<string, string | Uint8Array> };
 
 export type RunResult = {
   stdout: string;
@@ -39,8 +39,8 @@ export type RunResult = {
   timedOut: boolean;
   truncated: boolean;
   ms: number;
-  /** Files in the program's working folder after the run. */
-  files: Record<string, string>;
+  /** Files in the program's working folder after the run: the text of each, or its bytes when it isn't text (UTF-8), such as a PNG. */
+  files: Record<string, string | Uint8Array>;
   /** Set when the engine failed to run the program at all. */
   internalError?: string;
   /** On the first case only: time from asking for a runner to the program starting. */

@@ -7,12 +7,16 @@
 // - WindowPanel: a free run's window (the Playground, a lesson's "Run with my input"), whose
 //   buttons and fields work. Each click or typing is an event line (click Button "Add", type #3 "Ada"); the
 //   page runs the compiled program again from the start with all the events so far
-//   (useWindowSession), and draws the window it then leaves.
-import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
+//   (useWindowSession), and draws the window it then leaves. A slider sends `set Slider 1 25` when
+//   it is let go (or the arrow keys stop); a canvas or image view with mouse handlers takes a
+//   gesture of the mouse or a finger and sends it at once when the finger lifts (press, the drags
+//   every few pixels, release; a tap is `click Canvas 1 at 10 20`), and the keyboard can do the same.
+import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
-import { rerun, type CompiledProgram, type FreeRun } from "../grader/grade";
-import { NOT_SHOWN_NOTE, neverShown, quoteText, windowOutline, type OutlineLine, type WindowCheck, type WindowState } from "../grader/window";
-import { TITLE_BUTTONS_SVG, WIDE_NOTE, drawWindows, drawingLabel, outlineLines, type Drawn, type DrawnControl, type DrawnWindow } from "./window-drawing";
+import { rerun, timeLimitFor, type CompiledProgram, type FreeRun } from "../grader/grade";
+import { NOT_SHOWN_NOTE, mouseNotices, neverShown, quoteText, windowOutline, type DrawCall, type OutlineLine, type WindowCheck, type WindowState } from "../grader/window";
+import { TITLE_BUTTONS_SVG, WIDE_NOTE, drawWindows, drawingLabel, outlineLines, sliderValueText, type Drawn, type DrawnControl, type DrawnWindow } from "./window-drawing";
+import { paintCalls } from "./window-canvas";
 import { useWindowFrames } from "./window-frame";
 
 // ------------------------------------------------------------------ drawing with React
@@ -26,10 +30,349 @@ type Live = {
   onType: (c: DrawnControl, text: string) => void;
   onKey: (c: DrawnControl, e: KeyboardEvent) => void;
   onLeave: (c: DrawnControl) => void;
+  /** A slider let go at a value (false: nothing was sent, so it goes back to its value). */
+  onSlide: (c: DrawnControl, value: number) => boolean;
+  /** A gesture on a canvas or image view, as its event lines for a target (false: it can't be sent). */
+  onGesture: (c: DrawnControl, lines: (target: string) => string[]) => boolean;
+  /** The id of the keyboard help of canvases and image views, and whether one of them has the focus from the keyboard (the help then shows). */
+  keysHelp: string;
+  onSurfaceFocus: (focused: boolean) => void;
 };
+
+// ------------------------------------------------------------------ canvases
+
+/** Replays a canvas's calls on an HTML canvas element, sharp on the screen's pixels (at most 16 million of them). */
+function paintCanvas(el: HTMLCanvasElement | null, width: number, height: number, calls: DrawCall[]) {
+  if (!el) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const k = Math.max(0.1, Math.min(dpr, Math.sqrt(16e6 / Math.max(1, width * height))));
+  el.width = Math.max(1, Math.round(width * k));
+  el.height = Math.max(1, Math.round(height * k));
+  const ctx = el.getContext("2d");
+  if (!ctx) return;
+  ctx.setTransform(k, 0, 0, k, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  paintCalls(ctx, calls);
+}
+
+function CanvasPicture({ canvas }: { canvas: NonNullable<Drawn["canvas"]> }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const { width, height, calls } = canvas;
+  useLayoutEffect(() => paintCanvas(ref.current, width, height, calls), [width, height, calls]);
+  return <canvas ref={ref} className="fx-canvas-el" style={{ width, height }} aria-hidden="true" />;
+}
+
+/** A gesture of the mouse or a finger going on: where it started (in the node's coordinates and in CSS pixels), its drags so far. */
+type Point = { x: number; y: number; sx: number; sy: number };
+type Gesture = { id: number; start: Point; last: Point; drags: Point[]; moved: boolean };
+
+/**
+ * A gesture's drags are sampled every this many CSS pixels, at most this many: past it, every other
+ * drag is dropped (the last kept), so a long stroke keeps its shape with fewer points.
+ */
+const SAMPLE_PX = 4;
+const MAX_DRAGS = 400;
+
+/** A gesture's drags with one more, thinned (see MAX_DRAGS) when there are too many. */
+function withDrag<T>(drags: T[], p: T): T[] {
+  const all = [...drags, p];
+  return all.length <= MAX_DRAGS ? all : all.filter((_, i) => i % 2 === 1 || i === all.length - 1);
+}
+
+/**
+ * A canvas or image view with mouse handlers, in the window panel: the learner draws on it with the
+ * mouse or a finger (a tap is a click), and the gesture goes to the program in one batch when the
+ * finger lifts; the line drawn meanwhile is only a preview. With the keyboard, the arrow keys move a
+ * point (5 pixels on a canvas, Shift: one; one pixel of an image view), Enter clicks there, Space presses the mouse there and, after
+ * the arrow keys drag it, lets it go; Escape forgets a press.
+ */
+function LivePointer({ d, live }: { d: Drawn; live: Live }) {
+  const c = d.control!;
+  const ptr = c.pointer!;
+  const surface = useRef<HTMLSpanElement>(null);
+  const preview = useRef<HTMLCanvasElement>(null);
+  const gesture = useRef<Gesture | null>(null);
+  const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
+  const [held, setHeld] = useState<{ start: { x: number; y: number }; drags: { x: number; y: number }[] } | null>(null);
+  const [keyboard, setKeyboard] = useState(false);
+  const shownW = ptr.width * ptr.scale;
+  const shownH = ptr.height * ptr.scale;
+
+  const clearPreview = () => {
+    const el = preview.current;
+    el?.getContext("2d")?.clearRect(0, 0, el.width, el.height);
+  };
+  // A new drawing came: the preview's line is in it now (or the gesture is waiting for its run).
+  useEffect(() => {
+    clearPreview();
+    setHeld(null);
+  }, [c]);
+  useLayoutEffect(() => {
+    const el = preview.current;
+    if (!el) return;
+    const k = Math.min(window.devicePixelRatio || 1, 3);
+    el.width = Math.max(1, Math.round(shownW * k));
+    el.height = Math.max(1, Math.round(shownH * k));
+    el.getContext("2d")?.setTransform(k, 0, 0, k, 0, 0);
+  }, [shownW, shownH]);
+
+  const line = (a: Point, b: Point) => {
+    const ctx = preview.current?.getContext("2d");
+    if (!ctx) return;
+    ctx.strokeStyle = "rgba(10, 95, 166, 0.85)";
+    ctx.fillStyle = "rgba(10, 95, 166, 0.85)";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    if (a === b) {
+      ctx.arc(a.sx, a.sy, 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.moveTo(a.sx, a.sy);
+      ctx.lineTo(b.sx, b.sy);
+      ctx.stroke();
+    }
+  };
+  const at = (e: { clientX: number; clientY: number }): Point => {
+    const r = surface.current!.getBoundingClientRect();
+    const sx = e.clientX - r.left;
+    const sy = e.clientY - r.top;
+    return { x: Math.floor(sx / ptr.scale), y: Math.floor(sy / ptr.scale), sx, sy };
+  };
+  const send = (lines: (t: string) => string[]) => {
+    if (!live.onGesture(c, lines)) clearPreview();
+  };
+
+  const down = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    if (c.disabled || gesture.current || (e.pointerType === "mouse" && e.button !== 0)) return;
+    e.preventDefault();
+    surface.current?.focus({ preventScroll: true });
+    setKeyboard(false);
+    surface.current?.setPointerCapture(e.pointerId);
+    live.onPress();
+    const p = at(e);
+    gesture.current = { id: e.pointerId, start: p, last: p, drags: [], moved: false };
+    line(p, p);
+  };
+  const move = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    const g = gesture.current;
+    if (!g || e.pointerId !== g.id) return;
+    const p = at(e);
+    if (!g.moved && Math.hypot(p.sx - g.start.sx, p.sy - g.start.sy) >= SAMPLE_PX) g.moved = true;
+    if (g.moved && Math.hypot(p.sx - g.last.sx, p.sy - g.last.sy) >= SAMPLE_PX && (p.x !== g.last.x || p.y !== g.last.y)) {
+      line(g.last, p);
+      g.drags = withDrag(g.drags, p);
+      g.last = p;
+    }
+  };
+  const up = (e: ReactPointerEvent<HTMLSpanElement>) => {
+    const g = gesture.current;
+    if (!g || e.pointerId !== g.id) return;
+    gesture.current = null;
+    const end = at(e);
+    if (!g.moved) {
+      send((t) => [`click ${t} at ${g.start.x} ${g.start.y}`]);
+      return;
+    }
+    line(g.last, end);
+    send((t) => [`press ${t} at ${g.start.x} ${g.start.y}`, ...g.drags.map((q) => `drag ${t} to ${q.x} ${q.y}`), `release ${t} at ${end.x} ${end.y}`]);
+  };
+  const cancel = () => {
+    gesture.current = null;
+    clearPreview();
+  };
+
+  const key = (e: KeyboardEvent<HTMLSpanElement>) => {
+    if (c.disabled) return;
+    const step = c.kind === "image" || e.shiftKey ? 1 : 5;
+    live.onSurfaceFocus(true);
+    const from = point ?? { x: Math.floor(ptr.width / 2), y: Math.floor(ptr.height / 2) };
+    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    setKeyboard(true);
+    if (moves[e.key]) {
+      e.preventDefault();
+      const [dx, dy] = moves[e.key];
+      const to = { x: Math.min(Math.max(from.x + dx, 0), Math.max(0, Math.ceil(ptr.width) - 1)), y: Math.min(Math.max(from.y + dy, 0), Math.max(0, Math.ceil(ptr.height) - 1)) };
+      setPoint(to);
+      if (held && (to.x !== from.x || to.y !== from.y)) setHeld({ ...held, drags: withDrag(held.drags, to) });
+    } else if (e.key === "Enter" && !held) {
+      e.preventDefault();
+      setPoint(from);
+      live.onPress();
+      send((t) => [`click ${t} at ${from.x} ${from.y}`]);
+    } else if (e.key === " ") {
+      e.preventDefault();
+      setPoint(from);
+      if (!held) setHeld({ start: from, drags: [] });
+      else {
+        const h = held;
+        setHeld(null);
+        live.onPress();
+        send((t) => [`press ${t} at ${h.start.x} ${h.start.y}`, ...h.drags.map((q) => `drag ${t} to ${q.x} ${q.y}`), `release ${t} at ${from.x} ${from.y}`]);
+      }
+    } else if (e.key === "Escape" && held) {
+      e.preventDefault();
+      setHeld(null);
+    }
+  };
+
+  const shownPoint = keyboard ? (point ?? { x: Math.floor(ptr.width / 2), y: Math.floor(ptr.height / 2) }) : null;
+  const picture = d.canvas ? <CanvasPicture canvas={d.canvas} /> : d.kids?.filter((k) => k.tag === "img").map((k) => toReact(k));
+  const area = (
+    <span
+      ref={surface}
+      className={"fx-pointer" + (held ? " fx-held" : "")}
+      style={{ width: shownW, height: shownH }}
+      role="application"
+      tabIndex={c.disabled ? -1 : 0}
+      aria-label={c.name}
+      aria-describedby={live.keysHelp}
+      aria-disabled={c.disabled || undefined}
+      data-fx-path={c.path}
+      onFocus={(e) => {
+        live.onFocus(c);
+        // The keyboard's help shows for keyboard focus, not after a gesture of the mouse or a finger.
+        live.onSurfaceFocus(e.currentTarget.matches(":focus-visible"));
+      }}
+      onBlur={() => {
+        live.onSurfaceFocus(false);
+        setKeyboard(false);
+        setHeld(null);
+      }}
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={up}
+      onPointerCancel={cancel}
+      onLostPointerCapture={(e) => gesture.current?.id === e.pointerId && up(e)}
+      onKeyDown={key}
+    >
+      {picture}
+      <canvas ref={preview} className="fx-gesture" style={{ width: shownW, height: shownH }} aria-hidden="true" />
+      {shownPoint && <span className="fx-point" style={{ left: (shownPoint.x + 0.5) * ptr.scale, top: (shownPoint.y + 0.5) * ptr.scale }} aria-hidden="true" />}
+    </span>
+  );
+  return (
+    <span className={d.cls} style={d.style} {...d.attrs}>
+      {area}
+      {d.kids?.filter((k) => k.tag !== "img").map((k) => toReact(k))}
+    </span>
+  );
+}
+
+// ------------------------------------------------------------------ sliders
+
+/**
+ * How the arrow keys, Page Up and Down, Home and End move a slider. Page Up and Down move it by its
+ * block increment, as JavaFX's keys do (a slider that snaps to ticks: at least the ticks' spacing,
+ * SliderBehavior's computeIncrement). The arrow keys move a slider that snaps by one tick, and one
+ * that doesn't by its block increment, except that no arrow press crosses the whole range at once
+ * (then a tenth of it): JavaFX's default block increment (10) would take a slider of 1 to 5 from end
+ * to end, and a keyboard could never reach the values between.
+ */
+function sliderKey(key: string, v: number, s: NonNullable<DrawnControl["slider"]>): number | null {
+  const clamp = (x: number) => Math.min(Math.max(x, s.min), s.max);
+  const page = s.snap ? Math.max(s.block, s.snap) : s.block;
+  const range = s.max - s.min;
+  const arrow = s.snap ? s.snap : s.block >= range ? range / 10 : s.block;
+  switch (key) {
+    case "PageUp":
+      return clamp(v + page);
+    case "PageDown":
+      return clamp(v - page);
+    case "ArrowRight":
+    case "ArrowUp":
+      return clamp(v + arrow);
+    case "ArrowLeft":
+    case "ArrowDown":
+      return clamp(v - arrow);
+    case "Home":
+      return s.min;
+    case "End":
+      return s.max;
+    default:
+      return null;
+  }
+}
+
+/**
+ * A slider in the window panel: a real range input, with the slider's tick marks and labels drawn
+ * under it. Let go (or clicked on its track), it sends its value at once; moved with the keys (see
+ * sliderKey), it sends once they stop for 600 ms or the focus leaves.
+ * It shows the program's own value as it is (JavaFX doesn't snap a setValue); a slider that snaps to
+ * ticks snaps only what the learner does: each key press, and a drag when it is let go (onSlide), as
+ * JavaFX's keys and thumb do.
+ */
+function LiveSlider({ d, live }: { d: Drawn; live: Live }) {
+  const c = d.control!;
+  const s = c.slider!;
+  const [draft, setDraft] = useState<number | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const keyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const keyed = useRef<number | null>(null);
+  const liveRef = useRef(live);
+  liveRef.current = live;
+  // A new window: the slider shows its value there.
+  useEffect(() => setDraft(null), [c]);
+  useEffect(() => () => clearTimeout(keyTimer.current), []);
+  // The input's change event: the pointer let it go (the arrow keys are handled below).
+  useEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    const changed = () => {
+      // Let go: a slider that snaps shows the tick it goes to, as JavaFX's thumb jumps there.
+      if (c.slider?.snap) setDraft(Number(sliderValueText(Number(el.value), c.slider)));
+      if (!liveRef.current.onSlide(c, Number(el.value))) setDraft(null);
+    };
+    el.addEventListener("change", changed);
+    return () => el.removeEventListener("change", changed);
+  }, [c]);
+  const flush = () => {
+    clearTimeout(keyTimer.current);
+    if (keyed.current != null && !liveRef.current.onSlide(c, keyed.current)) setDraft(null);
+    keyed.current = null;
+  };
+  const usable = s.max > s.min;
+  const shown = draft ?? s.value;
+  return (
+    <span className={d.cls} style={d.style} {...d.attrs}>
+      <input
+        ref={input}
+        type="range"
+        className="fx-range"
+        min={s.min}
+        max={usable ? s.max : s.min + 1}
+        step="any"
+        value={shown}
+        disabled={c.disabled || !usable}
+        aria-label={c.name}
+        aria-valuetext={sliderValueText(shown, { ...s, snap: undefined })}
+        data-fx-path={c.path}
+        style={{ "--fx-fill": `${usable ? ((shown - s.min) / (s.max - s.min)) * 100 : 0}%` } as CSSProperties}
+        onFocus={() => live.onFocus(c)}
+        onPointerDown={live.onPress}
+        onChange={(e) => setDraft(Number(e.currentTarget.value))}
+        onKeyDown={(e) => {
+          const k = sliderKey(e.key, keyed.current ?? shown, s);
+          if (k == null) return;
+          e.preventDefault();
+          // Snapped (and rounded) now, so what is shown and announced is what will be sent.
+          const v = Number(sliderValueText(k, s));
+          setDraft(v);
+          keyed.current = v;
+          clearTimeout(keyTimer.current);
+          keyTimer.current = setTimeout(flush, 600);
+        }}
+        onBlur={flush}
+      />
+      {d.kids?.filter((k) => k.key === "marks" || k.key === "labels").map((k) => toReact(k))}
+    </span>
+  );
+}
 
 function LiveControl({ d, live }: { d: Drawn; live: Live }) {
   const c = d.control!;
+  if (c.kind === "slider") return <LiveSlider d={d} live={live} />;
+  if (c.kind === "canvas" || c.kind === "image") return <LivePointer d={d} live={live} />;
   // data-fx-path: the panel finds the control again after a run (to put the keyboard focus back).
   const common = { className: d.cls.replace(" fx-prompt", ""), style: d.style, ...d.attrs, "data-fx-path": c.path, onFocus: () => live.onFocus(c) };
   if (c.kind === "button") {
@@ -68,7 +411,11 @@ function LiveControl({ d, live }: { d: Drawn; live: Live }) {
 
 function toReact(d: Drawn, live?: Live): ReactNode {
   if (d.control && live) return <LiveControl key={d.key} d={d} live={live} />;
-  return createElement(d.tag, { key: d.key, className: d.cls, style: d.style, ...d.attrs }, d.text ?? d.kids?.map((k) => toReact(k, live)));
+  const props = { key: d.key, className: d.cls, style: d.style, ...d.attrs };
+  if (d.canvas) return createElement(d.tag, props, <CanvasPicture canvas={d.canvas} />);
+  if (d.markup != null) return createElement(d.tag, { ...props, dangerouslySetInnerHTML: { __html: d.markup } });
+  if (d.tag === "img") return createElement("img", props);
+  return createElement(d.tag, props, d.text ?? d.kids?.map((k) => toReact(k, live)));
 }
 
 const titleButtons = <span className="fx-title-glyphs" aria-hidden="true" dangerouslySetInnerHTML={{ __html: TITLE_BUTTONS_SVG }} />;
@@ -211,7 +558,7 @@ export type WindowFailure = false | "compile" | "engine" | "time" | "none";
  * compiled program, the code it was compiled from, and the clicks and typing so far. `failed`: the
  * latest run left no window, so `window` is from before (or null: no run left one yet).
  */
-export type WindowSession = { code: string; program: CompiledProgram | null; events: string[]; window: WindowState | null; failed: WindowFailure };
+export type WindowSession = { code: string; program: CompiledProgram | null; events: string[]; window: WindowState | null; failed: WindowFailure; ms?: number };
 
 /**
  * The window panel's state for a page that runs programs freely. `lock` is the page's own "a run
@@ -233,7 +580,7 @@ export function useWindowSession(lock: MutableRefObject<boolean>, show: (r: Free
   /** After a run of `code` (Run, or the window's own): the window it left, or the earlier one marked out of date. */
   const took = useCallback((code: string, r: FreeRun) => {
     setSession((s) => {
-      if (r.status === "ran" && r.program) return { code, program: r.program, events: r.events ?? [], window: r.window ?? s?.window ?? null, failed: r.window ? false : r.run?.timedOut ? "time" : "none" };
+      if (r.status === "ran" && r.program) return { code, program: r.program, events: r.events ?? [], window: r.window ?? s?.window ?? null, failed: r.window ? false : r.run?.timedOut ? "time" : "none", ms: r.run?.ms };
       // A program without JavaFX has no window.
       if (r.status === "ran") return null;
       // It didn't compile (or the engine failed): the drawing (if any) stays, out of date.
@@ -277,7 +624,15 @@ export function useWindowSession(lock: MutableRefObject<boolean>, show: (r: Free
   return { session, replaying, eventsFor, took, replay, reset, stamp, isCurrent };
 }
 
-type Pending = { kind: "click" | "enter"; path: string; text: string };
+/**
+ * A click, an Enter, a slider let go or a gesture on a canvas or image view, made while a run went
+ * on: sent after it, checked against the window that run left. A slider's and a gesture's event
+ * lines are made for the target the new window names the control by.
+ */
+type Pending = { kind: "click" | "enter"; path: string; text: string } | { kind: "events"; path: string; control: DrawnControl["kind"]; lines: (target: string) => string[] };
+
+/** Whether a control is a text input (a text field, password field or text area). */
+const isText = (c: DrawnControl) => c.kind === "field" || c.kind === "password" || c.kind === "area";
 /** The control that had the keyboard focus, to find it again in the next window. */
 type FocusTarget = { path: string; kind: DrawnControl["kind"]; text: string; name: string };
 
@@ -304,11 +659,49 @@ function sameControl(t: FocusTarget, controls: Map<string, DrawnControl>): Drawn
   return list.find((c) => c.path === t.path);
 }
 
-/** "2 clicks and 1 Enter", for a message about events that weren't sent. */
+/** "2 clicks and 1 Enter", "1 slider move", for a message about events that weren't sent. */
 function clicksAndEnters(list: Pending[]) {
+  const count = (n: number, one: string, many: string) => (n ? `${n} ${n === 1 ? one : many}` : "");
   const clicks = list.filter((p) => p.kind === "click").length;
-  const enters = list.length - clicks;
-  return [clicks ? `${clicks} ${clicks === 1 ? "click" : "clicks"}` : "", enters ? `${enters} ${enters === 1 ? "Enter" : "Enters"}` : ""].filter(Boolean).join(" and ");
+  const enters = list.filter((p) => p.kind === "enter").length;
+  const slides = list.filter((p) => p.kind === "events" && p.control === "slider").length;
+  const drawings = list.filter((p) => p.kind === "events" && p.control !== "slider").length;
+  const parts = [count(clicks, "click", "clicks"), count(enters, "Enter", "Enters"), count(slides, "slider move", "slider moves"), count(drawings, "use of the mouse", "uses of the mouse")].filter(Boolean);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts.join("");
+}
+
+/**
+ * The line under a window with canvases or image views the learner can use: "Draw on" when one of
+ * them takes a press, drag or release (else "Click"), naming the kinds it is about.
+ */
+function pointerNote(pointers: DrawnControl[]): string {
+  const drawing = pointers.filter((c) => c.pointer?.draws);
+  const about = drawing.length ? drawing : pointers;
+  const canvas = about.some((c) => c.kind === "canvas");
+  const image = about.some((c) => c.kind === "image");
+  const what = canvas && image ? "the canvas or the image" : canvas ? "the canvas" : "the image";
+  if (drawing.length) return `Draw on ${what} with the mouse or a finger: the ${canvas && !image ? "drawing" : "window"} updates when you lift your finger.`;
+  return `Click ${what} with the mouse or a finger: the window updates when you lift your finger.`;
+}
+
+/**
+ * The keyboard's help for canvases and image views: Shift steps one pixel only on a canvas (an
+ * image view's arrow keys already move one pixel), and Space's press and drag only matter where a
+ * press, drag or release has a handler.
+ */
+function pointerKeysHelp(pointers: DrawnControl[]): string {
+  const shift = pointers.some((c) => c.kind === "canvas") ? " (with Shift, one pixel at a time)" : "";
+  if (!pointers.some((c) => c.pointer?.draws)) return `With the keyboard: the arrow keys move the point${shift}, and Enter clicks there.`;
+  return `With the keyboard: the arrow keys move the point${shift}, Enter clicks there, and Space presses the mouse there and, after the arrow keys move it, lets it go.`;
+}
+
+/** A run that took this share of the time limit or more, with events: the panel warns that each event adds to it. */
+const SLOW_SHARE = 0.4;
+
+/** The warning about a run made slow by the events so far (see SLOW_SHARE). */
+function slowNote(ms: number, limit: number): string {
+  const secs = (n: number) => `${Math.round(n / 1000)} seconds`;
+  return `Your program took ${secs(ms)} to run again with everything you did in the window, and each click, slider move or stroke you draw makes the next run longer. A run is stopped after ${secs(limit)}: Start over forgets what you did, so the runs are quick again.`;
 }
 
 /** The note over a drawing that isn't the latest run's window. */
@@ -388,7 +781,7 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
     const out: { n: number; line: string }[] = [];
     for (const [path, text] of Object.entries(draftsRef.current)) {
       const c = latest.current.controls.get(path);
-      if (!c || c.kind === "button" || c.disabled || !c.editable || text === c.text) continue;
+      if (!c || !isText(c) || c.disabled || !c.editable || text === c.text) continue;
       out.push({ n: c.n, line: text.startsWith(c.text) ? `type ${c.target} ${quoteText(text.slice(c.text.length))}` : `set ${c.target} ${quoteText(text)}` });
     }
     return out.sort((a, b) => a.n - b.n).map((e) => e.line);
@@ -397,7 +790,7 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
   /** Notes what every text field shows as a run starts. */
   const markBase = () => {
     const b: Record<string, string> = {};
-    for (const c of latest.current.controls.values()) if (c.kind !== "button") b[c.path] = draftsRef.current[c.path] ?? c.text;
+    for (const c of latest.current.controls.values()) if (isText(c)) b[c.path] = draftsRef.current[c.path] ?? c.text;
     base.current = b;
     edited.current = new Set();
   };
@@ -411,7 +804,7 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
     if (!typed.length && !extra.length) return false;
     markBase();
     setMessage("");
-    setSaid("Running your program again with your clicks and typing.");
+    setSaid("Running your program again with everything you did in the window.");
     void replay([...s.events, ...typed, ...extra]).then((started) => {
       // The page's own Run was going on: nothing was sent, so the typing is still to send.
       if (started) return;
@@ -489,7 +882,7 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
     const keep: Record<string, string> = {};
     for (const [path, text] of Object.entries(draftsRef.current)) {
       const c = controls.get(path);
-      if (!c || c.kind === "button") continue;
+      if (!c || !isText(c)) continue;
       let next = text;
       // A run that failed changed nothing in the window: the typing stays as it is.
       if (!session.failed && was[path] !== undefined) {
@@ -517,19 +910,47 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
     while (queue.current.length && !sentNow) {
       const p = queue.current.shift()!;
       const c = controls.get(p.path);
-      if (!c || c.disabled || (p.kind === "click" ? c.kind !== "button" || c.text !== p.text : c.kind === "button" || c.kind === "area")) {
+      if (!c || c.disabled || (p.kind === "events" ? c.kind !== p.control : p.kind === "click" ? c.kind !== "button" || c.text !== p.text : c.kind !== "field" && c.kind !== "password")) {
         queue.current.unshift(p);
         dropQueue("the window changed first");
         break;
       }
+      if (p.kind === "events") sentNow = send(p.lines(c.target));
       // A button or field without a handler: nothing to send unless there is typing.
-      sentNow = send(c.onAction ? [`${p.kind} ${c.target}`] : []);
+      else sentNow = send(c.onAction ? [`${p.kind} ${c.target}`] : []);
     }
     if (!sentNow && Object.keys(keep).length) sendLater();
   }, [session]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
+  const keysHelp = useId();
+  const [surfaceFocused, setSurfaceFocused] = useState(false);
   const live: Live = {
+    keysHelp,
+    onSurfaceFocus: setSurfaceFocused,
+    onSlide: (c, value) => {
+      const s = c.slider;
+      if (!s || !latest.current.usable || c.disabled) return false;
+      const text = sliderValueText(value, s);
+      const lines = (t: string) => [`set ${t} ${text}`];
+      if (latest.current.replaying) {
+        // Only where it was let go last counts.
+        queue.current = queue.current.filter((p) => !(p.kind === "events" && p.path === c.path));
+        queue.current.push({ kind: "events", path: c.path, control: c.kind, lines });
+        return true;
+      }
+      // Let go where it was (a slider that snaps, nearer its tick): nothing changes.
+      if (Number(text) === s.value) return false;
+      return send(lines(c.target));
+    },
+    onGesture: (c, lines) => {
+      if (!latest.current.usable || c.disabled) return false;
+      if (latest.current.replaying) {
+        queue.current.push({ kind: "events", path: c.path, control: c.kind, lines });
+        return true;
+      }
+      return send(lines(c.target));
+    },
     draft: (c) => drafts[c.path],
     onPress: () => (pressed.current = Date.now()),
     onFocus: (c) => (focusTarget.current = focusTargetOf(c)),
@@ -580,12 +1001,19 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
     setDraftsNow({});
     markBase();
     setMessage("");
-    setSaid("Starting over: running your program with no clicks or typing.");
+    setSaid("Starting over: running your program as if nothing was done in the window.");
     void replay([]);
   };
 
   const hasControls = [...controls.values()].some((c) => !c.disabled);
+  // Canvases and image views the learner can draw on or click: a line under the window says how.
+  const allPointers = [...controls.values()].filter((c) => c.kind === "canvas" || c.kind === "image");
+  const hasPointers = allPointers.length > 0;
+  const pointers = allPointers.filter((c) => !c.disabled);
   const stale = session.failed ? "failed" : codeChanged ? "code" : null;
+  // Each event makes every later run longer (the program does it all again): say so before the time limit stops one.
+  const limit = timeLimitFor(session.program?.libraries ?? []);
+  const slow = !stale && session.events.length > 0 && (session.ms ?? 0) >= limit * SLOW_SHARE;
   return (
     <section ref={panelRef} className={"fx-panel" + (stale ? " fx-stale" : "")} aria-labelledby="fx-panel-h" aria-busy={replaying || undefined}>
       <div className="fx-panel-head">
@@ -604,7 +1032,7 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
           </button>
         )}
       </div>
-      <p className="fx-note">Java Arena draws your window and runs your program again from the start for each click, with your earlier clicks and typing.</p>
+      <p className="fx-note">Java Arena draws your window and runs your program again from the start each time you click, type, move a slider or use the mouse, with everything you did before.</p>
       {session.failed && session.window && <p className="fx-stale-note">{STALE_NOTE[session.failed]}</p>}
       {stale === "code" && <p className="fx-stale-note">Out of date: your code changed since this run. Run it again to use the window.</p>}
       {!usable || !drawn.length ? (
@@ -619,17 +1047,30 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
           </div>
         </Frame>
       )}
+      {usable && pointers.length > 0 && <p className="fx-note fx-draw-note">{pointerNote(pointers)}</p>}
+      {usable && hasPointers && (
+        <p id={keysHelp} className={surfaceFocused ? "fx-note fx-keys-note" : "visually-hidden"}>
+          {pointerKeysHelp(allPointers)}
+        </p>
+      )}
       {!session.window && session.failed === "time" && <p className="fx-stale-note">Your program was stopped at the time limit before it left a window.</p>}
       {!session.window && session.failed === "none" && <p className="fx-stale-note">Your program ended before it left a window: main must call launch, as in launch(Main.class), and start must run to its end. The output below may say why.</p>}
       {notShown && <p className="fx-stale-note">{NOT_SHOWN_NOTE}</p>}
+      {slow && <p className="fx-stale-note fx-slow-note">{slowNote(session.ms!, limit)}</p>}
       {message && <p className="fx-message">{message}</p>}
       {session.window && session.window.problems.length > 0 && (
-        <ul className="rules" aria-label="Clicks and typing that couldn't happen">
+        <ul className="rules" aria-label="What you did that couldn't happen">
           {session.window.problems.map((p, i) => (
             <li key={i}>{p}</li>
           ))}
         </ul>
       )}
+      {session.window &&
+        mouseNotices(session.window).map((m, i) => (
+          <p key={i} className="fx-note">
+            {m}
+          </p>
+        ))}
       {session.window && <WindowText outline={outline} />}
       <p className="visually-hidden" role="status" aria-live="polite">
         {said}

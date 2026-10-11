@@ -1,0 +1,3287 @@
+id: drawing-and-images
+summary: Drawing and pictures with JavaFX. A Canvas and its GraphicsContext with colors, rectangles, ovals and lines, drawing with the mouse, images as grids of pixels (Image, PixelReader, WritableImage, PixelWriter and ImageView), making images smaller, tiling them, color filters, and sound, which this page can't play. MOOC section 14.2.
+steps:
+  - id: drawing-and-images-canvas
+    slug: canvas
+    title: Drawing on a canvas
+    text: |
+      Module 51 drew charts, and JavaFX decided where each line and bar went. This module draws by itself. A **canvas** is an empty area of a window that a program draws on: rectangles, ovals and lines, wherever it wants them and in the colors it picks. Then come **images**: pictures from files, read and changed one pixel at a time. Sound comes at the end.
+
+      ### Drawings and images in Java Arena
+
+      As with the windows of part 13 (module 48 explained it) and the charts of module 51, Java Arena's JavaFX is a practice version written for this site, and the page draws the window from what your program told JavaFX. A canvas here keeps a list of what the program drew on it, in order and with the colors, and the page draws that list for you, approximately: real JavaFX smooths the edges of shapes in its own way. Under each drawing, "The window as text" lists every call, and that list is what the challenges compare. The check that runs every model solution on real JavaFX (module 48) also draws each canvas's recorded calls again on real JavaFX and compares the result with the real canvas, pixel by pixel, and it compares every pixel of each image. What it doesn't check is how this page draws the list.
+
+      Images are different: they're read and written **pixel by pixel, exactly**, and the challenges compare every pixel. The images that this module's programs read are small pictures that Java Arena makes for its lessons. Sound can't play on this page at all: step 7 shows sound code to read, and the MOOC's exercise with sound needs your own computer.
+
+      ### A canvas and its pen
+
+      A rowing club (made up for this lesson) wants its flag on a screen:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(150, 100);
+              GraphicsContext pen = canvas.getGraphicsContext2D();
+              pen.setFill(Color.NAVY);
+              pen.fillRect(0, 0, 150, 100);
+              pen.setFill(Color.WHITE);
+              pen.fillRect(0, 40, 150, 20);
+              pen.setFill(Color.GOLD);
+              pen.fillOval(55, 30, 40, 40);
+
+              stage.setScene(new Scene(new Pane(canvas)));
+              stage.setTitle("Rowing club");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - `new Canvas(150, 100)` is a canvas 150 pixels wide and 100 pixels high. It's a node, like a label, so it goes into a layout. `Pane` (from `javafx.scene.layout`) is the plainest layout: it shows its children and doesn't arrange them, and a canvas needs nothing more.
+      - `canvas.getGraphicsContext2D()` returns the canvas's **GraphicsContext**: the object that draws on it, so the code calls it `pen`. Each canvas has one, and the method always returns the same object.
+      - `setFill(Color.NAVY)` picks the color for the drawing that follows. The pen keeps it until the next `setFill`.
+      - `fillRect(x, y, width, height)` fills a rectangle whose top left corner is at (x, y).
+      - `fillOval(x, y, width, height)` fills the oval that just fits inside that same rectangle. A width equal to the height gives a circle: here one 40 pixels across.
+
+      ### Where the pixels are
+
+      Every point of the canvas has an **x** and a **y**, counted in pixels from the **top left corner**, which is (0, 0). x grows to the right, as in a math class, but y grows **down**: (0, 40) is 40 pixels below the corner. So the white stripe starts 40 pixels from the top and is 20 high, and the flag's last row of pixels is at y 99.
+
+      An oval is given by its rectangle, not by its center. A circle with its center at (75, 50) and a radius of 20 fits in the square from (55, 30), 40 wide and 40 high: `fillOval(75 - 20, 50 - 20, 40, 40)`. That's the gold circle, in the middle of the flag.
+
+      **Order matters.** Each call draws over what's already there, like paint. The navy rectangle comes first and covers the whole canvas, the stripe goes over it, and the circle over the stripe. With the navy rectangle drawn last, the flag would be all navy.
+
+      ### The window as text
+
+      For a canvas, "The window as text" lists every drawing call, in order, with its numbers and the color it used:
+
+      ```text
+      Window "Rowing club"
+        Pane
+          Canvas 150 x 100
+            fillRect 0 0 150 100, fill #000080
+            fillRect 0 40 150 20, fill #ffffff
+            fillOval 55 30 40 40, fill #ffd700
+      ```
+
+      Colors are written as `#` and six hexadecimal digits: two for red, two for green and two for blue, from `00` (none) to `ff` (all). `#000080` is navy: no red, no green, half the blue. The challenges compare these lines exactly, so a picture that looks the same but is drawn with other calls doesn't pass: a task always says which shapes to draw, where, in which colors and in what order.
+
+      ### Colors
+
+      The class `Color` (from `javafx.scene.paint`) gives colors in four ways:
+
+      - By name: `Color.RED`, `Color.NAVY`, `Color.GOLD`, `Color.DARKGREEN`. JavaFX has 147 of the color names that web pages use, plus `Color.TRANSPARENT`.
+      - By their amounts of red, green and blue, each from 0 to 255: `Color.rgb(255, 128, 0)` is orange (all the red, half the green, no blue). Screens mix light, so `Color.rgb(255, 255, 0)` is yellow, `Color.rgb(0, 0, 0)` black and `Color.rgb(255, 255, 255)` white.
+      - By the code that web pages use: `Color.web("#e63946")`.
+      - With `new Color(red, green, blue, opacity)`, each amount a double from 0.0 to 1.0: `new Color(1.0, 0.5, 0.0, 1.0)` is orange too. An amount outside that range throws an IllegalArgumentException.
+
+      Printing a color shows its code with its **opacity** at the end: `System.out.println(Color.rgb(255, 128, 0))` prints `0xff8000ff`, where the last `ff` means fully opaque.
+
+      ### Lines and outlines
+
+      Next to the fill color, the pen has a **stroke** color for lines and outlines, and a line width. A cottage with a window:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(160, 140);
+              GraphicsContext pen = canvas.getGraphicsContext2D();
+              pen.setFill(Color.BURLYWOOD);
+              pen.fillRect(30, 60, 100, 70);
+              pen.setFill(Color.FIREBRICK);
+              double[] roofX = {20, 80, 140};
+              double[] roofY = {60, 15, 60};
+              pen.fillPolygon(roofX, roofY, 3);
+              pen.setFill(Color.SADDLEBROWN);
+              pen.fillRect(90, 90, 20, 40);
+
+              pen.setStroke(Color.BLACK);
+              pen.setLineWidth(2);
+              pen.strokeRect(45, 75, 24, 24);
+              pen.strokeLine(57, 75, 57, 99);
+              pen.strokeLine(45, 87, 69, 87);
+
+              stage.setScene(new Scene(new Pane(canvas)));
+              stage.setTitle("Cottage");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - `setStroke(Color.BLACK)` and `setLineWidth(2)` set the color and the width (in pixels) of what the stroke methods draw. A new pen strokes in black, 1 pixel wide, and fills in black too.
+      - `strokeRect(x, y, width, height)` draws only the outline of a rectangle, and `strokeOval` the outline of an oval.
+      - `strokeLine(x1, y1, x2, y2)` draws a line from (x1, y1) to (x2, y2). The two lines here make the cross of the window.
+      - `fillPolygon(xs, ys, count)` fills a shape with corners: the first `count` values of the array `xs` are the corners' x values, and those of `ys` their y values, in the same order. The roof is a triangle with corners (20, 60), (80, 15) and (140, 60). `strokePolygon` draws its outline.
+
+      In the window as text, a stroke call shows its stroke color and width (`strokeLine 57 75 57 99, stroke #000000, width 2`), and the polygon its corners.
+
+      ### Shapes in a loop
+
+      The numbers can be computed, so a loop can draw a row of shapes. A weather map shows a scale of six squares, from yellow for warm to red for hot:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(180, 30);
+              GraphicsContext pen = canvas.getGraphicsContext2D();
+              for (int i = 0; i < 6; i++) {
+                  pen.setFill(Color.rgb(255, 220 - i * 40, 0));
+                  pen.fillRect(i * 30, 0, 30, 30);
+              }
+
+              stage.setScene(new Scene(new Pane(canvas)));
+              stage.setTitle("Heat scale");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      Square `i` starts at x `i * 30`, right where the one before it ends, and each square has 40 less green than the one before, which turns yellow into red step by step.
+
+      **Your turn:** a hiking club's flag, 120 pixels wide and 80 high. Fill in the blanks so that it draws, in this order: a dark green background (`Color.DARKGREEN`) over the whole canvas, a white stripe 20 pixels wide from x 30 down the whole height, and a black circle 30 pixels across whose center is at (90, 40). The window it should show is drawn below.
+    fill: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(120, 80);
+              GraphicsContext pen = canvas.[[getGraphicsContext2D]]();
+              pen.setFill(Color.DARKGREEN);
+              pen.[[fillRect]](0, 0, 120, 80);
+              pen.setFill(Color.WHITE);
+              pen.fillRect(30, 0, 20, 80);
+              pen.setFill(Color.BLACK);
+              pen.fillOval([[75‖90 - 15]], [[25‖40 - 15]], 30, 30);
+
+              stage.setScene(new Scene(new Pane(canvas)));
+              stage.setTitle("Hiking club");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "The canvas's GraphicsContext comes from `canvas.getGraphicsContext2D()`, and a filled rectangle is `fillRect(x, y, width, height)`."
+      - "`fillOval` takes the top left corner of the square around the circle. The circle is 30 across, so its radius is 15: the corner is at (90 - 15, 40 - 15)."
+    tests:
+      - events: []
+    more:
+      - task: |
+          A road sign: no entry. Draw it on the canvas of 120 x 160 pixels that the starter code makes, with these calls in this order:
+
+          1. a gray post (`Color.GRAY`): a filled rectangle 10 wide and 110 high, from (55, 50)
+          2. the sign: a red (`Color.RED`) filled circle 100 pixels across, in the square from (10, 0)
+          3. a white (`Color.WHITE`) filled bar 70 wide and 20 high, from (25, 40)
+          4. the sign's edge: the outline of the same circle, in dark red (`Color.DARKRED`) and 3 pixels wide
+
+          The post starts in the middle of the sign, so the circle covers its top. Keep the window's title and the Pane. The window it should show is drawn below.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.canvas.Canvas;
+          import javafx.scene.canvas.GraphicsContext;
+          import javafx.scene.layout.Pane;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Canvas canvas = new Canvas(120, 160);
+                  GraphicsContext pen = canvas.getGraphicsContext2D();
+
+                  stage.setScene(new Scene(new Pane(canvas)));
+                  stage.setTitle("No entry");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.canvas.Canvas;
+          import javafx.scene.canvas.GraphicsContext;
+          import javafx.scene.layout.Pane;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Canvas canvas = new Canvas(120, 160);
+                  GraphicsContext pen = canvas.getGraphicsContext2D();
+                  pen.setFill(Color.GRAY);
+                  pen.fillRect(55, 50, 10, 110);
+                  pen.setFill(Color.RED);
+                  pen.fillOval(10, 0, 100, 100);
+                  pen.setFill(Color.WHITE);
+                  pen.fillRect(25, 40, 70, 20);
+                  pen.setStroke(Color.DARKRED);
+                  pen.setLineWidth(3);
+                  pen.strokeOval(10, 0, 100, 100);
+
+                  stage.setScene(new Scene(new Pane(canvas)));
+                  stage.setTitle("No entry");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "Before each filled shape, `pen.setFill(...)` picks its color. The circle is `fillOval(10, 0, 100, 100)`."
+          - "The edge uses the stroke color and width: `pen.setStroke(Color.DARKRED);`, `pen.setLineWidth(3);`, then `pen.strokeOval(10, 0, 100, 100);`."
+        tests:
+          - events: []
+      - task: |
+          A paint shop prints cards of color samples. The file `colors.txt` holds one web color code on each line, such as `#e63946`. Show them on a canvas 300 pixels wide and 60 high: for the color on line `i` of the file (counting from 0), a filled square 40 x 40 with its top left corner at x `10 + 50 * i` and y 10, in the color `Color.web(code)`. Under the canvas, in a VBox with no spacing, a label says how many colors there are: `Colors: 3`. The window's title is `Color card`.
+
+          For the file below, the window should look like the drawing under it.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.canvas.Canvas;
+          import javafx.scene.canvas.GraphicsContext;
+          import javafx.scene.control.Label;
+          import javafx.scene.layout.VBox;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Canvas canvas = new Canvas(300, 60);
+                  GraphicsContext pen = canvas.getGraphicsContext2D();
+
+                  stage.setScene(new Scene(new VBox(canvas)));
+                  stage.setTitle("Color card");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.canvas.Canvas;
+          import javafx.scene.canvas.GraphicsContext;
+          import javafx.scene.control.Label;
+          import javafx.scene.layout.VBox;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  Canvas canvas = new Canvas(300, 60);
+                  GraphicsContext pen = canvas.getGraphicsContext2D();
+                  List<String> codes = Files.readAllLines(Paths.get("colors.txt"));
+                  for (int i = 0; i < codes.size(); i++) {
+                      pen.setFill(Color.web(codes.get(i)));
+                      pen.fillRect(10 + 50 * i, 10, 40, 40);
+                  }
+                  Label count = new Label("Colors: " + codes.size());
+
+                  stage.setScene(new Scene(new VBox(canvas, count)));
+                  stage.setTitle("Color card");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "Read the lines with `Files.readAllLines(Paths.get(\"colors.txt\"))` (and add `throws Exception` to `start`). A loop with an index `i` over the lines gives each square its place, `10 + 50 * i`."
+          - "In the loop: `pen.setFill(Color.web(codes.get(i)));` and then `pen.fillRect(10 + 50 * i, 10, 40, 40);`. After it, make the label and put both in the VBox: `new VBox(canvas, count)`."
+        tests:
+          - files:
+              colors.txt: |
+                #e63946
+                #f1c453
+                #2a9d8f
+            events: []
+          - files:
+              colors.txt: |
+                #264653
+                #8ab17d
+                #e9c46a
+                #f4a261
+                #e76f51
+            events: []
+            hidden: true
+          - files:
+              colors.txt: |
+                #6a4c93
+            events: []
+            hidden: true
+
+  - id: drawing-and-images-mouse
+    slug: mouse
+    title: Drawing with the mouse
+    text: |
+      A canvas can react to the mouse, as a button reacts to clicks. That turns it into something to draw on.
+
+      ### Mouse events
+
+      A node has four methods for the mouse, each taking an event handler, usually a lambda as in module 49:
+
+      | method | its handler runs when |
+      | --- | --- |
+      | `setOnMousePressed` | a mouse button goes down on the node |
+      | `setOnMouseDragged` | the mouse moves while its button is down |
+      | `setOnMouseReleased` | the button comes up again |
+      | `setOnMouseClicked` | the button went down and came up on the node: a click |
+
+      The handler gets a **MouseEvent** (from `javafx.scene.input`), and `event.getX()` and `event.getY()` say where the mouse was, in the canvas's own coordinates: (0, 0) is the canvas's top left corner, wherever the canvas is in the window. Both are doubles. A test pad that prints every event:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.layout.Pane;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(200, 120);
+              canvas.setOnMousePressed(event -> System.out.println("pressed at (" + event.getX() + ", " + event.getY() + ")"));
+              canvas.setOnMouseDragged(event -> System.out.println("dragged to (" + event.getX() + ", " + event.getY() + ")"));
+              canvas.setOnMouseReleased(event -> System.out.println("released at (" + event.getX() + ", " + event.getY() + ")"));
+              canvas.setOnMouseClicked(event -> System.out.println("clicked at (" + event.getX() + ", " + event.getY() + ")"));
+
+              stage.setScene(new Scene(new Pane(canvas)));
+              stage.setTitle("Test pad");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      click Canvas 1 at 40 30
+      press Canvas 1 at 100 60
+      drag Canvas 1 to 120 70
+      drag Canvas 1 to 140 80
+      release Canvas 1 at 140 80
+      ```
+
+      ```output
+      pressed at (40.0, 30.0)
+      released at (40.0, 30.0)
+      clicked at (40.0, 30.0)
+      pressed at (100.0, 60.0)
+      dragged to (120.0, 70.0)
+      dragged to (140.0, 80.0)
+      released at (140.0, 80.0)
+      clicked at (140.0, 80.0)
+      ```
+
+      The event lines work like part 13's clicks and typing, with a point added. `click Canvas 1 at 40 30` clicks the first canvas of the window at (40, 30). `press`, `drag ... to` and `release` move the mouse one step at a time: here it's pressed at (100, 60), moved with its button down to (120, 70) and then (140, 80), and let go there.
+
+      - A click is three events, in this order: pressed, released, clicked.
+      - A drag runs the dragged handler once for each point the mouse moves to. On a real screen that's every few pixels, so a handler for drags runs often.
+      - After the drag, JavaFX still counts a **click**: the button went down and came up on the same node. A program that draws on clicks and on drags must keep that in mind.
+
+      ### Drawing where the mouse is
+
+      A game's level editor plants a flower in a meadow at each click: a gold circle 16 pixels across with its center at the mouse, and a small brown center in it. `start` draws the grass first:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(200, 120);
+              GraphicsContext pen = canvas.getGraphicsContext2D();
+              pen.setFill(Color.YELLOWGREEN);
+              pen.fillRect(0, 0, 200, 120);
+              canvas.setOnMouseClicked(event -> {
+                  double x = event.getX();
+                  double y = event.getY();
+                  pen.setFill(Color.GOLD);
+                  pen.fillOval(x - 8, y - 8, 16, 16);
+                  pen.setFill(Color.SADDLEBROWN);
+                  pen.fillOval(x - 3, y - 3, 6, 6);
+              });
+
+              stage.setScene(new Scene(new Pane(canvas)));
+              stage.setTitle("Meadow");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      click Canvas 1 at 40 30
+      click Canvas 1 at 100 80
+      click Canvas 1 at 160 45
+      ```
+
+      The handler draws on the same `pen` that `start` used: a canvas keeps everything drawn on it, so each flower is added to the grass and the flowers before it. To center a circle 16 across on the mouse, its square starts 8 pixels to the left of the mouse and 8 above it. In the window as text, the grass's call comes first, then two calls for each click, in the order of the clicks.
+
+      ### Lines that follow the mouse
+
+      To draw a line as the mouse moves, the program joins each point to the one before it with a short line. So it has to remember the last point, from one event to the next. The handlers are lambdas, which can't change a local variable of `start` (module 49), so the point goes in two instance variables. A doodle pad, with buttons for the color and one to wipe it clean:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.control.Button;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+          private double lastX;
+          private double lastY;
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(240, 140);
+              GraphicsContext pen = canvas.getGraphicsContext2D();
+              pen.setLineWidth(3);
+              canvas.setOnMousePressed(event -> {
+                  this.lastX = event.getX();
+                  this.lastY = event.getY();
+              });
+              canvas.setOnMouseDragged(event -> {
+                  pen.strokeLine(this.lastX, this.lastY, event.getX(), event.getY());
+                  this.lastX = event.getX();
+                  this.lastY = event.getY();
+              });
+
+              Button black = new Button("Black");
+              black.setOnAction(event -> pen.setStroke(Color.BLACK));
+              Button red = new Button("Red");
+              red.setOnAction(event -> pen.setStroke(Color.RED));
+              Button clear = new Button("Clear");
+              clear.setOnAction(event -> pen.clearRect(0, 0, canvas.getWidth(), canvas.getHeight()));
+
+              stage.setScene(new Scene(new VBox(new HBox(5, black, red, clear), canvas)));
+              stage.setTitle("Doodle pad");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      press Canvas 1 at 20 100
+      drag Canvas 1 to 60 40
+      drag Canvas 1 to 100 100
+      release Canvas 1 at 100 100
+      click Button "Red"
+      press Canvas 1 at 140 70
+      drag Canvas 1 to 180 40
+      drag Canvas 1 to 220 70
+      release Canvas 1 at 220 70
+      ```
+
+      - Pressing only remembers where the line starts. Each drag draws from the remembered point to the new one, and then remembers the new one, so the short lines join up.
+      - The color buttons just call `pen.setStroke(...)`. The GraphicsContext keeps its stroke color, so every line drawn after a click on Red is red, until another button changes it.
+      - `clearRect(x, y, width, height)` wipes a rectangle clean: the canvas there is empty again, as at the start (the window shows through). With the canvas's own size, it wipes everything. In the window as text, a wiped canvas still lists what was drawn before it, followed by the `clearRect` line: the list is the canvas's whole history, in order.
+
+      ### Drawing yourself
+
+      The windows drawn in a lesson show the events listed with them, and can't be clicked. When you run a challenge's code with "Run with my input", or a program in the Playground, you can use its window: on a canvas that has mouse handlers, draw with the mouse or a finger. The page collects the whole movement (the press, a drag every few pixels and the release) and runs your program once with all of it, so the drawing updates when you lift your finger. A tap without moving is a click. With the keyboard, the arrow keys move a point, Enter clicks there, and Space presses there and, after the arrow keys have moved the point, lets go.
+
+      **Your turn:** a park ranger marks on a map where birds have built their nests. The starter code makes a canvas of 200 x 150 pixels with the label `Nests: 0` under it. Make each click on the canvas mark a nest: an orange (`Color.ORANGE`) filled circle 12 pixels across, with its center where the mouse was clicked. The label then says how many nests are marked: `Nests: 2` after two clicks. The window after the two clicks listed below is drawn under them.
+    seed: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.VBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(200, 150);
+              GraphicsContext pen = canvas.getGraphicsContext2D();
+              Label nests = new Label("Nests: 0");
+
+              stage.setScene(new Scene(new VBox(canvas, nests)));
+              stage.setTitle("Nest map");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.VBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+          private int marked;
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(200, 150);
+              GraphicsContext pen = canvas.getGraphicsContext2D();
+              Label nests = new Label("Nests: 0");
+              pen.setFill(Color.ORANGE);
+              canvas.setOnMouseClicked(event -> {
+                  pen.fillOval(event.getX() - 6, event.getY() - 6, 12, 12);
+                  this.marked++;
+                  nests.setText("Nests: " + this.marked);
+              });
+
+              stage.setScene(new Scene(new VBox(canvas, nests)));
+              stage.setTitle("Nest map");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "`canvas.setOnMouseClicked(event -> { ... });` runs at each click. The circle's square starts 6 pixels left of and above the mouse: `pen.fillOval(event.getX() - 6, event.getY() - 6, 12, 12);`."
+      - "The count has to survive from one click to the next, so keep it in an instance variable, `private int marked;`, and add one to it in the handler before setting the label's text."
+    tests:
+      - events: |
+          click Canvas 1 at 50 40
+          click Canvas 1 at 120 95
+      - events: |
+          click Canvas 1 at 10 10
+          click Canvas 1 at 190 140
+          click Canvas 1 at 100 75
+        hidden: true
+      - events: |
+          click Canvas 1 at 33.5 61
+        hidden: true
+    more:
+      - task: |
+          A delivery app asks for a signature. Under the label `Sign below`, in a VBox with no spacing, a canvas of 240 x 100 pixels takes it: pressing the mouse starts a line, and each drag draws a line from the point before to the new point, in dark blue (`Color.DARKBLUE`) and 2 pixels wide. Releasing draws nothing. Nothing else is drawn. The window after the events below is drawn under them.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.canvas.Canvas;
+          import javafx.scene.canvas.GraphicsContext;
+          import javafx.scene.control.Label;
+          import javafx.scene.layout.VBox;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Canvas canvas = new Canvas(240, 100);
+                  GraphicsContext pen = canvas.getGraphicsContext2D();
+
+                  stage.setScene(new Scene(new VBox(new Label("Sign below"), canvas)));
+                  stage.setTitle("Sign here");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.canvas.Canvas;
+          import javafx.scene.canvas.GraphicsContext;
+          import javafx.scene.control.Label;
+          import javafx.scene.layout.VBox;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+              private double lastX;
+              private double lastY;
+
+              @Override
+              public void start(Stage stage) {
+                  Canvas canvas = new Canvas(240, 100);
+                  GraphicsContext pen = canvas.getGraphicsContext2D();
+                  pen.setStroke(Color.DARKBLUE);
+                  pen.setLineWidth(2);
+                  canvas.setOnMousePressed(event -> {
+                      this.lastX = event.getX();
+                      this.lastY = event.getY();
+                  });
+                  canvas.setOnMouseDragged(event -> {
+                      pen.strokeLine(this.lastX, this.lastY, event.getX(), event.getY());
+                      this.lastX = event.getX();
+                      this.lastY = event.getY();
+                  });
+
+                  stage.setScene(new Scene(new VBox(new Label("Sign below"), canvas)));
+                  stage.setTitle("Sign here");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "Keep the last point in two instance variables, `private double lastX;` and `private double lastY;`. The pressed handler only stores the point."
+          - "The dragged handler draws `pen.strokeLine(this.lastX, this.lastY, event.getX(), event.getY());` and then stores the new point. Set the stroke color and the width once, in `start`."
+        tests:
+          - events: |
+              press Canvas 1 at 20 70
+              drag Canvas 1 to 40 30
+              drag Canvas 1 to 60 70
+              drag Canvas 1 to 80 40
+              release Canvas 1 at 80 40
+          - events: |
+              press Canvas 1 at 100 50
+              drag Canvas 1 to 130 20
+              release Canvas 1 at 130 20
+              press Canvas 1 at 150 80
+              drag Canvas 1 to 170 60
+              drag Canvas 1 to 200.5 75
+              release Canvas 1 at 200.5 75
+            hidden: true
+          - events: |
+              click Canvas 1 at 120 50
+            hidden: true
+      - task: |
+          A room planner draws furniture as rectangles. Drag on the canvas from one corner of a piece to the opposite corner: where the mouse is pressed is one corner, and where it's released is the other. On release, draw the rectangle between them: first filled in light steel blue (`Color.LIGHTSTEELBLUE`), then its outline with the same numbers in the pen's own stroke (black, 1 pixel wide). Its top left corner is at the smaller x and the smaller y of the two points, and its width and height are the distances between them, so a drag up or to the left works too. When the width or the height is 0 (a click, say), draw nothing. Nothing is drawn while the mouse moves. The window after the events below is drawn under them.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.canvas.Canvas;
+          import javafx.scene.canvas.GraphicsContext;
+          import javafx.scene.layout.Pane;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Canvas canvas = new Canvas(200, 150);
+                  GraphicsContext pen = canvas.getGraphicsContext2D();
+
+                  stage.setScene(new Scene(new Pane(canvas)));
+                  stage.setTitle("Room planner");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.canvas.Canvas;
+          import javafx.scene.canvas.GraphicsContext;
+          import javafx.scene.layout.Pane;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+              private double startX;
+              private double startY;
+
+              @Override
+              public void start(Stage stage) {
+                  Canvas canvas = new Canvas(200, 150);
+                  GraphicsContext pen = canvas.getGraphicsContext2D();
+                  pen.setFill(Color.LIGHTSTEELBLUE);
+                  canvas.setOnMousePressed(event -> {
+                      this.startX = event.getX();
+                      this.startY = event.getY();
+                  });
+                  canvas.setOnMouseReleased(event -> {
+                      double x = Math.min(this.startX, event.getX());
+                      double y = Math.min(this.startY, event.getY());
+                      double width = Math.abs(event.getX() - this.startX);
+                      double height = Math.abs(event.getY() - this.startY);
+                      if (width > 0 && height > 0) {
+                          pen.fillRect(x, y, width, height);
+                          pen.strokeRect(x, y, width, height);
+                      }
+                  });
+
+                  stage.setScene(new Scene(new Pane(canvas)));
+                  stage.setTitle("Room planner");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The pressed handler stores the first corner in two instance variables. The released handler has the other corner in `event.getX()` and `event.getY()`."
+          - "`Math.min(this.startX, event.getX())` is the left edge, and `Math.abs(event.getX() - this.startX)` the width; the same for y. Then `fillRect` and `strokeRect` with those four numbers, inside an `if` that checks both are above 0."
+        tests:
+          - events: |
+              press Canvas 1 at 20 30
+              drag Canvas 1 to 60 50
+              release Canvas 1 at 80 70
+              press Canvas 1 at 180 130
+              release Canvas 1 at 120 90
+          - events: |
+              press Canvas 1 at 150 120
+              release Canvas 1 at 110 60
+              click Canvas 1 at 30 30
+              press Canvas 1 at 10 10
+              release Canvas 1 at 70 10
+              press Canvas 1 at 10 100
+              drag Canvas 1 to 90 100
+              release Canvas 1 at 90 140.5
+            hidden: true
+
+  - id: drawing-and-images-pixels
+    slug: pixels
+    title: Images as grids of pixels
+    text: |
+      A picture on a screen is a grid of tiny squares, the **pixels**, each of one color. Module 47 kept a picture's brightness in a two-dimensional array. JavaFX reads real image files into such grids of colors, lets a program read and change every pixel, and shows the result in a window.
+
+      ### An image from a file
+
+      The pictures in this module are small PNG files that Java Arena draws for its lessons with a program of its own, so that they're the same everywhere. A block like the one below shows the file a lesson's example gets in its folder, with its name and size. Here's `landscape.png`:
+
+      ```asset landscape.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.layout.Pane;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image picture = new Image("file:landscape.png");
+              System.out.println(picture.getWidth() + " x " + picture.getHeight());
+
+              stage.setScene(new Scene(new Pane(new ImageView(picture))));
+              stage.setTitle("Landscape");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```output
+      32.0 x 24.0
+      ```
+
+      - `new Image("file:landscape.png")` reads the file `landscape.png` in the program's folder. The `file:` at the start says that it's a file. (Without it, JavaFX looks for the image among the files that come packed with the program's classes, its resources, instead of in its folder. In Java Arena that throws an IllegalArgumentException, so always write `file:` here.)
+      - `getWidth()` and `getHeight()` return the size in pixels. They're doubles, as sizes are everywhere in JavaFX: write `(int) picture.getWidth()` for an int to loop with.
+      - An **ImageView** is a node that shows an Image. The Image holds the pixels, and the view shows them in the window. The classes are in `javafx.scene.image`.
+
+      The page draws a small image several times larger with its pixels kept square and sharp, and says how much larger under it. In the window as text, this image view is the line `ImageView 32 x 24, pixels 6315e812`: its size, and then a checksum, a number worked out from every pixel's color. Change a single pixel and the number changes, so the challenges with images compare your picture with the model solution's **pixel by pixel**.
+
+      ### Reading pixels
+
+      `tiny.png` is 6 pixels wide and 4 high, and Java Arena made each of its pixels a known color:
+
+      ```asset tiny.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image tiny = new Image("file:tiny.png");
+              PixelReader reader = tiny.getPixelReader();
+              Color corner = reader.getColor(0, 0);
+              System.out.println(corner);
+              System.out.println(corner.getRed() + " " + corner.getGreen() + " " + corner.getBlue());
+
+              Color steel = reader.getColor(3, 3);
+              System.out.println(steel);
+              int red = (int) Math.round(steel.getRed() * 255);
+              int green = (int) Math.round(steel.getGreen() * 255);
+              int blue = (int) Math.round(steel.getBlue() * 255);
+              System.out.println(red + " " + green + " " + blue);
+
+              stage.setScene(new Scene(new Pane(new ImageView(tiny))));
+              stage.setTitle("Tiny");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```output
+      0xff0000ff
+      1.0 0.0 0.0
+      0x336699ff
+      51 102 153
+      ```
+
+      - `getPixelReader()` returns the image's **PixelReader**, and `getColor(x, y)` the color of one pixel. x is the column, counted from 0 at the left, and y the row, from 0 at the top, as on a canvas. Note the order: x first, unlike `grid[row][column]` in module 47. A pixel outside the image, such as x 6 here, throws an IndexOutOfBoundsException.
+      - The top left pixel is pure red: `0xff0000ff`.
+      - `getRed()`, `getGreen()` and `getBlue()` return the amounts as doubles from 0.0 to 1.0, not 0 to 255. Times 255 and rounded, they're the familiar whole numbers: the pixel at (3, 3) is 51, 102, 153, a steel blue.
+
+      ### When the file can't be read
+
+      A missing file doesn't throw an exception. JavaFX gives an **error image** instead: `isError()` returns `true`, its size is 0 x 0, and `getException()` returns the exception that says what went wrong (for a missing file, a FileNotFoundException). So a program checks before it uses the picture:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.layout.Pane;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image picture = new Image("file:holiday.png");
+              System.out.println(picture.isError() + " " + picture.getWidth());
+              if (picture.isError()) {
+                  stage.setScene(new Scene(new Label("The picture couldn't be read.")));
+              } else {
+                  stage.setScene(new Scene(new Pane(new ImageView(picture))));
+              }
+              stage.setTitle("Holiday");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```output
+      true 0.0
+      ```
+
+      An error image has no pixels to read: its `getPixelReader()` returns `null`.
+
+      ### Writing pixels
+
+      A **WritableImage** is an image whose pixels a program sets. `new WritableImage(width, height)` makes one in which every pixel is fully transparent at first, and its `getPixelWriter()` returns a **PixelWriter**, whose `setColor(x, y, color)` sets one pixel. A WritableImage is an Image too (the class extends Image), so an ImageView shows it.
+
+      A copy of the landscape with a one-pixel crimson frame around it: the loops go through every pixel, row by row as in module 47, and each pixel on the edge gets the frame's color, while the others get the original's:
+
+      ```asset landscape.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image original = new Image("file:landscape.png");
+              PixelReader reader = original.getPixelReader();
+              int width = (int) original.getWidth();
+              int height = (int) original.getHeight();
+
+              WritableImage framed = new WritableImage(width, height);
+              PixelWriter writer = framed.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      if (x == 0 || y == 0 || x == width - 1 || y == height - 1) {
+                          writer.setColor(x, y, Color.CRIMSON);
+                      } else {
+                          writer.setColor(x, y, reader.getColor(x, y));
+                      }
+                  }
+              }
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(original), new ImageView(framed))));
+              stage.setTitle("Frame");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      The original isn't changed: an Image read from a file can't be written to. The framed picture is a new image with pixels of its own.
+
+      A WritableImage doesn't need a file at all. Here every pixel's color is worked out from where it is, which makes a smooth blend of colors:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              WritableImage blend = new WritableImage(16, 16);
+              PixelWriter writer = blend.getPixelWriter();
+              for (int y = 0; y < 16; y++) {
+                  for (int x = 0; x < 16; x++) {
+                      writer.setColor(x, y, Color.rgb(x * 16, 100, y * 16));
+                  }
+              }
+
+              stage.setScene(new Scene(new Pane(new ImageView(blend))));
+              stage.setTitle("Blend");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      Red grows from left to right (from 0 to 240) and blue from top to bottom.
+
+      ### Clicking on an image
+
+      An image view takes the mouse as a canvas does. On an image view, `getX()` and `getY()` are in the image's own pixels, however large the page draws it, so `(int) event.getX()` is the column of the pixel that was clicked. A program that tells the color of the pixel you click:
+
+      ```asset tiny.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.layout.Pane;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image tiny = new Image("file:tiny.png");
+              PixelReader reader = tiny.getPixelReader();
+              ImageView view = new ImageView(tiny);
+              view.setOnMouseClicked(event -> {
+                  int x = (int) event.getX();
+                  int y = (int) event.getY();
+                  System.out.println("(" + x + ", " + y + ") is " + reader.getColor(x, y));
+              });
+
+              stage.setScene(new Scene(new Pane(view)));
+              stage.setTitle("Tiny");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      click ImageView 1 at 3 3
+      click ImageView 1 at 0 1
+      ```
+
+      ```output
+      (3, 3) is 0x336699ff
+      (0, 1) is 0xffff00ff
+      ```
+
+      **Your turn:** an eyedropper. The program reads `pic.png` and shows it in an image view, with a label under it that starts as `Click a pixel`. A click on a pixel sets the label to the pixel's place and its red, green and blue as whole numbers from 0 to 255: `(3, 3): 51 102 153`. Fill in the blanks. The challenge's picture is `tiny.png`, given to the program as `pic.png`:
+
+      ```asset tiny.png
+      ```
+    fill: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.layout.VBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image picture = new Image("file:pic.png");
+              PixelReader reader = picture.[[getPixelReader]]();
+              Label shown = new Label("Click a pixel");
+              ImageView view = new ImageView(picture);
+              view.setOnMouseClicked(event -> {
+                  int x = (int) event.getX();
+                  int y = (int) event.getY();
+                  Color color = reader.[[getColor]](x, y);
+                  int red = (int) Math.round(color.[[getRed]]() * 255);
+                  int green = (int) Math.round(color.getGreen() * 255);
+                  int blue = (int) Math.round(color.getBlue() * [[255]]);
+                  shown.setText("(" + x + ", " + y + "): " + red + " " + green + " " + blue);
+              });
+
+              stage.setScene(new Scene(new VBox(view, shown)));
+              stage.setTitle("Eyedropper");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "An image's pixels are read through its PixelReader, from `getPixelReader()`, and the reader's `getColor(x, y)` gives one pixel's Color."
+      - "A Color's `getRed()` is between 0.0 and 1.0, so times 255 (and rounded) it's a whole number from 0 to 255. Blue works the same way."
+    tests:
+      - files:
+          pic.png: { asset: tiny.png }
+        events: |
+          click ImageView 1 at 3 3
+      - files:
+          pic.png: { asset: tiny.png }
+        events: |
+          click ImageView 1 at 5 0
+          click ImageView 1 at 2 2
+        hidden: true
+      - files:
+          pic.png: { asset: blocks.png }
+        events: |
+          click ImageView 1 at 20 10
+        hidden: true
+    more:
+      - task: |
+          A pixel-art editor saves its pictures as text. In the file `art.txt`, each line is a row of pixels and each character a pixel: `#` is black (`Color.BLACK`), `o` is orange (`Color.ORANGE`) and `.` is white (`Color.WHITE`). Every line is as long as the first one.
+
+          Make a WritableImage as wide as a line and as high as the file has lines, give each pixel the color of its character, and show the image in an ImageView, inside a Pane. The window's title is `Pixel art`. For this file:
+
+          ```text
+          .......
+          ..##...
+          .#oo#.#
+          #oooo##
+          .#oo#.#
+          ..##...
+          ```
+
+          the window should look like the drawing below.
+        seed: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.Pane;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> rows = Files.readAllLines(Paths.get("art.txt"));
+
+                  stage.setScene(new Scene(new Pane()));
+                  stage.setTitle("Pixel art");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.Pane;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> rows = Files.readAllLines(Paths.get("art.txt"));
+                  int width = rows.get(0).length();
+                  int height = rows.size();
+                  WritableImage art = new WritableImage(width, height);
+                  PixelWriter writer = art.getPixelWriter();
+                  for (int y = 0; y < height; y++) {
+                      for (int x = 0; x < width; x++) {
+                          char c = rows.get(y).charAt(x);
+                          if (c == '#') {
+                              writer.setColor(x, y, Color.BLACK);
+                          } else if (c == 'o') {
+                              writer.setColor(x, y, Color.ORANGE);
+                          } else {
+                              writer.setColor(x, y, Color.WHITE);
+                          }
+                      }
+                  }
+
+                  stage.setScene(new Scene(new Pane(new ImageView(art))));
+                  stage.setTitle("Pixel art");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The width is `rows.get(0).length()` and the height `rows.size()`. Make `new WritableImage(width, height)` and get its PixelWriter."
+          - "Loop over y (the rows) and, inside, over x. The character is `rows.get(y).charAt(x)`; pick the color with `if` and `else if`, and set it with `writer.setColor(x, y, ...)`. At the end, the Pane holds `new ImageView(art)`."
+        tests:
+          - files:
+              art.txt: |
+                .......
+                ..##...
+                .#oo#.#
+                #oooo##
+                .#oo#.#
+                ..##...
+            events: []
+          - files:
+              art.txt: |
+                ..#..
+                ..#..
+                #####
+                ..o..
+                ..o..
+            events: []
+            hidden: true
+          - files:
+              art.txt: |
+                o.#.o.#.o.#.
+            events: []
+            hidden: true
+      - task: |
+          A digital photo frame shows the picture `pic.png`. When the image can be read, the scene's root is a VBox with no spacing, holding an ImageView of it and, under it, a label with its size: `32 x 24 pixels` (whole numbers). When it can't be read (the file is missing), the scene's root is only the label `No picture: pic.png is missing`, with no ImageView. The window's title is `Photo frame`.
+
+          The first test gives the program `landscape.png` as `pic.png`, and the window should look like the drawing below. Another test gives it no file at all.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Label;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image picture = new Image("file:pic.png");
+                  ImageView view = new ImageView(picture);
+
+                  stage.setScene(new Scene(new VBox(view)));
+                  stage.setTitle("Photo frame");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Label;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image picture = new Image("file:pic.png");
+                  if (picture.isError()) {
+                      stage.setScene(new Scene(new Label("No picture: pic.png is missing")));
+                  } else {
+                      int width = (int) picture.getWidth();
+                      int height = (int) picture.getHeight();
+                      Label size = new Label(width + " x " + height + " pixels");
+                      stage.setScene(new Scene(new VBox(new ImageView(picture), size)));
+                  }
+                  stage.setTitle("Photo frame");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "`picture.isError()` is `true` when the file couldn't be read. Then the scene's root is just `new Label(\"No picture: pic.png is missing\")`."
+          - "Otherwise cast the size to whole numbers, `(int) picture.getWidth()`, so that the label says `32 x 24 pixels` and not `32.0 x 24.0 pixels`."
+        tests:
+          - files:
+              pic.png: { asset: landscape.png }
+            events: []
+          - events: []
+          - files:
+              pic.png: { asset: photo.png }
+            events: []
+            hidden: true
+
+  - id: drawing-and-images-scaling-down
+    slug: scaling-down
+    title: Making an image smaller
+    text: |
+      A photo gallery shows small copies of its photos, **thumbnails**, so that many fit on a screen. This step makes them, pixel by pixel.
+
+      ### Every second pixel
+
+      The simplest way to make an image half as wide and half as high: keep every second pixel of every second row, and drop the rest. Pixel (x, y) of the small image is pixel (2x, 2y) of the big one:
+
+      | x in the small image | 0 | 1 | 2 | 3 |
+      | --- | --- | --- | --- | --- |
+      | x in the big image | 0 | 2 | 4 | 6 |
+
+      The same goes for y. So the loops go through the pixels of the **small** image, and each one reads its color from the big one:
+
+      ```asset landscape.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image original = new Image("file:landscape.png");
+              PixelReader reader = original.getPixelReader();
+              int width = (int) original.getWidth() / 2;
+              int height = (int) original.getHeight() / 2;
+
+              WritableImage half = new WritableImage(width, height);
+              PixelWriter writer = half.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, reader.getColor(2 * x, 2 * y));
+                  }
+              }
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(original), new ImageView(half))));
+              stage.setTitle("Half size");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - `(int) original.getWidth() / 2`: the cast comes first, so this is 32 / 2, which is 16. The thumbnail is 16 x 12.
+      - Each pixel of the thumbnail is set exactly once. Going through the big image's pixels instead would need a check for the ones to keep.
+      - The page draws the small image more times larger than the big one, so on the page they can look about the same size. The window as text gives their real sizes.
+
+      Dropping pixels loses detail: a thin line one pixel wide can vanish from the thumbnail. Photo editors usually work out each small pixel from the colors of all the pixels it replaces (their average, for example), which looks smoother. Keeping every second pixel is the simplest way, and the one these lessons use.
+
+      ### A method that makes the thumbnail
+
+      Making a thumbnail is a job of its own, so it fits in a method, in a class without anything about windows: the image goes in, and a new image comes out. A WritableImage is an Image, so the method can be given either kind:
+
+      ```java fragment
+      public static WritableImage half(Image source) {
+          PixelReader reader = source.getPixelReader();
+          int width = (int) source.getWidth() / 2;
+          int height = (int) source.getHeight() / 2;
+          WritableImage small = new WritableImage(width, height);
+          PixelWriter writer = small.getPixelWriter();
+          for (int y = 0; y < height; y++) {
+              for (int x = 0; x < width; x++) {
+                  writer.setColor(x, y, reader.getColor(2 * x, 2 * y));
+              }
+          }
+          return small;
+      }
+      ```
+
+      A WritableImage can be made without any window, so a plain program can try the method on a tiny image whose colors it knows, and check what comes out. Here a 4 x 2 image gets shades of red in its first row and shades of green in its second:
+
+      ```java run
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.paint.Color;
+
+      public class Main {
+          public static void main(String[] args) {
+              WritableImage strip = new WritableImage(4, 2);
+              PixelWriter writer = strip.getPixelWriter();
+              for (int x = 0; x < 4; x++) {
+                  writer.setColor(x, 0, Color.rgb(x * 50, 0, 0));
+                  writer.setColor(x, 1, Color.rgb(0, x * 50, 0));
+              }
+
+              WritableImage small = Thumbnail.half(strip);
+              System.out.println(small.getWidth() + " x " + small.getHeight());
+              System.out.println(small.getPixelReader().getColor(0, 0));
+              System.out.println(small.getPixelReader().getColor(1, 0));
+          }
+      }
+      // ==== Thumbnail.java ====
+      import javafx.scene.image.Image;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+
+      public class Thumbnail {
+
+          public static WritableImage half(Image source) {
+              PixelReader reader = source.getPixelReader();
+              int width = (int) source.getWidth() / 2;
+              int height = (int) source.getHeight() / 2;
+              WritableImage small = new WritableImage(width, height);
+              PixelWriter writer = small.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, reader.getColor(2 * x, 2 * y));
+                  }
+              }
+              return small;
+          }
+      }
+      ```
+
+      ```output
+      2.0 x 1.0
+      0x000000ff
+      0x640000ff
+      ```
+
+      The thumbnail kept the first row only, and from it the pixels at x 0 and x 2: red 0 and red 100 (`64` in hexadecimal). The challenges with methods check them like this, without a window.
+
+      ### Smaller by any whole number
+
+      Every third pixel makes a thumbnail a third of the size, and every fourth a quarter. With a **factor** `f`, the small image is `width / f` by `height / f`, and its pixel (x, y) is the big one's (x * f, y * f). The division is a whole-number division: the 32 x 24 landscape with a factor of 3 gives 10 x 8. Its 32 columns make 10 groups of 3 with 2 left over, and the leftover columns 30 and 31 are simply dropped. The sunset of `photo.png`, 64 x 48, at a half, a quarter and an eighth of its size:
+
+      ```asset photo.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image photo = new Image("file:photo.png");
+              HBox row = new HBox(10);
+              for (int factor = 2; factor <= 8; factor *= 2) {
+                  row.getChildren().add(new ImageView(shrink(photo, factor)));
+              }
+
+              stage.setScene(new Scene(row));
+              stage.setTitle("Thumbnails");
+              stage.show();
+          }
+
+          public static WritableImage shrink(Image source, int factor) {
+              PixelReader reader = source.getPixelReader();
+              int width = (int) source.getWidth() / factor;
+              int height = (int) source.getHeight() / factor;
+              WritableImage small = new WritableImage(width, height);
+              PixelWriter writer = small.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, reader.getColor(x * factor, y * factor));
+                  }
+              }
+              return small;
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      The window as text lists the three image views, 32 x 24, 16 x 12 and 8 x 6. The page draws each of them larger, so compare their pixels: the smaller the copy, the blockier the sunset.
+
+      ### Into a bigger image
+
+      A small copy can also go **inside** another image. A frame shop puts a picture on a mat: a white card as big as the original, with the half-size copy in the middle. The card is a WritableImage painted white, pixel by pixel. Then the copy is written into it shifted: the small image's pixel (x, y) goes to (x + left, y + top), where `left` is a quarter of the width and `top` a quarter of the height, which centers it:
+
+      ```asset landscape.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image original = new Image("file:landscape.png");
+              PixelReader reader = original.getPixelReader();
+              int width = (int) original.getWidth();
+              int height = (int) original.getHeight();
+
+              WritableImage card = new WritableImage(width, height);
+              PixelWriter writer = card.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, Color.WHITE);
+                  }
+              }
+              int left = width / 4;
+              int top = height / 4;
+              for (int y = 0; y < height / 2; y++) {
+                  for (int x = 0; x < width / 2; x++) {
+                      writer.setColor(x + left, y + top, reader.getColor(2 * x, 2 * y));
+                  }
+              }
+
+              stage.setScene(new Scene(new Pane(new ImageView(card))));
+              stage.setTitle("On a mat");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      Writing a pixel a second time replaces its color, as drawing over a canvas does: the white pixels in the middle are overwritten by the picture.
+
+      One more way to start: `new WritableImage(reader, width, height)` makes a WritableImage that is already a copy of the image the reader reads (of its top left corner, `width` x `height` pixels). A program that changes a part of a picture starts with such a copy, and writes over the part it changes.
+
+      **Your turn:** thumbnails a quarter of the size. Read `pic.png` and make a copy of it that keeps every fourth pixel in each direction: it is `width / 4` by `height / 4`, and its pixel (x, y) is the original's (4x, 4y). Show the original and the thumbnail side by side in an HBox with a spacing of 10, the original first. The window's title is `Thumbnail`. The first test gives the program the sunset `photo.png` as `pic.png`, and the window should look like the drawing below.
+    seed: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image original = new Image("file:pic.png");
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(original))));
+              stage.setTitle("Thumbnail");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image original = new Image("file:pic.png");
+              PixelReader reader = original.getPixelReader();
+              int width = (int) original.getWidth() / 4;
+              int height = (int) original.getHeight() / 4;
+              WritableImage thumbnail = new WritableImage(width, height);
+              PixelWriter writer = thumbnail.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, reader.getColor(4 * x, 4 * y));
+                  }
+              }
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(original), new ImageView(thumbnail))));
+              stage.setTitle("Thumbnail");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "The thumbnail is `new WritableImage(width, height)` with `width = (int) original.getWidth() / 4`, and the same for the height."
+      - "Loop over the thumbnail's pixels, y outside and x inside, and copy `reader.getColor(4 * x, 4 * y)` with `writer.setColor(x, y, ...)`. Then add `new ImageView(thumbnail)` to the HBox after the original."
+    tests:
+      - files:
+          pic.png: { asset: photo.png }
+        events: []
+      - files:
+          pic.png: { asset: landscape.png }
+        events: []
+        hidden: true
+      - files:
+          pic.png: { asset: blocks.png }
+        events: []
+        hidden: true
+    more:
+      - task: |
+          In `Thumbnails.java`, write the method `public static WritableImage shrink(Image source, int factor)`: it returns a new image `factor` times smaller, `width / factor` by `height / factor` (whole-number division), whose pixel (x, y) is the source's pixel (x * factor, y * factor). The factor is at least 1, and never more than the source's width or height.
+
+          `Main.java` has two methods to try it with: `sample(width, height)` makes an image whose pixel (x, y) has red `x * 30` and green `y * 60`, and `describe(image)` prints an image's size and then the colors of its pixels, a row on each line. Don't change them. The check calls:
+
+          ```java fragment
+          describe(Thumbnails.shrink(sample(7, 4), 3));
+          ```
+
+          and expects:
+
+          ```
+          2 x 1
+          0x000000ff 0x5a0000ff
+          ```
+        seed:
+          Thumbnails.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+
+            public class Thumbnails {
+
+            }
+          Main.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+            import javafx.scene.paint.Color;
+
+            public class Main {
+                public static void main(String[] args) {
+                    describe(Thumbnails.shrink(sample(7, 4), 3));
+                }
+
+                // An image to try things on: pixel (x, y) has red x * 30 and green y * 60.
+                public static WritableImage sample(int width, int height) {
+                    WritableImage image = new WritableImage(width, height);
+                    PixelWriter writer = image.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            writer.setColor(x, y, Color.rgb(x * 30, y * 60, 0));
+                        }
+                    }
+                    return image;
+                }
+
+                // Prints the size, then the color of every pixel, a row on each line.
+                public static void describe(Image image) {
+                    int width = (int) image.getWidth();
+                    int height = (int) image.getHeight();
+                    System.out.println(width + " x " + height);
+                    PixelReader reader = image.getPixelReader();
+                    for (int y = 0; y < height; y++) {
+                        String row = "";
+                        for (int x = 0; x < width; x++) {
+                            row += " " + reader.getColor(x, y);
+                        }
+                        System.out.println(row.trim());
+                    }
+                }
+            }
+        solution:
+          Thumbnails.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+
+            public class Thumbnails {
+
+                public static WritableImage shrink(Image source, int factor) {
+                    PixelReader reader = source.getPixelReader();
+                    int width = (int) source.getWidth() / factor;
+                    int height = (int) source.getHeight() / factor;
+                    WritableImage small = new WritableImage(width, height);
+                    PixelWriter writer = small.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            writer.setColor(x, y, reader.getColor(x * factor, y * factor));
+                        }
+                    }
+                    return small;
+                }
+            }
+          Main.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+            import javafx.scene.paint.Color;
+
+            public class Main {
+                public static void main(String[] args) {
+                    describe(Thumbnails.shrink(sample(7, 4), 3));
+                }
+
+                // An image to try things on: pixel (x, y) has red x * 30 and green y * 60.
+                public static WritableImage sample(int width, int height) {
+                    WritableImage image = new WritableImage(width, height);
+                    PixelWriter writer = image.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            writer.setColor(x, y, Color.rgb(x * 30, y * 60, 0));
+                        }
+                    }
+                    return image;
+                }
+
+                // Prints the size, then the color of every pixel, a row on each line.
+                public static void describe(Image image) {
+                    int width = (int) image.getWidth();
+                    int height = (int) image.getHeight();
+                    System.out.println(width + " x " + height);
+                    PixelReader reader = image.getPixelReader();
+                    for (int y = 0; y < height; y++) {
+                        String row = "";
+                        for (int x = 0; x < width; x++) {
+                            row += " " + reader.getColor(x, y);
+                        }
+                        System.out.println(row.trim());
+                    }
+                }
+            }
+        hints:
+          - "The new size is `(int) source.getWidth() / factor` by `(int) source.getHeight() / factor`. Make a WritableImage of that size and get its PixelWriter."
+          - "For every pixel (x, y) of the new image, `writer.setColor(x, y, reader.getColor(x * factor, y * factor));`, and at the end `return` the new image."
+        tests:
+          - call: describe(Thumbnails.shrink(sample(7, 4), 3));
+          - call: describe(Thumbnails.shrink(sample(6, 4), 2));
+            hidden: true
+          - call: |
+              describe(Thumbnails.shrink(sample(9, 5), 4));
+              describe(Thumbnails.shrink(sample(3, 2), 1));
+            hidden: true
+      - task: |
+          Picture in picture: a copy of `pic.png` with a third-size copy of it in its top right corner, 1 pixel in from the top and right edges. Start with a full copy, `new WritableImage(reader, width, height)`. Then write the third-size copy (every third pixel, as `Thumbnails.shrink` in the challenge before does with a factor of 3) over it: it is `width / 3` pixels wide and `height / 3` high (whole-number division), and its pixel (x, y), which is the original's (3x, 3y), goes to (x + width - width / 3 - 1, y + 1). The pixels around it stay the picture's own. Show only the result, in an ImageView inside a Pane. The window's title is `Picture in picture`. The first test gives the program `landscape.png` as `pic.png`, and the window should look like the drawing below.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelReader;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.Pane;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image original = new Image("file:pic.png");
+
+                  stage.setScene(new Scene(new Pane(new ImageView(original))));
+                  stage.setTitle("Picture in picture");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelReader;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.Pane;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image original = new Image("file:pic.png");
+                  PixelReader reader = original.getPixelReader();
+                  int width = (int) original.getWidth();
+                  int height = (int) original.getHeight();
+                  WritableImage result = new WritableImage(reader, width, height);
+                  PixelWriter writer = result.getPixelWriter();
+                  for (int y = 0; y < height / 3; y++) {
+                      for (int x = 0; x < width / 3; x++) {
+                          writer.setColor(x + width - width / 3 - 1, y + 1, reader.getColor(3 * x, 3 * y));
+                      }
+                  }
+
+                  stage.setScene(new Scene(new Pane(new ImageView(result))));
+                  stage.setTitle("Picture in picture");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "`new WritableImage(reader, width, height)` is a copy of the whole picture to start from, with `reader = original.getPixelReader()` and the size as ints."
+          - "Loop over the third-size copy, `y < height / 3` and `x < width / 3`, and write `reader.getColor(3 * x, 3 * y)` at `(x + width - width / 3 - 1, y + 1)`. Show `new ImageView(result)`."
+        tests:
+          - files:
+              pic.png: { asset: landscape.png }
+            events: []
+          - files:
+              pic.png: { asset: photo.png }
+            events: []
+            hidden: true
+          - files:
+              pic.png: { asset: checker.png }
+            events: []
+            hidden: true
+
+  - id: drawing-and-images-tiling
+    slug: tiling
+    title: Tiling an image
+    text: |
+      Wrapping paper, wallpaper and tiled floors repeat one small picture over and over. Each copy is a **tile**, and putting them side by side is **tiling**.
+
+      ### Repeating with the remainder
+
+      An image of 4 tiles across and 3 down is 4 times as wide as the tile and 3 times as high. Which pixel of the tile does pixel (x, y) of the big image show? With a tile `w` pixels wide, x from 0 to w - 1 is in the first tile, at the same place in it; x from w to 2w - 1 is in the second tile, which starts over from 0; and so on. That's the remainder of a division (module 6): the place in the tile is `x % w`. For a tile 8 pixels wide:
+
+      | x in the big image | 0 | 1 | ... | 7 | 8 | 9 | ... | 15 | 16 |
+      | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+      | `x % 8`, in the tile | 0 | 1 | ... | 7 | 0 | 1 | ... | 7 | 0 |
+
+      Down, it's `y % h` for a tile `h` pixels high. Wrapping paper with the 8 x 8 heart of `icon.png`, whose corners are transparent:
+
+      ```asset icon.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.Pane;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image heart = new Image("file:icon.png");
+              PixelReader reader = heart.getPixelReader();
+              int w = (int) heart.getWidth();
+              int h = (int) heart.getHeight();
+
+              WritableImage paper = new WritableImage(4 * w, 3 * h);
+              PixelWriter writer = paper.getPixelWriter();
+              for (int y = 0; y < 3 * h; y++) {
+                  for (int x = 0; x < 4 * w; x++) {
+                      writer.setColor(x, y, reader.getColor(x % w, y % h));
+                  }
+              }
+
+              stage.setScene(new Scene(new Pane(new ImageView(paper))));
+              stage.setTitle("Wrapping paper");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      The transparent corners of the heart stay transparent in the copies: `getColor` reads them as a color whose opacity is 0, and `setColor` writes that.
+
+      ### Tile by tile
+
+      The same image can be made the other way round: go through the tiles, and copy the whole small image into each one, shifted, as step 4 put a picture on a mat. The tile in column `tx` and row `ty` starts at (tx * w, ty * h):
+
+      ```java fragment
+      for (int ty = 0; ty < 3; ty++) {
+          for (int tx = 0; tx < 4; tx++) {
+              for (int y = 0; y < h; y++) {
+                  for (int x = 0; x < w; x++) {
+                      writer.setColor(tx * w + x, ty * h + y, reader.getColor(x, y));
+                  }
+              }
+          }
+      }
+      ```
+
+      Both ways give exactly the same pixels. The one with `%` needs only two loops instead of four. The one tile by tile always knows which tile it is writing, `tx` and `ty`. The next part works that out in the two-loop version too, with a division.
+
+      ### Mirrored tiles
+
+      Tiles that are all the same make a plain pattern. Mirror every other tile, and each edge meets its own mirror image, which gives the symmetry of a tiled floor or a quilt. Which tile a pixel is in is a whole-number division: across, `x / w` is 0 in the first tile, 1 in the second, and so on. In the tiles with an odd number, the pixel reads from the other side of the tile: column `w - 1 - x % w` instead of `x % w`, so the tile's column 0 shows its last column, and its last column shows column 0. The same down the image, with rows, turns tiles upside down. The landscape, 2 x 2, mirrored both ways:
+
+      ```asset landscape.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.Pane;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image tile = new Image("file:landscape.png");
+              PixelReader reader = tile.getPixelReader();
+              int w = (int) tile.getWidth();
+              int h = (int) tile.getHeight();
+
+              WritableImage pattern = new WritableImage(2 * w, 2 * h);
+              PixelWriter writer = pattern.getPixelWriter();
+              for (int y = 0; y < 2 * h; y++) {
+                  for (int x = 0; x < 2 * w; x++) {
+                      int fromX = x % w;
+                      if (x / w % 2 == 1) {
+                          fromX = w - 1 - fromX;
+                      }
+                      int fromY = y % h;
+                      if (y / h % 2 == 1) {
+                          fromY = h - 1 - fromY;
+                      }
+                      writer.setColor(x, y, reader.getColor(fromX, fromY));
+                  }
+              }
+
+              stage.setScene(new Scene(new Pane(new ImageView(pattern))));
+              stage.setTitle("Mirrored");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      `x / w % 2` is worked out from left to right, `(x / w) % 2`: the tile's number, then whether it's odd. The top right tile is the landscape mirrored left to right, the bottom left one is upside down, like a reflection in the lake, and the bottom right one is both.
+
+      **Your turn:** tile `pic.png` 2 times across and 2 times down: pixel (x, y) of the result is the picture's pixel (x % width, y % height). Fill in the blanks. The first test gives the program the heart of `icon.png` as `pic.png`, and the window should look like the drawing below.
+    fill: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.Pane;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image picture = new Image("file:pic.png");
+              PixelReader reader = picture.getPixelReader();
+              int width = (int) picture.getWidth();
+              int height = (int) picture.getHeight();
+
+              WritableImage tiles = new WritableImage(2 * width, 2 * height);
+              PixelWriter writer = tiles.getPixelWriter();
+              for (int y = 0; y < 2 * height; y++) {
+                  for (int x = 0; x < [[2 * width‖width * 2]]; x++) {
+                      writer.setColor(x, y, reader.getColor(x [[%]] width, y % [[height]]));
+                  }
+              }
+
+              stage.setScene(new Scene(new Pane(new ImageView([[tiles]]))));
+              stage.setTitle("Tiles");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "The result is twice as wide as the picture, so x goes up to `2 * width`. The place in the tile is the remainder, `x % width`."
+      - "Down, the tile is `height` pixels high, so it's `y % height`. The image view shows the new image, `tiles`."
+    tests:
+      - files:
+          pic.png: { asset: icon.png }
+        events: []
+      - files:
+          pic.png: { asset: landscape.png }
+        events: []
+        hidden: true
+      - files:
+          pic.png: { asset: tiny.png }
+        events: []
+        hidden: true
+    more:
+      - task: |
+          In `Tiles.java`, write the method `public static WritableImage tile(Image source, int across, int down)`: it returns a new image with the source repeated `across` times side by side and `down` times one under another. Both are at least 1.
+
+          `Main.java` has the methods of step 4's challenge to try it with: `sample(width, height)` makes an image whose pixel (x, y) has red `x * 30` and green `y * 60`, and `describe(image)` prints the size and the colors. The check calls:
+
+          ```java fragment
+          describe(Tiles.tile(sample(3, 2), 2, 1));
+          ```
+
+          and expects:
+
+          ```
+          6 x 2
+          0x000000ff 0x1e0000ff 0x3c0000ff 0x000000ff 0x1e0000ff 0x3c0000ff
+          0x003c00ff 0x1e3c00ff 0x3c3c00ff 0x003c00ff 0x1e3c00ff 0x3c3c00ff
+          ```
+        seed:
+          Tiles.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+
+            public class Tiles {
+
+            }
+          Main.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+            import javafx.scene.paint.Color;
+
+            public class Main {
+                public static void main(String[] args) {
+                    describe(Tiles.tile(sample(3, 2), 2, 1));
+                }
+
+                // An image to try things on: pixel (x, y) has red x * 30 and green y * 60.
+                public static WritableImage sample(int width, int height) {
+                    WritableImage image = new WritableImage(width, height);
+                    PixelWriter writer = image.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            writer.setColor(x, y, Color.rgb(x * 30, y * 60, 0));
+                        }
+                    }
+                    return image;
+                }
+
+                // Prints the size, then the color of every pixel, a row on each line.
+                public static void describe(Image image) {
+                    int width = (int) image.getWidth();
+                    int height = (int) image.getHeight();
+                    System.out.println(width + " x " + height);
+                    PixelReader reader = image.getPixelReader();
+                    for (int y = 0; y < height; y++) {
+                        String row = "";
+                        for (int x = 0; x < width; x++) {
+                            row += " " + reader.getColor(x, y);
+                        }
+                        System.out.println(row.trim());
+                    }
+                }
+            }
+        solution:
+          Tiles.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+
+            public class Tiles {
+
+                public static WritableImage tile(Image source, int across, int down) {
+                    PixelReader reader = source.getPixelReader();
+                    int w = (int) source.getWidth();
+                    int h = (int) source.getHeight();
+                    WritableImage result = new WritableImage(across * w, down * h);
+                    PixelWriter writer = result.getPixelWriter();
+                    for (int y = 0; y < down * h; y++) {
+                        for (int x = 0; x < across * w; x++) {
+                            writer.setColor(x, y, reader.getColor(x % w, y % h));
+                        }
+                    }
+                    return result;
+                }
+            }
+          Main.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+            import javafx.scene.paint.Color;
+
+            public class Main {
+                public static void main(String[] args) {
+                    describe(Tiles.tile(sample(3, 2), 2, 1));
+                }
+
+                // An image to try things on: pixel (x, y) has red x * 30 and green y * 60.
+                public static WritableImage sample(int width, int height) {
+                    WritableImage image = new WritableImage(width, height);
+                    PixelWriter writer = image.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            writer.setColor(x, y, Color.rgb(x * 30, y * 60, 0));
+                        }
+                    }
+                    return image;
+                }
+
+                // Prints the size, then the color of every pixel, a row on each line.
+                public static void describe(Image image) {
+                    int width = (int) image.getWidth();
+                    int height = (int) image.getHeight();
+                    System.out.println(width + " x " + height);
+                    PixelReader reader = image.getPixelReader();
+                    for (int y = 0; y < height; y++) {
+                        String row = "";
+                        for (int x = 0; x < width; x++) {
+                            row += " " + reader.getColor(x, y);
+                        }
+                        System.out.println(row.trim());
+                    }
+                }
+            }
+        hints:
+          - "The result is `across * w` wide and `down * h` high, where `w` and `h` are the source's size as ints."
+          - "For each pixel (x, y) of the result, the color is the source's `reader.getColor(x % w, y % h)`. Return the new image at the end."
+        tests:
+          - call: describe(Tiles.tile(sample(3, 2), 2, 1));
+          - call: describe(Tiles.tile(sample(2, 2), 2, 3));
+            hidden: true
+          - call: |
+              describe(Tiles.tile(sample(1, 3), 4, 1));
+              describe(Tiles.tile(sample(3, 1), 1, 1));
+            hidden: true
+      - task: |
+          A border for a page: `pic.png` repeated 4 times across, in one row, with every second tile (the second and the fourth) mirrored left to right. So the result is 4 times as wide as the picture and as high as it. In a mirrored tile, the tile's pixel (x, y) shows the picture's pixel (width - 1 - x, y); the other tiles show the picture as it is. Show the result in an ImageView inside a Pane. The window's title is `Border`. The first test gives the program `landscape.png` as `pic.png`, and the window should look like the drawing below.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelReader;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.Pane;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image picture = new Image("file:pic.png");
+
+                  stage.setScene(new Scene(new Pane(new ImageView(picture))));
+                  stage.setTitle("Border");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelReader;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.Pane;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image picture = new Image("file:pic.png");
+                  PixelReader reader = picture.getPixelReader();
+                  int width = (int) picture.getWidth();
+                  int height = (int) picture.getHeight();
+                  WritableImage border = new WritableImage(4 * width, height);
+                  PixelWriter writer = border.getPixelWriter();
+                  for (int y = 0; y < height; y++) {
+                      for (int x = 0; x < 4 * width; x++) {
+                          int fromX = x % width;
+                          if (x / width % 2 == 1) {
+                              fromX = width - 1 - fromX;
+                          }
+                          writer.setColor(x, y, reader.getColor(fromX, y));
+                      }
+                  }
+
+                  stage.setScene(new Scene(new Pane(new ImageView(border))));
+                  stage.setTitle("Border");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The result is `new WritableImage(4 * width, height)`. For pixel (x, y), the column in the tile is `x % width`, and the tile's number is `x / width`: 0, 1, 2 or 3."
+          - "When the tile's number is odd (`x / width % 2 == 1`), read the column `width - 1 - x % width` instead. The row is `y` in every tile."
+        tests:
+          - files:
+              pic.png: { asset: landscape.png }
+            events: []
+          - files:
+              pic.png: { asset: icon.png }
+            events: []
+            hidden: true
+          - files:
+              pic.png: { asset: tiny.png }
+            events: []
+            hidden: true
+
+  - id: drawing-and-images-color-filters
+    slug: color-filters
+    title: Color filters
+    text: |
+      The filters of a photo app change the colors of a picture: black and white, a warm old-photo look, a negative. Each one is a rule that takes a pixel's color and gives a new color, and the program applies it to every pixel, with the same two loops as a copy.
+
+      ### The negative
+
+      In a photo's **negative**, light becomes dark and each color becomes its opposite: each of red, green and blue becomes 255 minus itself. Black (0, 0, 0) turns white (255, 255, 255), and red (255, 0, 0) turns cyan (0, 255, 255). Color has a method for it: `invert()` returns the color whose amounts are 1.0 minus the color's own. That's the same rule with amounts from 0.0 to 1.0, and it gives the same pixels. The sunset and its negative:
+
+      ```asset photo.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image photo = new Image("file:photo.png");
+              PixelReader reader = photo.getPixelReader();
+              int width = (int) photo.getWidth();
+              int height = (int) photo.getHeight();
+
+              WritableImage negative = new WritableImage(width, height);
+              PixelWriter writer = negative.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, reader.getColor(x, y).invert());
+                  }
+              }
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(photo), new ImageView(negative))));
+              stage.setTitle("Negative");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      The orange sky turns blue, and the dark hills light.
+
+      ### Two kinds of gray
+
+      A pixel is gray when its red, green and blue are equal: (0, 0, 0) is black, (128, 128, 128) a middle gray, and (255, 255, 255) white. To turn a color into a gray, the program picks one number for all three, and there are two common ways:
+
+      - The **average** of the three: `(red + green + blue) / 3`.
+      - The way JavaFX's `grayscale()` does it: 21% of the red, 71% of the green and 7% of the blue. People see green as much brighter than blue, so a pure green should become a light gray and a pure blue a dark one.
+
+      They don't agree, and pure green shows it best:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Color green = Color.rgb(0, 255, 0);
+              int red = (int) Math.round(green.getRed() * 255);
+              int greenAmount = (int) Math.round(green.getGreen() * 255);
+              int blue = (int) Math.round(green.getBlue() * 255);
+              int average = (red + greenAmount + blue) / 3;
+              System.out.println("average: " + Color.rgb(average, average, average));
+              System.out.println("grayscale(): " + green.grayscale());
+
+              stage.setScene(new Scene(new Label("Two kinds of gray")));
+              stage.setTitle("Gray");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```output
+      average: 0x555555ff
+      grayscale(): 0xb5b5b5ff
+      ```
+
+      The average makes it 85 (`55` in hexadecimal), a dark gray, while `grayscale()` makes it 181 (`b5`), a light one. Neither is wrong, but a picture comes out differently, so the challenges always say which one to use. Here are the colored squares of `blocks.png`, by the average and then by `grayscale()`:
+
+      ```asset blocks.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image blocks = new Image("file:blocks.png");
+              PixelReader reader = blocks.getPixelReader();
+              int width = (int) blocks.getWidth();
+              int height = (int) blocks.getHeight();
+
+              WritableImage byAverage = new WritableImage(width, height);
+              WritableImage byGrayscale = new WritableImage(width, height);
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      Color color = reader.getColor(x, y);
+                      byAverage.getPixelWriter().setColor(x, y, average(color));
+                      byGrayscale.getPixelWriter().setColor(x, y, color.grayscale());
+                  }
+              }
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(byAverage), new ImageView(byGrayscale))));
+              stage.setTitle("Grays");
+              stage.show();
+          }
+
+          public static Color average(Color color) {
+              int red = (int) Math.round(color.getRed() * 255);
+              int green = (int) Math.round(color.getGreen() * 255);
+              int blue = (int) Math.round(color.getBlue() * 255);
+              int gray = (red + green + blue) / 3;
+              return Color.rgb(gray, gray, gray);
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      A rule for one color fits well in a method of its own, like `average` here: the loops stay the same for every filter, and only the method changes. The rule works with whole numbers from 0 to 255, and the division `/ 3` is a whole-number division. Look at the top row: by the average, the green square (64) comes out darker than the blue one (106), while by `grayscale()` the green (136) is much lighter than the blue (63), as your eyes see them.
+
+      ### Black and white
+
+      A **threshold** turns every pixel either black or white: a pixel whose average is at least some limit becomes white, and every other pixel black. With a limit of 128, the landscape becomes a stencil:
+
+      ```asset landscape.png
+      ```
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image landscape = new Image("file:landscape.png");
+              PixelReader reader = landscape.getPixelReader();
+              int width = (int) landscape.getWidth();
+              int height = (int) landscape.getHeight();
+
+              WritableImage stencil = new WritableImage(width, height);
+              PixelWriter writer = stencil.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      Color color = reader.getColor(x, y);
+                      int red = (int) Math.round(color.getRed() * 255);
+                      int green = (int) Math.round(color.getGreen() * 255);
+                      int blue = (int) Math.round(color.getBlue() * 255);
+                      if ((red + green + blue) / 3 >= 128) {
+                          writer.setColor(x, y, Color.WHITE);
+                      } else {
+                          writer.setColor(x, y, Color.BLACK);
+                      }
+                  }
+              }
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(landscape), new ImageView(stencil))));
+              stage.setTitle("Stencil");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      A lower limit makes more of the picture white, and a higher one more of it black.
+
+      ### Tints
+
+      A **tint** shows a picture's grays in one color. Take the gray amount `g` of each pixel and use it for some of the color's amounts and not others: `Color.rgb(g, 0, 0)` shows the picture in shades of red, from black where it's dark to bright red where it's light. An old-photo brown is `Color.rgb(g, g * 3 / 4, g / 2)`: all the red, three quarters of the green and half the blue. A gray of 200 becomes (200, 150, 100).
+
+      **Your turn:** a black-and-white filter. Show `pic.png` and a gray copy of it side by side in an HBox with a spacing of 10, the original first. In the gray copy, each pixel's red, green and blue are all the **average** of the original pixel's three amounts: take each amount as a whole number from 0 to 255 (times 255, rounded with `Math.round`), add them and divide by 3 with whole-number division. The window's title is `Gray`. The first test gives the program the sunset `photo.png` as `pic.png`, and the window should look like the drawing below.
+    seed: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image picture = new Image("file:pic.png");
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(picture))));
+              stage.setTitle("Gray");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.image.Image;
+      import javafx.scene.image.ImageView;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Image picture = new Image("file:pic.png");
+              PixelReader reader = picture.getPixelReader();
+              int width = (int) picture.getWidth();
+              int height = (int) picture.getHeight();
+              WritableImage gray = new WritableImage(width, height);
+              PixelWriter writer = gray.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      Color color = reader.getColor(x, y);
+                      int red = (int) Math.round(color.getRed() * 255);
+                      int green = (int) Math.round(color.getGreen() * 255);
+                      int blue = (int) Math.round(color.getBlue() * 255);
+                      int average = (red + green + blue) / 3;
+                      writer.setColor(x, y, Color.rgb(average, average, average));
+                  }
+              }
+
+              stage.setScene(new Scene(new HBox(10, new ImageView(picture), new ImageView(gray))));
+              stage.setTitle("Gray");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "Make a WritableImage of the same size, and in the two loops read each pixel's Color with `reader.getColor(x, y)`."
+      - "`int red = (int) Math.round(color.getRed() * 255);`, the same for green and blue, then `int average = (red + green + blue) / 3;` and `writer.setColor(x, y, Color.rgb(average, average, average));`."
+    tests:
+      - files:
+          pic.png: { asset: photo.png }
+        events: []
+      - files:
+          pic.png: { asset: landscape.png }
+        events: []
+        hidden: true
+      - files:
+          pic.png: { asset: blocks.png }
+        events: []
+        hidden: true
+    more:
+      - task: |
+          In `Filters.java`, write two filters, each returning a new image of the source's size:
+
+          - `public static WritableImage negative(Image source)`: each pixel's red, green and blue become 255 minus themselves (or use `invert()`, which gives the same pixels)
+          - `public static WritableImage threshold(Image source, int limit)`: a pixel becomes white (`Color.WHITE`) when the average of its red, green and blue, as whole numbers from 0 to 255 and with whole-number division, is at least `limit`, and black (`Color.BLACK`) otherwise
+
+          `Main.java` has `sample(width, height)` and `describe(image)` from the challenges before. The check calls:
+
+          ```java fragment
+          describe(Filters.negative(sample(3, 1)));
+          describe(Filters.threshold(sample(4, 2), 30));
+          ```
+
+          and expects:
+
+          ```
+          3 x 1
+          0xffffffff 0xe1ffffff 0xc3ffffff
+          4 x 2
+          0x000000ff 0x000000ff 0x000000ff 0xffffffff
+          0x000000ff 0xffffffff 0xffffffff 0xffffffff
+          ```
+        seed:
+          Filters.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+            import javafx.scene.paint.Color;
+
+            public class Filters {
+
+            }
+          Main.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+            import javafx.scene.paint.Color;
+
+            public class Main {
+                public static void main(String[] args) {
+                    describe(Filters.negative(sample(3, 1)));
+                    describe(Filters.threshold(sample(4, 2), 30));
+                }
+
+                // An image to try things on: pixel (x, y) has red x * 30 and green y * 60.
+                public static WritableImage sample(int width, int height) {
+                    WritableImage image = new WritableImage(width, height);
+                    PixelWriter writer = image.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            writer.setColor(x, y, Color.rgb(x * 30, y * 60, 0));
+                        }
+                    }
+                    return image;
+                }
+
+                // Prints the size, then the color of every pixel, a row on each line.
+                public static void describe(Image image) {
+                    int width = (int) image.getWidth();
+                    int height = (int) image.getHeight();
+                    System.out.println(width + " x " + height);
+                    PixelReader reader = image.getPixelReader();
+                    for (int y = 0; y < height; y++) {
+                        String row = "";
+                        for (int x = 0; x < width; x++) {
+                            row += " " + reader.getColor(x, y);
+                        }
+                        System.out.println(row.trim());
+                    }
+                }
+            }
+        solution:
+          Filters.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+            import javafx.scene.paint.Color;
+
+            public class Filters {
+
+                public static WritableImage negative(Image source) {
+                    PixelReader reader = source.getPixelReader();
+                    int width = (int) source.getWidth();
+                    int height = (int) source.getHeight();
+                    WritableImage result = new WritableImage(width, height);
+                    PixelWriter writer = result.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            writer.setColor(x, y, reader.getColor(x, y).invert());
+                        }
+                    }
+                    return result;
+                }
+
+                public static WritableImage threshold(Image source, int limit) {
+                    PixelReader reader = source.getPixelReader();
+                    int width = (int) source.getWidth();
+                    int height = (int) source.getHeight();
+                    WritableImage result = new WritableImage(width, height);
+                    PixelWriter writer = result.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            Color color = reader.getColor(x, y);
+                            int red = (int) Math.round(color.getRed() * 255);
+                            int green = (int) Math.round(color.getGreen() * 255);
+                            int blue = (int) Math.round(color.getBlue() * 255);
+                            if ((red + green + blue) / 3 >= limit) {
+                                writer.setColor(x, y, Color.WHITE);
+                            } else {
+                                writer.setColor(x, y, Color.BLACK);
+                            }
+                        }
+                    }
+                    return result;
+                }
+            }
+          Main.java: |
+            import javafx.scene.image.Image;
+            import javafx.scene.image.PixelReader;
+            import javafx.scene.image.PixelWriter;
+            import javafx.scene.image.WritableImage;
+            import javafx.scene.paint.Color;
+
+            public class Main {
+                public static void main(String[] args) {
+                    describe(Filters.negative(sample(3, 1)));
+                    describe(Filters.threshold(sample(4, 2), 30));
+                }
+
+                // An image to try things on: pixel (x, y) has red x * 30 and green y * 60.
+                public static WritableImage sample(int width, int height) {
+                    WritableImage image = new WritableImage(width, height);
+                    PixelWriter writer = image.getPixelWriter();
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            writer.setColor(x, y, Color.rgb(x * 30, y * 60, 0));
+                        }
+                    }
+                    return image;
+                }
+
+                // Prints the size, then the color of every pixel, a row on each line.
+                public static void describe(Image image) {
+                    int width = (int) image.getWidth();
+                    int height = (int) image.getHeight();
+                    System.out.println(width + " x " + height);
+                    PixelReader reader = image.getPixelReader();
+                    for (int y = 0; y < height; y++) {
+                        String row = "";
+                        for (int x = 0; x < width; x++) {
+                            row += " " + reader.getColor(x, y);
+                        }
+                        System.out.println(row.trim());
+                    }
+                }
+            }
+        hints:
+          - "Both methods have the same shape as `shrink` and `tile`: a new WritableImage of the source's size, two loops, and a `return` at the end. Only the color written for each pixel differs."
+          - "The negative writes `reader.getColor(x, y).invert()`. The threshold works out `(red + green + blue) / 3` with whole numbers and writes `Color.WHITE` when it's `>= limit`, else `Color.BLACK`."
+        tests:
+          - call: |
+              describe(Filters.negative(sample(3, 1)));
+              describe(Filters.threshold(sample(4, 2), 30));
+          - call: |
+              describe(Filters.negative(sample(2, 3)));
+              describe(Filters.threshold(sample(5, 3), 50));
+            hidden: true
+          - call: |
+              describe(Filters.threshold(sample(3, 2), 0));
+              describe(Filters.threshold(sample(3, 2), 255));
+            hidden: true
+      - task: |
+          A photo app previews its new warm filter: the left half of the picture stays as it is, and the right half is filtered, so you can compare the two. The result is exactly as big as `pic.png`. With `width` the picture's width, a pixel is in the right half when `x >= width / 2` (whole-number division). A pixel in the left half is the picture's pixel unchanged. For a pixel in the right half, `g` is the gray amount of JavaFX's `grayscale()` of the picture's pixel, as a whole number from 0 to 255 (the red of the gray color, times 255, rounded with `Math.round`), and the pixel becomes `Color.rgb(g, g * 3 / 4, g / 2)` (whole-number division).
+
+          Show the result in an ImageView inside a Pane. The window's title is `Filter preview`. The first test gives the program `landscape.png` as `pic.png`, and the window should look like the drawing below.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelReader;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.Pane;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image picture = new Image("file:pic.png");
+
+                  stage.setScene(new Scene(new Pane(new ImageView(picture))));
+                  stage.setTitle("Filter preview");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelReader;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.Pane;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image picture = new Image("file:pic.png");
+                  PixelReader reader = picture.getPixelReader();
+                  int width = (int) picture.getWidth();
+                  int height = (int) picture.getHeight();
+                  WritableImage preview = new WritableImage(width, height);
+                  PixelWriter writer = preview.getPixelWriter();
+                  for (int y = 0; y < height; y++) {
+                      for (int x = 0; x < width; x++) {
+                          Color color = reader.getColor(x, y);
+                          if (x >= width / 2) {
+                              int g = (int) Math.round(color.grayscale().getRed() * 255);
+                              writer.setColor(x, y, Color.rgb(g, g * 3 / 4, g / 2));
+                          } else {
+                              writer.setColor(x, y, color);
+                          }
+                      }
+                  }
+
+                  stage.setScene(new Scene(new Pane(new ImageView(preview))));
+                  stage.setTitle("Filter preview");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "Make a WritableImage of the picture's size and go through every pixel with two loops. Read the picture's pixel (x, y) and decide with `if (x >= width / 2)` which half it is in."
+          - "In the left half, write the color you read. In the right half, `color.grayscale()` is a gray Color, `(int) Math.round(color.grayscale().getRed() * 255)` is `g`, and the pixel is `Color.rgb(g, g * 3 / 4, g / 2)`."
+        tests:
+          - files:
+              pic.png: { asset: landscape.png }
+            events: []
+          - files:
+              pic.png: { asset: blocks.png }
+            events: []
+            hidden: true
+          - files:
+              pic.png: { asset: tiny.png }
+            events: []
+            hidden: true
+
+  - id: drawing-and-images-sound
+    slug: sound
+    title: Sound, and the end of section 14.2
+    text: |
+      The last kind of multimedia in this module is sound: a click when a button is pressed, a chime when a message arrives, a cheer when a game is won.
+
+      ### Sound in JavaFX
+
+      JavaFX plays short sounds with the class **AudioClip**, from the package `javafx.scene.media`. On your own computer, a window with a button that plays a chime looks like this:
+
+      ```java fragment
+      import java.nio.file.Paths;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.layout.VBox;
+      import javafx.scene.media.AudioClip;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              AudioClip chime = new AudioClip(Paths.get("chime.wav").toUri().toString());
+              Button ring = new Button("Ring the chime");
+              ring.setOnAction(event -> chime.play());
+
+              stage.setScene(new Scene(new VBox(ring)));
+              stage.setTitle("Door chime");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - `new AudioClip(...)` takes the address of the sound file. `Paths.get("chime.wav").toUri().toString()` turns the file's name into its full address, which starts with `file:`, such as `file:///home/ada/chime/chime.wav`.
+      - The clip reads the whole sound when it's made, so `play()` starts at once. Calling `play()` again while it still plays starts the sound once more, over the first one.
+      - `stop()` stops it, `setVolume(0.5)` makes it play at half the volume (from 0.0 for silence to 1.0, the default), and `setCycleCount(3)` makes each `play()` play it three times in a row.
+      - For long sounds, such as music, JavaFX has `Media` and `MediaPlayer`, which play a file little by little instead of reading it all first.
+      - The sound classes are a part of JavaFX of their own, `javafx.media`, which a project needs next to the `javafx.controls` of the windows.
+
+      ### Sound in Java Arena
+
+      This page can't play sound. Java Arena's practice JavaFX has no `javafx.scene.media`, and the Java engine that runs your programs inside the page can't play sound. So here, javac stops at the import:
+
+      ```java error
+      import javafx.scene.media.AudioClip;
+
+      public class Main {
+          public static void main(String[] args) {
+              AudioClip chime = new AudioClip("file:chime.wav");
+              chime.play();
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:1: error: package javafx.scene.media does not exist
+      import javafx.scene.media.AudioClip;
+                               ^
+      Main.java:5: error: cannot find symbol
+              AudioClip chime = new AudioClip("file:chime.wav");
+              ^
+        symbol:   class AudioClip
+        location: class Main
+      Main.java:5: error: cannot find symbol
+              AudioClip chime = new AudioClip("file:chime.wav");
+                                    ^
+        symbol:   class AudioClip
+        location: class Main
+      3 errors
+      ```
+
+      This step is for reading. The MOOC's exercise with sound, a button that plays a sound file, needs your own computer with JavaFX installed (module 48 links to the MOOC's instructions for that).
+
+      ### Deciding what to play
+
+      What a program **decides** about sound can still be written and checked here: which sound to play, and when. As in module 50, that decision goes in a plain class, and the window's handlers only carry it out. A quiz show's buzzer plays `right.wav` for a right answer and `wrong.wav` for a wrong one, except that the third wrong answer in a row plays `out.wav` and starts the count again. Here the handler prints the name of the clip where your computer would play it:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Button;
+      import javafx.scene.control.Label;
+      import javafx.scene.layout.HBox;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Buzzer buzzer = new Buzzer();
+              Label last = new Label("No answers yet");
+              Button right = new Button("Right");
+              Button wrong = new Button("Wrong");
+              right.setOnAction(event -> {
+                  String clip = buzzer.clipFor(true);
+                  System.out.println("play " + clip);
+                  last.setText("Last sound: " + clip);
+              });
+              wrong.setOnAction(event -> {
+                  String clip = buzzer.clipFor(false);
+                  System.out.println("play " + clip);
+                  last.setText("Last sound: " + clip);
+              });
+
+              stage.setScene(new Scene(new VBox(10, new HBox(5, right, wrong), last)));
+              stage.setTitle("Quiz buzzer");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      // ==== Buzzer.java ====
+      public class Buzzer {
+          private int wrongInARow;
+
+          public String clipFor(boolean correct) {
+              if (correct) {
+                  this.wrongInARow = 0;
+                  return "right.wav";
+              }
+              this.wrongInARow++;
+              if (this.wrongInARow == 3) {
+                  this.wrongInARow = 0;
+                  return "out.wav";
+              }
+              return "wrong.wav";
+          }
+      }
+      ```
+
+      ```events
+      click Button "Wrong"
+      click Button "Wrong"
+      click Button "Right"
+      click Button "Wrong"
+      ```
+
+      ```output
+      play wrong.wav
+      play wrong.wav
+      play right.wav
+      play wrong.wav
+      ```
+
+      On your own computer, the handler would make an AudioClip for each of the three files in `start`, keep them in a map from the file's name to its clip, and call `clips.get(clip).play()` where this one prints. Buzzer stays the same, and every case of it can be tried by calling `clipFor`, with no sound at all.
+
+      ### Part 14 so far
+
+      Section 14.1 (module 51) and section 14.2 (this module) were about showing more than text:
+
+      - **Charts** (module 51): rows of data read from files into numbers, lists and maps; line charts with `NumberAxis`, `XYChart.Series` and `XYChart.Data`; several series from a map, and series from a formula; a `Slider` whose listener redraws a chart; bar charts with a `CategoryAxis`; and charts that are honest about their numbers.
+      - **Drawing** (steps 1 and 2): a `Canvas` and its `GraphicsContext`, with fill and stroke colors and a line width; rectangles, ovals given by the rectangle around them, lines and polygons, where later drawing covers earlier; colors by name, by `Color.rgb` and by `Color.web`; and the mouse, with its pressed, dragged, released and clicked events and the point in `getX()` and `getY()`.
+      - **Images** (steps 3 to 6): an `Image` read from a file (or an error image when it can't be), its `PixelReader`, a `WritableImage` written through its `PixelWriter`, and an `ImageView` that shows it; smaller copies that keep every second (or every f-th) pixel; copies placed into bigger images; tiles with `%`, mirrored tiles; and filters: the negative, two kinds of gray, a threshold and tints.
+      - **Sound** (this step): `AudioClip`, for your own computer.
+
+      Section 14.3 builds a larger program with a window: a game in the style of Asteroids, with shapes that move and the keyboard to steer, in the next module.
+
+      **Your turn:** the quiz buzzer from above gets seven answers. What does this program print?
+    predict: |
+      public class Main {
+          public static void main(String[] args) {
+              Buzzer buzzer = new Buzzer();
+              boolean[] answers = {false, false, true, false, false, false, false};
+              for (boolean answer : answers) {
+                  System.out.println(buzzer.clipFor(answer));
+              }
+          }
+      }
+      // ==== Buzzer.java ====
+      public class Buzzer {
+          private int wrongInARow;
+
+          public String clipFor(boolean correct) {
+              if (correct) {
+                  this.wrongInARow = 0;
+                  return "right.wav";
+              }
+              this.wrongInARow++;
+              if (this.wrongInARow == 3) {
+                  this.wrongInARow = 0;
+                  return "out.wav";
+              }
+              return "wrong.wav";
+          }
+      }
+    hints:
+      - "A right answer sets the count of wrong answers in a row back to 0. So after the first `true`, the count starts over."
+      - "Count the wrong answers after the `true`: the third one in a row plays `out.wav` and sets the count to 0, so the fourth is an ordinary wrong answer again."
+    more:
+      - task: |
+          How light is a picture? Count the pixels of `pic.png` in three groups by their brightness, the average of their red, green and blue as whole numbers from 0 to 255 (rounded with `Math.round`, and divided by 3 with whole-number division): `dark` below 85, `middle` from 85 to 169, and `light` from 170 up.
+
+          Show the counts in a bar chart (module 51), which is the scene's root: the x axis a `CategoryAxis` and the y axis a `NumberAxis`, both without labels and auto-ranging; the chart's title `Brightness of pic.png` and no legend; and one series named `Pixels` with the three data points `("dark", count)`, `("middle", count)` and `("light", count)`, in that order. The window's title is `Brightness`. The first test gives the program the sunset `photo.png` as `pic.png`, and the window should look like the drawing below.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.BarChart;
+          import javafx.scene.chart.CategoryAxis;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.PixelReader;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image picture = new Image("file:pic.png");
+                  BarChart<String, Number> chart = new BarChart<>(new CategoryAxis(), new NumberAxis());
+
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Brightness");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.BarChart;
+          import javafx.scene.chart.CategoryAxis;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.scene.image.Image;
+          import javafx.scene.image.PixelReader;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Image picture = new Image("file:pic.png");
+                  PixelReader reader = picture.getPixelReader();
+                  int dark = 0;
+                  int middle = 0;
+                  int light = 0;
+                  for (int y = 0; y < (int) picture.getHeight(); y++) {
+                      for (int x = 0; x < (int) picture.getWidth(); x++) {
+                          Color color = reader.getColor(x, y);
+                          int red = (int) Math.round(color.getRed() * 255);
+                          int green = (int) Math.round(color.getGreen() * 255);
+                          int blue = (int) Math.round(color.getBlue() * 255);
+                          int brightness = (red + green + blue) / 3;
+                          if (brightness < 85) {
+                              dark++;
+                          } else if (brightness < 170) {
+                              middle++;
+                          } else {
+                              light++;
+                          }
+                      }
+                  }
+
+                  BarChart<String, Number> chart = new BarChart<>(new CategoryAxis(), new NumberAxis());
+                  chart.setTitle("Brightness of pic.png");
+                  chart.setLegendVisible(false);
+                  XYChart.Series<String, Number> pixels = new XYChart.Series<>();
+                  pixels.setName("Pixels");
+                  pixels.getData().add(new XYChart.Data<>("dark", dark));
+                  pixels.getData().add(new XYChart.Data<>("middle", middle));
+                  pixels.getData().add(new XYChart.Data<>("light", light));
+                  chart.getData().add(pixels);
+
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Brightness");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "Three int counters, then the two loops over the pixels: for each, the brightness `(red + green + blue) / 3` from the whole-number amounts, and `if`, `else if` and `else` to pick the counter."
+          - "Then a `XYChart.Series<String, Number>` named `Pixels` with `new XYChart.Data<>(\"dark\", dark)` and the other two, added to `chart.getData()`. The chart also needs `setTitle(...)` and `setLegendVisible(false)`."
+        tests:
+          - files:
+              pic.png: { asset: photo.png }
+            events: []
+          - files:
+              pic.png: { asset: landscape.png }
+            events: []
+            hidden: true
+          - files:
+              pic.png: { asset: blocks.png }
+            events: []
+            hidden: true
+      - task: |
+          A tiny pixel-art editor. Make a WritableImage of 8 x 8 pixels, all white (`Color.WHITE`) at first, and show it in an ImageView. A click on a pixel of the image view turns a white pixel black (`Color.BLACK`), and a black pixel white again. Under the image, a label counts the black pixels: `Black pixels: 0` at first, and `Black pixels: 3` after three pixels were turned black. The scene's root is a VBox with no spacing, holding the image view and then the label, and the window's title is `Pixel editor`. The window after the clicks below is drawn under them.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Label;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.VBox;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  WritableImage picture = new WritableImage(8, 8);
+                  ImageView view = new ImageView(picture);
+                  Label count = new Label("Black pixels: 0");
+
+                  stage.setScene(new Scene(new VBox(view, count)));
+                  stage.setTitle("Pixel editor");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Label;
+          import javafx.scene.image.ImageView;
+          import javafx.scene.image.PixelWriter;
+          import javafx.scene.image.WritableImage;
+          import javafx.scene.layout.VBox;
+          import javafx.scene.paint.Color;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+              private int black;
+
+              @Override
+              public void start(Stage stage) {
+                  WritableImage picture = new WritableImage(8, 8);
+                  PixelWriter writer = picture.getPixelWriter();
+                  for (int y = 0; y < 8; y++) {
+                      for (int x = 0; x < 8; x++) {
+                          writer.setColor(x, y, Color.WHITE);
+                      }
+                  }
+                  ImageView view = new ImageView(picture);
+                  Label count = new Label("Black pixels: 0");
+                  view.setOnMouseClicked(event -> {
+                      int x = (int) event.getX();
+                      int y = (int) event.getY();
+                      if (picture.getPixelReader().getColor(x, y).equals(Color.WHITE)) {
+                          writer.setColor(x, y, Color.BLACK);
+                          this.black++;
+                      } else {
+                          writer.setColor(x, y, Color.WHITE);
+                          this.black--;
+                      }
+                      count.setText("Black pixels: " + this.black);
+                  });
+
+                  stage.setScene(new Scene(new VBox(view, count)));
+                  stage.setTitle("Pixel editor");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "A new WritableImage is transparent, so paint all 64 pixels white first, with two loops. In the image view's `setOnMouseClicked`, `(int) event.getX()` and `(int) event.getY()` are the pixel's column and row."
+          - "`picture.getPixelReader().getColor(x, y).equals(Color.WHITE)` tells whether the pixel is white. Keep the count in an instance variable, add or take away one, and set the label's text."
+        tests:
+          - events: |
+              click ImageView 1 at 1 1
+              click ImageView 1 at 6 1
+              click ImageView 1 at 3 5
+              click ImageView 1 at 4 6
+              click ImageView 1 at 6 1
+          - events: |
+              click ImageView 1 at 0 0
+              click ImageView 1 at 7 7
+              click ImageView 1 at 0 0
+              click ImageView 1 at 0 0
+              click ImageView 1 at 2 4
+            hidden: true
+          - events: []
+            hidden: true

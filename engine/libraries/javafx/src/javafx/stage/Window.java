@@ -1,6 +1,7 @@
 // Part of Java Arena's practice version of JavaFX: written for this site, not OpenJFX's code.
 package javafx.stage;
 
+import arena.fx.Charts;
 import arena.fx.Session;
 import javafx.scene.Scene;
 
@@ -68,6 +69,8 @@ public class Window {
         if (!showing) {
             showing = true;
             Session.shown(this);
+            // JavaFX lays the window out as it shows: a chart that can't be laid out fails here.
+            Charts.layout(scene);
         }
     }
 

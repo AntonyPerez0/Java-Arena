@@ -1,0 +1,346 @@
+topic: charts
+drills:
+  - type: predict
+    after: rows-to-numbers
+    prompt: What does this print?
+    body: |
+      String[] friday = "Fri,12,".split(",");
+      String[] saturday = "Sat,,7".split(",");
+      System.out.println(friday.length + " " + saturday.length);
+      System.out.println("[" + saturday[1] + "]");
+    why: "`split` drops empty values at the **end** of the text, so `\"Fri,12,\"` gives only `Fri` and `12`. An empty value in the middle stays, as an empty string: `\"Sat,,7\"` gives `Sat`, `\"\"` and `7`. That's why files of data mark a missing value with a `-`."
+
+  - type: predict
+    after: rows-to-numbers
+    prompt: What does this print?
+    body: |
+      String[] rows = {"week,km", "1,5.5", "2,-", "3,6"};
+      Map<Integer, Double> km = new HashMap<>();
+      for (int i = 1; i < rows.length; i++) {
+          String[] parts = rows[i].split(",");
+          if (!parts[1].equals("-")) {
+              km.put(Integer.valueOf(parts[0]), Double.valueOf(parts[1]));
+          }
+      }
+      System.out.println(km.size() + " " + km.get(3) + " " + km.get(2));
+    why: "The loop skips the header, and week 2's `-` never goes into the map, so the map has 2 weeks. `Double.valueOf(\"6\")` is the double `6.0`, and `get` returns `null` for a key that isn't in the map."
+
+  - type: predict
+    after: line-chart
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.chart.XYChart.Series<Number, Number> steps = new javafx.scene.chart.XYChart.Series<>();
+      for (int week = 1; week <= 3; week++) {
+          steps.getData().add(new javafx.scene.chart.XYChart.Data<>(week, week * 10));
+      }
+      steps.getData().remove(0);
+      System.out.println(steps.getData().size() + " " + steps.getData().get(0));
+    why: "A series's `getData()` is a list of its points, and it works like any list: removing index 0 removes week 1's point, so 2 points are left and the first is now week 2's. Printing a point gives `Data[x,y,null]`."
+
+  - type: predict
+    after: slider
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Slider speed = new javafx.scene.control.Slider(0, 50, 20);
+      speed.valueProperty().addListener((observable, oldValue, newValue) -> System.out.print(newValue.intValue() + " "));
+      speed.setValue(35.8);
+      speed.setValue(-5);
+      speed.setValue(0);
+      System.out.println(speed.getValue());
+    why: "The listener prints the new value as an int: `intValue()` cuts 35.8 to 35. `setValue(-5)` is below the min, so the slider goes to 0, and the listener hears that change. `setValue(0)` changes nothing, so the listener doesn't run. `getValue()` is a double: `0.0`."
+
+  - type: predict
+    after: honest-charts
+    prompt: What does this print?
+    body: |
+      int[] values = {35, 72, 18};
+      int max = 0;
+      for (int value : values) {
+          max = Math.max(max, value);
+      }
+      int tick = 25;
+      int upper = tick;
+      while (upper < max) {
+          upper += tick;
+      }
+      System.out.println(max + " " + upper);
+    why: "The largest value is 72, and the loop climbs a tick at a time, 25, 50, 75, until it reaches it. So the axis would go from 0 to 75: a whole number of ticks, with room for the tallest bar."
+
+  - type: fill
+    after: line-chart
+    prompt: "This code runs inside `start`. Fill in the tick unit, so that the axis goes from 2000 to 2020 with a tick every 5 years. (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.chart.NumberAxis years = new javafx.scene.chart.NumberAxis("Year", 2000, 2020, [[5‖5.0]]);
+      System.out.println(years.getLowerBound() + " to " + years.getUpperBound() + " by " + years.getTickUnit());
+      System.out.println(years.isAutoRanging());
+    why: "`new NumberAxis(label, lower, upper, tickUnit)` takes the label, the lower bound, the upper bound and the tick unit. An axis made with bounds isn't auto-ranging."
+
+  - type: fill
+    after: slider
+    prompt: "This code runs inside `start`. Fill in the method that gives the new value as an int. (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.control.Slider guests = new javafx.scene.control.Slider(1, 10, 2);
+      javafx.scene.control.Label label = new javafx.scene.control.Label("2 guests");
+      guests.valueProperty().addListener((observable, oldValue, newValue) -> label.setText(newValue.[[intValue]]() + " guests"));
+      guests.setValue(6);
+      System.out.println(label.getText());
+    why: "A slider's value property gives its listeners Numbers. `intValue()` turns one into an int (and `doubleValue()` into a double); a Number itself can't be used in arithmetic."
+
+  - type: bug
+    after: rows-to-numbers
+    prompt: "This should print the total cups, 10, but it crashes with a NumberFormatException. Which line has the bug?"
+    body: |
+      String[] rows = {"day,cups", "Mon,4", "Tue,6"};
+      int total = 0;
+      for (int i = 0; i < rows.length; i++) { // BUG
+          total += Integer.valueOf(rows[i].split(",")[1]);
+      }
+      System.out.println(total);
+    fix: for (int i = 1; i < rows.length; i++) {
+    why: "Row 0 is the header, `day,cups`, and `Integer.valueOf(\"cups\")` throws. Starting the loop at 1 skips the header."
+
+  - type: bug
+    after: slider
+    prompt: "This code runs inside `start`. Each round should replace the line's points with new ones and keep the line in the chart, so it should print `1 series, 3 points`. It prints `0 series, 6 points`. Which line has the bug? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.chart.LineChart<Number, Number> chart = new javafx.scene.chart.LineChart<>(new javafx.scene.chart.NumberAxis(), new javafx.scene.chart.NumberAxis());
+      javafx.scene.chart.XYChart.Series<Number, Number> line = new javafx.scene.chart.XYChart.Series<>();
+      chart.getData().add(line);
+      for (int round = 1; round <= 2; round++) {
+          chart.getData().clear(); // BUG
+          for (int x = 0; x < 3; x++) {
+              line.getData().add(new javafx.scene.chart.XYChart.Data<>(x, x * round));
+          }
+      }
+      System.out.println(chart.getData().size() + " series, " + line.getData().size() + " points");
+    fix: line.getData().clear();
+    why: "`chart.getData()` is the chart's list of series, so clearing it takes the line out of the chart, and the old points stay in the series. To redraw, clear the series's own list of points, `line.getData()`."
+
+  - type: compiles
+    after: bar-charts
+    prompt: "This code runs inside `start`. Does it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.chart.LineChart<Number, Number> chart = new javafx.scene.chart.LineChart<>(new javafx.scene.chart.CategoryAxis(), new javafx.scene.chart.NumberAxis());
+      System.out.println(chart.getData().size());
+    why: "A `LineChart<Number, Number>` needs two axes of Numbers. A CategoryAxis is an axis of Strings, so it can't be its x axis. Categories go with a `BarChart<String, Number>`."
+
+  - type: compiles
+    after: bar-charts
+    prompt: "This code runs inside `start`. Does it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.chart.XYChart.Series<String, Number> sold = new javafx.scene.chart.XYChart.Series<>();
+      sold.getData().add(new javafx.scene.chart.XYChart.Data<>("Mon", 12));
+      sold.getData().add(new javafx.scene.chart.XYChart.Data<>("Tue", 7.5));
+      System.out.println(sold.getData().get(1).getYValue());
+    why: "The y values are Numbers, and both Integer (12) and Double (7.5) extend Number, so one series can hold both. The x values are Strings, the categories of a bar chart."
+
+  - type: choice
+    after: several-series
+    prompt: "A program keeps its series in a `HashMap` from each name to its series. Why does it sort the names before adding the series to the chart?"
+    choices:
+      - "A HashMap's keys come in an order the program didn't choose, and the legend and the checks follow the order of the series"
+      - "JavaFX throws an exception when series are added in an order that isn't sorted"
+      - "A chart can only show series whose names are in alphabetical order"
+      - "Sorting makes the chart draw faster"
+    answer: 1
+    why: "The order in which series are added is the order of the legend and of the chart's list of series, which the checks compare. A HashMap's order is no order you decided, so the program sorts the names (or keeps the file's order) to make it fixed. JavaFX itself accepts any order."
+
+  - type: choice
+    after: honest-charts
+    prompt: "Three made-up products scored 980, 1000 and 1010. Which y axis makes an honest bar chart of them?"
+    choices:
+      - "`new NumberAxis(970, 1015, 5)`"
+      - "`new NumberAxis(0, 1200, 200)`"
+      - "`new NumberAxis(950, 1050, 10)`"
+    answer: 2
+    why: "The length of a bar must stand for its value, so bars start at 0. An axis that starts at 970 or 950 cuts the same amount off every bar, which makes the 3 percent difference between 980 and 1010 look several times bigger."
+
+  - type: boss
+    after: series-from-formula
+    prompt: |
+      A survey's answers are counts per option, and a chart of shares wants them in percent. Write the class `Shares` with the method `public static List<Integer> percents(List<Integer> counts)`: for each count, its share of the sum of all counts, in percent, rounded to a whole number with `Math.round` (so 1 of 3 is 33). When the sum is 0, every share is 0. The check runs:
+
+      ```java fragment
+      List<Integer> counts = new ArrayList<>();
+      counts.add(1);
+      counts.add(1);
+      counts.add(2);
+      System.out.println(Shares.percents(counts));
+      ```
+
+      and expects `[25, 25, 50]`.
+    seed:
+      Shares.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Shares {
+
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Integer> counts = new ArrayList<>();
+                counts.add(1);
+                counts.add(1);
+                counts.add(2);
+                System.out.println(Shares.percents(counts));
+            }
+        }
+    solution:
+      Shares.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Shares {
+
+            public static List<Integer> percents(List<Integer> counts) {
+                int sum = 0;
+                for (int count : counts) {
+                    sum += count;
+                }
+                List<Integer> shares = new ArrayList<>();
+                for (int count : counts) {
+                    if (sum == 0) {
+                        shares.add(0);
+                    } else {
+                        shares.add((int) Math.round(100.0 * count / sum));
+                    }
+                }
+                return shares;
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Integer> counts = new ArrayList<>();
+                counts.add(1);
+                counts.add(1);
+                counts.add(2);
+                System.out.println(Shares.percents(counts));
+            }
+        }
+    hints:
+      - "Add up the counts first. Then each share is `100.0 * count / sum`: the `100.0` makes the division a double one, so 1 of 3 isn't 0."
+      - "`Math.round` returns a long, so `(int) Math.round(...)` makes it an int for the list. Check `sum == 0` before dividing."
+    tests:
+      - call: |
+          List<Integer> counts = new ArrayList<>();
+          counts.add(1);
+          counts.add(1);
+          counts.add(2);
+          System.out.println(Shares.percents(counts));
+      - call: |
+          List<Integer> counts = new ArrayList<>();
+          counts.add(1);
+          counts.add(2);
+          System.out.println(Shares.percents(counts));
+          counts.add(0);
+          counts.add(5);
+          System.out.println(Shares.percents(counts));
+        hidden: true
+      - call: |
+          List<Integer> counts = new ArrayList<>();
+          System.out.println(Shares.percents(counts));
+          counts.add(0);
+          counts.add(0);
+          System.out.println(Shares.percents(counts));
+        hidden: true
+
+  - type: boss
+    after: slider
+    prompt: |
+      A times table you can slide. Write `start`: the window, titled `Times tables`, holds a VBox (spacing 10) with a slider and a line chart, in that order.
+
+      - The slider goes from 1 to 10, starts at 2, shows tick labels, has a major tick every 1 and no minor ticks, and snaps to ticks.
+      - The chart's title is `Times table of 2` (with the slider's value as an int), its x axis is labeled `x` and goes from 1 to 10 with a tick every 1, its y axis is labeled `n times x` and goes from 0 to 100 with a tick every 10, and its legend is hidden. Its one series, `Table`, has the points (x, n * x) for x from 1 to 10, where n is the slider's value as an int.
+      - When the slider moves, the title and the series's points follow the new value.
+    seed: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.scene.control.Slider;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+
+              stage.setTitle("Times tables");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.scene.control.Slider;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Slider n = new Slider(1, 10, 2);
+              n.setShowTickLabels(true);
+              n.setMajorTickUnit(1);
+              n.setMinorTickCount(0);
+              n.setSnapToTicks(true);
+
+              LineChart<Number, Number> chart = new LineChart<>(new NumberAxis("x", 1, 10, 1), new NumberAxis("n times x", 0, 100, 10));
+              chart.setLegendVisible(false);
+              XYChart.Series<Number, Number> table = new XYChart.Series<>();
+              table.setName("Table");
+              this.fill(chart, table, 2);
+              chart.getData().add(table);
+              n.valueProperty().addListener((observable, oldValue, newValue) -> this.fill(chart, table, newValue.intValue()));
+
+              stage.setScene(new Scene(new VBox(10, n, chart)));
+              stage.setTitle("Times tables");
+              stage.show();
+          }
+
+          private void fill(LineChart<Number, Number> chart, XYChart.Series<Number, Number> table, int n) {
+              chart.setTitle("Times table of " + n);
+              table.getData().clear();
+              for (int x = 1; x <= 10; x++) {
+                  table.getData().add(new XYChart.Data<>(x, n * x));
+              }
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "Write a method that sets the title and refills the series for a given n (clear the points, then add the ten new ones). Call it once in `start` with 2, and in the listener of the slider's `valueProperty()` with `newValue.intValue()`."
+      - "The axes are `new NumberAxis(\"x\", 1, 10, 1)` and `new NumberAxis(\"n times x\", 0, 100, 10)`, and the scene's root is `new VBox(10, slider, chart)`."
+    tests:
+      - events: |
+          set Slider 1 7
+      - events: []
+        hidden: true
+      - events: |
+          set Slider 1 9.6
+        hidden: true
+      - events: |
+          set Slider 1 10
+          set Slider 1 1
+        hidden: true

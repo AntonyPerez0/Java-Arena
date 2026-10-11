@@ -7,6 +7,11 @@ import java.util.Comparator;
 import java.util.List;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.chart.Axis;
+import javafx.scene.chart.BarChart;
+import javafx.scene.chart.Chart;
+import javafx.scene.control.Slider;
+import javafx.scene.image.ImageView;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Labeled;
@@ -27,7 +32,7 @@ import javafx.stage.Window;
  */
 public final class Outline {
     /** The node classes of Java Arena's JavaFX, by simple name. */
-    private static final String[] TYPES = { "Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea" };
+    private static final String[] TYPES = { "Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea", "Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart" };
 
     private Outline() {
     }
@@ -85,6 +90,18 @@ public final class Outline {
                 return "control";
             case "Node":
                 return "node";
+            case "Canvas":
+                return "canvas";
+            case "ImageView":
+                return "image view";
+            case "Slider":
+                return "slider";
+            case "LineChart":
+                return "line chart";
+            case "BarChart":
+                return "bar chart";
+            case "ScatterChart":
+                return "scatter chart";
             default:
                 return type;
         }
@@ -99,6 +116,8 @@ public final class Outline {
             case "HBox":
             case "VBox":
                 return type + "es";
+            case "Canvas":
+                return "canvases";
             default:
                 return noun(type) + "s";
         }
@@ -192,6 +211,21 @@ public final class Outline {
         }
         if (node instanceof TextArea) {
             return "text-input text-area";
+        }
+        if (node instanceof ImageView) {
+            return "image-view";
+        }
+        if (node instanceof Slider) {
+            return "slider";
+        }
+        if (node instanceof BarChart) {
+            return "chart bar-chart";
+        }
+        if (node instanceof Chart) {
+            return "chart";
+        }
+        if (node instanceof Axis) {
+            return "axis";
         }
         return "";
     }

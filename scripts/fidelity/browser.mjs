@@ -44,13 +44,23 @@ const compileInPage = (sources, libraries = []) =>
     },
     { sources, libraries },
   );
+// A binary data file (a PNG a program reads) crosses as a plain array too, and is given to the runner
+// as bytes. The engine gives a file left in the folder that isn't text back as bytes, which cross
+// back as { binary: base64 }, as fidelity/out/jdk.json keeps them.
 const runInPage = (classes, mainClass, input, libraries = []) =>
   page.evaluate(
     async ({ classes, mainClass, input, libraries }) => {
       const cls = classes.map((c) => ({ path: c.path, bytes: new Uint8Array(c.bytes) }));
-      return (await window.javaArena.runClasses(cls, mainClass, [input], 60_000, { libraries }))[0];
+      const files = Object.fromEntries(Object.entries(input.files ?? {}).map(([name, v]) => [name, typeof v === 'string' ? v : new Uint8Array(v.bytes)]));
+      const r = (await window.javaArena.runClasses(cls, mainClass, [{ ...input, files }], 60_000, { libraries }))[0];
+      const b64 = (u8) => {
+        let s = '';
+        for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+        return btoa(s);
+      };
+      return r && { ...r, files: r.files && Object.fromEntries(Object.entries(r.files).map(([name, v]) => [name, typeof v === 'string' ? v : { binary: b64(v) }])) };
     },
-    { classes, mainClass, input, libraries },
+    { classes, mainClass, input: { ...input, files: Object.fromEntries(Object.entries(input.files ?? {}).map(([name, v]) => [name, typeof v === 'string' ? v : { bytes: Array.from(v) }])) }, libraries },
   );
 
 function runOnHotSpot(classes, p) {
@@ -93,9 +103,17 @@ function compare(ref, got, p) {
   if (stable(got.stdout, p.nondeterministic) !== stable(ref.stdout, p.nondeterministic)) problems.push('stdout differs');
   if (got.exitCode !== ref.exitCode) problems.push(`exit code ${got.exitCode}, expected ${ref.exitCode}`);
   if (stderrKey(got.stderr) !== stderrKey(ref.stderr)) problems.push('stderr differs');
-  for (const [name, text] of Object.entries(ref.files ?? {})) {
-    if (p.files[name] === text) continue;
-    if (got.files && got.files[name] !== text) problems.push(`file ${name} differs`);
+  for (const [name, value] of Object.entries(ref.files ?? {})) {
+    if (typeof value === 'string') {
+      if (p.files[name] === value) continue;
+      if (got.files && got.files[name] !== value) problems.push(`file ${name} differs`);
+      continue;
+    }
+    // A binary file: unchanged from the program's own data file, or else compared byte for byte
+    // (the engine gives a file that isn't text back as its bytes).
+    const bytes = Buffer.from(value.binary, 'base64');
+    if (typeof p.files[name] !== 'string' && p.files[name] && Buffer.from(p.files[name]).equals(bytes)) continue;
+    if (got.files && got.files[name]?.binary !== value.binary) problems.push(`file ${name} differs`);
   }
   return problems;
 }
@@ -114,6 +132,7 @@ for (const p of suite.programs) {
     entry.wallMs = Date.now() - t;
     entry.run = run;
     entry.problems = compare(ref, run, p);
+    if (p.maxRunMs != null && entry.wallMs > p.maxRunMs) entry.problems.push(`took ${entry.wallMs} ms in the browser, more than its ${p.maxRunMs} ms (meta.json maxRunMs)`);
     // Browser javac -> HotSpot: tests the compiler alone.
     const hs = runOnHotSpot(c.classes, p);
     entry.compilerOnly = compare({ ...ref, files: {} }, { ...hs, files: {} }, p);

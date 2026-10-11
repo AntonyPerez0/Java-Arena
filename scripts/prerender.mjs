@@ -7,6 +7,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { marked } from "marked";
+import { assetExample, assetFigureHtml } from "../src/grader/assets.ts";
 import { FILE_MARK, splitFiles } from "../src/grader/files.js";
 import { windowExample } from "../src/grader/window.ts";
 import { windowFigureHtml } from "../src/components/window-drawing.ts";
@@ -43,6 +44,9 @@ marked.use({
       if (shown) return windowFigureHtml(shown);
       const file = lang ? /^file\s+(\S+)$/.exec(lang) : null;
       if (file) return `<figure class="io io-file"><figcaption>The file ${esc(file[1])}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
+      // An image of content/assets (stored by the build): drawn with its name and size, as the page shows it.
+      const asset = lang && /^asset\s/.test(lang) ? assetExample(text) : null;
+      if (asset) return assetFigureHtml(asset.name, asset.image, BASE);
       if (lang === "java" && new RegExp(FILE_MARK.source, "m").test(text))
         return splitFiles(text).map((f) => `<figure class="code-file"><figcaption>${esc(f.path)}</figcaption><pre class="code-java"><code>${esc(f.text.replace(/\n$/, ""))}</code></pre></figure>\n`).join("");
       if (lang === "input" && /\n$/.test(text))

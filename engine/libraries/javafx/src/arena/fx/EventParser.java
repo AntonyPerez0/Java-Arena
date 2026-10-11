@@ -11,7 +11,12 @@ import java.util.List;
  * click Button "Add"          click #3          click #addButton
  * type TextField 1 "Ada"      set TextArea 1 "two\nlines"
  * enter TextField 1           close
+ * set Slider 1 25             click Canvas 1 at 10 20
+ * press Canvas 1 at 10 20     drag Canvas 1 to 30 40       release Canvas 1 at 30 40
  * </pre>
+ *
+ * A number (a slider's value, a point's x and y) is written as digits, with a minus sign and a
+ * decimal point if needed (25, -3, 2.5).
  *
  * Text is in double quotes, with Java's escapes (\" \\ \n \t \r \b \f \' and \\uXXXX). A line
  * that can't be read becomes a problem, in plain English, that the window JSON lists.
@@ -62,16 +67,60 @@ final class EventParser {
         return events;
     }
 
+    private static boolean isCommand(String word) {
+        switch (word) {
+            case "click":
+            case "type":
+            case "set":
+            case "enter":
+            case "close":
+            case "press":
+            case "drag":
+            case "release":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static boolean mouse(String command) {
+        return command.equals("press") || command.equals("drag") || command.equals("release");
+    }
+
+    /** An example of a command's line, for the problems. */
+    private static String example(String command) {
+        switch (command) {
+            case "click":
+                return "click Button \"OK\"";
+            case "enter":
+                return "enter TextField 1";
+            case "press":
+                return "press Canvas 1 at 10 20";
+            case "drag":
+                return "drag Canvas 1 to 30 40";
+            case "release":
+                return "release Canvas 1 at 30 40";
+            default:
+                return command + " TextField 1 \"Ada\"";
+        }
+    }
+
     private static EventLine event(String line) throws Bad {
         List<Token> tokens = tokens(line);
         Token first = tokens.get(0);
         String command = first.text;
-        if (first.quoted || !(command.equals("click") || command.equals("type") || command.equals("set") || command.equals("enter") || command.equals("close"))) {
+        if (first.quoted || !isCommand(command)) {
             String lower = first.quoted ? "" : command.toLowerCase(java.util.Locale.ROOT);
-            if (lower.equals("click") || lower.equals("type") || lower.equals("set") || lower.equals("enter") || lower.equals("close")) {
+            if (isCommand(lower)) {
                 throw new Bad("write the event in small letters: " + lower);
             }
-            throw new Bad("there's no event called " + (first.quoted ? "\"" + command + "\"" : command) + " (the events are click, type, set, enter and close)");
+            String name = first.quoted ? "\"" + command + "\"" : command;
+            for (Token t : tokens) {
+                if (!t.quoted && (t.text.equals("at") || t.text.equals("to"))) {
+                    throw new Bad("there's no event called " + name + " (the mouse events are press, drag, release and click, such as press Canvas 1 at 10 20)");
+                }
+            }
+            throw new Bad("there's no event called " + name + " (the events are click, type, set, enter and close)");
         }
         if (command.equals("close")) {
             if (tokens.size() > 1) {
@@ -81,22 +130,67 @@ final class EventParser {
         }
         int[] next = { 1 };
         Target target = target(command, tokens, next);
-        String argument = null;
+        EventLine event;
         if (command.equals("type") || command.equals("set")) {
-            if (next[0] >= tokens.size() || !tokens.get(next[0]).quoted) {
+            if (command.equals("set") && next[0] < tokens.size() && !tokens.get(next[0]).quoted && isNumber(tokens.get(next[0]).text)) {
+                event = EventLine.number(line, command, target, tokens.get(next[0]).text);
+            } else if (next[0] >= tokens.size() || !tokens.get(next[0]).quoted) {
+                if (command.equals("set") && "Slider".equals(target.type)) {
+                    throw new Bad("set needs a number after the slider, such as set Slider 1 25");
+                }
                 throw new Bad(command + " needs the text in double quotes after the target, such as " + command + " TextField 1 \"Ada\"");
+            } else {
+                event = EventLine.of(line, command, target, tokens.get(next[0]).text);
             }
-            argument = tokens.get(next[0]).text;
             next[0]++;
+        } else if (mouse(command) || (command.equals("click") && next[0] < tokens.size() && !tokens.get(next[0]).quoted && tokens.get(next[0]).text.equals("at"))) {
+            String word = command.equals("drag") ? "to" : "at";
+            if (next[0] >= tokens.size() || tokens.get(next[0]).quoted || !tokens.get(next[0]).text.equals(word)) {
+                throw new Bad(command + " needs " + word + " and a point after the target, such as " + example(command));
+            }
+            next[0]++;
+            if (next[0] + 1 >= tokens.size() || tokens.get(next[0]).quoted || tokens.get(next[0] + 1).quoted || !isNumber(tokens.get(next[0]).text) || !isNumber(tokens.get(next[0] + 1).text)) {
+                throw new Bad(word + " needs two numbers after it, x and y, such as " + (command.equals("click") ? "click Canvas 1 at 10 20" : example(command)));
+            }
+            event = EventLine.point(line, command, target, tokens.get(next[0]).text, tokens.get(next[0] + 1).text);
+            next[0] += 2;
+        } else {
+            event = EventLine.of(line, command, target, null);
         }
         if (next[0] < tokens.size()) {
             throw new Bad("there's something extra at the end of the line");
         }
-        return EventLine.of(line, command, target, argument);
+        return event;
+    }
+
+    /** A number as event lines write them: digits, a minus sign before them and a decimal point between them if needed. */
+    static boolean isNumber(String s) {
+        int i = s.startsWith("-") ? 1 : 0;
+        int digitsBefore = 0;
+        while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+            i++;
+            digitsBefore++;
+        }
+        if (digitsBefore == 0) {
+            return false;
+        }
+        if (i == s.length()) {
+            return true;
+        }
+        if (s.charAt(i) != '.') {
+            return false;
+        }
+        i++;
+        int digitsAfter = 0;
+        while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+            i++;
+            digitsAfter++;
+        }
+        return digitsAfter > 0 && i == s.length();
     }
 
     private static Target target(String command, List<Token> tokens, int[] next) throws Bad {
-        String example = command.equals("click") ? "click Button \"OK\"" : command.equals("enter") ? "enter TextField 1" : command + " TextField 1 \"Ada\"";
+        String example = example(command);
         if (next[0] >= tokens.size()) {
             throw new Bad(command + " needs a target, such as " + example);
         }
@@ -123,7 +217,7 @@ final class EventParser {
             throw new Bad(word + " isn't a target: write a class and which one, such as " + example);
         }
         if (!Outline.known(word)) {
-            throw new Bad(word + " isn't a JavaFX class that Java Arena knows (use Button, Label, TextField, PasswordField, TextArea or a pane such as VBox)");
+            throw new Bad(word + " isn't a JavaFX class that Java Arena knows (" + (mouse(command) ? "use Canvas or ImageView" : "use Button, Label, TextField, PasswordField, TextArea or a pane such as VBox") + ")");
         }
         if (next[0] >= tokens.size() || !(tokens.get(next[0]).quoted || digits(tokens.get(next[0]).text))) {
             throw new Bad("say which " + Outline.noun(word) + ": " + word + " \"its text\", or " + word + " 1 for the first one");

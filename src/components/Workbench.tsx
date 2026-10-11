@@ -29,7 +29,7 @@ function announce(r: GradeResult): string {
   if (r.status === "pass") return "All tests passed.";
   if (r.status === "compile-error") return "It didn't compile. The errors are listed below the editor.";
   if (r.status === "call-error") return "The check couldn't call your code. What to change is explained below the editor.";
-  if (r.status === "internal-error") return "The Java engine couldn't check this. Try again.";
+  if (r.status === "internal-error") return r.assetError ?? "The Java engine couldn't check this. Try again.";
   const failed = r.tests.filter((t) => !t.pass).length;
   const rules = r.ruleProblems.length ? ` ${r.ruleProblems.length} rule${r.ruleProblems.length > 1 ? "s" : ""} not met.` : "";
   const style = r.styleProblems.length ? " The indentation doesn't match the braces." : "";
@@ -38,7 +38,7 @@ function announce(r: GradeResult): string {
 
 function announceRun(r: FreeRun): string {
   if (r.status === "compile-error") return "It didn't compile. The errors are listed below the input box.";
-  if (r.status === "internal-error") return "The Java engine couldn't run this. Try again.";
+  if (r.status === "internal-error") return r.assetError ?? "The Java engine couldn't run this. Try again.";
   const files = r.written?.length ? ` and the ${r.written.length === 1 ? "file" : "files"} it wrote` : "";
   if (!r.note) return `The program finished. Its output${files} ${files ? "are" : "is"} below the input box.`;
   // It ended normally but printed an error (an event handler's exception, or on System.err).
@@ -232,7 +232,7 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
           {freeRun && (
             <div className="results">
               {freeRun.status === "internal-error" ? (
-                <div className="banner banner-fail">The Java engine couldn't run this ({freeRun.internalError}). Try again.</div>
+                <div className="banner banner-fail">{freeRun.assetError ?? `The Java engine couldn't run this (${freeRun.internalError}). Try again.`}</div>
               ) : freeRun.status === "compile-error" ? (
                 <DiagnosticList diagnostics={freeRun.diagnostics} raw={freeRun.javacOutput} multiFile={freeRun.multiFile} />
               ) : null}

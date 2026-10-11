@@ -2,7 +2,18 @@
 // check of the files a test wants written (its `writes`). Shared by the browser grader and the
 // Node content build (scripts/build-content.mjs) and replay (scripts/content-browser.mjs).
 import { normalizeOutput } from "./assemble.js";
+import { binaryNote, fromBase64, sameContent } from "./assets.ts";
 import { isArenaFile } from "./javafx.js";
+
+/**
+ * A file's contents as the checks see them: its text, or its bytes for a binary file. The engine
+ * gives a binary file as a Uint8Array, and JSON (the content build's results) as { binary: base64 }.
+ */
+export function fileContent(v) {
+  if (v == null || typeof v === "string" || v instanceof Uint8Array) return v;
+  if (typeof v === "object" && typeof v.binary === "string") return fromBase64(v.binary);
+  return String(v);
+}
 
 /**
  * Why a name can't be used for a file in the program's folder, or null. A name is a plain file
@@ -22,13 +33,15 @@ export function dataPathProblem(name) {
  * Each file a test wants the program to leave in its folder, compared with what the run left
  * there (`files`, name to text): { name, expected, got, pass }, where `got` is null when the
  * program didn't create the file. Texts are compared the way output is (normalizeOutput: line
- * endings, spaces at line ends and blank lines at the end don't matter).
+ * endings, spaces at line ends and blank lines at the end don't matter). A file the program wrote
+ * that isn't text (see fileContent) never passes, and `got` says what it holds in words.
  */
 export function compareWrites(writes, files) {
   return Object.entries(writes ?? {}).map(([name, want]) => {
     const expected = normalizeOutput(String(want));
-    const text = files?.[name];
-    const got = text == null ? null : normalizeOutput(String(text));
+    const content = fileContent(files?.[name]);
+    if (content instanceof Uint8Array) return { name, expected, got: binaryNote(content), pass: false };
+    const got = content == null ? null : normalizeOutput(content);
     return { name, expected, got, pass: got === expected };
   });
 }
@@ -51,11 +64,13 @@ export function writesNote(results, hidden = false) {
 /**
  * The files a run created or changed: `after` (every file in the folder after the run) without the
  * ones given to the program (`before`) that it left as they were, and without Java Arena's own
- * files in .arena/ (such as the window of a JavaFX program). Sorted by name.
+ * files in .arena/ (such as the window of a JavaFX program). Sorted by name. Each is { name, text }
+ * for a text file, or { name, bytes } for one that isn't text (which the page never shows as text).
  */
 export function changedFiles(before, after) {
   return Object.entries(after ?? {})
-    .filter(([name, text]) => before?.[name] !== text && !isArenaFile(name))
+    .map(([name, v]) => [name, fileContent(v)])
+    .filter(([name, content]) => !sameContent(fileContent(before?.[name]), content) && !isArenaFile(name))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([name, text]) => ({ name, text }));
+    .map(([name, content]) => (content instanceof Uint8Array ? { name, bytes: content } : { name, text: content }));
 }

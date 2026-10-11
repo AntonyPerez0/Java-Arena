@@ -2,6 +2,8 @@
 package javafx.scene;
 
 import arena.fx.Outline;
+import javafx.event.EventHandler;
+import javafx.scene.input.MouseEvent;
 
 /** Anything in a scene: a button, a label, a text field, or a pane that holds other nodes. */
 public abstract class Node {
@@ -13,6 +15,10 @@ public abstract class Node {
     Parent parent;
     /** The scene whose root this node is (kept by Scene). */
     Scene rootOf;
+    private EventHandler<? super MouseEvent> onMousePressed;
+    private EventHandler<? super MouseEvent> onMouseDragged;
+    private EventHandler<? super MouseEvent> onMouseReleased;
+    private EventHandler<? super MouseEvent> onMouseClicked;
 
     protected Node() {
     }
@@ -75,6 +81,42 @@ public abstract class Node {
 
     public final String getStyle() {
         return style == null ? "" : style;
+    }
+
+    /** The code to run when the mouse is pressed on this node (in Java Arena, a canvas or an image view). */
+    public final void setOnMousePressed(EventHandler<? super MouseEvent> value) {
+        onMousePressed = value;
+    }
+
+    public final EventHandler<? super MouseEvent> getOnMousePressed() {
+        return onMousePressed;
+    }
+
+    /** The code to run each time the mouse moves while it is pressed, after it was pressed on this node. */
+    public final void setOnMouseDragged(EventHandler<? super MouseEvent> value) {
+        onMouseDragged = value;
+    }
+
+    public final EventHandler<? super MouseEvent> getOnMouseDragged() {
+        return onMouseDragged;
+    }
+
+    /** The code to run when the mouse is released, after it was pressed on this node. */
+    public final void setOnMouseReleased(EventHandler<? super MouseEvent> value) {
+        onMouseReleased = value;
+    }
+
+    public final EventHandler<? super MouseEvent> getOnMouseReleased() {
+        return onMouseReleased;
+    }
+
+    /** The code to run when the mouse is pressed and released on this node (also after it moved in between). */
+    public final void setOnMouseClicked(EventHandler<? super MouseEvent> value) {
+        onMouseClicked = value;
+    }
+
+    public final EventHandler<? super MouseEvent> getOnMouseClicked() {
+        return onMouseClicked;
     }
 
     /** This node when the selector is "#" followed by its id, otherwise null (only #id selectors are supported). */

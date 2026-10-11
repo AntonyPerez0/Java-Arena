@@ -1,0 +1,342 @@
+topic: drawing-and-images
+drills:
+  - type: predict
+    after: canvas
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.paint.Color orange = javafx.scene.paint.Color.rgb(255, 128, 0);
+      System.out.println(orange);
+      System.out.println(orange.equals(javafx.scene.paint.Color.web("#ff8000")));
+    why: "Printing a Color shows its red, green and blue as two hexadecimal digits each (255 is `ff`, 128 is `80` and 0 is `00`), and then its opacity, `ff` for fully opaque. `Color.web(\"#ff8000\")` is the same color written as a web color code, and two colors with the same amounts are `equals`."
+
+  - type: predict
+    after: canvas
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.canvas.Canvas canvas = new javafx.scene.canvas.Canvas(100, 50);
+      javafx.scene.canvas.GraphicsContext pen = canvas.getGraphicsContext2D();
+      System.out.println(pen.getFill() + " " + pen.getLineWidth());
+      pen.setFill(javafx.scene.paint.Color.RED);
+      pen.fillRect(0, 0, 10, 10);
+      pen.setStroke(javafx.scene.paint.Color.BLUE);
+      System.out.println(pen.getFill() + " " + (canvas.getGraphicsContext2D() == pen));
+    why: "A new GraphicsContext fills in black with a line width of 1.0. The fill color stays red after `fillRect`, and `setStroke` changes only the stroke color. A canvas has one GraphicsContext, so asking for it again returns the same object."
+
+  - type: predict
+    after: pixels
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.image.WritableImage image = new javafx.scene.image.WritableImage(3, 2);
+      System.out.println(image.getWidth() + " " + image.getPixelReader().getColor(0, 0));
+      image.getPixelWriter().setColor(2, 1, javafx.scene.paint.Color.rgb(0, 0, 255));
+      javafx.scene.paint.Color pixel = image.getPixelReader().getColor(2, 1);
+      System.out.println(pixel.getRed() + " " + pixel.getBlue());
+    why: "An image's width is a double, `3.0`. A new WritableImage is fully transparent: black with an opacity of `00`. A Color's amounts go from 0.0 to 1.0, so the blue pixel has red `0.0` and blue `1.0`, not 255."
+
+  - type: predict
+    after: tiling
+    prompt: What does this print?
+    body: |
+      int w = 3;
+      String plain = "";
+      String mirrored = "";
+      for (int x = 0; x < 2 * w; x++) {
+          plain += x % w;
+          int fromX = x % w;
+          if (x / w % 2 == 1) {
+              fromX = w - 1 - fromX;
+          }
+          mirrored += fromX;
+      }
+      System.out.println(plain);
+      System.out.println(mirrored);
+    why: "`x % w` starts over at 0 at the start of each tile: `012012`. `x / w` is the tile's number, 0 or 1, and in tile 1 the column is read from the other side, `w - 1 - x % w`: 2, 1, 0."
+
+  - type: predict
+    after: color-filters
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.paint.Color blue = javafx.scene.paint.Color.rgb(0, 0, 255);
+      int gray = (0 + 0 + 255) / 3;
+      System.out.println(javafx.scene.paint.Color.rgb(gray, gray, gray));
+      System.out.println(blue.grayscale());
+      System.out.println(blue.invert());
+    why: "The average of 0, 0 and 255 is 85, `55` in hexadecimal. `grayscale()` takes only 7% of the blue, since blue looks dark to the eye: about 18, `12`. `invert()` turns each amount into its opposite, and the opposite of blue is yellow."
+
+  - type: fill
+    after: canvas
+    prompt: "This code runs inside `start`. Fill in the method that returns the object that draws on the canvas. (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.canvas.Canvas canvas = new javafx.scene.canvas.Canvas(80, 60);
+      javafx.scene.canvas.GraphicsContext pen = canvas.[[getGraphicsContext2D]]();
+      pen.setStroke(javafx.scene.paint.Color.GREEN);
+      System.out.println(pen.getStroke());
+    why: "`getGraphicsContext2D()` returns the canvas's GraphicsContext, which keeps the colors and draws the shapes. JavaFX's `GREEN` is `0x008000`, a darker green than `rgb(0, 255, 0)`."
+
+  - type: fill
+    after: pixels
+    prompt: "This code runs inside `start`. Fill in the method that returns the object that sets the image's pixels. (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.image.WritableImage image = new javafx.scene.image.WritableImage(2, 2);
+      image.[[getPixelWriter]]().setColor(1, 0, javafx.scene.paint.Color.YELLOW);
+      System.out.println(image.getPixelReader().getColor(1, 0));
+    why: "A WritableImage's pixels are set through its PixelWriter, from `getPixelWriter()`, and read through its PixelReader. Yellow is all the red and all the green: `0xffff00ff`."
+
+  - type: bug
+    after: scaling-down
+    prompt: "This code runs inside `start`. It should make a half-size copy of a 4 x 1 image by keeping every second pixel, so it should print `0x780000ff`, the color of the big image's pixel at x 2. Which line is wrong? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.image.WritableImage big = new javafx.scene.image.WritableImage(4, 1);
+      for (int x = 0; x < 4; x++) {
+          big.getPixelWriter().setColor(x, 0, javafx.scene.paint.Color.rgb(x * 60, 0, 0));
+      }
+      javafx.scene.image.WritableImage small = new javafx.scene.image.WritableImage(2, 1);
+      for (int x = 0; x < 2; x++) {
+          small.getPixelWriter().setColor(x, 0, big.getPixelReader().getColor(x / 2, 0)); // BUG
+      }
+      System.out.println(small.getPixelReader().getColor(1, 0));
+    fix: small.getPixelWriter().setColor(x, 0, big.getPixelReader().getColor(2 * x, 0));
+    why: "Pixel x of the small image is pixel `2 * x` of the big one. `x / 2` reads pixel 0 for both small pixels, so the copy shows only the big image's first pixel."
+
+  - type: bug
+    after: color-filters
+    prompt: "This code runs inside `start`. It should print the average of the color's red, green and blue as whole numbers from 0 to 255, which is `100`. Which line is wrong? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.paint.Color color = javafx.scene.paint.Color.rgb(200, 100, 0);
+      int red = (int) Math.round(color.getRed() * 255);
+      int green = (int) Math.round(color.getGreen()); // BUG
+      int blue = (int) Math.round(color.getBlue() * 255);
+      System.out.println((red + green + blue) / 3);
+    fix: int green = (int) Math.round(color.getGreen() * 255);
+    why: "`getGreen()` is between 0.0 and 1.0 (here about 0.39), so rounded on its own it's 0. Times 255 first, it's 100, as the other two amounts are."
+
+  - type: compiles
+    after: pixels
+    prompt: "This code runs inside `start`. Does it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.image.WritableImage image = new javafx.scene.image.WritableImage(4, 3);
+      int width = image.getWidth();
+      System.out.println(width);
+    why: "`getWidth()` returns a double, even for an image whose size is whole pixels, and Java doesn't turn a double into an int by itself: javac says `possible lossy conversion from double to int`. Write `int width = (int) image.getWidth();`."
+
+  - type: compiles
+    after: canvas
+    prompt: "This code runs inside `start`. Does it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.paint.Color red = new javafx.scene.paint.Color(255, 0, 0, 1);
+      System.out.println(red);
+    why: "It compiles: Color's constructor takes four doubles, and Java turns the ints into doubles. But it fails when it runs: the constructor wants amounts from 0.0 to 1.0, so it throws an IllegalArgumentException about the red value 255. For amounts from 0 to 255, use `Color.rgb(255, 0, 0)`."
+
+  - type: choice
+    after: canvas
+    prompt: Which call fills a circle with its center at (50, 40) and a radius of 10?
+    choices:
+      - "`pen.fillOval(50, 40, 10, 10)`"
+      - "`pen.fillOval(40, 30, 20, 20)`"
+      - "`pen.fillOval(40, 30, 10, 10)`"
+      - "`pen.fillOval(50, 40, 20, 20)`"
+    answer: 2
+    why: "`fillOval` takes the rectangle the oval fits in: its top left corner, its width and its height. The circle reaches 10 pixels to each side of its center, so the square starts at (50 - 10, 40 - 10) and is 20 across."
+
+  - type: choice
+    after: mouse
+    prompt: "A canvas has handlers for all four mouse events. The mouse is pressed on the canvas at (10, 10), dragged to (30, 10) and released there. Which handlers run, in order?"
+    choices:
+      - pressed, dragged, released
+      - pressed, dragged, released, clicked
+      - pressed, released, clicked
+      - dragged, released
+    answer: 2
+    why: "Pressing runs the pressed handler, moving with the button down the dragged handler, and letting go the released handler. Then JavaFX also counts a click, because the button went down and came up on the same node, even though the mouse moved in between."
+
+  - type: boss
+    after: mouse
+    prompt: |
+      A mosaic maker sets clay stones on a grid. Write `start`: a canvas of 200 x 120 pixels in a Pane, and the window's title `Mosaic maker`. The canvas is a grid of squares 20 x 20 pixels, and a click anywhere in a square fills that whole square with sienna (`Color.SIENNA`): the square whose top left corner is at x `(int) event.getX() / 20 * 20`, and the same for y. A click at (25, 47) fills the square from (20, 40), 20 wide and 20 high. Draw nothing else.
+    seed: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(200, 120);
+
+              stage.setScene(new Scene(new Pane(canvas)));
+              stage.setTitle("Mosaic maker");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.canvas.Canvas;
+      import javafx.scene.canvas.GraphicsContext;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.paint.Color;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Canvas canvas = new Canvas(200, 120);
+              GraphicsContext pen = canvas.getGraphicsContext2D();
+              pen.setFill(Color.SIENNA);
+              canvas.setOnMouseClicked(event -> {
+                  int x = (int) event.getX() / 20 * 20;
+                  int y = (int) event.getY() / 20 * 20;
+                  pen.fillRect(x, y, 20, 20);
+              });
+
+              stage.setScene(new Scene(new Pane(canvas)));
+              stage.setTitle("Mosaic maker");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "Get the canvas's GraphicsContext, set its fill to `Color.SIENNA`, and give the canvas a handler with `setOnMouseClicked`."
+      - "In the handler, `(int) event.getX() / 20` is the square's column (a whole-number division), and times 20 it's the square's left edge. Then `pen.fillRect(x, y, 20, 20);`."
+    tests:
+      - events: |
+          click Canvas 1 at 25 47
+          click Canvas 1 at 199.5 0
+      - events: |
+          click Canvas 1 at 0 119
+          click Canvas 1 at 59.9 60
+          click Canvas 1 at 100 20
+        hidden: true
+
+  - type: boss
+    after: tiling
+    prompt: |
+      Write the method `public static WritableImage mirror(Image source)` in `Main`: it returns a new image of the same size, the source mirrored left to right, so the new image's pixel (x, y) is the source's pixel (width - 1 - x, y).
+
+      `Main` also has `sample(width, height)`, which makes an image whose pixel (x, y) has red `x * 30` and green `y * 60`, and `describe(image)`, which prints an image's size and the colors of its pixels, a row on each line. The check calls `describe(mirror(sample(3, 2)));` and expects:
+
+      ```
+      3 x 2
+      0x3c0000ff 0x1e0000ff 0x000000ff
+      0x3c3c00ff 0x1e3c00ff 0x003c00ff
+      ```
+    seed: |
+      import javafx.scene.image.Image;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.paint.Color;
+
+      public class Main {
+          public static void main(String[] args) {
+              describe(mirror(sample(3, 2)));
+          }
+
+          public static WritableImage mirror(Image source) {
+              return null;
+          }
+
+          // An image to try things on: pixel (x, y) has red x * 30 and green y * 60.
+          public static WritableImage sample(int width, int height) {
+              WritableImage image = new WritableImage(width, height);
+              PixelWriter writer = image.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, Color.rgb(x * 30, y * 60, 0));
+                  }
+              }
+              return image;
+          }
+
+          // Prints the size, then the color of every pixel, a row on each line.
+          public static void describe(Image image) {
+              int width = (int) image.getWidth();
+              int height = (int) image.getHeight();
+              System.out.println(width + " x " + height);
+              PixelReader reader = image.getPixelReader();
+              for (int y = 0; y < height; y++) {
+                  String row = "";
+                  for (int x = 0; x < width; x++) {
+                      row += " " + reader.getColor(x, y);
+                  }
+                  System.out.println(row.trim());
+              }
+          }
+      }
+    solution: |
+      import javafx.scene.image.Image;
+      import javafx.scene.image.PixelReader;
+      import javafx.scene.image.PixelWriter;
+      import javafx.scene.image.WritableImage;
+      import javafx.scene.paint.Color;
+
+      public class Main {
+          public static void main(String[] args) {
+              describe(mirror(sample(3, 2)));
+          }
+
+          public static WritableImage mirror(Image source) {
+              PixelReader reader = source.getPixelReader();
+              int width = (int) source.getWidth();
+              int height = (int) source.getHeight();
+              WritableImage result = new WritableImage(width, height);
+              PixelWriter writer = result.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, reader.getColor(width - 1 - x, y));
+                  }
+              }
+              return result;
+          }
+
+          // An image to try things on: pixel (x, y) has red x * 30 and green y * 60.
+          public static WritableImage sample(int width, int height) {
+              WritableImage image = new WritableImage(width, height);
+              PixelWriter writer = image.getPixelWriter();
+              for (int y = 0; y < height; y++) {
+                  for (int x = 0; x < width; x++) {
+                      writer.setColor(x, y, Color.rgb(x * 30, y * 60, 0));
+                  }
+              }
+              return image;
+          }
+
+          // Prints the size, then the color of every pixel, a row on each line.
+          public static void describe(Image image) {
+              int width = (int) image.getWidth();
+              int height = (int) image.getHeight();
+              System.out.println(width + " x " + height);
+              PixelReader reader = image.getPixelReader();
+              for (int y = 0; y < height; y++) {
+                  String row = "";
+                  for (int x = 0; x < width; x++) {
+                      row += " " + reader.getColor(x, y);
+                  }
+                  System.out.println(row.trim());
+              }
+          }
+      }
+    hints:
+      - "Make a WritableImage of the source's size (as ints) and get its PixelWriter and the source's PixelReader."
+      - "For each pixel, `writer.setColor(x, y, reader.getColor(width - 1 - x, y));`, and return the new image at the end."
+    tests:
+      - call: describe(mirror(sample(3, 2)));
+      - call: describe(mirror(sample(5, 1)));
+        hidden: true
+      - call: |
+          describe(mirror(sample(1, 3)));
+          describe(mirror(sample(4, 2)));
+        hidden: true

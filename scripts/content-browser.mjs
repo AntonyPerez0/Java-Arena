@@ -4,7 +4,8 @@
 // and javac's exact message for every example that must not compile. Where a test checks the
 // files a program writes, every file the run leaves in its folder is compared too, and a JavaFX
 // program's window (.arena/window.json, after a test's clicks and typing or an example's events
-// block) is compared byte for byte.
+// block) is compared byte for byte. An image of content/assets that a test or an example gives the
+// program is fetched from the built site, as the grader fetches it.
 // Usage: npm run build && node scripts/content-browser.mjs
 // CONTENT_ONLY=<regular expression> replays only the programs whose place matches (while working on something).
 import { readFileSync, existsSync } from "node:fs";
@@ -35,14 +36,30 @@ await page.evaluate(() => window.javaArena.engineReady());
 
 let failures = 0;
 let runs = 0;
+/** A file's contents for a message: its text, or how many bytes a binary one has. */
+const shown = (v) => (typeof v === "string" ? v : `(${Buffer.from(v?.binary ?? "", "base64").length} bytes that aren't text)\n`);
 const t0 = Date.now();
 for (const c of checks) {
-  const got = await page.evaluate(async ({ files, mainClass, inputs, libraries }) => {
+  const got = await page.evaluate(async ({ files, mainClass, inputs, libraries, base }) => {
     const r = await window.javaArena.compile(files, { libraries });
     if (!r.ok || !inputs) return { compile: { ok: r.ok, output: r.output, internalError: r.internalError }, runs: [] };
-    const runs = await window.javaArena.runClasses(r.classes, mainClass, inputs, 30_000, { libraries });
-    return { compile: { ok: r.ok, output: r.output }, runs: runs.map((x) => ({ stdout: x.stdout, stderr: x.stderr, exitCode: x.exitCode, timedOut: x.timedOut, internalError: x.internalError, files: x.files })) };
-  }, { files: c.files, mainClass: c.mainClass ?? "Main", inputs: c.kind === "run" ? c.tests.map((t) => ({ stdin: t.stdin, ...(t.args ? { args: t.args } : {}), ...(t.events ? { files: withEventsFile(t.files, t.events) } : t.files ? { files: t.files } : {}) })) : null, libraries: librariesFor(c.files) });
+    // An image (an AssetFile: { asset, url, ... }) is fetched from the site; text stays as it is.
+    const bytes = async (v) => {
+      const res = await fetch(base + v.url);
+      if (!res.ok) throw new Error(`the image ${v.url} isn't on the built site (HTTP ${res.status})`);
+      return new Uint8Array(await res.arrayBuffer());
+    };
+    const given = await Promise.all(inputs.map(async (input) => (input.files ? { ...input, files: Object.fromEntries(await Promise.all(Object.entries(input.files).map(async ([n, v]) => [n, typeof v === "string" ? v : await bytes(v)]))) } : input)));
+    const runs = await window.javaArena.runClasses(r.classes, mainClass, given, 30_000, { libraries });
+    // A file that isn't text comes back as its bytes: as base64, which crosses to Node as text.
+    const b64 = (u8) => {
+      let s = "";
+      for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+      return btoa(s);
+    };
+    const left = (fs) => fs && Object.fromEntries(Object.entries(fs).map(([n, v]) => [n, typeof v === "string" ? v : { binary: b64(v) }]));
+    return { compile: { ok: r.ok, output: r.output }, runs: runs.map((x) => ({ stdout: x.stdout, stderr: x.stderr, exitCode: x.exitCode, timedOut: x.timedOut, internalError: x.internalError, files: left(x.files) })) };
+  }, { files: c.files, mainClass: c.mainClass ?? "Main", inputs: c.kind === "run" ? c.tests.map((t) => ({ stdin: t.stdin, ...(t.args ? { args: t.args } : {}), ...(t.events ? { files: withEventsFile(t.files, t.events) } : t.files ? { files: t.files } : {}) })) : null, libraries: librariesFor(c.files), base: url });
   const problems = [];
   if (got.compile.internalError) problems.push(`engine error: ${got.compile.internalError}`);
   else if (c.kind === "error") {
@@ -76,7 +93,8 @@ for (const c of checks) {
           const want = Object.keys(t.written).sort();
           const have = Object.keys(r.files).sort();
           if (want.join("\n") !== have.join("\n")) problems.push(`input ${i + 1}: leaves the files ${have.join(", ") || "(none)"} in its folder, the JDK ${want.join(", ") || "(none)"}`);
-          else for (const name of want) if (r.files[name] !== t.written[name]) problems.push(`input ${i + 1}: the file ${name} differs\n--- JDK\n${t.written[name]}--- browser\n${r.files[name]}`);
+          // Text as it is, and a file that isn't text as its bytes in base64 ({ binary }), on both sides.
+          else for (const name of want) if (JSON.stringify(r.files[name]) !== JSON.stringify(t.written[name])) problems.push(`input ${i + 1}: the file ${name} differs\n--- JDK\n${shown(t.written[name])}--- browser\n${shown(r.files[name])}`);
         }
       }
     });

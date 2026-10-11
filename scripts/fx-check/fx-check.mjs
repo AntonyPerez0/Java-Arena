@@ -1,8 +1,9 @@
 // The real-JavaFX check (npm run fx-check): runs every program that uses Java Arena's practice
 // version of JavaFX on real OpenJFX 21 (headless, with Monocle) and on Java Arena's JavaFX (the
 // engine's javafx library, on the reference JDK), with the same input, arguments, files and clicks
-// and typing, and compares what they print and the windows they leave (as the canonical outline
-// of src/grader/window.ts, plus the events that couldn't happen). See scripts/fx-check/README.md.
+// and typing, mouse events and slider moves, and compares what they print and the windows they
+// leave (as the canonical outline of src/grader/window.ts, plus the events that couldn't happen);
+// a canvas's drawing is compared as pixels (canvas.mjs). See scripts/fx-check/README.md.
 //
 // The programs: every lesson program that uses JavaFX (from fidelity/out/content-checks.json, which
 // the content build writes: run npm run content or npm run build first), the fidelity programs that
@@ -13,6 +14,9 @@
 //   FX_CHECK_CHECKS=<file>              read the lesson programs from this file instead
 //   FX_CHECK_CACHE=<folder>             where the OpenJFX jars are kept (default node_modules/.cache/java-arena-fx)
 //   FX_CHECK_VERBOSE=1                  also print what each run printed and its window, on real JavaFX
+//   FX_CHECK_SAVE=<folder>              save each canvas compared as PNGs (real JavaFX's and the recorded calls drawn)
+//   FX_CHECK_CANVAS_STATS=1             print how many pixels of each canvas differ
+//   FX_CHECK_CANVAS_SELFTEST=1          also check the canvas comparison with deliberately wrong drawings
 // It exits with 1 when anything differs, and writes fidelity/out/fx-check.json.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -22,7 +26,9 @@ import { delimiter, dirname, join, relative } from "node:path";
 import { EVENTS_FILE, JAVAFX_LIBRARY, WINDOW_FILE, withoutArenaFiles } from "../../src/grader/javafx.js";
 import { librariesFor } from "../../src/grader/libraries.js";
 // TypeScript, which Node runs as it is (it has only types to strip): shared with the browser's grader.
-import { compareOutlines, eventsFileText, parseEventLine, parseWindow, windowOutline } from "../../src/grader/window.ts";
+import { compareOutlines, eventsFileText, javaNumber, parseEventLine, parseWindow, windowOutline } from "../../src/grader/window.ts";
+import { binaryWords, textOrBytes } from "../../src/grader/assets.ts";
+import { compareDrawing, png, replay, wrongDrawings } from "./canvas.mjs";
 import { loadSuite, REFERENCE_JVM_FLAGS, referenceJavaHome } from "../fidelity/suite.mjs";
 import { javaRunArgs } from "../javafx/reference.mjs";
 import { libraryDir } from "../libraries.mjs";
@@ -74,7 +80,9 @@ function openjfxJars() {
 }
 
 /** JVM flags for real JavaFX without a screen: Monocle's headless platform and software rendering. */
-const headless = () => ["-Dglass.platform=Monocle", "-Dmonocle.platform=Headless", "-Dprism.order=sw", `-Djavafx.cachedir=${join(CACHE, "native")}`];
+// The headless screen is made big (Monocle's own is 1280 x 800), since a window bigger than the
+// screen makes its renderer fail (a BufferOverflowException in UploadingPainter) as it paints it.
+const headless = () => ["-Dglass.platform=Monocle", "-Dmonocle.platform=Headless", "-Dheadless.geometry=4096x4096-32", "-Dprism.order=sw", `-Djavafx.cachedir=${join(CACHE, "native")}`];
 
 // ---------------------------------------------------------------- the programs
 
@@ -93,13 +101,15 @@ function probes() {
     .map((name) => {
       const folder = join(dir, name);
       const all = list(folder);
-      const files = all.filter((f) => f.endsWith(".java")).map((f) => ({ path: relative(folder, f), text: readFileSync(f, "utf8") }));
+      const sources = all.filter((f) => f.endsWith(".java")).map((f) => ({ path: relative(folder, f), text: readFileSync(f, "utf8") }));
       const meta = existsSync(join(folder, "meta.json")) ? JSON.parse(readFileSync(join(folder, "meta.json"), "utf8")) : {};
       const stdin = existsSync(join(folder, "stdin.txt")) ? readFileSync(join(folder, "stdin.txt"), "utf8") : "";
       // Each <name>.events file is one run with those events; a probe without one runs once, with none.
       const eventFiles = all.filter((f) => f.endsWith(".events")).sort();
-      const runs = eventFiles.length ? eventFiles.map((f) => ({ name: relative(folder, f), stdin, args: meta.args ?? [], files: {}, eventsText: readFileSync(f, "utf8") })) : [{ name: "no events", stdin, args: meta.args ?? [], files: {}, eventsText: null }];
-      return { group: "library", where: `scripts/fx-check/probes/${name}`, files, mainClass: meta.mainClass ?? "Main", runs };
+      // meta.json's files: images of content/assets that the runs get ({ "pic.png": { "asset": "tiny.png" } }).
+      const files = givenFiles(meta.files);
+      const runs = eventFiles.length ? eventFiles.map((f) => ({ name: relative(folder, f), stdin, args: meta.args ?? [], files, eventsText: readFileSync(f, "utf8") })) : [{ name: "no events", stdin, args: meta.args ?? [], files, eventsText: null }];
+      return { group: "library", where: `scripts/fx-check/probes/${name}`, files: sources, mainClass: meta.mainClass ?? "Main", runs };
     });
 }
 
@@ -107,6 +117,14 @@ function fidelityPrograms() {
   return loadSuite()
     .programs.filter((p) => p.libraries.includes(JAVAFX_LIBRARY))
     .map((p) => ({ group: "library", where: `fidelity/programs/${p.id}`, files: p.sources, mainClass: p.mainClass, runs: [{ name: "run", stdin: p.stdin, args: p.args, files: withoutArenaFiles(p.files), eventsText: p.files[EVENTS_FILE] ?? null }] }));
+}
+
+/**
+ * A lesson run's files as both runs get them: text, and each image of content/assets (an AssetFile
+ * in content-checks.json, see src/grader/assets.ts) as the bytes of content/assets/<its name>.
+ */
+function givenFiles(files) {
+  return Object.fromEntries(Object.entries(files ?? {}).map(([name, v]) => [name, typeof v === "string" ? v : readFileSync(join(ROOT, "content", "assets", v.asset))]));
 }
 
 function contentPrograms() {
@@ -126,7 +144,7 @@ function contentPrograms() {
       where: c.where,
       files: c.files,
       mainClass: c.mainClass ?? "Main",
-      runs: c.tests.map((t, i) => ({ name: c.tests.length > 1 ? `test ${i + 1}` : "run", stdin: t.stdin ?? "", args: t.args ?? [], files: t.files ?? {}, eventsText: t.events ? eventsFileText(t.events) : null })),
+      runs: c.tests.map((t, i) => ({ name: c.tests.length > 1 ? `test ${i + 1}` : "run", stdin: t.stdin ?? "", args: t.args ?? [], files: givenFiles(t.files), eventsText: t.events ? eventsFileText(t.events) : null })),
     }));
 }
 
@@ -174,7 +192,7 @@ function compileAll(programs, tmp, jars) {
 
 function compileDriver(tmp, jars) {
   const out = join(tmp, "driver");
-  const r = spawnSync(bin("javac"), ["-encoding", "UTF-8", "-cp", jars.join(delimiter), "-d", out, join(HERE, "RealFxDriver.java")], { env, encoding: "utf8" });
+  const r = spawnSync(bin("javac"), ["-encoding", "UTF-8", "-cp", jars.join(delimiter), "-d", out, join(HERE, "RealFxDriver.java"), join(HERE, "CanvasReplay.java")], { env, encoding: "utf8" });
   if (r.status !== 0) throw new Error(`fx-check: couldn't compile RealFxDriver.java:\n${r.stdout}${r.stderr}`);
   return out;
 }
@@ -201,12 +219,19 @@ function limit(fn) {
   });
 }
 
-/** Every file in a folder and its subfolders, by its path in it, except Java Arena's own (.arena/). */
+/**
+ * Every file in a folder and its subfolders, by its path in it, except Java Arena's own (.arena/):
+ * its text, or for a file that isn't UTF-8 text (an image the program was given) its size and the
+ * SHA-256 of its bytes in words, so two files compare by their bytes and none is shown as text.
+ */
 function folderFiles(dir, prefix = "", out = {}) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, e.name);
     if (e.isDirectory()) folderFiles(full, `${prefix}${e.name}/`, out);
-    else if (e.isFile()) out[prefix + e.name] = readFileSync(full, "utf8");
+    else if (e.isFile()) {
+      const content = textOrBytes(readFileSync(full));
+      out[prefix + e.name] = typeof content === "string" ? content : `(${binaryWords(content)}; SHA-256 ${createHash("sha256").update(content).digest("hex")})`;
+    }
   }
   return withoutArenaFiles(out);
 }
@@ -259,7 +284,7 @@ function driverEvents(eventsText) {
     }
     const t = e.target;
     const [kind, type, value] = !t ? ["none", null, null] : t.kind === "number" ? ["number", null, String(t.n)] : t.kind === "id" ? ["id", null, t.id] : t.kind === "text" ? ["text", t.type, t.text] : ["index", t.type, String(t.index)];
-    rows.push(["E", hex(e.line), hex(e.command), hex(kind), hex(type), hex(value), hex(e.text ?? null)].join(" "));
+    rows.push(["E", hex(e.line), hex(e.command), hex(kind), hex(type), hex(value), hex(e.text ?? null), hex(e.number ?? null), hex(e.point?.x ?? null), hex(e.point?.y ?? null)].join(" "));
   }
   return rows.join("\n") + "\n";
 }
@@ -292,8 +317,10 @@ async function runBoth(program, run, tmp, jars, driver, key) {
  * What stderr says without stack frames (which differ: JavaFX's own frames, and the driver's) and
  * without what real JavaFX logs about itself: java.util.logging's two lines (a time and a class of
  * JavaFX's own, then the level and the message, such as its warning that it runs from the class
- * path) and fontconfig's warnings.
+ * path or a PNG loader's warning about a file's chunks, and the second line of a two-line message
+ * JavaFX logs) and fontconfig's warnings.
  */
+const LOG_CONTINUATIONS = new Set(["The chunk wil be ignored."]);
 function stderrHeads(s) {
   const lines = s.split("\n");
   const kept = [];
@@ -301,6 +328,9 @@ function stderrHeads(s) {
     const l = lines[i];
     if (/^\w{3} \d{1,2}, \d{4} \d{1,2}:\d{2}:\d{2} [AP]M (com\.sun\.|javafx\.)\S+ \S+$/.test(l) && /^(SEVERE|WARNING|INFO|CONFIG|FINE|FINER|FINEST): /.test(lines[i + 1] ?? "")) {
       i++;
+      // The second line of JavaFX's two-line warnings about a PNG file's chunks (a PLTE in a gray
+      // image, a second PLTE), which Java Arena's JavaFX doesn't log.
+      while (LOG_CONTINUATIONS.has(lines[i + 1])) i++;
       continue;
     }
     if (!l || /^\s+at |^\s+\.\.\. \d+ more$/.test(l) || /^Fontconfig (error|warning):/.test(l)) continue;
@@ -332,8 +362,8 @@ function layoutStyles(node, out = new Set()) {
 
 const indent = (s, by = "    ") => s.replace(/\n$/, "").split("\n").map((l) => by + l).join("\n");
 
-/** The differences between the two runs, each as text (none: the same). */
-function differences(ours, real) {
+/** The differences between the two runs, each as text (none: the same). `run` has their window states and canvases, `drawn` the canvases' recorded calls drawn again on real JavaFX. */
+function differences(ours, real, run, drawn) {
   const out = [];
   if (real.timedOut || ours.timedOut) out.push(`timed out (after ${TIME_LIMIT_MS / 1000} s) with ${real.timedOut ? "real JavaFX" : "Java Arena's JavaFX"}`);
   if (withoutHashes(ours.stdout) !== withoutHashes(real.stdout)) out.push(`the output differs\n  --- real JavaFX\n${indent(real.stdout || "(nothing)")}\n  --- Java Arena's JavaFX\n${indent(ours.stdout || "(nothing)")}`);
@@ -348,12 +378,12 @@ function differences(ours, real) {
       else if (ours.written[name] !== real.written[name]) out.push(`the file ${name} differs\n  --- real JavaFX\n${indent(real.written[name] || "(empty)")}\n  --- Java Arena's JavaFX\n${indent(ours.written[name] || "(empty)")}`);
     }
   }
-  const ow = parseWindow(ours.window);
-  const rw = parseWindow(real.window);
+  const ow = run.ow;
+  const rw = run.rw;
   if ((ow == null) !== (rw == null)) out.push(ow ? "only Java Arena's JavaFX left a window file" : "only real JavaFX left a window file");
   else if (ow && rw) {
-    const oo = windowOutline(ow);
-    const ro = windowOutline(rw);
+    const oo = windowOutline(withoutCalls(ow));
+    const ro = windowOutline(withoutCalls(rw));
     if (oo !== ro) {
       const { expected, got } = compareOutlines(ro, oo);
       const mark = (lines) => lines.map((l) => `${l.differs ? "  > " : "    "}${l.text}`).join("\n");
@@ -364,9 +394,110 @@ function differences(ours, real) {
       if (styles.length) text += `\n  (Real JavaFX applies a style such as ${JSON.stringify(styles[0])} to the font, padding, spacing, gaps, alignment or sizes; Java Arena's JavaFX only stores it. Set those with setFont, setPadding and the like instead.)`;
       out.push(text);
     }
+    for (const c of run.canvases) {
+      const d = compareCanvas(c.node, c.real, drawn.get(c.name), c.name);
+      if (d) out.push(d);
+    }
     if (JSON.stringify(ow.problems) !== JSON.stringify(rw.problems)) out.push(`the events that couldn't happen differ\n  --- real JavaFX\n${indent(rw.problems.join("\n") || "(none)")}\n  --- Java Arena's JavaFX\n${indent(ow.problems.join("\n") || "(none)")}`);
   }
   return out;
+}
+
+// ---------------------------------------------------------------- canvases
+
+const REGIONS = ["top", "left", "center", "right", "bottom"];
+
+/** The canvases of a window state, in outline order. */
+function canvasesOf(w) {
+  const out = [];
+  const walk = (n) => {
+    if (!n) return;
+    if (n.type === "Canvas") out.push(n);
+    for (const r of REGIONS) walk(n[r]);
+    for (const c of n.children ?? []) walk(c);
+  };
+  for (const s of w?.windows ?? []) walk(s.scene?.root);
+  return out;
+}
+
+/**
+ * The window state with its canvases' calls left out (and the real side's snapshots): the outline
+ * then compares each canvas's place and size, and the drawings are compared apart (compareCanvas).
+ */
+function withoutCalls(w) {
+  const copy = structuredClone(w);
+  for (const n of canvasesOf(copy)) {
+    n.calls = [];
+    delete n.callCount;
+    delete n.snapshot;
+    delete n.snapshotWidth;
+    delete n.snapshotHeight;
+  }
+  return copy;
+}
+
+/**
+ * Compares a canvas's drawing: the snapshot of the canvas the program drew on with real JavaFX with
+ * the snapshot of the calls Java Arena's JavaFX recorded, drawn again on real JavaFX (see
+ * canvas.mjs). Returns the difference as text, or null.
+ */
+function compareCanvas(node, real, mine, name) {
+  if (real.snapshot == null) return null;
+  const size = `${javaNumber(node.width)} x ${javaNumber(node.height)}`;
+  // A canvas with more calls than Java Arena keeps isn't compared (the summary lists it).
+  if (!mine) return null;
+  const width = real.snapshotWidth;
+  const height = real.snapshotHeight;
+  const theirs = Buffer.from(real.snapshot, "base64");
+  if (mine.length !== theirs.length) return `the canvas ${size} has a snapshot of ${width} x ${height} pixels on real JavaFX, and ${mine.length / 4} pixels when its recorded calls are drawn again`;
+  if (process.env.FX_CHECK_SAVE) {
+    mkdirSync(process.env.FX_CHECK_SAVE, { recursive: true });
+    writeFileSync(join(process.env.FX_CHECK_SAVE, `${name}-real.png`), png(width, height, theirs));
+    writeFileSync(join(process.env.FX_CHECK_SAVE, `${name}-real.rgba`), theirs);
+    writeFileSync(join(process.env.FX_CHECK_SAVE, `${name}-ours.png`), png(width, height, mine));
+    writeFileSync(join(process.env.FX_CHECK_SAVE, `${name}.json`), JSON.stringify({ calls: node.calls, width: node.width, height: node.height }));
+  }
+  const { same, why, over, worst } = compareDrawing({ real: theirs, mine, width, height });
+  if (process.env.FX_CHECK_CANVAS_STATS) console.log(`canvas ${name} ${width} x ${height}: ${over} pixels over the tolerance, the most ${worst}`);
+  return same ? null : `the drawing on the canvas ${size} differs from real JavaFX's: ${why}`;
+}
+
+/**
+ * FX_CHECK_CANVAS_SELFTEST=1: how well the canvas comparison tells right drawings from wrong ones.
+ * For every canvas compared, deliberately wrong versions of its recorded calls (wrongDrawings in
+ * canvas.mjs) are drawn on real JavaFX and compared with the real canvas, as a recording that is
+ * off would be. A wrong version that draws exactly the same pixels as the right one (a change
+ * hidden under a later call, or outside the canvas) can't be told apart by any comparison of what
+ * the canvas shows; every other one should fail. Prints the counts and each wrong drawing that
+ * passed although it looks different, and fails the run when the right drawings don't all pass.
+ */
+function canvasSelfTest(results, jobs, drawn, replayArgs) {
+  const real = new Map();
+  for (const r of results) for (const run of r.runs) for (const c of run.canvases) if (c.real.snapshot != null) real.set(c.name, c.real);
+  const wrong = [];
+  for (const job of jobs) for (const [what, calls] of wrongDrawings(job.calls)) wrong.push({ name: `${job.name}w${wrong.length}`, of: job.name, what, calls, width: job.width, height: job.height });
+  const drawnWrong = replay(wrong, { ...replayArgs, dir: join(replayArgs.dir, "wrong") });
+  let rightFailed = 0;
+  let hidden = 0;
+  let caught = 0;
+  const missed = [];
+  for (const job of jobs) {
+    const r = real.get(job.name);
+    if (!compareDrawing({ real: Buffer.from(r.snapshot, "base64"), mine: drawn.get(job.name), width: r.snapshotWidth, height: r.snapshotHeight }).same) rightFailed++;
+  }
+  for (const w of wrong) {
+    const r = real.get(w.of);
+    const mine = drawnWrong.get(w.name);
+    if (Buffer.compare(mine, drawn.get(w.of)) === 0) {
+      hidden++;
+      continue;
+    }
+    const { same } = compareDrawing({ real: Buffer.from(r.snapshot, "base64"), mine, width: r.snapshotWidth, height: r.snapshotHeight });
+    if (same) missed.push(`${w.of}: ${w.what}`);
+    else caught++;
+  }
+  console.log(`\nCanvas self-test: ${jobs.length - rightFailed} of ${jobs.length} right drawings pass; of ${wrong.length} wrong drawings, ${hidden} draw the same pixels as the right one (hidden under later calls or outside the canvas), ${caught} of the other ${wrong.length - hidden} fail, and ${missed.length} pass${missed.length ? `:\n  ${missed.join("\n  ")}` : "."}`);
+  if (rightFailed) process.exitCode = 1;
 }
 
 // ---------------------------------------------------------------- main
@@ -389,10 +520,38 @@ async function main() {
       const runs = await Promise.all(p.runs.map(async (run, j) => ({ run, ...(await runBoth(p, run, tmp, jars, driver, `${i}-${j}`)) })));
       if (process.env.FX_CHECK_VERBOSE)
         for (const { run, real } of runs) console.log(`--- ${p.where} (${run.name}) on real JavaFX: exit code ${real.exitCode}\n${real.stdout}${stderrHeads(real.stderr) ? `stderr:\n${stderrHeads(real.stderr)}\n` : ""}${windowOutline(parseWindow(real.window))}${real.window ? "" : " (no window file)"}\n${parseWindow(real.window)?.problems.join("\n") ?? ""}`);
-      const problems = runs.flatMap(({ run, ours, real }) => differences(ours, real).map((d) => (p.runs.length > 1 || run.eventsText ? `${run.name}: ${d}` : d)));
-      return { program: p, runs, problems };
+      return { program: p, runs, problems: [] };
     }),
   );
+
+  // The canvases: each one's recorded calls drawn again on real JavaFX, to compare with the snapshot of the program's real canvas.
+  const jobs = [];
+  let canvasCount = 0;
+  const uncompared = [];
+  for (const r of results)
+    r.runs.forEach((run, j) => {
+      run.ow = parseWindow(run.ours.window);
+      run.rw = parseWindow(run.real.window);
+      const mine = canvasesOf(run.ow);
+      const theirs = canvasesOf(run.rw);
+      run.canvases = [];
+      if (mine.length !== theirs.length) return;
+      mine.forEach((node, k) => {
+        const real = theirs[k];
+        const name = `c${canvasCount++}`;
+        run.canvases.push({ name, node, real });
+        if (real.snapshot == null) return;
+        if (node.callCount > node.calls.length) uncompared.push(`${r.program.where}${r.runs.length > 1 ? ` (${run.run.name})` : ""}: the canvas ${javaNumber(node.width)} x ${javaNumber(node.height)} has ${node.callCount} drawing calls, more than the ${node.calls.length} Java Arena keeps`);
+        else jobs.push({ name, calls: node.calls, width: node.width, height: node.height });
+      });
+    });
+  const replayArgs = { dir: join(tmp, "replay"), java: bin("java"), args: [...REFERENCE_JVM_FLAGS, ...headless(), "-cp", [...jars, driver].join(delimiter)], env };
+  const drawn = replay(jobs, replayArgs);
+  if (process.env.FX_CHECK_CANVAS_SELFTEST) canvasSelfTest(results, jobs, drawn, replayArgs);
+  for (const r of results) {
+    const p = r.program;
+    r.problems.push(...r.runs.flatMap((run) => differences(run.ours, run.real, run, drawn).map((d) => (p.runs.length > 1 || run.run.eventsText ? `${run.run.name}: ${d}` : d))));
+  }
 
   let failed = 0;
   const report = { openjfx: OPENJFX_VERSION, monocle: MONOCLE_VERSION, groups: {} };
@@ -406,10 +565,12 @@ async function main() {
     console.log(`\n${title}: ${mine.length - bad.length} of ${mine.length} programs (${runs} runs) behave the same on real OpenJFX ${OPENJFX_VERSION} as on Java Arena's JavaFX.`);
     for (const r of bad) console.log(`DIFF ${r.program.where}\n  ${r.problems.join("\n").replace(/\n/g, "\n  ")}`);
   }
+  report.canvasesNotCompared = uncompared;
+  if (uncompared.length) console.log(`\nDrawings not compared with real JavaFX (the rest of the window was):\n  ${uncompared.join("\n  ")}`);
   mkdirSync(join(ROOT, "fidelity", "out"), { recursive: true });
   writeFileSync(join(ROOT, "fidelity", "out", "fx-check.json"), JSON.stringify(report, null, 1));
   console.log(`\nfx-check: ${failed ? `${failed} program${failed > 1 ? "s differ" : " differs"}` : "no differences"} (${((Date.now() - t0) / 1000).toFixed(1)} s).`);
-  process.exit(failed ? 1 : 0);
+  process.exit(failed || process.exitCode ? 1 : 0);
 }
 
 await main();

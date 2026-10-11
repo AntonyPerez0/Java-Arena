@@ -747,17 +747,17 @@ test("a JavaFX class without its import gets the exact import line, and a star i
 });
 
 test("a JavaFX class, package or method that the practice version doesn't have says so, without denying real JavaFX has it", () => {
-  const files = fxProgram(['CheckBox box = new CheckBox("Ready");', "Buton add = null;", 'Button button = new Button("Add");', "button.setOnMouseClicked(e -> button.setText(\"x\"));", "button.setOnAcion(e -> button.setText(\"y\"));", "button.setMinWidth(100);"], {
-    imports: ["import javafx.application.Application;", "import javafx.scene.control.*;", "import javafx.scene.canvas.Canvas;", "import javafx.scene.contol.Label;", "import javafx.scene.layout.Button;", "import javafx.stage.Stage;"],
+  const files = fxProgram(['CheckBox box = new CheckBox("Ready");', "Buton add = null;", 'Button button = new Button("Add");', "button.setOnKeyPressed(e -> button.setText(\"x\"));", "button.setOnAcion(e -> button.setText(\"y\"));", "button.setMinWidth(100);"], {
+    imports: ["import javafx.application.Application;", "import javafx.scene.control.*;", "import javafx.scene.shape.Rectangle;", "import javafx.scene.contol.Label;", "import javafx.scene.layout.Button;", "import javafx.stage.Stage;"],
   });
   const checkBox = fxExplain(files, "CheckBox box", "CheckBox", NOT_FOUND, "cannot find symbol\n  symbol:   class CheckBox\n  location: class Main");
-  has(checkBox, "CheckBox is part of real JavaFX (javafx.scene.control.CheckBox), but Java Arena's practice version of JavaFX doesn't have it: it has only the classes and methods its lessons use.", "Its controls are Label, Button, TextField, PasswordField and TextArea.");
+  has(checkBox, "CheckBox is part of real JavaFX (javafx.scene.control.CheckBox), but Java Arena's practice version of JavaFX doesn't have it: it has only the classes and methods its lessons use.", "Its controls are Label, Button, TextField, PasswordField, TextArea and Slider.");
   has(fxExplain(files, "Buton", "Buton", NOT_FOUND, "cannot find symbol\n  symbol:   class Buton\n  location: class Main"), "Did you mean Button?");
-  has(fxExplain(files, "canvas", "Canvas", "compiler.err.doesnt.exist", "package javafx.scene.canvas does not exist"), "Canvas (javafx.scene.canvas.Canvas) is part of real JavaFX, but Java Arena's practice version of JavaFX doesn't have the package javafx.scene.canvas");
+  has(fxExplain(files, "shape", "Rectangle", "compiler.err.doesnt.exist", "package javafx.scene.shape does not exist"), "Rectangle (javafx.scene.shape.Rectangle) is part of real JavaFX, but Java Arena's practice version of JavaFX doesn't have the package javafx.scene.shape", "use a Canvas and its GraphicsContext");
   has(fxExplain(files, "contol", "Label", "compiler.err.doesnt.exist", "package javafx.scene.contol does not exist"), "Did you mean javafx.scene.control?", "import javafx.scene.control.Label;");
   has(fxExplain(files, "layout.Button", "Button", NOT_FOUND, "cannot find symbol\n  symbol:   class Button\n  location: package javafx.scene.layout"), "Button isn't in javafx.scene.layout: it's in javafx.scene.control. Write import javafx.scene.control.Button;");
-  const mouse = fxExplain(files, "setOnMouseClicked", ".setOnMouseClicked", NOT_FOUND_CALL, 'cannot find symbol\n  symbol:   method setOnMouseClicked((e)->butt[...]("x"))\n  location: variable button of type Button');
-  has(mouse, "Java Arena's practice version of JavaFX has no setOnMouseClicked: of the events, it has only setOnAction", "are part of real JavaFX but not of this version", "To react to a click, use button.setOnAction(e -> ...).");
+  const keys = fxExplain(files, "setOnKeyPressed", ".setOnKeyPressed", NOT_FOUND_CALL, 'cannot find symbol\n  symbol:   method setOnKeyPressed((e)->butt[...]("x"))\n  location: variable button of type Button');
+  has(keys, "Java Arena's practice version of JavaFX has no setOnKeyPressed: of the events, it has setOnAction", "setOnMouseClicked", "are part of real JavaFX but not of this version", "To react to a click, use button.setOnAction(e -> ...).");
   has(fxExplain(files, "setOnAcion", ".setOnAcion", NOT_FOUND_CALL, 'cannot find symbol\n  symbol:   method setOnAcion((e)->butt[...]("y"))\n  location: variable button of type Button'), "Did you mean setOnAction?");
   has(fxExplain(files, "setMinWidth", ".setMinWidth", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method setMinWidth(int)\n  location: variable button of type Button"), "Java Arena's practice version of JavaFX has no method setMinWidth(...) in Button: it has only the classes and methods its lessons use", "setOnAction");
   // A program that doesn't use JavaFX: CheckBox may be anything.
@@ -965,7 +965,7 @@ test("Application.Parameters, what getParameters() gives: a wrong method gets it
 
 const UNEXPECTED = ["compiler.err.unexpected.type", "unexpected type\n  required: variable\n  found:    value"];
 const NOT_A_SETTER = "If the method has a setter to go with it";
-const ACTION_SELF = "has no setOnAction: of the events, it has only setOnAction";
+const ACTION_SELF = "has no setOnAction: of the events, it has setOnAction";
 const MOUSE_KEYS = "are part of real JavaFX but not of this version";
 
 test("setOnAction on a node that has none (only buttons and text fields do here, and in real JavaFX that node has none either), window events, other real events, and a made-up one", () => {
@@ -986,9 +986,9 @@ test("setOnAction on a node that has none (only buttons and text fields do here,
   const close = call("stage", "Stage", "setOnCloseRequest");
   has(close, "Java Arena's practice version of JavaFX has no setOnCloseRequest: its windows have no events of their own", "which are part of real JavaFX", "override stop()");
   lacks(close, "Mouse", "To react to a click", ACTION_SELF);
-  has(call("label", "Label", "setOnScroll"), "has no setOnScroll: of the events, it has only setOnAction", "Mouse, keyboard, scroll and drag events", MOUSE_KEYS);
+  has(call("label", "Label", "setOnScroll"), "has no setOnScroll: of the events, it has setOnAction", "Keyboard, scroll and drag-and-drop events", MOUSE_KEYS);
   const made = call("label", "Label", "setOnClick");
-  has(made, "has no setOnClick: of the events, it has only setOnAction");
+  has(made, "has no setOnClick: of the events, it has setOnAction");
   lacks(made, "part of real JavaFX");
 });
 
@@ -1159,4 +1159,229 @@ test("the table of the practice version's classes and methods matches the librar
   assert.deepEqual(table, found);
   // The static methods, which a call on the class's name (GridPane.getColumnIndex(...)) can use.
   assert.deepEqual(Object.fromEntries(Object.entries(PRACTICE_JAVAFX_STATIC).map(([name, m]) => [name, m.split(" ").sort().join(" ")])), foundStatic);
+});
+
+// ---- Part 14 (sections 14.1 and 14.2): charts, drawing, images and sound with the practice JavaFX ----
+// Each message below is javac's or the practice library's own, from a program compiled and run on the JDK with the library on the class path.
+
+const CHART_IMPORTS = ["import javafx.application.Application;", "import javafx.scene.Scene;", "import javafx.scene.chart.BarChart;", "import javafx.scene.chart.CategoryAxis;", "import javafx.scene.chart.LineChart;", "import javafx.scene.chart.NumberAxis;", "import javafx.scene.chart.XYChart;", "import javafx.stage.Stage;"];
+const BAD_TYPES = "compiler.err.prob.found.req";
+
+test("part 14: a chart, axis, color, canvas, image or mouse class without its import gets its import line; XYChart.Series without XYChart, Series without XYChart., and an import of Series", () => {
+  const files = fxProgram(
+    ["NumberAxis years = new NumberAxis();", "XYChart.Series<Number, Number> rain = new XYChart.Series<>();", "Series<Number, Number> snow = new Series<>();", "snow.getData().add(new Data<>(2020, 120));", 'Image photo = new Image("file:photo.png");', "painter.setFill(Color.DARKBLUE);", "canvas.setOnMouseDragged((MouseEvent event) -> {});"],
+    { imports: ["import javafx.application.Application;", "import javafx.scene.chart.Data;", "import javafx.stage.Stage;"] },
+  );
+  for (const [name, pkg, text] of [["NumberAxis", "javafx.scene.chart", "NumberAxis years"], ["Image", "javafx.scene.image", "Image photo"], ["MouseEvent", "javafx.scene.input", "MouseEvent event"]])
+    has(fxExplain(files, text, name, NOT_FOUND, `cannot find symbol\n  symbol:   class ${name}\n  location: class Main`), `To use ${name}, import it at the top of the file: import ${pkg}.${name};`);
+  has(fxExplain(files, "Color.DARKBLUE", "Color", NOT_FOUND, "cannot find symbol\n  symbol:   variable Color\n  location: class Main"), "import javafx.scene.paint.Color;");
+  // Without its import, XYChart before a dot reads as a package.
+  has(fxExplain(files, "XYChart.Series<Number", ".Series", "compiler.err.doesnt.exist", "package XYChart does not exist"), "XYChart.Series is the class Series inside XYChart", "it reads XYChart as the name of a package", "import javafx.scene.chart.XYChart;");
+  has(fxExplain(files, "Series<Number, Number> snow", "Series", NOT_FOUND, "cannot find symbol\n  symbol:   class Series\n  location: class Main"), "Series is a class inside XYChart: a line of data points with a name", "write XYChart.Series (with import javafx.scene.chart.XYChart; at the top of the file)", "XYChart.Series<Number, Number> series = new XYChart.Series<>();");
+  has(fxExplain(files, "new Data<>", "Data", NOT_FOUND, "cannot find symbol\n  symbol:   class Data\n  location: class Main"), "Data is a class inside XYChart: one data point, an x value and a y value", "new XYChart.Data<>(2020, 15)");
+  has(fxExplain(files, "chart.Data", "chart.", NOT_FOUND, "cannot find symbol\n  symbol:   class Data\n  location: package javafx.scene.chart"), "Data isn't a class of javafx.scene.chart of its own: it's a class inside XYChart, so import XYChart instead, import javafx.scene.chart.XYChart;", "import javafx.scene.chart.XYChart.Data; works too");
+  // A class XYChart doesn't have inside it.
+  const point = program({ "Main.java": ["import javafx.scene.chart.XYChart.Point;", "", "public class Main {", "}"] });
+  has(explain(point, "Main.java", 1, ".Point", NOT_FOUND, "cannot find symbol\n  symbol:   class Point\n  location: class javafx.scene.chart.XYChart"), "XYChart has two classes inside it, Series", "and Data", "it has no class Point.");
+  // A program without JavaFX: Series and Data may be classes not written yet.
+  lacks(explain(program({ "Main.java": ["public class Main {", "    Series s;", "}"] }), "Main.java", 2, "Series", NOT_FOUND, "cannot find symbol\n  symbol:   class Series\n  location: class Main"), "XYChart");
+});
+
+test("part 14: a chart whose axis is for other values than its angle brackets say, and data points and series of the wrong types", () => {
+  const files = fxProgram(
+    ["LineChart<Number, Number> growth = new LineChart<>(new CategoryAxis(), new NumberAxis());", "BarChart<String, Number> votes = new BarChart<>(new NumberAxis(), new NumberAxis());", "CategoryAxis years = new CategoryAxis();", "LineChart<Number, Number> prices = new LineChart<Number, Number>(years, new NumberAxis());", "XYChart.Series<Number, Number> population = new XYChart.Series<>();", 'population.getData().add(new XYChart.Data<>("2015", 5472));', 'population.getData().add(new XYChart.Data<Number, Number>("2016", 5487));', "XYChart.Series<String, Number> parties = new XYChart.Series<>();", "parties.getData().add(new XYChart.Data<>(1, 20));", "growth.getData().add(parties);", "parties.getData().add(new XYChart.Data<Number, Number>(1, 2));", "votes.getData().add(new XYChart.Series<Number, Number>());", "parties.getData().add(0, new XYChart.Data<Number, Number>(3, 4));"],
+    { imports: CHART_IMPORTS },
+  );
+  const category = fxExplain(files, "growth = new", "<>(new Category", BAD_TYPES, "incompatible types: cannot infer type arguments for LineChart<>\n    reason: inference variable X has incompatible equality constraints Number,String");
+  has(category, "A chart's axes decide the types of its values", "Here the x axis (new CategoryAxis()) is a CategoryAxis, for names", "the angle brackets say the x values are Numbers", "give the chart a NumberAxis there: new NumberAxis()", "LineChart<String, Number>", "XYChart.Series<String, Number>");
+  const bar = fxExplain(files, "votes = new", "<>(new Number", BAD_TYPES, "incompatible types: cannot infer type arguments for BarChart<>\n    reason: inference variable X has incompatible equality constraints String,Number");
+  has(bar, "Here the x axis (new NumberAxis()) is a NumberAxis, for numbers", "the x values are Strings", "give the chart a CategoryAxis there: new CategoryAxis()", "A BarChart needs one of each");
+  lacks(bar, "BarChart<Number, Number>", "XYChart.Series<Number, Number>", "write Number for them");
+  has(fxExplain(files, "prices = new", "years,", BAD_TYPES, "incompatible types: CategoryAxis cannot be converted to Axis<Number>"), "Here the x axis (years) is a CategoryAxis", "the x values are Numbers");
+  has(fxExplain(files, '"2015"', ".Data<>", BAD_TYPES, "incompatible types: cannot infer type arguments for Data<>\n    reason: inference variable X has incompatible bounds\n      equality constraints: Number\n      lower bounds: String"), "new XYChart.Data<>(x, y) takes the x value first and the y value second", 'Here the x value must be a Number, and "2015" is a String', "write the number without quotes, 2015", "XYChart.Series<String, Number>");
+  has(fxExplain(files, '"2016"', '"2016"', BAD_TYPES, "incompatible types: String cannot be converted to Number"), 'Here the x value must be a Number, and "2016" is a String');
+  has(fxExplain(files, "(1, 20)", ".Data<>", BAD_TYPES, "incompatible types: cannot infer type arguments for Data<>\n    reason: inference variable X has incompatible bounds\n      equality constraints: String\n      lower bounds: Integer"), "the x value must be a String, and 1 is an Integer", 'write this one in quotes, "1"');
+  has(fxExplain(files, "growth.getData().add(parties)", "parties", BAD_TYPES, "incompatible types: Series<String,Number> cannot be converted to Series<Number,Number>"), "parties is an XYChart.Series<String, Number>, and a chart of Number and Number values takes only XYChart.Series<Number, Number>", "the x values (String and Number) differ");
+  // An argument with a comma inside its angle brackets: never cut there.
+  const point = fxExplain(files, "(new XYChart.Data<Number, Number>(1, 2))", "new XYChart", BAD_TYPES, "incompatible types: Data<Number,Number> cannot be converted to Data<String,Number>");
+  has(point, "This is an XYChart.Data<Number, Number>, and a series of String and Number values takes only XYChart.Data<String, Number>");
+  lacks(point, "Data<Number is");
+  const series = fxExplain(files, "votes.getData().add(new", "new XYChart", BAD_TYPES, "incompatible types: Series<Number,Number> cannot be converted to Series<String,Number>");
+  has(series, "This is an XYChart.Series<Number, Number>, and a chart of String and Number values takes only XYChart.Series<String, Number>");
+  lacks(series, "Series<Number is");
+  const second = fxExplain(files, "add(0, new", "new XYChart", BAD_TYPES, "incompatible types: Data<Number,Number> cannot be converted to Data<String,Number>");
+  has(second, "This is an XYChart.Data<Number, Number>");
+  lacks(second, "Data<Number is");
+});
+
+test("part 14: a BarChart's axes: its advice never leaves it two axes of the same kind, and two axes the wrong way round are swapped", () => {
+  const files = fxProgram(
+    ["BarChart<String, Number> upright = new BarChart<>(new NumberAxis(), new CategoryAxis());", "BarChart<Number, String> sideways = new BarChart<>(new CategoryAxis(), new NumberAxis());", "CategoryAxis names = new CategoryAxis();", "NumberAxis heights = new NumberAxis();", "BarChart<String, Number> named = new BarChart<String, Number>(heights, names);", "BarChart<Number, Number> numbers = new BarChart<>(new CategoryAxis(), new NumberAxis());", "BarChart<String, String> texts = new BarChart<>(new CategoryAxis(), new NumberAxis());"],
+    { imports: CHART_IMPORTS },
+  );
+  const never = ["BarChart<Number, Number>", "BarChart<String, String>", "XYChart.Series<Number, Number>", "XYChart.Series<String, String>"];
+  const upright = fxExplain(files, "upright = new", "<>(new Number", BAD_TYPES, "incompatible types: cannot infer type arguments for BarChart<>\n    reason: inference variable X has incompatible equality constraints String,Number");
+  has(upright, "Here the x axis (new NumberAxis()) is a NumberAxis", "the two axes are the wrong way round for the angle brackets: swap them so they fit, new BarChart<>(new CategoryAxis(), new NumberAxis()).", "if you want the bars to lie sideways, with their names on the y axis, swap the types in the angle brackets instead so they match the axes: BarChart<Number, String>, and in its series' too, XYChart.Series<Number, String>.");
+  lacks(upright, ...never, "give the chart a CategoryAxis there");
+  const sideways = fxExplain(files, "sideways = new", "<>(new Category", BAD_TYPES, "incompatible types: cannot infer type arguments for BarChart<>\n    reason: inference variable X has incompatible equality constraints Number,String");
+  has(sideways, "Here the x axis (new CategoryAxis()) is a CategoryAxis", "swap them so they fit, new BarChart<>(new NumberAxis(), new CategoryAxis()).", "if you want the bars to stand up, with their names on the x axis, swap the types in the angle brackets instead so they match the axes: BarChart<String, Number>, and in its series' too, XYChart.Series<String, Number>.");
+  lacks(sideways, ...never, "give the chart a NumberAxis there");
+  // Variables for the axes, with the types written in.
+  const named = fxExplain(files, "named = new", "heights,", BAD_TYPES, "incompatible types: NumberAxis cannot be converted to Axis<String>");
+  has(named, "Here the x axis (heights) is a NumberAxis", "swap them so they fit, new BarChart<>(names, heights).");
+  lacks(named, ...never);
+  // Number and Number in the angle brackets: only other angle brackets fit, as another axis would make two NumberAxes.
+  const numbers = fxExplain(files, "numbers = new", "<>(new Category", BAD_TYPES, "incompatible types: cannot infer type arguments for BarChart<>\n    reason: inference variable X has incompatible equality constraints Number,String");
+  has(numbers, "Write String for the x values in the angle brackets, BarChart<String, Number>, and in its series' too, XYChart.Series<String, Number>.", "A BarChart needs one of each");
+  lacks(numbers, ...never, "give the chart a NumberAxis there");
+  const texts = fxExplain(files, "texts = new", "<>(new Category", BAD_TYPES, "incompatible types: cannot infer type arguments for BarChart<>\n    reason: inference variable Y has incompatible equality constraints String,Number");
+  has(texts, "Here the y axis (new NumberAxis()) is a NumberAxis", "Write Number for the y values in the angle brackets, BarChart<String, Number>");
+  lacks(texts, ...never, "give the chart a CategoryAxis there");
+});
+
+test("part 14: chart classes without their types in angle brackets: javac's note says which, and an Object from a raw series", () => {
+  const raw = fxProgram(["XYChart.Series series = new XYChart.Series();", "series.getData().add(new XYChart.Data(1, 2));", "for (XYChart.Data<Number, Number> point : series.getData()) {", "}"], { imports: CHART_IMPORTS });
+  const note = explainDiagnostic({ kind: "note", code: "compiler.note.unchecked.filename", file: "Main.java", line: -1, column: -1, message: "Main.java uses unchecked or unsafe operations.", formatted: "Note: Main.java uses unchecked or unsafe operations." }, raw);
+  has(note, "This is a note, not an error: the program compiles and runs.", "here that's because XYChart.Series is written without its types in angle brackets", "XYChart.Series<Number, Number> series = new XYChart.Series<>();");
+  has(fxExplain(raw, "for (XYChart", "series.getData()", BAD_TYPES, "incompatible types: Object cannot be converted to Data<Number,Number>"), "series is declared without its types in angle brackets, so for Java its getData() holds plain Objects");
+  // With the types written in, the note is the general one, as before.
+  const typed = fxProgram(["XYChart.Series<Number, Number> series = new XYChart.Series<>();"], { imports: CHART_IMPORTS });
+  const general = explainDiagnostic({ kind: "note", code: "compiler.note.unchecked.filename", file: "Main.java", line: -1, column: -1, message: "Main.java uses unchecked or unsafe operations.", formatted: "Note: Main.java uses unchecked or unsafe operations." }, typed);
+  has(general, "This is a note, not an error. Java says it can't check some types for you, most often because of a cast such as (T[]) new Object[10]");
+});
+
+test("part 14: a slider's listener for Double, its Number values used as numbers, and doubles from getValue, getWidth and getX where an int is wanted", () => {
+  const files = fxProgram(
+    ["Slider size = new Slider(0, 100, 50);", "size.valueProperty().addListener((ObservableValue<? extends Double> o, Double oldValue, Double newValue) -> {});", "size.valueProperty().addListener((ObservableValue<? extends Number> o, Double oldValue, Double newValue) -> {});", "size.valueProperty().addListener((o, oldValue, newValue) -> {", "    int width = newValue;", "    double twice = newValue * 2;", "});", "int start = size.getValue();", 'Image photo = new Image("file:photo.png");', "WritableImage copy = new WritableImage(photo.getWidth(), photo.getHeight());", "canvas.setOnMouseClicked(event -> {", "    int x = event.getX();", "});"],
+    { imports: [...FX_IMPORTS, "import javafx.scene.control.Slider;", "import javafx.beans.value.ObservableValue;", "import javafx.scene.image.Image;", "import javafx.scene.image.WritableImage;"] },
+  );
+  const listener = fxExplain(files, "extends Double>", "(Observable", BAD_TYPES, "incompatible types: ChangeListener<Double> cannot be converted to ChangeListener<? super Number>");
+  has(listener, "A slider's valueProperty() is a DoubleProperty, and JavaFX makes it an ObservableValue<Number>, not <Double>: its change listeners get Numbers.", "with Number where this says Double", "newValue.doubleValue()");
+  has(fxExplain(files, "extends Number>", "{})", BAD_TYPES, "incompatible types: incompatible parameter types in lambda expression"), "its change listeners get Numbers", "where this says Double (Number oldValue, Number newValue)");
+  has(fxExplain(files, "int width", "newValue", BAD_TYPES, "incompatible types: Number cannot be converted to int"), "newValue is a Number", "write newValue.intValue(), which drops the decimals");
+  has(fxExplain(files, "newValue * 2", "*", "compiler.err.operator.cant.be.applied.1", "bad operand types for binary operator '*'\n  first type:  Number\n  second type: int"), "* doesn't work on it", "newValue.doubleValue() * 2");
+  has(fxExplain(files, "int start", "()", BAD_TYPES, "incompatible types: possible lossy conversion from double to int"), "size.getValue() gives a double", "(int) size.getValue() drops the decimals", "(int) Math.round(size.getValue())");
+  has(fxExplain(files, "new WritableImage(photo", "(), photo", BAD_TYPES, "incompatible types: possible lossy conversion from double to int"), "photo.getWidth() gives a double: JavaFX measures sizes in doubles", "cast it: (int) photo.getWidth().");
+  has(fxExplain(files, "int x = event", "()", BAD_TYPES, "incompatible types: possible lossy conversion from double to int"), "event.getX() gives a double: the mouse's position can be between two pixels", "(int) event.getX()");
+  // Outside JavaFX, the general note, as before.
+  const plain = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        int x = Math.sqrt(2);", "    }", "}"] });
+  has(explain(plain, "Main.java", 3, "(2)", BAD_TYPES, "incompatible types: possible lossy conversion from double to int"), "This would squeeze a bigger or more precise number type into a smaller one");
+});
+
+test("part 14: a double where an int is wanted: the slider's or the mouse's wording only for a slider, a slider's value property, a mouse event or an untyped handler parameter", () => {
+  const files = program({ "Main.java": ["import java.util.Map;", "import javafx.application.Application;", "import javafx.scene.canvas.Canvas;", "import javafx.scene.control.Slider;", "import javafx.stage.Stage;", "", "public class Main extends Application {", "    private Slider level = new Slider(0, 10, 5);", "", "    @Override", "    public void start(Stage stage) {", "        Map<String, Double> prices = Map.of(\"tea\", 2.5);", "        for (Map.Entry<String, Double> e : prices.entrySet()) {", "            int twice = e.getValue() * 2;", "        }", "        Slider size = new Slider(0, 100, 50);", "        int start = size.getValue();", "        int now = level.getValue();", "        Canvas canvas = new Canvas(100, 100);", "        canvas.setOnMouseClicked(e -> {", "            int x = e.getX();", "        });", "        int v = size.valueProperty().getValue() * 2;", "    }", "}"] });
+  const lossy = (text, at) => fxExplain(files, text, at, BAD_TYPES, "incompatible types: possible lossy conversion from double to int");
+  // A Map.Entry<String, Double>'s getValue: not a slider's, and a cast to int doesn't take a Double.
+  const entry = lossy("int twice", "* 2");
+  has(entry, "e.getValue() gives a decimal number", "(int) Math.round(e.getValue()) gives the nearest one, whether e.getValue() gives a double or a Double.");
+  lacks(entry, "slider", "(int) e.getValue()");
+  // A slider as a local variable and as a field.
+  has(lossy("int start", "();"), "size.getValue() gives a double, such as 25.0 or 25.4 (a slider moves", "(int) size.getValue() drops the decimals");
+  has(lossy("int now", "();"), "level.getValue() gives a double, such as 25.0 or 25.4 (a slider moves", "(int) level.getValue() drops the decimals");
+  // The handler's e has no type written, and the for loop's e (an Entry) has ended: the mouse's wording.
+  has(lossy("int x = e.getX()", "();"), "e.getX() gives a double: the mouse's position can be between two pixels", "(int) e.getX()");
+  // A slider's value property gives a Double from getValue(), and its get() gives the double that a cast takes.
+  const property = lossy("int v = size", "* 2");
+  has(property, "size.valueProperty().getValue() gives a double, such as 25.0", "(int) size.valueProperty().get() drops the decimals");
+  lacks(property, "(int) size.valueProperty().getValue()");
+});
+
+test("part 14: a Number used as a number: the note names what javac points at, and speaks of a slider only for a change listener's parameter", () => {
+  const files = program({ "Main.java": ["import java.util.List;", "import javafx.application.Application;", "import javafx.beans.value.ChangeListener;", "import javafx.beans.value.ObservableValue;", "import javafx.scene.control.Slider;", "import javafx.stage.Stage;", "", "public class Main extends Application {", "    @Override", "    public void start(Stage stage) {", "        List<Number> nums = List.of(1, 2.5);", "        int first = nums.get(0);", "        Number n = nums.get(1);", "        double half = n / 2;", "        double more = 1 + nums.get(0) * 3;", "        Slider size = new Slider(0, 100, 50);", "        size.valueProperty().addListener((o, was, now) -> {", "            int width = now;", "            double twice = 2 * now;", "        });", "        size.valueProperty().addListener(new ChangeListener<Number>() {", "            @Override", "            public void changed(ObservableValue<? extends Number> o, Number oldValue, Number newValue) {", "                long w = newValue;", "            }", "        });", "        int v = size.valueProperty().getValue();", "    }", "}"] });
+  const op = (o, first, second) => `bad operand types for binary operator '${o}'\n  first type:  ${first}\n  second type: ${second}`;
+  // A call: javac's caret is on its parenthesis.
+  const call = fxExplain(files, "int first", "(0)", BAD_TYPES, "incompatible types: Number cannot be converted to int");
+  has(call, "nums.get(0) is a Number, an object that holds a number", "write nums.get(0).intValue(), which drops the decimals (or nums.get(0).doubleValue() for the double)");
+  lacks(call, "newValue", "slider");
+  // Arithmetic on a Number that isn't a listener's: its own name, on the side javac says.
+  const half = fxExplain(files, "n / 2", "/", "compiler.err.operator.cant.be.applied.1", op("/", "Number", "int"));
+  has(half, "n is a Number, an object that holds a number, and / doesn't work on it", "n.doubleValue() gives it as a double", "as in n.doubleValue() / 2");
+  lacks(half, "newValue", "slider");
+  has(fxExplain(files, "1 + nums", "*", "compiler.err.operator.cant.be.applied.1", op("*", "Number", "int")), "nums.get(0) is a Number", "as in nums.get(0).doubleValue() * 3");
+  // A lambda listener's parameter named now, and a Number on the right of the operator.
+  const width = fxExplain(files, "int width", "now", BAD_TYPES, "incompatible types: Number cannot be converted to int");
+  has(width, "now is a Number: a slider's change listener gets its old and new value as Numbers", "write now.intValue()");
+  lacks(width, "newValue");
+  const twice = fxExplain(files, "2 * now", "*", "compiler.err.operator.cant.be.applied.1", op("*", "int", "Number"));
+  has(twice, "now is a Number (a slider's change listener gets", "now.doubleValue() gives it as a double", "as in 2 * now.doubleValue()");
+  lacks(twice, "newValue");
+  // An anonymous ChangeListener's changed.
+  has(fxExplain(files, "long w", "newValue", BAD_TYPES, "incompatible types: Number cannot be converted to long"), "newValue is a Number: a slider's change listener gets", "write newValue.longValue()");
+});
+
+test("part 14: sound can't play in this page: javafx.scene.media and its classes say so plainly", () => {
+  const files = fxProgram(['AudioClip bell = new AudioClip("file:bell.wav");'], { imports: [...FX_IMPORTS, "import javafx.scene.media.AudioClip;", "import javafx.scene.media.*;"] });
+  const sound = "Sound can't play in this page: the browser engine that runs your program here has no way to play it";
+  has(fxExplain(files, "media.AudioClip", "AudioClip", "compiler.err.doesnt.exist", "package javafx.scene.media does not exist"), "AudioClip (javafx.scene.media.AudioClip) is part of real JavaFX, for sound.", sound, "run the program with real JavaFX on your own computer");
+  const video = "Sound and video can't play in this page: the browser engine that runs your program here has no way to play them, so the practice version has nothing of javafx.scene.media (AudioClip, Media, MediaPlayer, MediaView)";
+  has(fxExplain(files, "media.*", "import", "compiler.err.doesnt.exist", "package javafx.scene.media does not exist"), "The package javafx.scene.media is part of real JavaFX, for sound and video.", video, "to hear or see it");
+  has(fxExplain(files, "AudioClip bell", "AudioClip", NOT_FOUND, "cannot find symbol\n  symbol:   class AudioClip\n  location: class Main"), "AudioClip is part of real JavaFX (javafx.scene.media.AudioClip), for sound.", sound);
+  lacks(fxExplain(files, "AudioClip bell", "AudioClip", NOT_FOUND, "cannot find symbol\n  symbol:   class AudioClip\n  location: class Main"), "video");
+  // Media, MediaPlayer and MediaView play video too.
+  const media = fxProgram(['Media clip = new Media("file:film.mp4");', "MediaView view = new MediaView();"], { imports: [...FX_IMPORTS, "import javafx.scene.media.MediaView;"] });
+  has(fxExplain(media, "media.MediaView", "MediaView", "compiler.err.doesnt.exist", "package javafx.scene.media does not exist"), "MediaView (javafx.scene.media.MediaView) is part of real JavaFX, for sound and video.", video);
+  has(fxExplain(media, "Media clip", "Media", NOT_FOUND, "cannot find symbol\n  symbol:   class Media\n  location: class Main"), "Media is part of real JavaFX (javafx.scene.media.Media), for sound and video.", video, "to hear or see it");
+});
+
+/** A part 14 program's start, with its imports, for crashes: `body` from line 10 on. */
+const crash14 = (body) => ["import javafx.application.Application;", "import javafx.scene.chart.*;", "import javafx.scene.control.*;", "import javafx.scene.image.*;", "import javafx.scene.paint.Color;", "import javafx.stage.Stage;", "", "public class Main extends Application {", "    public void start(Stage stage) {", ...body.map((l) => `        ${l}`), "    }", "}"];
+/** The cause of "Exception in Application start method", thrown in the library and passing through start at `line`. */
+const startCrash = (lines, cause, javaFrames, line) => explainCrash(fxWrapped("Exception in Application start method", cause, `${javaFrames.map((f) => `\tat ${f}\n`).join("")}\tat Main.start(Main.java:${line})\n`), program({ "Main.java": lines }));
+
+test("part 14 crashes: colors out of range, and text Color.web can't read", () => {
+  const lines = crash14(["Color a = Color.rgb(300, 0, 0);", "Color b = Color.color(1.5, 0, 0);", "Color c = new Color(255, 0, 0, 1);", "Color d = Color.rgb(10, 20, 30, 2.0);", 'Color e = Color.web("#ff00zz");']);
+  const rgb = startCrash(lines, "java.lang.IllegalArgumentException: Color.rgb's red parameter (300) expects color values 0-255", ["javafx.scene.paint.Color.checkByte(Color.java:365)", "javafx.scene.paint.Color.rgb(Color.java:357)", "javafx.scene.paint.Color.rgb(Color.java:352)"], 10);
+  has(rgb.explanation, "Color.rgb(red, green, blue) takes each part of the color as a whole number from 0 to 255, and its red was 300.", "Math.min(255, value)");
+  const color = startCrash(lines, "java.lang.IllegalArgumentException: Color's red value (1.5) must be in the range 0.0-1.0", ["javafx.scene.paint.Color.check(Color.java:332)", "javafx.scene.paint.Color.<init>(Color.java:320)", "javafx.scene.paint.Color.color(Color.java:347)", "javafx.scene.paint.Color.color(Color.java:342)"], 11);
+  has(color.explanation, "Color.color(red, green, blue) takes each part of the color as a decimal number from 0.0 to 1.0, not from 0 to 255, and its red was 1.5.");
+  const made = startCrash(lines, "java.lang.IllegalArgumentException: Color's red value (255.0) must be in the range 0.0-1.0", ["javafx.scene.paint.Color.check(Color.java:332)", "javafx.scene.paint.Color.<init>(Color.java:320)"], 12);
+  has(made.explanation, "new Color(red, green, blue, opacity) takes each part", "its red was 255.0", "use Color.rgb(...) instead, as in Color.rgb(255, 0, 0)");
+  const opacity = startCrash(lines, "java.lang.IllegalArgumentException: Color's opacity value (2.0) must be in the range 0.0-1.0", ["javafx.scene.paint.Color.check(Color.java:332)", "javafx.scene.paint.Color.<init>(Color.java:320)", "javafx.scene.paint.Color.color(Color.java:347)", "javafx.scene.paint.Color.rgb(Color.java:358)"], 13);
+  has(opacity.explanation, "The opacity, the last value of Color.rgb(red, green, blue, opacity), is a decimal number from 0.0 (fully see-through) to 1.0 (solid), and it was 2.0.");
+  const web = startCrash(lines, "java.lang.IllegalArgumentException: Invalid color specification", ["javafx.scene.paint.Color.invalid(Color.java:424)", "javafx.scene.paint.Color.web(Color.java:415)", "javafx.scene.paint.Color.web(Color.java:376)"], 14);
+  has(web.explanation, "Color.web(text) reads a color written as on a web page", 'Here it got "#ff00zz".');
+  // The same message from the program's own throw is still the program's own.
+  const own = explainCrash('Exception in thread "main" java.lang.IllegalArgumentException: Invalid color specification\n\tat Main.check(Main.java:3)\n\tat Main.main(Main.java:6)\n', program({ "Main.java": ["public class Main {", "    static void check() {", '        throw new IllegalArgumentException("Invalid color specification");', "    }", "    public static void main(String[] args) {", "        check();", "    }", "}"] }));
+  has(own.explanation, "Your own code threw it on purpose, with the throw in check");
+});
+
+test("part 14 crashes: an image that didn't load, a name without file:, a pixel outside the image, a size of 0, and a null color", () => {
+  const lines = crash14(['Image photo = new Image("file:missing.png");', "PixelReader reader = photo.getPixelReader();", "System.out.println(reader.getColor(0, 0));", 'Image other = new Image("landscape.png");', "WritableImage copy = new WritableImage(10, 5);", "copy.getPixelWriter().setColor(3, 5, Color.RED);", "System.out.println(copy.getPixelReader().getArgb(10, 0));", "WritableImage none = new WritableImage(0, 5);", "Color shade = null;", "copy.getPixelWriter().setColor(0, 0, shade);"]);
+  const reader = startCrash(lines, 'java.lang.NullPointerException: Cannot invoke "javafx.scene.image.PixelReader.getColor(int, int)" because "<local3>" is null', [], 12);
+  has(reader.explanation, "getPixelReader() gave null: the image has no pixels to read, because it couldn't be loaded", "new Image(...) doesn't throw then", "isError() is true", "print image.getException()");
+  const url = startCrash(lines, "java.lang.IllegalArgumentException: Invalid URL: Invalid URL or resource not found", ["arena.fx.Images.load(Images.java:92)", "javafx.scene.image.Image.<init>(Image.java:40)"], 13);
+  has(url.explanation, 'new Image(...) got "landscape.png" without file: in front', 'write new Image("file:landscape.png")');
+  const write = startCrash(lines, "java.lang.IndexOutOfBoundsException: 3, 5", ["javafx.scene.image.Image.check(Image.java:91)", "javafx.scene.image.WritableImage$Writer.setArgb(WritableImage.java:37)", "javafx.scene.image.WritableImage$Writer.setColor(WritableImage.java:50)"], 15);
+  has(write.explanation, "The program wrote the pixel at x 3, y 5, and that's outside the image", "from y 0 to getHeight() - 1 down", "A loop with <= instead of <, or x and y swapped");
+  const read = startCrash(lines, "java.lang.IndexOutOfBoundsException: 10, 0", ["javafx.scene.image.Image.check(Image.java:91)", "javafx.scene.image.Image$Reader.getArgb(Image.java:104)"], 16);
+  has(read.explanation, "The program read the pixel at x 10, y 0");
+  // A list's index error keeps its own explanation.
+  const list = explainCrash('Exception in thread "main" java.lang.IndexOutOfBoundsException: Index 3 out of bounds for length 3\n\tat java.base/java.util.ArrayList.get(ArrayList.java:427)\n\tat Main.main(Main.java:5)\n', ["Main.java"]);
+  has(list.explanation, "The program asked for index 3 of a list with 3 values.");
+  const zero = startCrash(lines, "java.lang.IllegalArgumentException: Image dimensions must be positive (w,h > 0)", ["arena.fx.Images.checkSize(Images.java:149)", "arena.fx.Images.blank(Images.java:155)", "javafx.scene.image.WritableImage.<init>(WritableImage.java:18)"], 17);
+  has(zero.explanation, "new WritableImage(width, height) needs a width and a height of at least 1 pixel", "they're 0 when it couldn't be loaded");
+  const nullColor = startCrash(lines, "java.lang.NullPointerException: Color cannot be null", ["javafx.scene.image.WritableImage$Writer.setColor(WritableImage.java:44)"], 19);
+  has(nullColor.explanation, "The program gave setColor null instead of a color: shade holds no Color.");
+});
+
+test("part 14 crashes: a series or a point added twice, null series, points and values, a bar chart's axes, one axis twice, a category twice", () => {
+  const lines = crash14(["LineChart<Number, Number> chart = new LineChart<>(new NumberAxis(), new NumberAxis());", "XYChart.Series<Number, Number> s = new XYChart.Series<>();", "chart.getData().add(s);", "chart.getData().add(s);"]);
+  const files = program({ "Main.java": lines });
+  // Printed on the JavaFX Application Thread (the chart's list listener threw it): the grader reads it with handler: true.
+  const fxThread = (cause, frames, line) => explainCrash(`Exception in thread "main" ${cause}\n${frames.map((f) => `\tat ${f}\n`).join("")}\tat Main.start(Main.java:${line})\n\tat arena.fx.Session$FxThread.run(Session.java:253)\n`, files, { handler: true });
+  const listFrames = ["arena.fx.Charts$2.changed(Charts.java:266)", "arena.fx.ObservableArrayList.changed(ObservableArrayList.java:52)", "arena.fx.ObservableArrayList.add(ObservableArrayList.java:95)", "java.base/java.util.AbstractList.add(AbstractList.java:113)"];
+  has(fxThread("java.lang.IllegalArgumentException: Duplicate series added", listFrames, 13).explanation, "The program added a series to a chart that already has it", "create another XYChart.Series");
+  has(fxThread("java.lang.IllegalArgumentException: Duplicate data added", listFrames, 13).explanation, "the same XYChart.Data object twice", "create a new XYChart.Data<>(x, y) for each point");
+  has(fxThread('java.lang.NullPointerException: Cannot read field "setToRemove" because "<local5>" is null', listFrames, 13).explanation, "The program added null to a chart's series");
+  has(fxThread('java.lang.NullPointerException: Cannot read field "setToRemove" because "<local6>" is null', listFrames, 13).explanation, "The program added null to a series' data points");
+  has(fxThread('java.lang.NullPointerException: Cannot invoke "java.lang.Number.doubleValue()" because the return value of "javafx.scene.chart.XYChart$Data.getYValue()" is null', listFrames, 13).explanation, "A data point of the chart has null for its x or y value");
+  has(fxThread("java.lang.IllegalArgumentException: Children: duplicate children added: parent = Group@76e6cad[styleClass=plot-content]", listFrames, 13).explanation, "the same data point in two series of one chart");
+  const chartFrames = ["arena.fx.Charts.checkAxes(Charts.java:58)", "javafx.scene.chart.BarChart.<init>(BarChart.java:20)"];
+  has(startCrash(lines, "java.lang.IllegalArgumentException: Axis type incorrect, one of X,Y should be CategoryAxis and the other NumberAxis", chartFrames, 10).explanation, "A BarChart needs one CategoryAxis, for the bars' names, and one NumberAxis, for their heights");
+  has(startCrash(lines, "java.lang.IllegalArgumentException: Children: duplicate children added: parent = Chart$1@14b5984b[styleClass=chart-content]", chartFrames, 10).explanation, "The program gave a chart the same axis twice");
+  has(startCrash(lines, "java.lang.IllegalArgumentException: Duplicate category added; A already present", ["arena.fx.Charts.checkCategories(Charts.java:72)", "javafx.scene.chart.CategoryAxis.<init>(CategoryAxis.java:23)"], 10).explanation, 'A CategoryAxis\'s categories must all be different, and "A" is in its list twice.');
+  has(startCrash(lines, 'java.lang.NullPointerException: Cannot invoke "javafx.scene.chart.Axis.getSide()" because "<parameter1>" is null', ["arena.fx.Charts.checkAxes(Charts.java:46)", "javafx.scene.chart.LineChart.<init>(LineChart.java:20)"], 10).explanation, "The program created a chart with null for its x axis.");
+  // A pane's own duplicate keeps its explanation.
+  const pane = startCrash(lines, "java.lang.IllegalArgumentException: Children: duplicate children added: parent = HBox@6344e235", ["javafx.scene.Parent$Children.check(Parent.java:83)"], 10);
+  has(pane.explanation, "The program added a node to an HBox that already holds it");
 });

@@ -150,6 +150,11 @@ public class Font {
         return family;
     }
 
+    /** The style of the font: "Regular", "Bold", "Italic" or "Bold Italic". */
+    public final String getStyle() {
+        return style;
+    }
+
     /** The size of the font in points. */
     public final double getSize() {
         return size;

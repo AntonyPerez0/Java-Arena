@@ -1,7 +1,9 @@
-// Playground share links: the program and its input, packed into the address after #.
-// Compressed with deflate-raw where the browser can (CompressionStream), then base64url.
+// Playground share links: the program, its input and the names of the sample images it was given,
+// packed into the address after #. Compressed with deflate-raw where the browser can
+// (CompressionStream), then base64url.
 
-export type SharedProgram = { code: string; stdin: string };
+/** `samples`: the names of the images of content/assets in the program's folder (none: left out). */
+export type SharedProgram = { code: string; stdin: string; samples?: string[] };
 
 const toBase64Url = (bytes: Uint8Array) => {
   let s = "";
@@ -21,7 +23,7 @@ async function pipe(bytes: Uint8Array, stream: CompressionStream | Decompression
 
 /** The part after # for a share link: "code=<compressed>" or, without CompressionStream, "src=<plain>". */
 export async function encodeShare(p: SharedProgram): Promise<string> {
-  const json = new TextEncoder().encode(JSON.stringify({ c: p.code, i: p.stdin }));
+  const json = new TextEncoder().encode(JSON.stringify({ c: p.code, i: p.stdin, ...(p.samples?.length ? { a: p.samples } : {}) }));
   if (typeof CompressionStream !== "undefined") {
     try {
       return "code=" + toBase64Url(await pipe(json, new CompressionStream("deflate-raw")));
@@ -40,5 +42,6 @@ export async function decodeShare(hash: string): Promise<SharedProgram | null> {
   if (m[1] === "code") bytes = await pipe(bytes, new DecompressionStream("deflate-raw"));
   const data = JSON.parse(new TextDecoder().decode(bytes));
   if (typeof data?.c !== "string") throw new Error("not a Java Arena program");
-  return { code: data.c, stdin: typeof data.i === "string" ? data.i : "" };
+  const samples = Array.isArray(data.a) ? data.a.filter((x: unknown): x is string => typeof x === "string") : [];
+  return { code: data.c, stdin: typeof data.i === "string" ? data.i : "", ...(samples.length ? { samples } : {}) };
 }

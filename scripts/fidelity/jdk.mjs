@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, join, dirname } from 'node:path';
 import { javaRunArgs } from '../javafx/reference.mjs';
 import { libraryDir } from '../libraries.mjs';
-import { loadSuite, REFERENCE_JVM_FLAGS, referenceJavaHome } from './suite.mjs';
+import { loadSuite, REFERENCE_JVM_FLAGS, referenceJavaHome, snapshotValue } from './suite.mjs';
 
 const bin = (tool) => join(referenceJavaHome(), 'bin', tool);
 const env = { ...process.env, JAVA_TOOL_OPTIONS: '', LC_ALL: 'C.UTF-8' };
@@ -25,12 +25,12 @@ function snapshot(dir, prefix = '', files = {}) {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) snapshot(full, `${prefix}${name}/`, files);
-    else if (statSync(full).isFile()) files[prefix + name] = readFileSync(full, 'utf8');
+    else if (statSync(full).isFile()) files[prefix + name] = snapshotValue(readFileSync(full));
   }
   return files;
 }
 
-/** Writes a program's data files into its working folder, subfolders too (data/scores.txt). */
+/** Writes a program's data files (text, or the bytes of a binary file) into its working folder, subfolders too (data/scores.txt). */
 export function writeDataFiles(dir, files) {
   for (const [name, text] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, name)), { recursive: true });

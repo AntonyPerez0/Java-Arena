@@ -1,12 +1,14 @@
 // The shape of src/generated/course.json, src/generated/modules/<id>.json and the lesson files in
 // public/lessons (made by scripts/build-content.mjs).
+import type { AssetFile, GivenFile } from "../grader/assets";
 import type { WindowState } from "../grader/window";
 
 /**
  * One test: the program's input, or `call`, code the check runs to call the learner's methods, or
  * `junit`, a test class of the program to run (on the program as written, or with the files in
  * `replace` swapped for other versions), which must give `outcome`: every test passes, or at least
- * one fails. `files` are files in the program's folder it can read; `writes` are files it must
+ * one fails. `files` are files in the program's folder it can read (text, or an image of
+ * content/assets, which the grader fetches from the site); `writes` are files it must
  * leave there, with their text as the reference solution wrote them (compared like output).
  * `args` are main's command-line arguments. `events` (a JavaFX program) are the clicks and typing
  * replayed after start, one event line each ([] checks the window as start leaves it); `window` is
@@ -18,7 +20,7 @@ export type TestCase = {
   stdin: string;
   args?: string[];
   call?: string;
-  files?: Record<string, string>;
+  files?: Record<string, GivenFile>;
   writes?: Record<string, string>;
   expect: string;
   hidden?: boolean;
@@ -105,6 +107,8 @@ export type CourseIndex = {
   modules: ModuleSummary[];
   interviewDrills: number;
   placementQuestions: number;
+  /** The images of content/assets (served under the site's base address), which the Playground offers as sample files. */
+  assets: AssetFile[];
 };
 
 export type DrillType = "predict" | "fill" | "bug" | "compiles" | "choice" | "boss";

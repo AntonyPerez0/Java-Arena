@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react";
 import { marked } from "marked";
 import { codeLinesHtml } from "./code-lines";
 import { highlightHtml } from "./highlight";
+import { assetExample, assetFigureHtml } from "../grader/assets";
 import { splitFiles } from "../grader/files.js";
 import { windowExample } from "../grader/window";
 import { windowFigureHtml } from "./window-drawing";
@@ -33,6 +34,9 @@ marked.use({
       if (shown) return windowFigureHtml(shown);
       const file = lang ? /^file\s+(\S+)$/.exec(lang) : null;
       if (file) return `<figure class="io io-file"><figcaption>The file ${esc(file[1])}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
+      // An image of content/assets that the next example reads (the build stored where it's served): drawn, with its name and size.
+      const asset = lang && /^asset\s/.test(lang) ? assetExample(text) : null;
+      if (asset) return assetFigureHtml(asset.name, asset.image, import.meta.env.BASE_URL);
       const label = lang ? LABELS[lang] : undefined;
       // Input that ends with an empty line (the program reads until one) shows it.
       if (lang === "input" && /\n$/.test(text))

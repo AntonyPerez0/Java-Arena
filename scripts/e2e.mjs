@@ -1065,6 +1065,26 @@ await test('part 13 mistakes are explained: an event handler that changes a loca
   await ctx.close();
 });
 
+await test('part 14 mistakes are explained: XYChart.Series without its import, read as a package, and a color part above 255 in Color.rgb', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  const app = (imports, body) =>
+    'import javafx.application.Application;\nimport javafx.scene.Scene;\nimport javafx.scene.layout.VBox;\nimport javafx.stage.Stage;\n' + imports + '\n' +
+    'public class Main extends Application {\n    @Override\n    public void start(Stage stage) {\n' + body + '\n        stage.setScene(new Scene(box));\n        stage.show();\n    }\n\n' +
+    '    public static void main(String[] args) {\n        launch(args);\n    }\n}\n';
+  // XYChart.Series with only LineChart and NumberAxis imported: javac reads XYChart as a package, and the note says it's the class Series inside XYChart and gives the import.
+  await setCode(page, app('import javafx.scene.chart.LineChart;\nimport javafx.scene.chart.NumberAxis;\n', '        LineChart<Number, Number> chart = new LineChart<>(new NumberAxis(), new NumberAxis());\n        XYChart.Series<Number, Number> rain = new XYChart.Series<>();\n        chart.getData().add(rain);\n        VBox box = new VBox(chart);'));
+  let out = await check(page);
+  expect(/line 12/i.test(out) && out.includes('package XYChart does not exist') && out.includes('XYChart.Series is the class Series inside XYChart') && out.includes('import javafx.scene.chart.XYChart;'), out);
+  // A color part above 255: JavaFX's "Exception in Application start method", explained by its cause, Color.rgb's range.
+  await setCode(page, app('import javafx.scene.canvas.Canvas;\nimport javafx.scene.canvas.GraphicsContext;\nimport javafx.scene.paint.Color;\n', '        Canvas canvas = new Canvas(100, 50);\n        GraphicsContext painter = canvas.getGraphicsContext2D();\n        int red = 200 + 100;\n        painter.setFill(Color.rgb(red, 0, 0));\n        VBox box = new VBox(canvas);'));
+  out = await check(page);
+  expect(out.includes('crashed with IllegalArgumentException') && out.includes('its first line in your code is Main.java, line 15, in start') && out.includes('Color.rgb(red, green, blue) takes each part of the color as a whole number from 0 to 255, and its red was 300') && out.includes('Math.min(255, value)'), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test("playground: a JavaFX program runs with Java Arena's JavaFX on the class path, and its .arena files aren't listed as files it wrote", async () => {
   const { ctx, page, errors } = await newPage();
   await page.goto(BASE + 'playground/');
@@ -1112,7 +1132,7 @@ await test('playground: a JavaFX program draws its window; each click and typing
   const win = page.getByRole('group', { name: 'Window: Counter' });
   await win.waitFor();
   const panel = await page.locator('.fx-panel').innerText();
-  expect(panel.includes('Java Arena draws your window and runs your program again from the start for each click, with your earlier clicks and typing.') && /drawn approximately/i.test(panel), panel);
+  expect(panel.includes('Java Arena draws your window and runs your program again from the start each time you click, type, move a slider or use the mouse, with everything you did before.') && /drawn approximately/i.test(panel), panel);
   expect((await win.locator('.fx-title').innerText()) === 'Counter' && (await win.innerText()).includes('Clicks: 0'), await win.innerText());
   // Real buttons and fields, with accessible names; a disabled button is disabled.
   expect(await win.getByRole('button', { name: 'Off', exact: true }).isDisabled(), 'Off is disabled');
@@ -1533,7 +1553,7 @@ await test('a window challenge\'s "Run with my input": the window takes the task
   const title = shown.window.windows[0].title;
   const win = page.locator('.freerun').getByRole('group', { name: title ? `Window: ${title}` : 'Window without a title' });
   await win.waitFor();
-  expect((await page.locator('.freerun .fx-panel').innerText()).includes('Java Arena draws your window and runs your program again from the start for each click, with your earlier clicks and typing.'), await page.locator('.freerun .fx-panel').innerText());
+  expect((await page.locator('.freerun .fx-panel').innerText()).includes('Java Arena draws your window and runs your program again from the start each time you click, type, move a slider or use the mouse, with everything you did before.'), await page.locator('.freerun .fx-panel').innerText());
   // The test's events, made by hand: typing goes into the K-th text field, a click on the button with that text.
   for (const line of shown.events) {
     const e = parseEventLine(line);
@@ -1559,6 +1579,932 @@ await test('a window challenge\'s "Run with my input": the window takes the task
     await axe(page, `a lesson's window panel, ${colorScheme} theme`);
     await shot(page, `lesson-window-panel-${colorScheme}`);
   }
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// ------------------------------------------------------------------ images (content/assets)
+
+/** The test a challenge's task card shows (as TaskCard and the content build pick it). */
+const cardTest = (ex) => ex.tests.find((t) => !t.hidden && t.events) ?? ex.tests.find((t) => !t.hidden && t.writes) ?? ex.tests.find((t) => !t.hidden && t.expect);
+/** A lesson step with an ```asset block in its text, and a code challenge whose task card shows an image it gives the program: the first of each in the course. */
+const imageLessons = (() => {
+  const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
+  let step = null;
+  let challenge = null;
+  for (const m of course.modules) {
+    const mod = moduleOf(m.id);
+    step ??= ((s) => s && { moduleId: m.id, step: s })(mod.steps.find((s) => /^```asset /m.test(s.text)));
+    challenge ??= ((c) => c && { moduleId: m.id, ...c, shown: cardTest(c.ex) })(challengesOf(mod).find(({ ex }) => ex.kind === 'code' && Object.values(cardTest(ex)?.files ?? {}).some((v) => typeof v !== 'string')));
+  }
+  return { step, challenge, assets: course.assets };
+})();
+/** The images on the page under `scope`: each loaded, with its size in pixels and its alt text. */
+const imagesIn = (scope) => scope.locator('img.asset-img').evaluateAll((els) => els.map((e) => ({ src: e.getAttribute('src'), loaded: e.complete && e.naturalWidth > 0, w: e.naturalWidth, h: e.naturalHeight, alt: e.alt, drawnW: e.getBoundingClientRect().width })));
+
+await test('images in lessons: an asset block draws its image with its name and size (the pre-rendered page too); a challenge\'s image is on its task card and in the results, never as text; Run with my input gives it to the program; the model solution passes', async () => {
+  const { step, challenge } = imageLessons;
+  if (!step && !challenge) {
+    console.log('       (skipped: no lesson gives a program an image of content/assets yet)');
+    return;
+  }
+  const { ctx, page, errors } = await newPage();
+  if (step) {
+    const blocks = [...step.step.text.matchAll(/^```asset (\S+)\n(.*)\n```$/gm)].map((m) => JSON.parse(m[2]));
+    await page.goto(BASE + `learn/${step.moduleId}/${step.step.slug}/`);
+    await lessonReady(page);
+    const figures = page.locator('article.step-text figure.asset-figure');
+    await page.waitForFunction((n) => [...document.querySelectorAll('article.step-text figure.asset-figure img')].filter((i) => i.complete && i.naturalWidth > 0).length >= n, blocks.length);
+    expect((await figures.count()) === blocks.length, `${await figures.count()} images drawn for ${blocks.length} asset blocks`);
+    const shown = await imagesIn(page.locator('article.step-text'));
+    blocks.forEach((b, k) => {
+      const caption = shown[k];
+      expect(caption.loaded && caption.w === b.image.width && caption.h === b.image.height && caption.alt === b.image.alt, `image ${b.name}: ${JSON.stringify(caption)}`);
+      expect(caption.drawnW >= b.image.width * 2 || b.image.width > 128, `image ${b.name} isn't drawn larger: ${caption.drawnW} px`);
+    });
+    const captions = await figures.allInnerTexts();
+    blocks.forEach((b, k) => expect(captions[k].includes(b.name) && captions[k].includes(`${b.image.width} x ${b.image.height} pixels`), `caption ${captions[k]}`));
+    // The pre-rendered page draws the same images.
+    const html = await (await fetch(BASE + `learn/${step.moduleId}/${step.step.slug}/`)).text();
+    for (const b of blocks) expect(html.includes(`<img src="${new URL(BASE).pathname}${b.image.url}"`), `pre-rendered page lacks ${b.image.url}`);
+    for (const b of blocks) expect((await fetch(BASE + b.image.url)).status === 200, `${b.image.url} isn't served`);
+  }
+  if (challenge) {
+    const { moduleId, ex, shown } = challenge;
+    const images = Object.entries(shown.files).filter(([, v]) => typeof v !== 'string');
+    await openChallenge(page, moduleId, challenge);
+    const card = page.locator('.task-card');
+    await page.waitForFunction((n) => [...document.querySelectorAll('.task-card img.asset-img')].filter((i) => i.complete && i.naturalWidth > 0).length >= n, images.length);
+    const onCard = await imagesIn(card);
+    expect(onCard.length === images.length && images.every(([, v], k) => onCard[k].w === v.width && onCard[k].alt === v.alt), `task card images: ${JSON.stringify(onCard)}`);
+    const cardText = await card.innerText();
+    for (const [name] of images) expect(new RegExp(`The image\\s+${name.replace('.', '\\.')}`, 'i').test(cardText), `the task card names ${name}: ${cardText}`);
+    // The starter program fails; the results show the visible test's image as an image, and no file as text.
+    const out = await check(page);
+    expect(out.includes('Not yet'), out);
+    expect(!/PNG|�|IHDR/.test(out), `an image shown as text in the results: ${out}`);
+    const failedShown = page.locator('.t-fail', { hasText: shown.name }).first();
+    if (await failedShown.count()) expect((await imagesIn(failedShown)).length === images.length, 'the failed test shows its images');
+    // "Run with my input" gives the program the same images; they aren't listed as files it wrote.
+    await setProgram(page, ex.solution);
+    await page.getByRole('button', { name: 'Run with my input' }).click();
+    expect((await page.locator('.freerun').innerText()).includes(`The program can also read ${Object.keys(shown.files).join(' and ')}`), await page.locator('.freerun').innerText());
+    const n = await runCount(page);
+    await page.locator('.freerun button', { hasText: /^\s*Run\s*$/ }).click();
+    await nextRun(page, n);
+    await settled(page);
+    const freeRun = await page.locator('.freerun .results').innerText();
+    expect(!/after the run/i.test(freeRun) && !/PNG|�/.test(freeRun), `the free run lists or shows the image: ${freeRun}`);
+    expect(!/couldn't be (loaded|downloaded)|didn't start|crashed/i.test(freeRun), freeRun);
+    const passed = await check(page);
+    expect(passed.includes('All tests passed'), passed);
+    await page.setViewportSize({ width: 320, height: 800 });
+    await noOverflow(page, 'a challenge with an image at 320 px');
+    for (const colorScheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme });
+      await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+      await axe(page, `a challenge with an image at 320 px, ${colorScheme} theme`);
+      await shot(page, `image-challenge-${colorScheme}`);
+    }
+  }
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('playground: Add a sample image puts one of the site\'s images in the program\'s folder; a JavaFX program reads its pixels; the image isn\'t listed as written, a binary file it writes isn\'t shown as text; it is saved and shared; axe in both themes and at 320 px', async () => {
+  const assets = imageLessons.assets ?? [];
+  expect(assets.length > 0 && assets.some((a) => a.asset === 'tiny.png'), `the course lists the sample images: ${assets.map((a) => a.asset)}`);
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  const add = page.getByRole('button', { name: 'Add a sample image' });
+  await add.click();
+  expect((await add.getAttribute('aria-expanded')) === 'true', 'the list opens');
+  const list = page.locator('#pg-sample-list');
+  expect((await list.getByRole('button').count()) === assets.length, `${await list.getByRole('button').count()} images offered`);
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `playground with the sample list open, ${colorScheme} theme`);
+  }
+  await list.getByRole('button', { name: /tiny\.png/ }).click();
+  expect(!(await list.count()), 'the list closes');
+  expect((await page.evaluate(() => document.activeElement?.textContent ?? '')).includes('Add a sample image'), 'the focus goes back to Add a sample image');
+  await page.waitForFunction(() => [...document.querySelectorAll('.pg-samples img.asset-img')].some((i) => i.complete && i.naturalWidth === 6));
+  expect((await page.locator('.pg-samples').innerText()).includes('tiny.png'), await page.locator('.pg-samples').innerText());
+  await setCode(
+    page,
+    'import java.nio.file.Files;\nimport java.nio.file.Path;\nimport javafx.application.Application;\nimport javafx.scene.Scene;\nimport javafx.scene.image.Image;\nimport javafx.scene.image.ImageView;\nimport javafx.scene.layout.StackPane;\nimport javafx.stage.Stage;\n\npublic class Main extends Application {\n' +
+      '    @Override\n    public void start(Stage stage) throws Exception {\n        Image image = new Image("file:tiny.png");\n        System.out.println((int) image.getWidth() + " x " + (int) image.getHeight() + " " + Integer.toHexString(image.getPixelReader().getArgb(0, 0)) + " " + image.getPixelReader().getColor(5, 3));\n' +
+      '        Files.write(Path.of("copy.png"), Files.readAllBytes(Path.of("tiny.png")));\n        stage.setScene(new Scene(new StackPane(new ImageView(image))));\n        stage.show();\n    }\n\n    public static void main(String[] args) {\n        launch(args);\n    }\n}\n',
+  );
+  const out = await check(page);
+  expect(out.includes('6 x 4 ffff0000 0x2e8b57ff'), out);
+  const written = await page.locator('.written-files').innerText();
+  expect(/copy\.png after the run/i.test(written) && written.includes("120 bytes that aren't text: a PNG image of 6 x 4 pixels") && !/tiny\.png/.test(written), `written files: ${written}`);
+  expect(!/�|IHDR/.test(await page.locator('.results').innerText()), 'a binary file shown as text');
+  // Saved with the program: a reload keeps it.
+  await page.reload();
+  await lessonReady(page);
+  await page.locator('.pg-samples', { hasText: 'tiny.png' }).waitFor();
+  // A share link carries it.
+  await page.getByRole('button', { name: 'Share' }).click();
+  const link = await page.locator('#pg-link').inputValue();
+  const other = await newPage();
+  await other.page.goto(link);
+  await lessonReady(other.page);
+  await other.page.locator('.pg-samples', { hasText: 'tiny.png' }).waitFor();
+  await other.ctx.close();
+  await page.setViewportSize({ width: 320, height: 800 });
+  await noOverflow(page, 'playground with a sample image at 320 px');
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `playground with a sample image at 320 px, ${colorScheme} theme`);
+    await shot(page, `playground-sample-image-${colorScheme}`);
+  }
+  // Remove takes it out of the folder; the focus goes back to Add a sample image.
+  await page.getByRole('button', { name: 'Remove tiny.png' }).click();
+  expect(!(await page.locator('.pg-samples').count()), 'removed');
+  expect((await page.evaluate(() => document.activeElement?.textContent ?? '')).includes('Add a sample image'), 'the focus after Remove');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// ------------------------------------------------------------------ part 14: charts, sliders, canvases and images in the window panel
+
+const fxProgram = (imports, body) => imports.map((i) => `import ${i};\n`).join('') + '\npublic class Main extends Application {\n' + body.join('\n') + '\n\n    public static void main(String[] args) {\n        launch(args);\n    }\n}\n';
+// A slider whose value redraws a line chart: k times x, next to x squared.
+const FX_CHART = fxProgram(
+  ['javafx.application.Application', 'javafx.scene.Scene', 'javafx.scene.chart.LineChart', 'javafx.scene.chart.NumberAxis', 'javafx.scene.chart.XYChart', 'javafx.scene.control.Label', 'javafx.scene.control.Slider', 'javafx.scene.layout.VBox', 'javafx.stage.Stage'],
+  [
+    '    @Override',
+    '    public void start(Stage stage) {',
+    '        NumberAxis x = new NumberAxis(0, 10, 1);',
+    '        x.setLabel("x");',
+    '        NumberAxis y = new NumberAxis();',
+    '        y.setLabel("y");',
+    '        LineChart<Number, Number> chart = new LineChart<>(x, y);',
+    '        chart.setTitle("Lines");',
+    '        Slider slider = new Slider(1, 5, 2);',
+    '        slider.setShowTickMarks(true);',
+    '        slider.setShowTickLabels(true);',
+    '        slider.setMajorTickUnit(1);',
+    '        slider.setMinorTickCount(1);',
+    '        slider.setBlockIncrement(0.5);',
+    '        Label label = new Label("k = 2.0");',
+    '        draw(chart, 2);',
+    '        slider.valueProperty().addListener((obs, old, now) -> {',
+    '            label.setText("k = " + now);',
+    '            draw(chart, now.doubleValue());',
+    '        });',
+    '        stage.setTitle("Chart");',
+    '        stage.setScene(new Scene(new VBox(10, label, slider, chart)));',
+    '        stage.show();',
+    '    }',
+    '',
+    '    private void draw(LineChart<Number, Number> chart, double k) {',
+    '        XYChart.Series<Number, Number> line = new XYChart.Series<>();',
+    '        line.setName("k times x");',
+    '        XYChart.Series<Number, Number> square = new XYChart.Series<>();',
+    '        square.setName("x squared");',
+    '        for (int i = 0; i <= 10; i++) {',
+    '            line.getData().add(new XYChart.Data<>(i, k * i));',
+    '            square.getData().add(new XYChart.Data<>(i, i * i));',
+    '        }',
+    '        chart.getData().setAll(line, square);',
+    '    }',
+  ],
+);
+// A canvas drawn on with the mouse: a line along each drag, a red dot at each click.
+const FX_DRAW = fxProgram(
+  ['javafx.application.Application', 'javafx.scene.Scene', 'javafx.scene.canvas.Canvas', 'javafx.scene.canvas.GraphicsContext', 'javafx.scene.control.Label', 'javafx.scene.layout.VBox', 'javafx.scene.paint.Color', 'javafx.stage.Stage'],
+  [
+    '    private double lastX;',
+    '    private double lastY;',
+    '    private int clicks;',
+    '',
+    '    @Override',
+    '    public void start(Stage stage) {',
+    '        Canvas canvas = new Canvas(240, 160);',
+    '        GraphicsContext g = canvas.getGraphicsContext2D();',
+    '        g.setFill(Color.WHITE);',
+    '        g.fillRect(0, 0, 240, 160);',
+    '        g.setStroke(Color.DARKBLUE);',
+    '        g.setLineWidth(3);',
+    '        Label info = new Label("Draw with the mouse");',
+    '        canvas.setOnMousePressed(e -> {',
+    '            lastX = e.getX();',
+    '            lastY = e.getY();',
+    '        });',
+    '        canvas.setOnMouseDragged(e -> {',
+    '            g.strokeLine(lastX, lastY, e.getX(), e.getY());',
+    '            lastX = e.getX();',
+    '            lastY = e.getY();',
+    '        });',
+    '        canvas.setOnMouseClicked(e -> {',
+    '            clicks++;',
+    '            g.setFill(Color.CRIMSON);',
+    '            g.fillOval(e.getX() - 4, e.getY() - 4, 8, 8);',
+    '            info.setText("Clicks: " + clicks);',
+    '        });',
+    '        stage.setTitle("Draw");',
+    '        stage.setScene(new Scene(new VBox(6, info, canvas)));',
+    '        stage.show();',
+    '    }',
+  ],
+);
+// An image of the folder and its negative, made pixel by pixel.
+const FX_IMAGE = fxProgram(
+  ['javafx.application.Application', 'javafx.scene.Scene', 'javafx.scene.image.Image', 'javafx.scene.image.ImageView', 'javafx.scene.image.PixelReader', 'javafx.scene.image.PixelWriter', 'javafx.scene.image.WritableImage', 'javafx.scene.layout.HBox', 'javafx.stage.Stage'],
+  [
+    '    @Override',
+    '    public void start(Stage stage) {',
+    '        Image image = new Image("file:landscape.png");',
+    '        PixelReader reader = image.getPixelReader();',
+    '        int w = (int) image.getWidth();',
+    '        int h = (int) image.getHeight();',
+    '        WritableImage negative = new WritableImage(w, h);',
+    '        PixelWriter writer = negative.getPixelWriter();',
+    '        for (int y = 0; y < h; y++) {',
+    '            for (int x = 0; x < w; x++) {',
+    '                writer.setColor(x, y, reader.getColor(x, y).invert());',
+    '            }',
+    '        }',
+    '        System.out.println(w + " x " + h + ", first pixel " + Integer.toHexString(reader.getArgb(0, 0)) + ", last " + Integer.toHexString(negative.getPixelReader().getArgb(w - 1, h - 1)));',
+    '        stage.setTitle("Negative");',
+    '        stage.setScene(new Scene(new HBox(10, new ImageView(image), new ImageView(negative))));',
+    '        stage.show();',
+    '    }',
+  ],
+);
+/** The window panel alone, as a screenshot (with --shots). */
+async function panelShot(page, name) {
+  if (SHOTS) await page.locator('.fx-panel').screenshot({ path: `${SHOTS}/${name}.png` });
+}
+/** Each of these color schemes in turn: axe, then a screenshot of the window panel named after it. */
+async function bothThemes(page, label, shotName) {
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `${label}, ${colorScheme} theme`);
+    if (shotName) await panelShot(page, `${shotName}-${colorScheme}`);
+  }
+}
+/** On phones (320 and 390 px): nothing scrolls the page sideways, axe passes in both themes; screenshots at 390 px. */
+async function onPhones(page, label, shotName) {
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 860 });
+    await page.waitForFunction(() => [...document.querySelectorAll('.fx-frame')].every((f) => { const s = f.querySelector('.fx-scroll'); return (s.scrollWidth > s.clientWidth + 1) === f.hasAttribute('data-wide'); }));
+    await noOverflow(page, `${label} at ${width} px`);
+    await bothThemes(page, `${label} at ${width} px`, shotName && width === 390 ? `${shotName}-390` : null);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+}
+
+await test('playground: a chart redrawn by a slider: the chart is drawn (title, axes, legend, a line per series, each with its own symbol), the slider is a real one with its tick marks and labels; letting it go runs the program once with its value, the arrow keys move it by its block increment and send once they stop; axe in both themes and at 320 and 390 px', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, FX_CHART);
+  await check(page);
+  const win = page.getByRole('group', { name: 'Window: Chart' });
+  await win.waitFor();
+  // The chart: its text alternative is the window as text; its words, ticks and lines are drawn.
+  const chart = win.getByRole('img', { name: 'Line chart "Lines": its points are in the window as text' });
+  const words = await chart.locator('text').allTextContents();
+  for (const w of ['Lines', 'x', 'y', 'k times x', 'x squared', '0', '10', '110']) expect(words.includes(w), `the chart lacks ${w}: ${words}`);
+  expect((await chart.locator('polyline').count()) === 2, 'a line per series');
+  const box0 = await chart.boundingBox();
+  expect(Math.round(box0.width) === 500 && Math.round(box0.height) === 400, `JavaFX's 500 x 400: ${box0.width} x ${box0.height}`);
+  // The slider: a real one, at its value, with JavaFX's tick labels under it.
+  const slider = win.getByRole('slider', { name: 'Slider 1' });
+  expect((await slider.inputValue()) === '2' && (await slider.getAttribute('min')) === '1' && (await slider.getAttribute('max')) === '5', `slider ${await slider.inputValue()}`);
+  expect((await win.locator('.fx-tick-label').allTextContents()).join(' ') === '1 2 3 4 5', await win.locator('.fx-tick-label').allTextContents());
+  // Dragged to 4 and let go: one run, with the value it was let go at.
+  let n = await runCount(page);
+  const box = await slider.boundingBox();
+  const at = (v) => box.x + 8 + ((v - 1) / 4) * (box.width - 16);
+  await page.mouse.move(at(2), box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(at(4), box.y + box.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await nextRun(page, n);
+  await settled(page);
+  expect((await runCount(page)) === n + 1, `letting the slider go ran the program ${(await runCount(page)) - n} times`);
+  let outline = await outlineOf(page);
+  const value = Number(/Slider 1 to 5, value ([\d.]+)/.exec(outline)?.[1]);
+  expect(Math.abs(value - 4) <= 0.05 && Number(/Label "k = ([\d.]+)"/.exec(outline)?.[1]) === value, outline);
+  expect(Number(await slider.inputValue()) === value && outline.includes(`series "k times x": (0, 0) (1, ${String(value).replace(/\.0$/, '')})`), outline);
+  // The arrow keys: by the block increment (0.5), sent once they stop; the focus stays on the slider.
+  n = await runCount(page);
+  await slider.focus();
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  await nextRun(page, n);
+  await settled(page);
+  outline = await outlineOf(page);
+  expect((await runCount(page)) === n + 1 && Number(/Slider 1 to 5, value ([\d.]+)/.exec(outline)?.[1]) === Math.round((value - 1) * 100) / 100, `after two Left arrows: ${(await runCount(page)) - n} runs, ${outline}`);
+  expect((await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Slider 1', 'the slider keeps the keyboard focus');
+  n = await runCount(page);
+  await page.keyboard.press('End');
+  await nextRun(page, n);
+  expect((await outlineOf(page)).includes('Slider 1 to 5, value 5,'), await outlineOf(page));
+  await shot(page, 'playground-chart');
+  await bothThemes(page, 'a chart and a slider in the window panel', 'playground-chart');
+  // On a phone the 500 px chart scrolls inside its frame, which says so.
+  await onPhones(page, 'a chart and a slider', 'playground-chart');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('playground: drawing on a canvas with mouse handlers: a mouse gesture goes to the program in one run when the button lifts (the press, a drag every few pixels, the release), a tap is a click, a finger draws too, and the keyboard clicks and drags; a line under it says the drawing updates when you lift your finger; axe in both themes and at 320 and 390 px', async () => {
+  const { ctx, page, errors } = await newPage({ hasTouch: true });
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, FX_DRAW);
+  await check(page);
+  const win = page.getByRole('group', { name: 'Window: Draw' });
+  await win.waitFor();
+  expect((await page.locator('.fx-panel .fx-draw-note').innerText()) === 'Draw on the canvas with the mouse or a finger: the drawing updates when you lift your finger.', await page.locator('.fx-panel .fx-draw-note').innerText());
+  const pad = win.getByRole('application', { name: 'Canvas 1, 240 x 160' });
+  const strokes = async () => (await outlineOf(page)).split('\n').map((l) => l.trim()).filter((l) => l.startsWith('strokeLine'));
+  // A gesture: one run when the button lifts, a line along every sampled drag.
+  let n = await runCount(page);
+  let b = await pad.boundingBox();
+  await page.mouse.move(b.x + 20, b.y + 20);
+  await page.mouse.down();
+  for (let i = 1; i <= 20; i++) await page.mouse.move(b.x + 20 + 8 * i, b.y + 20 + 4 * i);
+  expect((await runCount(page)) === n, 'nothing is sent before the button lifts');
+  await page.mouse.up();
+  await nextRun(page, n);
+  await settled(page);
+  expect((await runCount(page)) === n + 1, `a gesture ran the program ${(await runCount(page)) - n} times`);
+  let lines = await strokes();
+  expect(lines.length === 20 && lines[0] === 'strokeLine 20 20 28 24, stroke #00008b, width 3' && lines[19] === 'strokeLine 172 96 180 100, stroke #00008b, width 3', lines.join('\n'));
+  expect(!(await page.locator('.fx-keys-note').count()), 'the keyboard help shows only for keyboard focus, not after the mouse');
+  // JavaFX clicks after a release on the node, also after a drag: a dot where it was let go.
+  expect((await outlineOf(page)).includes('fillOval 176 96 8 8, fill #dc143c') && (await outlineOf(page)).includes('Label "Clicks: 1"'), await outlineOf(page));
+  // The canvas is painted from the calls: dark blue on the line, white off it.
+  const pixel = (x, y) => pad.locator('canvas.fx-canvas-el').evaluate((c, [x, y]) => { const k = c.width / c.getBoundingClientRect().width; return [...c.getContext('2d').getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data]; }, [x, y]);
+  const on = await pixel(100, 60);
+  const off = await pixel(100, 140);
+  expect(on[0] < 60 && on[1] < 60 && on[2] > 100 && on[3] === 255 && off.join() === '255,255,255,255', `painted: ${on} on the line, ${off} off it`);
+  // A tap: a click at that point.
+  n = await runCount(page);
+  await page.mouse.click(b.x + 200, b.y + 30);
+  await nextRun(page, n);
+  expect((await outlineOf(page)).includes('fillOval 196 26 8 8, fill #dc143c') && (await outlineOf(page)).includes('Label "Clicks: 2"'), await outlineOf(page));
+  // A finger: the same, through touch events.
+  n = await runCount(page);
+  b = await pad.boundingBox();
+  const cdp = await ctx.newCDPSession(page);
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: b.x + x, y: b.y + y, id: 1 }] });
+  await touch('touchStart', 30, 140);
+  for (let x = 40; x <= 200; x += 10) await touch('touchMove', x, 140);
+  await touch('touchEnd');
+  await cdp.detach();
+  await nextRun(page, n);
+  await settled(page);
+  lines = await strokes();
+  expect((await runCount(page)) === n + 1 && lines.length === 20 + 17 && lines[20] === 'strokeLine 30 140 40 140, stroke #00008b, width 3' && lines.at(-1) === 'strokeLine 190 140 200 140, stroke #00008b, width 3', lines.slice(20).join('\n'));
+  // The keyboard: the arrow keys move a point from the middle, Enter clicks there, Space presses and lets go.
+  n = await runCount(page);
+  await pad.focus();
+  await page.keyboard.press('ArrowRight');
+  expect(await page.locator('.fx-keys-note').isVisible(), 'the keyboard help shows while the canvas has the focus');
+  expect((await pad.getAttribute('aria-describedby')) === (await page.locator('.fx-keys-note').getAttribute('id')), 'the canvas is described by the keyboard help');
+  await page.keyboard.press('Enter');
+  await nextRun(page, n);
+  expect((await outlineOf(page)).includes('fillOval 121 76 8 8, fill #dc143c'), await outlineOf(page));
+  n = await runCount(page);
+  await page.keyboard.press(' ');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press(' ');
+  await nextRun(page, n);
+  lines = await strokes();
+  expect(lines.slice(-2).join('\n') === 'strokeLine 125 80 125 85, stroke #00008b, width 3\nstrokeLine 125 85 125 90, stroke #00008b, width 3', lines.slice(-2).join('\n'));
+  expect((await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Canvas 1, 240 x 160', 'the canvas keeps the keyboard focus');
+  await shot(page, 'playground-canvas');
+  await bothThemes(page, 'a canvas drawn on in the window panel', 'playground-canvas');
+  await onPhones(page, 'a canvas drawn on', 'playground-canvas');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('playground: an image program with a sample image: its image views are drawn from their pixels, 4 times larger and crisp, the scale said under them, with exactly the pixels the program read and wrote; axe in both themes and at 320 and 390 px', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await page.getByRole('button', { name: 'Add a sample image' }).click();
+  await page.locator('#pg-sample-list').getByRole('button', { name: /landscape\.png/ }).click();
+  await setCode(page, FX_IMAGE);
+  const out = await check(page);
+  const printed = /32 x 24, first pixel ([0-9a-f]{8}), last ([0-9a-f]{8})/.exec(await outputOf(page));
+  expect(printed, out);
+  const win = page.getByRole('group', { name: 'Window: Negative' });
+  await win.waitFor();
+  const images = win.locator('img.fx-image');
+  await page.waitForFunction(() => [...document.querySelectorAll('.fx-panel img.fx-image')].filter((i) => i.complete && i.naturalWidth > 0).length === 2);
+  const shown = await images.evaluateAll((els) =>
+    els.map((img) => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const g = c.getContext('2d');
+      g.drawImage(img, 0, 0);
+      const hex = (x, y) => { const [r, gg, bb, a] = g.getImageData(x, y, 1, 1).data; return [a, r, gg, bb].map((v) => v.toString(16).padStart(2, '0')).join(''); };
+      return { w: img.naturalWidth, h: img.naturalHeight, drawn: img.getBoundingClientRect().width, rendering: getComputedStyle(img).imageRendering, first: hex(0, 0), last: hex(img.naturalWidth - 1, img.naturalHeight - 1) };
+    }),
+  );
+  expect(shown.length === 2 && shown.every((s) => s.w === 32 && s.h === 24 && s.drawn === 128 && s.rendering === 'pixelated'), JSON.stringify(shown));
+  // The page draws exactly the pixels the program has: its first pixel, and the last of the negative it made.
+  expect(shown[0].first === printed[1] && shown[1].last === printed[2], `${JSON.stringify(shown)} against ${printed[0]}`);
+  expect((await win.locator('.fx-image-scale').allTextContents()).join('|') === 'drawn 4 times larger|drawn 4 times larger', await win.locator('.fx-image-scale').allTextContents());
+  expect((await outlineOf(page)).includes('ImageView 32 x 24, pixels '), await outlineOf(page));
+  await bothThemes(page, 'image views in the window panel', 'playground-image');
+  await onPhones(page, 'image views', 'playground-image');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+/** The nodes of a window JSON, depth first. */
+const windowNodes = (w) => {
+  const out = [];
+  const walk = (n) => {
+    if (!n) return;
+    out.push(n);
+    for (const c of n.children ?? []) walk(c);
+    for (const r of ['top', 'left', 'center', 'right', 'bottom']) walk(n[r]);
+  };
+  for (const s of w?.windows ?? []) walk(s.scene?.root);
+  return out;
+};
+const PART14 = ['LineChart', 'BarChart', 'ScatterChart', 'Canvas', 'ImageView', 'Slider'];
+/** The elements the drawing makes for the part 14 nodes of a window, as CSS selectors. */
+const drawnAs = { LineChart: '.fx-chart svg', BarChart: '.fx-chart svg', ScatterChart: '.fx-chart svg', Canvas: '.fx-canvas', ImageView: '.fx-imageview', Slider: '.fx-slider' };
+const part14 = (() => {
+  const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
+  let example = null;
+  let challenge = null;
+  for (const m of course.modules) {
+    const mod = moduleOf(m.id);
+    example ??= ((s) => s && { moduleId: m.id, step: s })(mod.steps.find((s) => windowBlocks(s).some((b) => windowNodes(b.window).some((n) => PART14.includes(n.type)))));
+    // A challenge whose task card shows such a window (the card shows cardTest's).
+    challenge ??= ((c) => c && { moduleId: m.id, ...c, shown: cardTest(c.ex) })(challengesOf(mod).find(({ ex }) => ex.kind === 'code' && windowNodes(cardTest(ex)?.window).some((n) => PART14.includes(n.type))));
+  }
+  return { example, challenge };
+})();
+
+await test('part 14 in lessons: a java window example with a chart, canvas, image view or slider is drawn in the lesson text and in the pre-rendered page (a canvas as SVG there); a challenge with one draws it on its task card and in both windows of its results; the model solution passes', async () => {
+  const { example, challenge } = part14;
+  if (!example && !challenge) {
+    console.log('       (skipped: no lesson shows a chart, canvas, image view or slider yet)');
+    return;
+  }
+  const { ctx, page, errors } = await newPage();
+  if (example) {
+    const { moduleId, step } = example;
+    const blocks = windowBlocks(step);
+    await page.goto(BASE + `learn/${moduleId}/${step.slug}/`);
+    await lessonReady(page);
+    const figures = page.locator('article.step-text figure.fx-figure');
+    expect((await figures.count()) === blocks.length, `${await figures.count()} windows in the lesson text, not ${blocks.length}`);
+    const html = await (await page.request.get(BASE + `learn/${moduleId}/${step.slug}/`)).text();
+    const prerendered = html.match(/<figure class="fx-figure">[\s\S]*?<\/figure>/g) ?? [];
+    for (const [k, b] of blocks.entries()) {
+      const types = new Set(windowNodes(b.window).map((n) => n.type).filter((t) => PART14.includes(t)));
+      for (const t of types) {
+        expect((await figures.nth(k).locator(drawnAs[t]).count()) > 0, `figure ${k}: no ${t} drawn`);
+        expect(prerendered[k]?.includes(`class="${drawnAs[t].split(' ')[0].slice(1)}`), `the pre-rendered figure ${k} has no ${t}`);
+      }
+      if (types.has('Canvas')) expect(prerendered[k].includes('<svg class="fx-canvas-svg"') && !prerendered[k].includes('<canvas'), 'a pre-rendered canvas is SVG');
+    }
+    for (const colorScheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme });
+      await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+      await axe(page, `a lesson with part 14 windows, ${colorScheme} theme`);
+    }
+    await page.setViewportSize({ width: 320, height: 800 });
+    await noOverflow(page, 'a lesson with part 14 windows at 320 px');
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+  if (challenge) {
+    const { moduleId, ex, shown } = challenge;
+    await openChallenge(page, moduleId, challenge);
+    const types = new Set(windowNodes(shown.window).map((n) => n.type).filter((t) => PART14.includes(t)));
+    const card = page.locator('.task-card');
+    for (const t of types) expect((await card.locator(drawnAs[t]).count()) > 0, `the task card draws no ${t}`);
+    // The starter program: when its window differs, both windows are drawn with the same kinds of node.
+    const out = await check(page);
+    expect(out.includes('Not yet'), out);
+    const compare = page.locator('.fx-compare').first();
+    if (await compare.count()) {
+      const expected = compare.locator(':scope > div').first();
+      for (const t of types) expect((await expected.locator(drawnAs[t]).count()) > 0, `the expected window in the results draws no ${t}`);
+      await page.setViewportSize({ width: 320, height: 800 });
+      await noOverflow(page, 'failed part 14 results at 320 px');
+      for (const colorScheme of ['light', 'dark']) {
+        await page.emulateMedia({ colorScheme });
+        await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+        await axe(page, `failed part 14 results at 320 px, ${colorScheme} theme`);
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
+    await setProgram(page, ex.solution);
+    const passed = await check(page);
+    expect(passed.includes('All tests passed'), passed);
+  }
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// ------------------------------------------------------------------ part 14 lesson pages (modules 51 and 52)
+
+/** With --shots: the element in view on a desktop (light theme), then on a 390 px phone in the light and the dark theme. */
+async function threeShots(page, name, target) {
+  if (!SHOTS) return;
+  const size = page.viewportSize();
+  for (const [width, height, colorScheme, suffix] of [[1280, 900, 'light', 'desktop'], [390, 844, 'light', '390-light'], [390, 844, 'dark', '390-dark']]) {
+    await page.setViewportSize({ width, height });
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await target.evaluate((e) => e.scrollIntoView({ block: 'start' }));
+    await page.evaluate(() => window.scrollBy(0, -80));
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: `${SHOTS}/${name}-${suffix}.png` });
+  }
+  await page.setViewportSize(size);
+  await page.emulateMedia({ colorScheme: 'light' });
+}
+/** The CRC-32 of an image element's pixels as ARGB, row by row, 4 bytes each (as the outline's "pixels"). */
+const imageCrc = (img) =>
+  img.evaluate((e) => {
+    const c = document.createElement('canvas');
+    c.width = e.naturalWidth;
+    c.height = e.naturalHeight;
+    const g = c.getContext('2d');
+    g.drawImage(e, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data;
+    const table = Array.from({ length: 256 }, (_, n) => { let x = n; for (let k = 0; k < 8; k++) x = x & 1 ? 0xedb88320 ^ (x >>> 1) : x >>> 1; return x >>> 0; });
+    let crc = 0xffffffff;
+    for (let i = 0; i < d.length; i += 4) for (const b of [d[i + 3], d[i], d[i + 1], d[i + 2]]) crc = table[(crc ^ b) & 0xff] ^ (crc >>> 8);
+    return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0');
+  });
+/** An SVG element's pixel at (x, y) of its own coordinates, as [r, g, b, a] (the SVG drawn into a canvas of its size). */
+const svgPixel = (svg, x, y) =>
+  svg.evaluate(async (e, [x, y]) => {
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(e));
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = Number(e.getAttribute('width'));
+    c.height = Number(e.getAttribute('height'));
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    return [...g.getImageData(x, y, 1, 1).data];
+  }, [x, y]);
+/** A canvas element's pixel at (x, y) of the JavaFX canvas, as [r, g, b, a]. */
+const canvasPixel = (canvas, x, y) => canvas.evaluate((c, [x, y]) => { const k = c.width / c.getBoundingClientRect().width; return [...c.getContext('2d').getImageData(Math.floor(x * k), Math.floor(y * k), 1, 1).data]; }, [x, y]);
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const near = (a, b, d = 24) => a.every((v, i) => Math.abs(v - b[i]) <= d);
+/** Decodes the text of pre-rendered HTML. */
+const htmlText = (t) => t.replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+/** On a 320 px phone and back: nothing scrolls the page sideways, a frame says it scrolls exactly when it does, axe passes in both themes. */
+async function lessonOnPhone(page, label) {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.waitForFunction(() => [...document.querySelectorAll('.fx-frame')].every((f) => { const s = f.querySelector('.fx-scroll'); return (s.scrollWidth > s.clientWidth + 1) === f.hasAttribute('data-wide'); }));
+  const closed = page.locator('article.step-text details.fx-astext:not([open]) > summary');
+  while (await closed.count()) await closed.first().click();
+  await noOverflow(page, `${label} at 320 px`);
+  await outlinesWrap(page, `${label} at 320 px`);
+  const fs = await frames(page);
+  expect(fs.length > 0 && fs.every((f) => f.wide === f.noted), `${label} at 320 px: ${JSON.stringify(fs)}`);
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `${label} at 320 px, ${colorScheme} theme`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'light' });
+}
+async function lessonBothThemes(page, label) {
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `${label}, ${colorScheme} theme`);
+  }
+  await page.emulateMedia({ colorScheme: 'light' });
+}
+/** The first window block of a module's lesson texts that `pick` accepts: { step, k, block }. */
+function windowExample(moduleId, pick) {
+  for (const step of moduleOf(moduleId).steps) {
+    const k = windowBlocks(step).findIndex(pick);
+    if (k >= 0) return { step, k, block: windowBlocks(step)[k] };
+  }
+  return null;
+}
+/** The answers of a fill-in challenge's blanks, in order. */
+const blankAnswers = (ex) => [...ex.seed.matchAll(/\[\[(.*?)\]\]/g)].map((m) => m[1]);
+async function fillBlanks(page, answers) {
+  const blanks = page.locator('.workbench input.blank');
+  expect((await blanks.count()) === answers.length, `${await blanks.count()} blanks, not ${answers.length}`);
+  for (const [i, a] of answers.entries()) await blanks.nth(i).fill(a);
+}
+/** Opens "Run with my input" and runs the program once: its window panel. */
+async function runWithMyInput(page) {
+  await page.getByRole('button', { name: 'Run with my input' }).click();
+  const n = await runCount(page);
+  await page.locator('.freerun button', { hasText: /^\s*Run\s*$/ }).click();
+  await nextRun(page, n);
+  await settled(page);
+  return page.locator('.freerun .fx-panel');
+}
+
+await test('module 51 lesson: a chart example is drawn in the lesson (title, axis labels, a line per series through each point, the legend) and the pre-rendered page has the same chart; axe in both themes and at 320 px', async () => {
+  const found = windowExample('charts', (b) => { const r = b.window.windows[0]?.scene?.root; return r?.type === 'LineChart' && r.title && r.legendVisible !== false && r.series.length >= 2 && r.xAxis.label && r.yAxis.label; });
+  expect(found, 'no line chart with a title, axis labels, a legend and two series in module 51');
+  const { step, k, block } = found;
+  const chartNode = block.window.windows[0].scene.root;
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + `learn/charts/${step.slug}/`);
+  await lessonReady(page);
+  const figure = page.locator('article.step-text figure.fx-figure').nth(k);
+  // The drawing is a picture (aria-hidden, its text alternative the window as text), its chart named for when it's used live.
+  const chart = figure.locator('.fx-chart[role="img"]');
+  expect((await chart.count()) === 1 && (await chart.getAttribute('aria-label')) === `Line chart "${chartNode.title}": its points are in the window as text`, `the chart is drawn, named: ${await chart.getAttribute('aria-label')}`);
+  const words = await chart.locator('svg text').allTextContents();
+  for (const w of [chartNode.title, chartNode.xAxis.label, chartNode.yAxis.label, ...chartNode.series.map((s) => s.name)]) expect(words.includes(w), `the chart lacks "${w}": ${words}`);
+  const lines = await chart.locator('svg polyline').evaluateAll((els) => els.map((e) => e.getAttribute('points').trim().split(/\s+/).length));
+  expect(lines.length === chartNode.series.length && lines.every((n, i) => n === chartNode.series[i].data.length), `polylines with ${lines} points for series of ${chartNode.series.map((s) => s.data.length)}`);
+  const box = await chart.boundingBox();
+  expect(Math.round(box.width) === 500 && Math.round(box.height) === 400, `JavaFX's 500 x 400: ${box.width} x ${box.height}`);
+  // Each series in its own color: the lines' strokes all differ.
+  const strokes = await chart.locator('svg polyline').evaluateAll((els) => els.map((e) => e.getAttribute('stroke')));
+  expect(new Set(strokes).size === strokes.length, `series colors: ${strokes}`);
+  const details = figure.locator('details.fx-astext');
+  await details.locator('summary').click();
+  expect((await details.locator('pre').innerText()) === block.outline, `as text: ${await details.locator('pre').innerText()}`);
+  for (const s of chartNode.series) expect(block.outline.includes(`series "${s.name}": ${s.data.map(([x, y]) => `(${x}, ${y})`).join(' ')}`), `the window as text lists every point of ${s.name}: ${block.outline}`);
+  // The pre-rendered page: the same chart (the same words and lines) before any script runs.
+  const html = await (await page.request.get(BASE + `learn/charts/${step.slug}/`)).text();
+  const fig = (html.match(/<figure class="fx-figure">[\s\S]*?<\/figure>/g) ?? [])[k] ?? '';
+  const svg = fig.match(/<svg class="fx-chart-svg"[\s\S]*?<\/svg><\/span>/)?.[0] ?? '';
+  expect(fig.includes(`role="img" aria-label="Line chart &quot;${chartNode.title}&quot;: its points are in the window as text"`), `the pre-rendered chart's name: ${fig.slice(0, 400)}`);
+  const preWords = [...svg.matchAll(/<text[^>]*>([\s\S]*?)<\/text>/g)].map((m) => htmlText(m[1]));
+  expect(JSON.stringify(preWords) === JSON.stringify(words), `pre-rendered chart words: ${preWords}\nnot\n${words}`);
+  expect((svg.match(/<polyline /g) ?? []).length === lines.length, 'the pre-rendered chart has a line per series');
+  expect(htmlText(fig.match(/<pre[^>]*><code>([\s\S]*?)<\/code><\/pre>/)?.[1] ?? '') === block.outline, 'the pre-rendered window as text');
+  await lessonBothThemes(page, 'a module 51 lesson');
+  await lessonOnPhone(page, 'a module 51 lesson');
+  await threeShots(page, 'm51-chart-example', figure);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 52 lesson: a canvas example is drawn from its calls, a shape for each in order, the same in the pre-rendered page; axe in both themes and at 320 px', async () => {
+  const found = windowExample('drawing-and-images', (b) => { const c = windowNodes(b.window).find((n) => n.type === 'Canvas'); return c && !b.events.length && c.calls?.length >= 2 && /^\s+fill(Rect|Oval) /m.test(b.outline) && b.outline.split('\n').filter((l) => /^\s+(fill|stroke|clear)\w* /.test(l)).every((l) => /^\s+fill(Rect|Oval) /.test(l)); });
+  expect(found, 'no canvas example in module 52 drawn with filled rectangles and ovals only');
+  const { step, k, block } = found;
+  const calls = block.outline.split('\n').map((l) => /^\s+(fillRect|fillOval) (\S+) (\S+) (\S+) (\S+), fill (#[0-9a-f]{6})$/.exec(l)).filter(Boolean).map((m) => ({ op: m[1], x: +m[2], y: +m[3], w: +m[4], h: +m[5], color: m[6] }));
+  const [cw, ch] = /Canvas (\S+) x (\S+)/.exec(block.outline).slice(1).map(Number);
+  const inside = (c, x, y, m) => (c.op === 'fillRect' ? x >= c.x + m && x <= c.x + c.w - m && y >= c.y + m && y <= c.y + c.h - m : ((x - c.x - c.w / 2) / (c.w / 2 - m)) ** 2 + ((y - c.y - c.h / 2) / (c.h / 2 - m)) ** 2 <= 1);
+  const onEdge = (c, x, y) => inside(c, x, y, -3) && !inside(c, x, y, 3);
+  // Points to look at: each shape's middle (and a rectangle's corners, 5 px in), unless the edge of another shape runs within 3 px of it.
+  const probes = calls.flatMap((c) => [[Math.floor(c.x + c.w / 2), Math.floor(c.y + c.h / 2)], ...(c.op === 'fillRect' ? [[c.x + 5, c.y + 5], [c.x + c.w - 6, c.y + c.h - 6]] : [])]).filter(([x, y]) => x < cw && y < ch && !calls.some((c) => onEdge(c, x, y)));
+  const expected = (x, y) => [...calls].reverse().find((c) => inside(c, x, y, 0))?.color;
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + `learn/drawing-and-images/${step.slug}/`);
+  await lessonReady(page);
+  const figure = page.locator('article.step-text figure.fx-figure').nth(k);
+  // A canvas in the lesson text is a picture: SVG with a shape per call (the window panel paints an HTML canvas).
+  const canvas = figure.locator('.fx-canvas svg.fx-canvas-svg');
+  expect((await canvas.count()) === 1, 'the lesson draws the canvas');
+  const live = await canvas.locator('rect, ellipse').evaluateAll((els) => els.map((e) => `${e.tagName === 'rect' ? 'fillRect' : 'fillOval'} ${e.getAttribute('fill')}`));
+  expect(JSON.stringify(live) === JSON.stringify(calls.map((c) => `${c.op} ${c.color}`)), `the lesson's shapes: ${live}`);
+  const box = await canvas.boundingBox();
+  expect(Math.round(box.width) === cw && Math.round(box.height) === ch, `the canvas is ${box.width} x ${box.height}, not ${cw} x ${ch}`);
+  expect(probes.length >= 2, `points to look at: ${JSON.stringify(probes)}`);
+  for (const [x, y] of probes) {
+    const got = await svgPixel(canvas, x, y);
+    expect(got[3] === 255 && near(got.slice(0, 3), hexRgb(expected(x, y)), 2), `pixel (${x}, ${y}) is ${got}, not ${expected(x, y)}`);
+  }
+  // A lesson's canvas can't be drawn on: it's a picture.
+  expect((await figure.locator('[role="application"], button, input').count()) === 0, 'a lesson canvas takes input');
+  const html = await (await page.request.get(BASE + `learn/drawing-and-images/${step.slug}/`)).text();
+  const fig = (html.match(/<figure class="fx-figure">[\s\S]*?<\/figure>/g) ?? [])[k] ?? '';
+  const svg = fig.match(/<svg class="fx-canvas-svg"[\s\S]*?<\/svg>/)?.[0] ?? '';
+  expect(svg && !fig.includes('<canvas'), `the pre-rendered canvas is SVG: ${fig.slice(0, 300)}`);
+  const shapes = [...svg.matchAll(/<(rect|ellipse) [^>]*fill="(#[0-9a-f]{6})"/g)].map((m) => `${m[1] === 'rect' ? 'fillRect' : 'fillOval'} ${m[2]}`);
+  expect(JSON.stringify(shapes) === JSON.stringify(calls.map((c) => `${c.op} ${c.color}`)), `pre-rendered shapes: ${shapes}\nnot\n${calls.map((c) => `${c.op} ${c.color}`)}`);
+  expect(htmlText(fig.match(/<pre[^>]*><code>([\s\S]*?)<\/code><\/pre>/)?.[1] ?? '') === block.outline, 'the pre-rendered window as text');
+  await lessonBothThemes(page, 'a module 52 lesson');
+  await lessonOnPhone(page, 'a module 52 lesson');
+  await threeShots(page, 'm52-canvas-example', figure);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 52 lesson: an image example shows its asset with its name and size, and the window draws the image view with exactly its pixels, larger and crisp', async () => {
+  let found = null;
+  for (const step of moduleOf('drawing-and-images').steps) {
+    const m = /^```asset (\S+)\n(.*)\n```\n\n```java\n[\s\S]*?\n```\n\n(?:```(?!window)[^\n]*\n[\s\S]*?\n```\n\n)*```window\n(.*)\n```/m.exec(step.text);
+    if (m && /^\s+ImageView \d+ x \d+, pixels [0-9a-f]{8}$/m.test(JSON.parse(m[3]).outline)) {
+      const before = step.text.slice(0, m.index);
+      found = { step, asset: JSON.parse(m[2]), block: JSON.parse(m[3]), a: (before.match(/^```asset /gm) ?? []).length, k: (before.match(/^```window\n/gm) ?? []).length };
+      break;
+    }
+  }
+  expect(found, 'no image example in module 52: an asset block, then a window with an image view');
+  const { step, asset, block, a, k } = found;
+  const [, w, h, crc] = /^\s+ImageView (\d+) x (\d+), pixels ([0-9a-f]{8})$/m.exec(block.outline).map((v, i) => (i && i < 3 ? Number(v) : v));
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + `learn/drawing-and-images/${step.slug}/`);
+  await lessonReady(page);
+  const assetFig = page.locator('article.step-text figure.asset-figure').nth(a);
+  const assetImg = assetFig.locator('img.asset-img');
+  await assetImg.scrollIntoViewIfNeeded();
+  await page.waitForFunction((e) => e.complete && e.naturalWidth > 0, await assetImg.elementHandle());
+  const caption = await assetFig.innerText();
+  expect(caption.includes(asset.name) && caption.includes(`${asset.image.width} x ${asset.image.height} pixels`), caption);
+  expect((await assetImg.getAttribute('alt')) === asset.image.alt, 'the asset has its alt text');
+  // The program shows the image as it is: the image view's pixels are the asset's.
+  const figure = page.locator('article.step-text figure.fx-figure').nth(k);
+  const view = figure.locator('.fx-imageview img.fx-image');
+  await page.waitForFunction((e) => e.complete && e.naturalWidth > 0, await view.elementHandle());
+  const shown = await view.evaluate((e) => ({ w: e.naturalWidth, h: e.naturalHeight, drawn: e.getBoundingClientRect().width, rendering: getComputedStyle(e).imageRendering, alt: e.alt }));
+  expect(shown.w === w && shown.h === h && shown.drawn > w && shown.rendering === 'pixelated', JSON.stringify(shown));
+  expect((await figure.locator('.fx-image-scale').first().innerText()) === `drawn ${shown.drawn / w} times larger`, await figure.locator('.fx-image-scale').first().innerText());
+  expect((await imageCrc(view)) === crc, `the image view's pixels have CRC ${await imageCrc(view)}, the program's ${crc}`);
+  if (asset.image.width === w && asset.image.height === h) expect((await imageCrc(assetImg)) === crc, `the asset's pixels have CRC ${await imageCrc(assetImg)}, the image view's ${crc}`);
+  const html = await (await page.request.get(BASE + `learn/drawing-and-images/${step.slug}/`)).text();
+  expect(html.includes(`<img src="${new URL(BASE).pathname}${asset.image.url}"`), 'the pre-rendered page shows the asset');
+  const fig = (html.match(/<figure class="fx-figure">[\s\S]*?<\/figure>/g) ?? [])[k] ?? '';
+  expect(/<img class="fx-image" src="data:image\/png;base64,/.test(fig) && fig.includes('drawn '), `the pre-rendered image view: ${fig.slice(0, 200)}`);
+  await threeShots(page, 'm52-image-example', assetFig);
+  await threeShots(page, 'm52-image-example-window', figure);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test("module 51 chart challenge: the task card draws the chart the program should show; wrong blanks show both charts with the differing lines marked; the right ones pass", async () => {
+  const found = challengesOf(moduleOf('charts')).find(({ ex }) => ex.kind === 'fill' && windowNodes(cardTest(ex)?.window).some((n) => n.type === 'LineChart') && /new NumberAxis\("[^"]*", [^,]+, [^,]+, \[\[(\d+)\]\]\)/.test(ex.seed));
+  expect(found, 'no fill-in chart challenge in module 51 whose blank is a NumberAxis tick unit');
+  const { ex } = found;
+  const shown = cardTest(ex);
+  const answers = blankAnswers(ex);
+  const tick = /new NumberAxis\("[^"]*", [^,]+, [^,]+, \[\[(\d+)\]\]\)/.exec(ex.seed)[1];
+  const wrong = answers.map((x, i) => (i === answers.indexOf(tick) ? String(Number(tick) + 1) : x));
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'charts', found);
+  const card = page.locator('.task-card');
+  const chartNode = windowNodes(shown.window).find((n) => n.type === 'LineChart');
+  const cardChart = card.locator('.fx-chart[role="img"]');
+  expect((await cardChart.count()) === 1 && (await cardChart.getAttribute('aria-label')).startsWith(`Line chart${chartNode.title ? ` "${chartNode.title}"` : ''}: its points`), 'the task card draws the chart');
+  expect((await cardChart.locator('polyline').count()) === chartNode.series.length, 'a line per series on the task card');
+  expect((await card.locator('details.fx-astext pre').textContent()) === shown.outline, `the task card's window as text: ${await card.locator('details.fx-astext pre').textContent()}`);
+  for (const f of Object.keys(shown.files ?? {})) expect((await card.innerText()).includes(f), `the task card shows ${f}`);
+  await fillBlanks(page, wrong);
+  const out = await check(page);
+  expect(out.includes('Not yet'), out);
+  const failed = page.locator('.t-fail', { hasText: shown.name }).first();
+  const cmp = failed.locator('.fx-compare');
+  expect((await cmp.count()) === 1, `no window comparison: ${out}`);
+  expect((await cmp.locator('.fx-chart svg polyline').count()) === 2 * chartNode.series.length, 'both windows draw the chart');
+  const marks = async (side) => (await cmp.locator(':scope > div').nth(side).locator('mark.fx-differs').allTextContents()).map((t) => t.replace(/^Differs: /, '').trim());
+  const should = await marks(0);
+  const yours = await marks(1);
+  expect(should.length === 1 && / x axis NumberAxis .* by \S+$/.test(` ${should[0]}`) && should[0].endsWith(`by ${tick}`), `marked in the expected window: ${should}`);
+  expect(yours.length === 1 && yours[0] === should[0].replace(new RegExp(`by ${tick}$`), `by ${Number(tick) + 1}`), `marked in your window: ${yours}`);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await noOverflow(page, 'a failed chart challenge at 320 px');
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `a failed chart challenge at 320 px, ${colorScheme} theme`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await threeShots(page, 'm51-chart-challenge-card', card.locator('.fx-figure').first());
+  await threeShots(page, 'm51-chart-challenge-failed', cmp);
+  await fillBlanks(page, answers);
+  const passed = await check(page);
+  expect(passed.includes('All tests passed'), passed);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 51 slider challenge, "Run with my input": the slider is a real one; the arrow keys move it a tick a press (Page Up by its block increment) and the mouse drags it, each running the program once; it ends as the task card shows', async () => {
+  const found = challengesOf(moduleOf('charts')).find(({ ex }) => ex.kind === 'code' && (cardTest(ex)?.events ?? []).length && cardTest(ex).events.every((e) => /^set Slider 1 \S+$/.test(e)));
+  expect(found, 'no module 51 code challenge whose task card moves a slider');
+  const { ex } = found;
+  const shown = cardTest(ex);
+  const target = Number(/^set Slider 1 (\S+)$/.exec(shown.events.at(-1))[1]);
+  const sliderNode = windowNodes(shown.window).find((n) => n.type === 'Slider');
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'charts', found);
+  expect((await page.locator('.task-card .task-events').innerText()) === describeEvents(shown.events), await page.locator('.task-card .task-events').innerText());
+  await setProgram(page, ex.solution);
+  const panel = await runWithMyInput(page);
+  const title = shown.window.windows[0].title;
+  const win = panel.getByRole('group', { name: title ? `Window: ${title}` : 'Window without a title' });
+  await win.waitFor();
+  const slider = win.getByRole('slider', { name: 'Slider 1' });
+  const start = Number(await slider.inputValue());
+  expect((await slider.getAttribute('min')) === String(sliderNode.min) && (await slider.getAttribute('max')) === String(sliderNode.max), `slider from ${await slider.getAttribute('min')} to ${await slider.getAttribute('max')}`);
+  // The arrow keys: one step a press, sent once they stop; the program runs once.
+  let n = await runCount(page);
+  await slider.focus();
+  const steps = Math.round(target - start);
+  for (let i = 0; i < Math.abs(steps); i++) await page.keyboard.press(steps > 0 ? 'ArrowRight' : 'ArrowLeft');
+  await nextRun(page, n);
+  await settled(page);
+  expect((await runCount(page)) === n + 1, `the arrow keys ran the program ${(await runCount(page)) - n} times`);
+  const outline = await panel.locator('details.fx-astext pre').textContent();
+  expect(outline === shown.outline, `the window after the slider moved to ${target}:\n${outline}\nnot\n${shown.outline}`);
+  expect((await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Slider 1', 'the slider keeps the focus');
+  // Page Up: by the block increment, as JavaFX's keys (here past the end: to the maximum).
+  n = await runCount(page);
+  await page.keyboard.press('PageUp');
+  await nextRun(page, n);
+  await settled(page);
+  const paged = Math.min(sliderNode.max, target + Math.max(sliderNode.blockIncrement ?? 10, 1));
+  expect((await panel.locator('details.fx-astext pre').textContent()).includes(`Slider ${sliderNode.min} to ${sliderNode.max}, value ${paged},`), await panel.locator('details.fx-astext pre').textContent());
+  // The mouse: dragged to the minimum and let go, one run, the window follows.
+  n = await runCount(page);
+  await slider.scrollIntoViewIfNeeded();
+  const box = await slider.boundingBox();
+  const at = (v) => box.x + 8 + ((v - sliderNode.min) / (sliderNode.max - sliderNode.min)) * (box.width - 16);
+  await page.mouse.move(at(paged), box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(at(sliderNode.min) - 20, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await nextRun(page, n);
+  await settled(page);
+  expect((await runCount(page)) === n + 1, `letting the slider go ran the program ${(await runCount(page)) - n} times`);
+  const after = await panel.locator('details.fx-astext pre').textContent();
+  expect(after.includes(`Slider ${sliderNode.min} to ${sliderNode.max}, value ${sliderNode.min},`) && (await slider.inputValue()) === String(sliderNode.min), after);
+  expect(!(await page.locator('.freerun .fx-stale-note').count()), 'the window is up to date');
+  await bothThemes(page, 'a module 51 slider challenge run with my input', null);
+  await onPhones(page, 'a module 51 slider challenge run with my input', null);
+  await threeShots(page, 'm51-slider-run', panel);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 52 mouse-drawing challenge, "Run with my input": drawing the task\'s stroke with the mouse runs the program once and leaves the window the task card shows; the lesson\'s table keeps method names whole', async () => {
+  const found = challengesOf(moduleOf('drawing-and-images')).find(({ ex }) => ex.kind === 'code' && (cardTest(ex)?.events ?? []).some((e) => e.startsWith('drag ')) && /^press /.test(cardTest(ex).events[0]) && /^release /.test(cardTest(ex).events.at(-1)) && cardTest(ex).events.filter((e) => e.startsWith('press ')).length === 1);
+  expect(found, 'no module 52 code challenge whose task card is one press, drags and a release');
+  const { ex } = found;
+  const shown = cardTest(ex);
+  const pts = shown.events.map((e) => /(?:at|to) (\S+) (\S+)$/.exec(e).slice(1).map(Number));
+  const target = /^\w+ (Canvas \d+)/.exec(shown.events[0])[1];
+  const canvasNode = windowNodes(shown.window).find((n) => n.type === 'Canvas');
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'drawing-and-images', found);
+  // The lesson's table of mouse methods keeps each name on one line (a too-wide table scrolls inside itself), on a desktop and a 320 px phone.
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const rows = await page.locator('article.step-text td > code').evaluateAll((els) => els.map((e) => [e.textContent, e.getClientRects().length]));
+    expect(rows.length > 0 && rows.every(([, n]) => n === 1), `table code split over lines at ${width} px: ${JSON.stringify(rows.filter(([, n]) => n > 1))}`);
+    await noOverflow(page, `the mouse lesson at ${width} px`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  expect((await page.locator('.task-card .task-events').innerText()) === describeEvents(shown.events), await page.locator('.task-card .task-events').innerText());
+  expect((await page.locator('.task-card .fx-canvas').count()) === 1, 'the task card draws the canvas');
+  await setProgram(page, ex.solution);
+  const panel = await runWithMyInput(page);
+  expect((await panel.locator('.fx-draw-note').innerText()).includes('the drawing updates when you lift your finger'), await panel.locator('.fx-draw-note').innerText());
+  const pad = panel.getByRole('application', { name: `${target}, ${canvasNode.width} x ${canvasNode.height}` });
+  await pad.waitFor();
+  // The stroke of the task, with the mouse: pressed at its first point, moved straight to each next one, let go at the last.
+  const n = await runCount(page);
+  await pad.scrollIntoViewIfNeeded();
+  const b = await pad.boundingBox();
+  await page.mouse.move(b.x + pts[0][0] + 0.5, b.y + pts[0][1] + 0.5);
+  await page.mouse.down();
+  for (const [x, y] of pts.slice(1, -1)) await page.mouse.move(b.x + x + 0.5, b.y + y + 0.5);
+  expect((await runCount(page)) === n, 'nothing is sent before the button lifts');
+  await page.mouse.up();
+  await nextRun(page, n);
+  await settled(page);
+  expect((await runCount(page)) === n + 1, `the stroke ran the program ${(await runCount(page)) - n} times`);
+  const outline = await panel.locator('details.fx-astext pre').textContent();
+  expect(outline === shown.outline, `the window after the stroke:\n${outline}\nnot\n${shown.outline}`);
+  // The page paints what the program drew: the stroke's color halfway along its first line.
+  const first = /strokeLine (\S+) (\S+) (\S+) (\S+), stroke (#[0-9a-f]{6})/.exec(shown.outline);
+  if (first) {
+    const [x1, y1, x2, y2] = first.slice(1, 5).map(Number);
+    const px = await canvasPixel(pad.locator('canvas.fx-canvas-el'), (x1 + x2) / 2, (y1 + y2) / 2);
+    expect(near(px.slice(0, 3), hexRgb(first[5]), 80) && px[3] >= 160, `the stroke is painted ${px}, not ${first[5]}`);
+  }
+  await bothThemes(page, 'a module 52 drawing challenge run with my input', null);
+  await onPhones(page, 'a module 52 drawing challenge run with my input', null);
+  await threeShots(page, 'm52-drawing-run', panel);
+  // The model solution passes.
+  const passed = await check(page);
+  expect(passed.includes('All tests passed'), passed);
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });

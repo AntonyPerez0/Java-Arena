@@ -9,6 +9,9 @@
 // It also writes fidelity/out/content-checks.json: every program with its inputs and the JDK's
 // results, which scripts/content-browser.mjs replays in the browser engine.
 //
+// The images of content/assets (made by scripts/assets/make-images.mjs) that tests and lessons give
+// programs are checked and copied to public/images/<name>-<hash>.png, where the site serves them.
+//
 // Usage: node scripts/build-content.mjs [--no-cache] [--dry] [--drill-file <name>.yaml]
 //   --dry         check only: write nothing (no cache, no generated files), so several checks can run at once
 //   --drill-file  check only this file of content/drills, or placement.yaml (with --dry, for writing drills)
@@ -25,7 +28,8 @@ import { FILE_MARK, RESERVED_WORDS, baseName, classOfPath, declaredPackage, fold
 import { TEST_RUNNER_CLASS, TEST_RUNNER_FILE, TEST_RUNNER_SOURCE, parseTestReport, testClassesOf, usesJUnit } from "../src/grader/junit.js";
 import { JAVAFX_LIBRARY, WINDOW_FILE, usesJavaFX, withoutArenaFiles } from "../src/grader/javafx.js";
 import { librariesFor } from "../src/grader/libraries.js";
-import { compareWrites, dataPathProblem } from "../src/grader/writes.js";
+import { compareWrites, dataPathProblem, fileContent } from "../src/grader/writes.js";
+import { ASSET_FOLDER, assetProblem, isAssetFile, pngInfo, textOrBytes, toBase64 } from "../src/grader/assets.ts";
 // TypeScript, which Node runs as it is (it has only types to strip): shared with the browser's grader.
 import { checkWindow, eventLines, parseEventLine, parseWindow, windowOutline, withEventsFile } from "../src/grader/window.ts";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/suite.mjs";
@@ -39,8 +43,15 @@ const CACHE_FILE = path.join(ROOT, "node_modules", ".cache", "java-arena-content
 const GENERATED = path.join(ROOT, "src", "generated");
 // Each step's lesson as a file of its own, fetched when the step is opened (public/ is served as is).
 const LESSONS = path.join(ROOT, "public", "lessons");
+// The images that programs read (content/assets), copied where the site serves them, with a hash of
+// their bytes in their names so a saved copy is never out of date.
+const ASSETS_DIR = path.join(ROOT, "content", "assets");
+const IMAGES = path.join(ROOT, "public", ASSET_FOLDER);
 const CHECKS_JSON = path.join(ROOT, "fidelity", "out", "content-checks.json");
 const TIME_LIMIT_MS = 10_000;
+/** A window's JSON (a test's or an example's) above this many KB is a warning, and above the most an error. */
+const WINDOW_KB_WARN = 256;
+const WINDOW_KB_MAX = 1024;
 const CHALLENGES_PER_STEP = 3;
 
 const JAVA_HOME = referenceJavaHome();
@@ -91,6 +102,79 @@ const errors = [];
 const warnings = [];
 const checks = []; // for the browser replay
 const t0 = Date.now();
+
+// ---------------------------------------------------------------- images (content/assets)
+/**
+ * The images programs can be given (content/assets, listed in its assets.json by
+ * scripts/assets/make-images.mjs), by name: { file, bytes }, where `file` is the AssetFile that
+ * tests and lessons store (src/grader/assets.ts: where the site serves it, its size and its
+ * description) and `bytes` what a run's folder gets. Each must be a PNG that both Java Arena's
+ * JavaFX and real JavaFX read the same way (8-bit RGB or RGBA, no gamma, color profile or text).
+ */
+const assets = loadAssets();
+function loadAssets() {
+  const out = new Map();
+  const listFile = path.join(ASSETS_DIR, "assets.json");
+  if (!fs.existsSync(listFile)) return out;
+  let list;
+  try {
+    list = JSON.parse(fs.readFileSync(listFile, "utf8"));
+    if (!Array.isArray(list)) throw new Error("it isn't a list");
+  } catch (e) {
+    errors.push(`content/assets/assets.json can't be read: ${e.message}`);
+    return out;
+  }
+  for (const a of list) {
+    const where = `content/assets/${a?.name}`;
+    if (typeof a?.name !== "string" || !/^[A-Za-z0-9_-]+\.png$/.test(a.name)) {
+      errors.push(`content/assets/assets.json: ${JSON.stringify(a?.name)} isn't the name of a PNG file in content/assets (letters, digits, _ and -, then .png)`);
+      continue;
+    }
+    if (out.has(a.name)) errors.push(`content/assets/assets.json lists ${a.name} twice`);
+    const file = path.join(ASSETS_DIR, a.name);
+    if (!fs.existsSync(file)) {
+      errors.push(`${where} is listed in assets.json, but the file is missing (run node scripts/assets/make-images.mjs)`);
+      continue;
+    }
+    const bytes = fs.readFileSync(file);
+    const problem = assetProblem(bytes);
+    if (problem) {
+      errors.push(`${where} ${problem}`);
+      continue;
+    }
+    const { width, height } = pngInfo(bytes);
+    if (width !== a.width || height !== a.height) errors.push(`${where} is ${width} x ${height}, but assets.json says ${a.width} x ${a.height} (run node scripts/assets/make-images.mjs)`);
+    if (typeof a.alt !== "string" || !a.alt.trim()) errors.push(`${where} needs a description (alt) in assets.json, for people who can't see it`);
+    const hash = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 10);
+    out.set(a.name, { file: { asset: a.name, url: `${ASSET_FOLDER}${a.name.replace(/\.png$/, "")}-${hash}.png`, width, height, size: bytes.length, alt: String(a.alt ?? "") }, bytes });
+  }
+  for (const f of fs.readdirSync(ASSETS_DIR)) if (/\.png$/i.test(f) && !out.has(f) && !list.some((a) => a?.name === f)) errors.push(`content/assets/${f} isn't listed in content/assets/assets.json (run node scripts/assets/make-images.mjs)`);
+  return out;
+}
+
+/** The names of the images, for messages. */
+const assetNames = () => [...assets.keys()].join(", ") || "none";
+
+/**
+ * A file a test gives the program, as its YAML says: its text, or { asset: landscape.png } for an
+ * image of content/assets (stored as that image's AssetFile). Null, with an error, for anything else.
+ */
+function givenFile(where, name, value) {
+  if (value == null || typeof value !== "object") return ensureNl(String(value ?? ""));
+  if (Array.isArray(value) || Object.keys(value).join() !== "asset" || typeof value.asset !== "string") {
+    errors.push(`${where}: the file ${name} must be its text, or { asset: landscape.png } for an image of content/assets`);
+    return null;
+  }
+  const a = assets.get(value.asset);
+  if (!a) {
+    errors.push(`${where}: the file ${name} is the asset ${value.asset}, which isn't in content/assets (it has ${assetNames()})`);
+    return null;
+  }
+  return a.file;
+}
+
+/** What a run's folder gets for a file a test or an example gives: its text, or an image's bytes. */
+const fileBytes = (v) => (isAssetFile(v) ? assets.get(v.asset).bytes : v);
 
 // ---------------------------------------------------------------- compiling and running
 const sha = (x) => crypto.createHash("sha256").update(JSON.stringify(x)).digest("hex").slice(0, 24);
@@ -196,12 +280,18 @@ async function run(compiled, stdin, opts = {}, tries = 3) {
 }
 const JVM_LOG = /^\[\d+\.\d+s\]\[(warning|error)\].*$/m;
 
-/** Every file in a folder and its subfolders, by its path in it (reports/summary.txt). */
+/**
+ * Every file in a folder and its subfolders, by its path in it (reports/summary.txt): its text, or
+ * { binary: base64 of its bytes } for a file that isn't UTF-8 text (an image the program was given).
+ */
 function folderFiles(dir, prefix = "", out = {}) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) folderFiles(full, `${prefix}${e.name}/`, out);
-    else if (e.isFile()) out[prefix + e.name] = fs.readFileSync(full, "utf8");
+    else if (e.isFile()) {
+      const content = textOrBytes(fs.readFileSync(full));
+      out[prefix + e.name] = typeof content === "string" ? content : { binary: toBase64(content) };
+    }
   }
   return out;
 }
@@ -217,10 +307,10 @@ async function runOnce(compiled, stdin, { mainClass = "Main", args = [], files =
     () =>
       new Promise((resolve) => {
         const cwd = fs.mkdtempSync(path.join(TMP, "run-"));
-        // Files the program reads sit in its working folder, as they would next to a real program.
-        for (const [name, text] of Object.entries(files ?? {})) {
+        // Files the program reads sit in its working folder, as they would next to a real program (an image as its bytes).
+        for (const [name, value] of Object.entries(files ?? {})) {
           fs.mkdirSync(path.dirname(path.join(cwd, name)), { recursive: true });
-          fs.writeFileSync(path.join(cwd, name), text);
+          fs.writeFileSync(path.join(cwd, name), fileBytes(value));
         }
         // A JavaFX program runs through the launcher that lets the JDK run it as the browser does (scripts/javafx/reference.mjs).
         const p = spawn(bin("java"), [...REFERENCE_JVM_FLAGS, ...javaRunArgs({ javaHome: JAVA_HOME, libraries, classPath, mainClass, args })], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
@@ -360,7 +450,7 @@ function readEvents(where, value) {
   for (const line of lines) {
     const e = parseEventLine(line);
     // In a YAML list, " #" starts a comment, so "- click #3" is read as "click".
-    const hint = Array.isArray(value) && /^(click|type|set|enter)$/.test(line) ? " (in a YAML list, # after a space starts a comment: write the events as a block, events: |, or quote the line)" : "";
+    const hint = Array.isArray(value) && /^(click|type|set|enter|press|drag|release)$/.test(line) ? " (in a YAML list, # after a space starts a comment: write the events as a block, events: |, or quote the line)" : "";
     if (e?.problem !== undefined) errors.push(`${where}: the event ${line} can't be read: ${e.problem}${hint}`);
   }
   return lines;
@@ -373,6 +463,11 @@ function readEvents(where, value) {
  */
 function solutionWindow(where, r, what = "the solution") {
   if (r.timedOut || r.exitCode !== 0) return null;
+  // The lesson file holds the window, which a phone downloads with the step: a canvas of thousands
+  // of calls or a large image makes it big.
+  const kb = Math.round((r.window?.length ?? 0) / 1024);
+  if (kb > WINDOW_KB_MAX) errors.push(`${where}: the window of ${what} is ${kb} KB of JSON (most of it a canvas's drawing calls or an image's pixels); the lesson file holds it, so keep it under ${WINDOW_KB_MAX} KB: draw fewer shapes, or use a smaller image`);
+  else if (kb > WINDOW_KB_WARN) warnings.push(`${where}: the window of ${what} is ${kb} KB of JSON, which the lesson file holds (a canvas's calls or an image's pixels); smaller is better on a phone`);
   const w = parseWindow(r.window);
   if (!w) errors.push(`${where}: ${what} leaves no window (main must call launch, and nothing may end the program before the library writes its window: System.exit in start or a handler, or an exception from start that main catches)`);
   else if (w.problems.length) errors.push(`${where}: some events can't happen in the window of ${what}:\n${w.problems.join("\n")}`);
@@ -439,12 +534,14 @@ function checkRuleShape(where, list, kind) {
  *                     the page to draw.
  *   ```file data.txt  a file that the next ```java run (or java window) example reads (shown with
  *                     its name). Several can come before one example.
+ *   ```asset landscape.png   (empty) an image of content/assets that the next example gets in its
+ *                     folder; the page draws it with its name and size (the build fills the block in).
  * A ```java run example can hold several files: each one after the first starts with a line such as
  * `// ==== Person.java ====` (the page shows it as the file's name), or `// ==== library/domain/Book.java ====`
  * for a class in a package (whose package line must match its folders).
  * A ```classes block describes a UML class diagram (scripts/content/class-diagram.mjs), which is
  * drawn here as HTML: an SVG and the same content as text.
- * Returns the text with plain ```java info strings, the windows stored and the class diagrams drawn.
+ * Returns the text with plain ```java info strings, the windows stored, the asset blocks filled in and the class diagrams drawn.
  */
 async function checkExamples(where, text) {
   if (!text) return text;
@@ -536,22 +633,64 @@ async function checkExamples(where, text) {
     const end = x.events ? x.events.index + x.events[0].length : at;
     withWindows = withWindows.slice(0, at) + (x.events ? block : "\n\n" + block) + withWindows.slice(end);
   }
-  const plain = withWindows.replace(/^```java[ \t]+(run|main|error|fragment|test|window)([ \t]+crash)?[ \t]*$/gm, "```java");
+  const plain = checkAssetBlocks(where, withWindows, blocks).replace(/^```java[ \t]+(run|main|error|fragment|test|window)([ \t]+crash)?[ \t]*$/gm, "```java");
   const drawn = drawClassDiagrams(plain, (m) => errors.push(`${where}: ${m}`));
   if (UNDRAWN_CLASSES.test(drawn)) errors.push(`${where}: a classes block is drawn only when its fence is three backticks at the start of a line (not indented in a list, not in a quote): \`\`\`classes`);
   return drawn;
 }
 
-/** The ```file blocks since the previous java block: files the example at block i reads (in folders too: the run makes them), or null. */
+/**
+ * The ```file and ```asset blocks since the previous java block: files the example at block i reads
+ * (in folders too: the run makes them), or null. An ```asset block puts that image of content/assets
+ * in the example's folder, under its own name (checkAssetBlocks checks the block itself).
+ */
 function exampleFiles(w, blocks, i) {
   let files = null;
   for (let j = i - 1; j >= 0 && !/^java\b/.test(blocks[j][1].trim()); j--) {
+    const a = /^asset\s+(\S+)$/.exec(blocks[j][1].trim());
+    if (a && assets.has(a[1])) (files ??= {})[a[1]] = assets.get(a[1]).file;
     const f = /^file\s+(\S+)$/.exec(blocks[j][1].trim());
     if (!f) continue;
     if (dataPathProblem(f[1])) errors.push(`${w}: the file block's name "${f[1]}" ${dataPathProblem(f[1])}`);
     else (files ??= {})[f[1]] = blocks[j][2];
   }
   return files;
+}
+
+/** An ```asset block, at the start of a line: its info string's first word is asset. */
+const ASSET_BLOCK = /^```asset\b/m;
+
+/**
+ * Every ```asset block of a text: ```asset landscape.png, empty, naming an image of content/assets.
+ * Returns the text with each block filled in for the page (one line of JSON: the file's name and
+ * where the image is served, its size and description), which draws it.
+ */
+function checkAssetBlocks(where, text, blocks) {
+  let good = 0;
+  for (const b of blocks) {
+    const info = b[1].trim();
+    if (!/^asset\b/.test(info)) continue;
+    const m = /^asset\s+(\S+)$/.exec(info);
+    if (!m) errors.push(`${where}: an asset block names one image of content/assets: \`\`\`asset landscape.png`);
+    else if (!assets.has(m[1])) errors.push(`${where}: the asset block names ${m[1]}, which isn't in content/assets (it has ${assetNames()})`);
+    if (b[2].trim()) errors.push(`${where}: an asset block is empty (the build fills it in): \`\`\`asset ${m?.[1] ?? "landscape.png"}, then \`\`\` on the next line`);
+    else if (m && assets.has(m[1])) good++;
+  }
+  // An empty block may have blank lines in it (the check above trims them).
+  let filled = 0;
+  const out = text.replace(/^```asset[ \t]+(\S+)[ \t]*\n(?:[ \t]*\n)*```[ \t]*$/gm, (all, name) => {
+    if (!assets.has(name)) return all;
+    filled++;
+    return "```asset " + name + "\n" + JSON.stringify({ name, image: assets.get(name).file }) + "\n```";
+  });
+  // Every good block must be filled in, or the page would show an empty code box instead of the image.
+  if (filled !== good) errors.push(`${where}: ${good - filled} asset block${good - filled === 1 ? " wasn't" : "s weren't"} filled in: write each as \`\`\`asset landscape.png at the start of a line, then \`\`\` at the start of the next line`);
+  return out;
+}
+
+/** Hints and drills show no images: an ```asset block there would show as its raw text. */
+function noAssetBlock(where, text) {
+  if (typeof text === "string" && ASSET_BLOCK.test(text)) errors.push(`${where}: has an asset block, but images are drawn only in step text and tasks`);
 }
 
 /**
@@ -658,7 +797,11 @@ async function buildExercise(where, raw) {
   if (raw.predict != null) {
     const hints = raw.hints ?? [];
     if (!Array.isArray(hints) || hints.length === 0 || hints.some((h) => typeof h !== "string")) errors.push(`${where}: needs a list of hints (as text)`);
-    else hints.forEach((h, i) => noClassDiagram(`${where} hint ${i + 1}`, h));
+    else
+      hints.forEach((h, i) => {
+        noClassDiagram(`${where} hint ${i + 1}`, h);
+        noAssetBlock(`${where} hint ${i + 1}`, h);
+      });
     return buildPredict(where, raw, hints);
   }
   const kind = raw.fill != null ? "fill" : "code";
@@ -684,7 +827,10 @@ async function buildExercise(where, raw) {
   else
     hints.forEach((h, i) => {
       if (typeof h !== "string") errors.push(`${where}: hint ${i + 1} isn't plain text (quote it: a ": " inside makes YAML read it as a key and value)`);
-      else noClassDiagram(`${where} hint ${i + 1}`, h);
+      else {
+        noClassDiagram(`${where} hint ${i + 1}`, h);
+        noAssetBlock(`${where} hint ${i + 1}`, h);
+      }
     });
   const require = raw.require ?? [];
   const forbid = raw.forbid ?? [];
@@ -724,14 +870,16 @@ async function buildExercise(where, raw) {
   if (windowed && !usesJavaFX(mainFile(solution))) errors.push(`${where}: a test with events needs a program that uses JavaFX (import javafx...)`);
   if (windowed) for (const m of nondeterminism(mainFile(solution))) errors.push(`${where}: the solution ${m}`);
   if (eventsOf.some((e) => e?.length) && !testsRaw.some((t) => t.hidden)) warnings.push(`${where}: replays clicks and typing but has no hidden test`);
-  // Files a test's program reads: a map of file names (scores.txt, or data/scores.txt in a folder) to their text.
+  // Files a test's program reads: a map of file names (scores.txt, or data/scores.txt in a folder) to
+  // their text, or to { asset: landscape.png } for an image of content/assets.
   const inputFiles = testsRaw.map((t, i) => {
     if (t.files == null) return null;
     if (typeof t.files !== "object" || Array.isArray(t.files) || Object.keys(t.files).some((n) => dataPathProblem(n))) {
-      errors.push(`${where} test ${i + 1}: files must be a map of plain file names (like scores.txt, or data/scores.txt in a folder) to their text`);
+      errors.push(`${where} test ${i + 1}: files must be a map of plain file names (like scores.txt, or data/scores.txt in a folder) to their text, or to { asset: landscape.png } for an image`);
       return null;
     }
-    return Object.fromEntries(Object.entries(t.files).map(([n, text]) => [n, ensureNl(String(text ?? ""))]));
+    const files = Object.entries(t.files).map(([n, v]) => [n, givenFile(`${where} test ${i + 1}`, n, v)]);
+    return files.every(([, v]) => v != null) ? Object.fromEntries(files) : null;
   });
   // Files a test's program must leave in its folder: a list of names, whose text the solution's run
   // gives (as it gives the output), or a map of names to the text they must hold.
@@ -824,6 +972,12 @@ function solutionWrites(n, asked, written, given) {
   const missing = asked.names.filter((f) => written[f] == null);
   const there = Object.keys(written);
   if (missing.length) errors.push(`${n}: the solution doesn't write ${missing.join(", ")} (after its run, its folder holds ${there.length ? there.join(", ") : "no files"})`);
+  // writes compares text, as output is: a file that isn't text (an image) can't be checked.
+  const binary = asked.names.filter((f) => written[f] != null && typeof written[f] !== "string");
+  if (binary.length) {
+    errors.push(`${n}: writes names ${binary.join(", ")}, which ${binary.length > 1 ? "aren't" : "isn't"} text after the solution's run; writes checks text files only`);
+    return null;
+  }
   for (const f of asked.names) if (given?.[f] != null && given[f] === written[f]) errors.push(`${n}: writes names ${f}, but the solution leaves it as the test gives it`);
   if (asked.want) for (const r of compareWrites(asked.want, written)) if (r.got !== null && !r.pass) errors.push(`${n}: ${r.name} should hold\n${r.expected}\nbut the solution writes\n${r.got}`);
   const found = asked.names.filter((f) => written[f] != null);
@@ -1076,6 +1230,7 @@ async function buildDrill(where, id, topic, d, moduleSteps) {
   for (const [key, text] of [["prompt", d.prompt], ["why", d.why], ...(d.choices ?? []).map((c, i) => [`choice ${i + 1}`, c])]) {
     if (typeof text === "string" && htmlLike(text)) errors.push(`${where}: ${key} has text that Markdown reads as HTML; put it in backticks: ${text}`);
     noClassDiagram(`${where} ${key}`, text);
+    noAssetBlock(`${where} ${key}`, text);
   }
   const base = { id, topic, type: d.type, why: d.why ?? "", ...(after ? { after } : {}) };
   const pre = d.pre ? String(d.pre).replace(/\s*$/, "") : "";
@@ -1266,6 +1421,8 @@ const index = {
   modules: modules.map(({ steps, ...m }) => ({ ...m, drills: drills.filter((d) => d.topic === m.id).length, steps: steps.map((s) => ({ id: s.id, slug: s.slug, title: s.title, hash: lessonHash(s), challenges: 1 + s.more.length, drills: drills.filter((d) => d.after === s.id).length })) })),
   interviewDrills: drills.filter((d) => d.topic === "interview").length,
   placementQuestions: placement.length,
+  // The images of content/assets, which the Playground offers as sample files.
+  assets: [...assets.values()].map((a) => a.file),
 };
 // The lesson files first and the index after them, so a running dev server never sees an index
 // that names files not written yet; then the lesson files no longer named are removed.
@@ -1287,6 +1444,15 @@ for (const dir of fs.readdirSync(LESSONS)) {
   for (const f of fs.readdirSync(full)) if (!lessonFiles.has(path.join(full, f))) fs.rmSync(path.join(full, f));
   if (!fs.readdirSync(full).length) fs.rmdirSync(full);
 }
+// The images, served at the names their AssetFiles give (a hash of their bytes in each); names no longer used are removed.
+fs.mkdirSync(IMAGES, { recursive: true });
+const imageFiles = new Set();
+for (const a of assets.values()) {
+  const file = path.join(ROOT, "public", a.file.url);
+  imageFiles.add(file);
+  if (!fs.existsSync(file) || !fs.readFileSync(file).equals(a.bytes)) fs.writeFileSync(file, a.bytes);
+}
+for (const f of fs.readdirSync(IMAGES)) if (!imageFiles.has(path.join(IMAGES, f))) fs.rmSync(path.join(IMAGES, f), { recursive: true, force: true });
 // Drills and placement questions load only on the practice pages.
 fs.writeFileSync(path.join(GENERATED, "drills.json"), JSON.stringify({ drills, placement }));
 fs.mkdirSync(path.dirname(CHECKS_JSON), { recursive: true });

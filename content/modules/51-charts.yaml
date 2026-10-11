@@ -1,0 +1,3519 @@
+id: charts
+summary: Charts with JavaFX. Reading rows of data from CSV and tab-separated files into numbers, lists and maps, line charts with number axes, series and data points, several series from a map, series computed from a formula, a slider that redraws a chart, bar charts with a category axis, and charts that are honest about their numbers. MOOC section 14.1.
+steps:
+  - id: charts-rows-to-numbers
+    slug: rows-to-numbers
+    title: From text rows to numbers
+    text: |
+      Part 14 starts with **data visualization**: showing numbers as a picture. A table of 50 numbers is hard to read, while a line that climbs and then falls tells its story at a glance. JavaFX, the library of part 13, has classes for charts, and this module uses them: line charts, bar charts and charts that change when the user moves a slider.
+
+      ### Charts in Java Arena
+
+      As with the windows of part 13 (module 48 explained it), Java Arena's JavaFX is a practice version written for this site, and the page draws each chart from what your program told JavaFX to show: the kind of chart, its title, its axes and every data point. The drawing is approximate, as the windows were: real JavaFX picks its own colors, fonts and tick marks. Under each chart, "The window as text" lists every data point, and that's what the checks compare. The check that runs every model solution on the real JavaFX (module 48) covers charts too: it confirms that real JavaFX gets the same kind of chart, title, legend, axes and points, and the same slider values. It doesn't check how the chart is drawn. (Module 52 draws on a canvas and works with images, which are read and written pixel by pixel exactly; it also explains why sound can't play on this page.)
+
+      A chart needs numbers, and numbers usually come from a file. So this first step reads files of data, and step 2 draws the first chart. The numbers in this module's files are made up for the exercises: they look like measurements, but nobody measured them.
+
+      ### Rows and columns
+
+      A weather station on a hill measures the rain each month. Its file, `rain.csv`:
+
+      ```file rain.csv
+      month,mm
+      1,52
+      2,41
+      3,-
+      4,38
+      5,45
+      6,60
+      ```
+
+      This is a **CSV** file (comma-separated values): one **row** per line, and the values of a row separated by commas, so that they form **columns**. The first line is a **header**: it names the columns, and it isn't data. The `-` in March means that there's no measurement for that month (the rain gauge was broken). Files of data often mark a missing value like that, so a program must expect it.
+
+      The program reads the lines (module 48 used `Files.readAllLines` too), skips the header, and splits each row into its values with `split`:
+
+      ```java run
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              List<String> lines = Files.readAllLines(Paths.get("rain.csv"));
+              int total = 0;
+              int months = 0;
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  if (parts[1].equals("-")) {
+                      System.out.println("Month " + parts[0] + ": no measurement");
+                  } else {
+                      total += Integer.valueOf(parts[1]);
+                      months++;
+                  }
+              }
+              System.out.println("Months measured: " + months);
+              System.out.println("Rain in them: " + total + " mm");
+          }
+      }
+      ```
+
+      ```output
+      Month 3: no measurement
+      Months measured: 5
+      Rain in them: 236 mm
+      ```
+
+      - The loop starts at index 1, so the header line is left out. `Integer.valueOf("mm")` would throw a NumberFormatException.
+      - `"4,38".split(",")` gives the array `["4", "38"]`: text, still. `Integer.valueOf(parts[1])` turns the text into a number. A value with a decimal point, such as `12.5`, needs `Double.valueOf`.
+      - The check for `-` comes **before** `Integer.valueOf`, since `Integer.valueOf("-")` throws too. A missing value is skipped: it isn't counted as 0, which would be a measurement of no rain at all, and so a lie.
+
+      Two more things that files of data do:
+
+      - **Tabs.** A **tab-separated** file (often named `.tsv`) has a tab between its values instead of a comma: `split("\t")`. Tabs are handy when the values themselves may contain commas, such as `Smith, Ann`.
+      - **Empty values at the end.** `split` drops empty values at the end of a row: `"5,".split(",")` gives only `["5"]`, an array of length 1, and `parts[1]` throws an ArrayIndexOutOfBoundsException. That's one reason why files mark a missing value with a `-` rather than with nothing.
+
+      ### Keeping the numbers
+
+      A sum is fine for a report, but a chart needs every value, and which month it belongs to. A **map** from the month to the rain keeps both, and a month without a measurement simply isn't in it. Put the reading in a class of its own, and the rest of the program asks it for the map. The same file again:
+
+      ```file rain.csv
+      month,mm
+      1,52
+      2,41
+      3,-
+      4,38
+      5,45
+      6,60
+      ```
+
+      ```java run
+      import java.util.Map;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              Map<Integer, Integer> rain = RainFile.read("rain.csv");
+              System.out.println(rain.size() + " months");
+              System.out.println("April: " + rain.get(4) + " mm");
+              System.out.println("March measured: " + rain.containsKey(3));
+          }
+      }
+      // ==== RainFile.java ====
+      import java.io.IOException;
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+
+      public class RainFile {
+
+          public static Map<Integer, Integer> read(String fileName) throws IOException {
+              Map<Integer, Integer> rain = new HashMap<>();
+              List<String> lines = Files.readAllLines(Paths.get(fileName));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  if (!parts[1].equals("-")) {
+                      rain.put(Integer.valueOf(parts[0]), Integer.valueOf(parts[1]));
+                  }
+              }
+              return rain;
+          }
+      }
+      ```
+
+      ```output
+      5 months
+      April: 38 mm
+      March measured: false
+      ```
+
+      `read` declares `throws IOException` (module 42), since `Files.readAllLines` can throw it, and leaves it to the caller. When the values are only a sequence, such as the cups of coffee on each day of a week in order, a **list** is enough: the position in the list says where each value belongs.
+
+      **Your turn:** the school library counts its loans each month, in the tab-separated file `loans.tsv`. The library was closed for a month, so that month has a `-`. Fill in the blanks, so that the program prints each month with its loans (or `closed`), then the busiest month:
+
+      ```text
+      month	loans
+      Jan	412
+      Feb	388
+      Mar	455
+      Apr	-
+      May	301
+      ```
+
+      The program should print:
+
+      ```
+      Jan: 412
+      Feb: 388
+      Mar: 455
+      Apr: closed
+      May: 301
+      Busiest month: Mar
+      ```
+    fill: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) throws Exception {
+              List<String> lines = Files.readAllLines(Paths.get("loans.tsv"));
+              String busiest = "";
+              int most = 0;
+              for (int i = [[1]]; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split("[[\t]]");
+                  if (parts[1].equals("-")) {
+                      System.out.println(parts[0] + ": closed");
+                  } else {
+                      int loans = Integer.[[valueOf‖parseInt]](parts[1]);
+                      System.out.println(parts[0] + ": " + loans);
+                      if (loans > most) {
+                          most = loans;
+                          busiest = parts[0];
+                      }
+                  }
+              }
+              System.out.println("Busiest month: " + busiest);
+          }
+      }
+    hints:
+      - "The first line of the file is the header. Which index does the loop start from to skip it? Which character separates the values in a `.tsv` file, and which method of `Integer` turns text into a number?"
+      - "The loop starts at index 1, after the header. The values are separated by a tab, written `\\t` inside a string. `Integer.valueOf` turns a text of digits into a number."
+    tests:
+      - files:
+          loans.tsv: "month\tloans\nJan\t412\nFeb\t388\nMar\t455\nApr\t-\nMay\t301\n"
+      - files:
+          loans.tsv: "month\tloans\nSep\t520\nOct\t-\nNov\t610\nDec\t240\n"
+        hidden: true
+      - files:
+          loans.tsv: "month\tloans\nJun\t-\nJul\t-\nAug\t95\n"
+        hidden: true
+    more:
+      - task: |
+          A running club logs how far its training group ran each week, in kilometers, in `weeks.csv`. A week without a training run has a `-`:
+
+          ```text
+          week,km
+          1,24.5
+          2,-
+          3,31
+          4,28.5
+          ```
+
+          Write the class `DistanceLog` in `DistanceLog.java`, with the method `public static Map<Integer, Double> read(String fileName) throws IOException`. It reads the file (the header first, then one row per week) and returns a map from each week's number to its kilometers, as a double. A week with a `-` isn't in the map at all.
+
+          `Main.java` is a test drive. The check runs:
+
+          ```java fragment
+          Map<Integer, Double> km = DistanceLog.read("weeks.csv");
+          System.out.println(km.size());
+          System.out.println(km.get(1));
+          System.out.println(km.get(3));
+          System.out.println(km.containsKey(2));
+          ```
+
+          and expects, for the file above:
+
+          ```
+          3
+          24.5
+          31.0
+          false
+          ```
+        seed:
+          DistanceLog.java: |
+            import java.io.IOException;
+            import java.nio.file.Files;
+            import java.nio.file.Paths;
+            import java.util.HashMap;
+            import java.util.List;
+            import java.util.Map;
+
+            public class DistanceLog {
+
+            }
+          Main.java: |
+            import java.util.Map;
+
+            public class Main {
+                public static void main(String[] args) throws Exception {
+                    Map<Integer, Double> km = DistanceLog.read("weeks.csv");
+                    System.out.println(km.size());
+                    System.out.println(km.get(1));
+                    System.out.println(km.get(3));
+                    System.out.println(km.containsKey(2));
+                }
+            }
+        solution:
+          DistanceLog.java: |
+            import java.io.IOException;
+            import java.nio.file.Files;
+            import java.nio.file.Paths;
+            import java.util.HashMap;
+            import java.util.List;
+            import java.util.Map;
+
+            public class DistanceLog {
+
+                public static Map<Integer, Double> read(String fileName) throws IOException {
+                    Map<Integer, Double> km = new HashMap<>();
+                    List<String> lines = Files.readAllLines(Paths.get(fileName));
+                    for (int i = 1; i < lines.size(); i++) {
+                        String[] parts = lines.get(i).split(",");
+                        if (!parts[1].equals("-")) {
+                            km.put(Integer.valueOf(parts[0]), Double.valueOf(parts[1]));
+                        }
+                    }
+                    return km;
+                }
+            }
+          Main.java: |
+            import java.util.Map;
+
+            public class Main {
+                public static void main(String[] args) throws Exception {
+                    Map<Integer, Double> km = DistanceLog.read("weeks.csv");
+                    System.out.println(km.size());
+                    System.out.println(km.get(1));
+                    System.out.println(km.get(3));
+                    System.out.println(km.containsKey(2));
+                }
+            }
+        hints:
+          - "Read the lines with `Files.readAllLines(Paths.get(fileName))` and go through them from index 1, which skips the header. Split each row with `split(\",\")`."
+          - "When `parts[1]` isn't `\"-\"`, put `Integer.valueOf(parts[0])` and `Double.valueOf(parts[1])` into the map. `Double.valueOf(\"31\")` is fine too: it gives 31.0."
+        tests:
+          - files:
+              weeks.csv: |
+                week,km
+                1,24.5
+                2,-
+                3,31
+                4,28.5
+            call: |
+              Map<Integer, Double> km = DistanceLog.read("weeks.csv");
+              System.out.println(km.size());
+              System.out.println(km.get(1));
+              System.out.println(km.get(3));
+              System.out.println(km.containsKey(2));
+          - files:
+              weeks.csv: |
+                week,km
+                5,-
+                6,-
+                7,40.25
+                8,12
+                9,33.5
+            call: |
+              Map<Integer, Double> km = DistanceLog.read("weeks.csv");
+              System.out.println(km.size());
+              System.out.println(km.get(7) + km.get(8));
+              System.out.println(km.containsKey(5) + " " + km.containsKey(6) + " " + km.containsKey(9));
+            hidden: true
+          - files:
+              weeks.csv: |
+                week,km
+            call: |
+              Map<Integer, Double> km = DistanceLog.read("weeks.csv");
+              System.out.println(km.isEmpty());
+            hidden: true
+      - task: |
+          A coffee machine in an office logs the cups it made each day. Some rows have a `-`, and one row lost its value altogether. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+
+          public class Main {
+              public static void main(String[] args) {
+                  String[] rows = {"day,cups", "Mon,4", "Tue,-", "Wed,6", "Thu,", "Fri,5"};
+                  ArrayList<Integer> cups = new ArrayList<>();
+                  int skipped = 0;
+                  for (int i = 1; i < rows.length; i++) {
+                      String[] parts = rows[i].split(",");
+                      if (parts.length < 2 || parts[1].equals("-")) {
+                          skipped++;
+                      } else {
+                          cups.add(Integer.valueOf(parts[1]));
+                      }
+                  }
+                  System.out.println(cups);
+                  System.out.println(skipped + " skipped");
+                  System.out.println(rows[0].split(",").length);
+              }
+          }
+        hints:
+          - "The loop starts at index 1, so the header `day,cups` isn't one of the rows it reads. A row with `-` is skipped."
+          - "`\"Thu,\".split(\",\")` drops the empty value at the end, so its array has only one element, and `parts.length < 2` is true. The last line splits the header, which has two values."
+
+  - id: charts-line-chart
+    slug: line-chart
+    title: A first line chart
+    text: |
+      A **line chart** shows how a value changes: the x axis goes across (often time: days, weeks, months), the y axis goes up (the value), and a line joins the points. A class grows a corn seedling on its windowsill and measures it once a week:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              NumberAxis weeks = new NumberAxis();
+              NumberAxis height = new NumberAxis();
+              LineChart<Number, Number> chart = new LineChart<>(weeks, height);
+
+              XYChart.Series<Number, Number> corn = new XYChart.Series<>();
+              corn.getData().add(new XYChart.Data<>(1, 3));
+              corn.getData().add(new XYChart.Data<>(2, 7));
+              corn.getData().add(new XYChart.Data<>(3, 14));
+              corn.getData().add(new XYChart.Data<>(4, 26));
+              corn.getData().add(new XYChart.Data<>(5, 41));
+              chart.getData().add(corn);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Corn");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      The classes are in the package `javafx.scene.chart`. Part by part:
+
+      - `NumberAxis` is an **axis** for numbers. A chart has two: the first one given is the x axis, the second the y axis.
+      - `LineChart<Number, Number>` is a line chart whose x values and y values are both numbers. Like the classes of module 44, the chart has type parameters: the type of its x values, then of its y values. **Number** is a class of `java.lang` that Integer and Double both extend, so a chart of Numbers takes whole numbers and decimals alike. `new LineChart<>(weeks, height)` gives the chart its two axes.
+      - `XYChart.Series` is one **series**: a set of points that the chart joins with a line. Its name has a dot because Series is a class written inside the class XYChart (the class that every chart with an x and a y axis extends). The import of `javafx.scene.chart.XYChart` covers it.
+      - `new XYChart.Data<>(1, 3)` is one **data point**: x is 1 (week 1) and y is 3 (cm). `corn.getData()` is the series's list of points, and `add` adds one at the end.
+      - `getXValue()` and `getYValue()` read a point's values, `setYValue(...)` changes one, and the series holds the point objects themselves, so a change to a point you kept shows in the series.
+      - `chart.getData()` is the chart's list of series. A series shows only once it's added to the chart.
+      - A chart is a node, like a label or a VBox: here it's the scene's root, and it could just as well be in a layout.
+
+      A `new NumberAxis()` is **auto-ranging**: it picks its range from the data, so that every point fits. By default it also includes 0, so the y axis here starts at 0. The page draws an auto-ranging axis with a range it works out the way JavaFX does, approximately.
+
+      ### Titles, labels and fixed bounds
+
+      A chart that nobody can read is no use. The same chart with a title, labels on its axes and a fixed range for the weeks:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              NumberAxis weeks = new NumberAxis("Week", 1, 6, 1);
+              NumberAxis height = new NumberAxis();
+              height.setLabel("Height (cm)");
+              LineChart<Number, Number> chart = new LineChart<>(weeks, height);
+              chart.setTitle("A corn plant grows");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<Number, Number> corn = new XYChart.Series<>();
+              corn.setName("Corn");
+              corn.getData().add(new XYChart.Data<>(1, 3));
+              corn.getData().add(new XYChart.Data<>(2, 7));
+              corn.getData().add(new XYChart.Data<>(3, 14));
+              corn.getData().add(new XYChart.Data<>(4, 26));
+              corn.getData().add(new XYChart.Data<>(5, 41));
+              corn.getData().add(new XYChart.Data<>(6, 58.5));
+              chart.getData().add(corn);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Corn");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - `new NumberAxis("Week", 1, 6, 1)` is an axis with the label `Week` that goes from 1 (its **lower bound**) to 6 (its **upper bound**), with a tick mark and a number every 1 (its **tick unit**). An axis with bounds isn't auto-ranging: it shows exactly that range, even if a point lies outside it. `new NumberAxis(1, 6, 1)` is the same without a label. `getLowerBound()`, `getUpperBound()` and `getTickUnit()` read them back as doubles (`1.0`, not `1`), and `isAutoRanging()` says whether the axis picks its own range.
+      - `height.setLabel("Height (cm)")` labels an axis that stays auto-ranging. A label should say the unit: 58.5 what?
+      - `chart.setTitle(...)` is the title above the chart (and `stage.setTitle(...)` still the window's own title).
+      - `corn.setName("Corn")` names the series. The chart's **legend**, under the chart, shows each series's name next to its color. With one series the legend says little, so `chart.setLegendVisible(false)` hides it.
+      - Week 6 is `58.5`, a Double, in the same series as the Integers: both are Numbers.
+
+      ### What the page draws, and what's checked
+
+      The drawing above is the page's own, made from what the program told the chart: approximate, like the windows of part 13. What the program decided is listed exactly under it, in "The window as text":
+
+      ```text
+      Window "Corn"
+        LineChart "A corn plant grows" (no legend)
+          x axis NumberAxis "Week" 1 to 6 by 1
+          y axis NumberAxis "Height (cm)"
+          series "Corn": (1, 3) (2, 7) (3, 14) (4, 26) (5, 41) (6, 58.5)
+      ```
+
+      These lines are what the checks of the challenges compare: the kind of chart, its title, whether the legend shows, each axis (its class and label, and its bounds and tick unit when you set them), and each series, with its name and its points in the order they were added. So a task says all of these exactly, and when it says that an axis is auto-ranging, its line shows no bounds. The colors, the sizes and the range that an auto-ranging axis picks aren't compared. Numbers are written without a `.0` at the end, so 58.5 is `58.5` and 41.0 would be `41`.
+
+      ### From a file
+
+      The class keeps the heights in a file, with a `-` for a week when nobody measured:
+
+      ```file corn.csv
+      week,cm
+      1,3
+      2,7
+      3,-
+      4,26
+      5,41
+      6,58.5
+      ```
+
+      `start` reads it as step 1 did. `start` may declare `throws Exception` (module 48 did), so the reading needs no `try`:
+
+      ```java window
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              NumberAxis weeks = new NumberAxis("Week", 1, 6, 1);
+              NumberAxis height = new NumberAxis();
+              height.setLabel("Height (cm)");
+              LineChart<Number, Number> chart = new LineChart<>(weeks, height);
+              chart.setTitle("A corn plant grows");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<Number, Number> corn = new XYChart.Series<>();
+              corn.setName("Corn");
+              List<String> lines = Files.readAllLines(Paths.get("corn.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  if (!parts[1].equals("-")) {
+                      int week = Integer.valueOf(parts[0]);
+                      double cm = Double.valueOf(parts[1]);
+                      corn.getData().add(new XYChart.Data<>(week, cm));
+                  }
+              }
+              chart.getData().add(corn);
+              System.out.println(corn);
+              System.out.println(corn.getData().size() + " points");
+              System.out.println(corn.getData().get(2));
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Corn");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```output
+      Series[Corn]
+      5 points
+      Data[4,26.0,null]
+      ```
+
+      - Week 3 has no point, so the line goes straight from week 2 to week 4. A reader can easily miss that a week is missing: only the missing mark at week 3 shows it, while the window as text and the `5 points` above say it plainly.
+      - Printing a series shows its name, and printing a point shows its x and its y. The third value, `null`, is an extra value that JavaFX lets a point carry; this course doesn't use it. The third point is week 4's: the index counts the points of the series, not the rows of the file.
+      - `cm` is a double, so even `26` from the file became `26.0`. In the window as text it's `26`, since that leaves out the `.0`.
+
+      **Your turn:** the school library wants its loans as a line chart. `loans.csv` has the month's number and the loans:
+
+      ```text
+      month,loans
+      1,412
+      2,388
+      3,455
+      4,390
+      5,301
+      6,120
+      ```
+
+      Fill in the blanks. The chart's title is `School library loans`, its x axis is labeled `Month` and goes from 1 to 12 with a tick every 1, its y axis is labeled `Loans` and auto-ranging, and its one series, `Loans`, has a point for each row of the file. The legend is hidden.
+    fill: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              NumberAxis months = new NumberAxis("Month", 1, 12, [[1]]);
+              NumberAxis loans = new NumberAxis();
+              loans.setLabel("Loans");
+              LineChart<Number, Number> chart = new [[LineChart]]<>(months, loans);
+              chart.setTitle("School library loans");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<Number, Number> series = new XYChart.Series<>();
+              series.setName("Loans");
+              List<String> lines = Files.readAllLines(Paths.get("loans.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  series.getData().add(new XYChart.[[Data]]<>(Integer.valueOf(parts[0]), Integer.valueOf(parts[1])));
+              }
+              chart.getData().[[add]](series);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Library");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "NumberAxis's four-argument constructor takes the label, the lower bound, the upper bound and the tick unit: how far apart are the months' ticks? Which chart class draws points joined by a line, which class is one point, and how does a series get into the chart's list?"
+      - "`new NumberAxis(\"Month\", 1, 12, 1)` has a tick every 1. The chart is a `LineChart`, made with its two axes. A point is an `XYChart.Data`, and the series shows only once it's added to the chart's list: `chart.getData().add(series)`."
+    tests:
+      - files:
+          loans.csv: |
+            month,loans
+            1,412
+            2,388
+            3,455
+            4,390
+            5,301
+            6,120
+        events: []
+      - files:
+          loans.csv: |
+            month,loans
+            8,95
+            9,520
+            10,610
+            11,575
+            12,240
+        events: []
+        hidden: true
+      - files:
+          loans.csv: |
+            month,loans
+            1,0
+        events: []
+        hidden: true
+    more:
+      - task: |
+          A weather station sends its rain for the year in `rain.csv`. Its first line is the station's name, then come the header and a row for each month, with a `-` for a month without a measurement:
+
+          ```text
+          Hilltop
+          month,mm
+          1,52
+          2,41
+          3,-
+          4,38
+          5,45
+          6,60
+          7,72
+          8,81
+          9,64
+          10,77
+          11,69
+          12,58
+          ```
+
+          Write `start` so that the window, titled `Rain`, shows a line chart (the scene's root) with:
+
+          - the title `Rain at Hilltop`: `Rain at ` and the name from the first line
+          - an x axis labeled `Month`, from 1 to 12 with a tick every 1
+          - a y axis labeled `Rain (mm)`, auto-ranging
+          - one series named `Rain`, with a point (month, mm) for each month that has a measurement, in the order of the file
+          - no legend
+
+          Read the rain as whole numbers. The task card shows the window for the file above.
+        seed: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> lines = Files.readAllLines(Paths.get("rain.csv"));
+                  LineChart<Number, Number> chart = new LineChart<>(new NumberAxis(), new NumberAxis());
+
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Rain");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> lines = Files.readAllLines(Paths.get("rain.csv"));
+                  NumberAxis months = new NumberAxis("Month", 1, 12, 1);
+                  NumberAxis rain = new NumberAxis();
+                  rain.setLabel("Rain (mm)");
+                  LineChart<Number, Number> chart = new LineChart<>(months, rain);
+                  chart.setTitle("Rain at " + lines.get(0));
+                  chart.setLegendVisible(false);
+
+                  XYChart.Series<Number, Number> series = new XYChart.Series<>();
+                  series.setName("Rain");
+                  for (int i = 2; i < lines.size(); i++) {
+                      String[] parts = lines.get(i).split(",");
+                      if (!parts[1].equals("-")) {
+                          series.getData().add(new XYChart.Data<>(Integer.valueOf(parts[0]), Integer.valueOf(parts[1])));
+                      }
+                  }
+                  chart.getData().add(series);
+
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Rain");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The name is `lines.get(0)`, and line 1 is the header, so the rows of data start at index 2."
+          - "Make the axes first: `new NumberAxis(\"Month\", 1, 12, 1)`, and a `new NumberAxis()` with `setLabel(\"Rain (mm)\")`. Give them to `new LineChart<>(...)`, and skip a row whose `parts[1]` is `\"-\"`."
+        tests:
+          - files:
+              rain.csv: |
+                Hilltop
+                month,mm
+                1,52
+                2,41
+                3,-
+                4,38
+                5,45
+                6,60
+                7,72
+                8,81
+                9,64
+                10,77
+                11,69
+                12,58
+            events: []
+          - files:
+              rain.csv: |
+                Lakeside
+                month,mm
+                1,-
+                2,-
+                3,30
+                4,22
+                5,-
+                6,47
+            events: []
+            hidden: true
+          - files:
+              rain.csv: |
+                Old Harbor
+                month,mm
+                7,104
+                8,96
+            events: []
+            hidden: true
+      - task: |
+          A herb garden's basil gets a series of its own. What does this program print?
+        predict: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  XYChart.Series<Number, Number> basil = new XYChart.Series<>();
+                  basil.setName("Basil");
+                  XYChart.Data<Number, Number> first = new XYChart.Data<>(1, 4);
+                  basil.getData().add(first);
+                  basil.getData().add(new XYChart.Data<>(2, 9));
+                  first.setYValue(5);
+                  System.out.println(basil.getData().size());
+                  System.out.println(first.getXValue() + " " + first.getYValue());
+                  System.out.println(basil.getData().get(1));
+                  System.out.println(basil);
+
+                  LineChart<Number, Number> chart = new LineChart<>(new NumberAxis(), new NumberAxis());
+                  chart.getData().add(basil);
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Herbs");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The series holds the point objects themselves, so `first.setYValue(5)` changes the first point of the series. `getXValue()` and `getYValue()` give a point's x and y."
+          - "Printing a point gives `Data[x,y,null]`, and printing a series gives `Series[` and its name, then `]`."
+
+  - id: charts-several-series
+    slug: several-series
+    title: Several series from a map
+    text: |
+      One chart can hold several series. Each gets a line of its own, in a color of its own, and the legend says which line is which: that's what makes lines easy to compare. A bakery counts what it sells of three products each week, one column per product:
+
+      ```file bakery.csv
+      week,bread,buns,pies
+      1,120,80,15
+      2,115,95,-
+      3,130,90,18
+      4,125,-,22
+      5,140,105,20
+      ```
+
+      The names of the series come from the header, so the program needs no change when the bakery adds a fourth product:
+
+      ```java window
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              NumberAxis weeks = new NumberAxis("Week", 1, 5, 1);
+              NumberAxis sold = new NumberAxis();
+              sold.setLabel("Sold");
+              LineChart<Number, Number> chart = new LineChart<>(weeks, sold);
+              chart.setTitle("Bakery sales");
+
+              List<String> lines = Files.readAllLines(Paths.get("bakery.csv"));
+              String[] names = lines.get(0).split(",");
+              List<XYChart.Series<Number, Number>> products = new ArrayList<>();
+              for (int c = 1; c < names.length; c++) {
+                  XYChart.Series<Number, Number> series = new XYChart.Series<>();
+                  series.setName(names[c]);
+                  products.add(series);
+              }
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  int week = Integer.valueOf(parts[0]);
+                  for (int c = 1; c < parts.length; c++) {
+                      if (!parts[c].equals("-")) {
+                          products.get(c - 1).getData().add(new XYChart.Data<>(week, Integer.valueOf(parts[c])));
+                      }
+                  }
+              }
+              chart.getData().addAll(products);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Bakery");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - Column `c` of the file is the series at index `c - 1` of the list, since column 0 is the week.
+      - A `-` leaves that week out of that series only: the other products of the week still get their points.
+      - `chart.getData().addAll(products)` adds every series of the list, in its order. That order is the order of the legend, and the order in which the chart hands out its colors.
+      - The legend is visible, as charts have it by default. With three lines, it's needed.
+
+      ### One series per key
+
+      A file can also have one row per measurement. A school garden measures three plants each week, and writes a row for each plant:
+
+      ```file garden.csv
+      week,plant,cm
+      1,tomato,12
+      1,bean,8
+      1,pea,5
+      2,tomato,15
+      2,bean,13
+      2,pea,-
+      3,tomato,19
+      3,bean,20
+      3,pea,9
+      ```
+
+      Now the names are in the rows, and the program doesn't know them before it reads the file. A map from each name to its series collects the points: the first row of a plant makes its series, and every row adds a point to the series of its plant:
+
+      ```java window
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              NumberAxis weeks = new NumberAxis("Week", 1, 3, 1);
+              NumberAxis height = new NumberAxis();
+              height.setLabel("Height (cm)");
+              LineChart<Number, Number> chart = new LineChart<>(weeks, height);
+              chart.setTitle("School garden");
+
+              Map<String, XYChart.Series<Number, Number>> byPlant = new HashMap<>();
+              List<String> lines = Files.readAllLines(Paths.get("garden.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  if (!parts[2].equals("-")) {
+                      String plant = parts[1];
+                      XYChart.Series<Number, Number> series = byPlant.get(plant);
+                      if (series == null) {
+                          series = new XYChart.Series<>();
+                          series.setName(plant);
+                          byPlant.put(plant, series);
+                      }
+                      series.getData().add(new XYChart.Data<>(Integer.valueOf(parts[0]), Integer.valueOf(parts[2])));
+                  }
+              }
+
+              List<String> plants = new ArrayList<>(byPlant.keySet());
+              Collections.sort(plants);
+              for (String plant : plants) {
+                  chart.getData().add(byPlant.get(plant));
+              }
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Garden");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - The map's values are series. `byPlant.get(plant)` returns `null` for a plant that has no series yet, and then the program makes one, names it and puts it in the map. Module 33 gave each new key its own list the same way ("A list as a value").
+      - The series go to the chart in the **sorted** order of their names. A HashMap's order isn't one you choose (module 31), so a program that added them in the map's order would have a legend in an order nobody decided, and the checks compare the series in order. Sorted names give a fixed order: bean, pea, tomato.
+      - Each series gets its points in the order of the rows, and the file goes week by week, so every series goes from the smallest x up. Keep it that way: the window as text lists the points in the order they were added, and so do the checks. If a file isn't in order, sort the rows first.
+
+      **Your turn:** a running club writes down how far each runner ran in each week's training run, one row per runner and week, with a `-` when a runner skipped the run:
+
+      ```text
+      week,runner,km
+      1,Mia,5.5
+      1,Leo,7
+      1,Ava,4
+      2,Mia,6
+      2,Leo,-
+      2,Ava,4.5
+      3,Mia,6.5
+      3,Leo,8
+      3,Ava,5
+      ```
+
+      The window, its line chart and the axes are ready. Read `runs.csv` and add a series for each runner, named after the runner, with a point (week, km) for each of the runner's rows that has a number, in the order of the file. Read the km as doubles. Add the series to the chart in the alphabetical order of the names (here Ava, Leo, Mia). A runner whose every row has a `-` gets no series. The task card shows the window for the file above.
+    seed: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              NumberAxis weeks = new NumberAxis();
+              weeks.setLabel("Week");
+              NumberAxis km = new NumberAxis();
+              km.setLabel("km");
+              LineChart<Number, Number> chart = new LineChart<>(weeks, km);
+              chart.setTitle("Running club");
+
+              List<String> lines = Files.readAllLines(Paths.get("runs.csv"));
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Club");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              NumberAxis weeks = new NumberAxis();
+              weeks.setLabel("Week");
+              NumberAxis km = new NumberAxis();
+              km.setLabel("km");
+              LineChart<Number, Number> chart = new LineChart<>(weeks, km);
+              chart.setTitle("Running club");
+
+              List<String> lines = Files.readAllLines(Paths.get("runs.csv"));
+              Map<String, XYChart.Series<Number, Number>> byRunner = new HashMap<>();
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  if (!parts[2].equals("-")) {
+                      String runner = parts[1];
+                      XYChart.Series<Number, Number> series = byRunner.get(runner);
+                      if (series == null) {
+                          series = new XYChart.Series<>();
+                          series.setName(runner);
+                          byRunner.put(runner, series);
+                      }
+                      series.getData().add(new XYChart.Data<>(Integer.valueOf(parts[0]), Double.valueOf(parts[2])));
+                  }
+              }
+              List<String> runners = new ArrayList<>(byRunner.keySet());
+              Collections.sort(runners);
+              for (String runner : runners) {
+                  chart.getData().add(byRunner.get(runner));
+              }
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Club");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "Keep a `Map<String, XYChart.Series<Number, Number>>` from each runner's name to the runner's series. For a row with a number, get the runner's series from the map, and make it (named, and put in the map) when it's `null`."
+      - "After the loop, copy the names into a list, `new ArrayList<>(byRunner.keySet())`, sort it with `Collections.sort`, and add each runner's series to `chart.getData()` in that order."
+    tests:
+      - files:
+          runs.csv: |
+            week,runner,km
+            1,Mia,5.5
+            1,Leo,7
+            1,Ava,4
+            2,Mia,6
+            2,Leo,-
+            2,Ava,4.5
+            3,Mia,6.5
+            3,Leo,8
+            3,Ava,5
+        events: []
+      - files:
+          runs.csv: |
+            week,runner,km
+            4,Zoe,10
+            4,Ben,-
+            5,Ben,-
+            5,Zoe,11.25
+            5,Kai,3
+            6,Kai,3.5
+        events: []
+        hidden: true
+      - files:
+          runs.csv: |
+            week,runner,km
+            1,Noor,2
+        events: []
+        hidden: true
+    more:
+      - task: |
+          A park measures its young trees in centimeters. What does this program print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.Collections;
+          import java.util.HashMap;
+          import java.util.List;
+          import java.util.Map;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  String[] rows = {"1,oak,30", "1,elm,25", "2,oak,34", "2,ash,-", "2,elm,29"};
+                  Map<String, XYChart.Series<Number, Number>> byTree = new HashMap<>();
+                  for (String row : rows) {
+                      String[] parts = row.split(",");
+                      XYChart.Series<Number, Number> series = byTree.get(parts[1]);
+                      if (series == null) {
+                          series = new XYChart.Series<>();
+                          series.setName(parts[1]);
+                          byTree.put(parts[1], series);
+                      }
+                      if (!parts[2].equals("-")) {
+                          series.getData().add(new XYChart.Data<>(Integer.valueOf(parts[0]), Integer.valueOf(parts[2])));
+                      }
+                  }
+                  List<String> trees = new ArrayList<>(byTree.keySet());
+                  Collections.sort(trees);
+                  LineChart<Number, Number> chart = new LineChart<>(new NumberAxis(), new NumberAxis());
+                  for (String tree : trees) {
+                      chart.getData().add(byTree.get(tree));
+                      System.out.println(tree + ": " + byTree.get(tree).getData().size());
+                  }
+
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Park");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "This program makes a tree's series before it checks for `-`, so every tree that has a row gets a series, even one without a single number."
+          - "The names are sorted before they're printed: ash, elm, oak. Count each tree's rows with a number."
+      - task: |
+          A town has three swimming pools, and counts each pool's visitors per week in the tab-separated file `pools.tsv`, one column per pool. A pool that was closed for a week has a `-`:
+
+          ```text
+          week	North	Lake	Park
+          1	310	520	-
+          2	295	610	140
+          3	-	700	180
+          4	350	655	210
+          ```
+
+          Write `start` so that the window, titled `Pools`, shows a line chart (the scene's root) with the title `Swimming pool visitors`, an auto-ranging x axis labeled `Week`, an auto-ranging y axis labeled `Visitors` and a visible legend. It has a series for each pool, named as in the header and in the header's order, with a point (week, visitors) for each week the pool was open, in the order of the file. The file may have any number of pools. The task card shows the window for the file above.
+        seed: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.ArrayList;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> lines = Files.readAllLines(Paths.get("pools.tsv"));
+
+                  stage.setTitle("Pools");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.ArrayList;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> lines = Files.readAllLines(Paths.get("pools.tsv"));
+                  NumberAxis weeks = new NumberAxis();
+                  weeks.setLabel("Week");
+                  NumberAxis visitors = new NumberAxis();
+                  visitors.setLabel("Visitors");
+                  LineChart<Number, Number> chart = new LineChart<>(weeks, visitors);
+                  chart.setTitle("Swimming pool visitors");
+
+                  String[] names = lines.get(0).split("\t");
+                  List<XYChart.Series<Number, Number>> pools = new ArrayList<>();
+                  for (int c = 1; c < names.length; c++) {
+                      XYChart.Series<Number, Number> series = new XYChart.Series<>();
+                      series.setName(names[c]);
+                      pools.add(series);
+                  }
+                  for (int i = 1; i < lines.size(); i++) {
+                      String[] parts = lines.get(i).split("\t");
+                      int week = Integer.valueOf(parts[0]);
+                      for (int c = 1; c < parts.length; c++) {
+                          if (!parts[c].equals("-")) {
+                              pools.get(c - 1).getData().add(new XYChart.Data<>(week, Integer.valueOf(parts[c])));
+                          }
+                      }
+                  }
+                  chart.getData().addAll(pools);
+
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Pools");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "Split the header with `split(\"\\t\")`: its values from index 1 on are the pools' names. Make a series for each, in a list, before you read the rows."
+          - "In each row, column `c` (from 1 on) belongs to the series at index `c - 1`. Skip a `-`, and add the series to the chart with `chart.getData().addAll(...)` at the end."
+        tests:
+          - files:
+              pools.tsv: "week\tNorth\tLake\tPark\n1\t310\t520\t-\n2\t295\t610\t140\n3\t-\t700\t180\n4\t350\t655\t210\n"
+            events: []
+          - files:
+              pools.tsv: "week\tHill\tRiver\n7\t-\t88\n8\t120\t-\n9\t135\t95\n"
+            events: []
+            hidden: true
+          - files:
+              pools.tsv: "week\tA\tB\tC\tD\n1\t1\t2\t3\t4\n"
+            events: []
+            hidden: true
+
+  - id: charts-formula-series
+    slug: series-from-formula
+    title: Series from a formula
+    text: |
+      Not every chart shows measurements. A chart can show what a formula computes, and then the points come from a loop. Module 50 kept an application's logic in a plain class without JavaFX, which can be checked without a window; computed points belong in such a class too, and the window only draws them.
+
+      ### Computing the points
+
+      A cup of tea cools down. A simple model of it (a model, not an exact law of nature): each minute, the tea loses a tenth of how much warmer than the room it is. The class `Cooling` computes the temperature at each minute:
+
+      ```java run
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Double> tea = Cooling.temperatures(90, 20, 5);
+              System.out.println(tea);
+              System.out.println("After 5 minutes: " + tea.get(5));
+          }
+      }
+      // ==== Cooling.java ====
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Cooling {
+
+          public static List<Double> temperatures(double start, double room, int minutes) {
+              List<Double> temps = new ArrayList<>();
+              double tea = start;
+              for (int minute = 0; minute <= minutes; minute++) {
+                  temps.add(Math.round(tea * 10) / 10.0);
+                  tea = room + (tea - room) * 0.9;
+              }
+              return temps;
+          }
+      }
+      ```
+
+      ```output
+      [90.0, 83.0, 76.7, 71.0, 65.9, 61.3]
+      After 5 minutes: 61.3
+      ```
+
+      - The list holds the temperature at minute 0, 1, 2 and so on: the index is the minute. So the x of each point is its index, and the list needs no x values of its own.
+      - `Math.round(x)` rounds a double to the nearest whole number and gives it as a `long` (2.5 goes up to 3). So `Math.round(tea * 10) / 10.0` keeps one decimal: 65.927 becomes 659.27, then 659, then 65.9. Dividing by `10.0`, a double, is what keeps the decimal. Computing with doubles leaves tiny errors (`0.1 + 0.2` is `0.30000000000000004`), and the window as text would show them. Rounding what goes into the chart keeps the numbers readable.
+      - The program prints the numbers before any chart exists. Checking them first is easier than reading them off a drawing.
+
+      ### Charting them
+
+      The window makes a series from each list. The tea in a 20 °C kitchen, and the same tea taken out to a 5 °C balcony:
+
+      ```java window
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              NumberAxis minutes = new NumberAxis("Minutes", 0, 30, 5);
+              NumberAxis degrees = new NumberAxis();
+              degrees.setLabel("Temperature (°C)");
+              LineChart<Number, Number> chart = new LineChart<>(minutes, degrees);
+              chart.setTitle("A cup of tea cools down");
+              chart.setCreateSymbols(false);
+
+              chart.getData().add(series("In the kitchen", Cooling.temperatures(90, 20, 30)));
+              chart.getData().add(series("On the balcony", Cooling.temperatures(90, 5, 30)));
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Tea");
+              stage.show();
+          }
+
+          private XYChart.Series<Number, Number> series(String name, List<Double> values) {
+              XYChart.Series<Number, Number> series = new XYChart.Series<>();
+              series.setName(name);
+              for (int x = 0; x < values.size(); x++) {
+                  series.getData().add(new XYChart.Data<>(x, values.get(x)));
+              }
+              return series;
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      // ==== Cooling.java ====
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Cooling {
+
+          public static List<Double> temperatures(double start, double room, int minutes) {
+              List<Double> temps = new ArrayList<>();
+              double tea = start;
+              for (int minute = 0; minute <= minutes; minute++) {
+                  temps.add(Math.round(tea * 10) / 10.0);
+                  tea = room + (tea - room) * 0.9;
+              }
+              return temps;
+          }
+      }
+      ```
+
+      - The method `series` turns a name and a list of values into a series, so both lines are made the same way. It's an instance method of Main, as `start` is.
+      - `chart.setCreateSymbols(false)` leaves out the marks that a line chart puts on each point. With 31 points per line, the marks would only clutter it. The window as text says `(no symbols)`.
+      - Both series share the axes, so the lines can be compared: the tea on the balcony cools faster, and toward a lower temperature.
+
+      ### Points without a line: ScatterChart
+
+      A **ScatterChart** draws the points and no line. It suits points that have no order, where a line from one to the next would mean nothing. Fifteen raindrops land on a paving stone of 50 by 50 cm. Where each one lands is random, so the program uses a `Random` with a seed (module 46): the drops land in the same places at every run, and the window is the same at every run, as the window of a check must be.
+
+      ```java window
+      import java.util.Random;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.ScatterChart;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              ScatterChart<Number, Number> chart = new ScatterChart<>(new NumberAxis("cm", 0, 50, 10), new NumberAxis("cm", 0, 50, 10));
+              chart.setTitle("Raindrops on a paving stone");
+              chart.setLegendVisible(false);
+
+              Random random = new Random(14);
+              XYChart.Series<Number, Number> drops = new XYChart.Series<>();
+              drops.setName("Drops");
+              for (int i = 0; i < 15; i++) {
+                  int x = random.nextInt(51);
+                  int y = random.nextInt(51);
+                  drops.getData().add(new XYChart.Data<>(x, y));
+              }
+              chart.getData().add(drops);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Rain");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      A ScatterChart is made and filled exactly like a LineChart: axes, series, data points.
+
+      **Your turn:** a café stacks paper cups into a pyramid for its window: one cup on top, two under it, three under those, and so on. Write the class `CupPyramid` in `CupPyramid.java`, with the method `public static List<Integer> cups(int maxRows)`. It returns a list of `maxRows + 1` numbers: at index `r`, the number of cups that a pyramid of `r` rows needs (so 0 at index 0, then 1, then 1 + 2, then 1 + 2 + 3, ...). No JavaFX in it: a chart can use it later.
+
+      The check runs `System.out.println(CupPyramid.cups(5));` and expects:
+
+      ```
+      [0, 1, 3, 6, 10, 15]
+      ```
+    seed:
+      CupPyramid.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class CupPyramid {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(CupPyramid.cups(5));
+            }
+        }
+    solution:
+      CupPyramid.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class CupPyramid {
+
+            public static List<Integer> cups(int maxRows) {
+                List<Integer> counts = new ArrayList<>();
+                int total = 0;
+                counts.add(total);
+                for (int row = 1; row <= maxRows; row++) {
+                    total += row;
+                    counts.add(total);
+                }
+                return counts;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(CupPyramid.cups(5));
+            }
+        }
+    hints:
+      - "Keep a running total. A pyramid of `r` rows has the cups of `r - 1` rows plus a bottom row of `r` cups."
+      - "Add 0 to the list first (a pyramid of no rows), then loop `row` from 1 to `maxRows`: add `row` to the total, and the total to the list."
+    forbid:
+      - pattern: \bjavafx\b
+        message: "Keep CupPyramid free of JavaFX: it computes the numbers, and a window can chart them."
+    tests:
+      - call: System.out.println(CupPyramid.cups(5));
+      - call: |
+          System.out.println(CupPyramid.cups(0));
+          System.out.println(CupPyramid.cups(1));
+        hidden: true
+      - call: |
+          List<Integer> big = CupPyramid.cups(20);
+          System.out.println(big.size() + " " + big.get(12) + " " + big.get(20));
+        hidden: true
+    more:
+      - task: |
+          A ball is thrown straight up. With the pull of gravity rounded to 10 m/s² and no air to slow it, its height in meters after `t` seconds is `start + speed * t - 5 * t * t`, where `start` is the height it leaves the hand at and `speed` its speed upward in m/s. The file `throw.txt` holds both, separated by a comma, such as `2,14`. `Main` already reads them and has the method `height`.
+
+          Finish `start`: the window, titled `Ball`, shows a line chart (the scene's root) with the title `A thrown ball`, an auto-ranging x axis labeled `Seconds`, an auto-ranging y axis labeled `Height (m)`, no symbols and no legend. Its one series, `Ball`, has a point (t, height) for t = 0, 0.25, 0.5, 0.75 and so on, as long as the height is at least 0: the first point whose height is below 0 isn't added, and the series ends there. The task card shows the window for `2,14`.
+        seed: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+              private double start;
+              private double speed;
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  String[] parts = Files.readAllLines(Paths.get("throw.txt")).get(0).split(",");
+                  this.start = Double.valueOf(parts[0]);
+                  this.speed = Double.valueOf(parts[1]);
+
+                  stage.setTitle("Ball");
+                  stage.show();
+              }
+
+              private double height(double t) {
+                  return this.start + this.speed * t - 5 * t * t;
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+              private double start;
+              private double speed;
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  String[] parts = Files.readAllLines(Paths.get("throw.txt")).get(0).split(",");
+                  this.start = Double.valueOf(parts[0]);
+                  this.speed = Double.valueOf(parts[1]);
+
+                  NumberAxis seconds = new NumberAxis();
+                  seconds.setLabel("Seconds");
+                  NumberAxis meters = new NumberAxis();
+                  meters.setLabel("Height (m)");
+                  LineChart<Number, Number> chart = new LineChart<>(seconds, meters);
+                  chart.setTitle("A thrown ball");
+                  chart.setCreateSymbols(false);
+                  chart.setLegendVisible(false);
+
+                  XYChart.Series<Number, Number> ball = new XYChart.Series<>();
+                  ball.setName("Ball");
+                  double t = 0;
+                  while (this.height(t) >= 0) {
+                      ball.getData().add(new XYChart.Data<>(t, this.height(t)));
+                      t += 0.25;
+                  }
+                  chart.getData().add(ball);
+
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Ball");
+                  stage.show();
+              }
+
+              private double height(double t) {
+                  return this.start + this.speed * t - 5 * t * t;
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "A `while` loop fits: start with `double t = 0`, and as long as `this.height(t) >= 0`, add the point `(t, this.height(t))` and add 0.25 to `t`."
+          - "`setCreateSymbols(false)` and `setLegendVisible(false)` are methods of the chart; the labels are set on the two `NumberAxis` objects."
+        tests:
+          - files:
+              throw.txt: "2,14\n"
+            events: []
+          - files:
+              throw.txt: "0,10\n"
+            events: []
+            hidden: true
+          - files:
+              throw.txt: "1.5,3\n"
+            events: []
+            hidden: true
+      - task: |
+          A program should put points at x = 0, 0.5, 1, 1.5 and 2, but its author wrote `i / 2`. What does it print?
+        predict: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  XYChart.Series<Number, Number> squares = new XYChart.Series<>();
+                  for (int i = 0; i <= 4; i++) {
+                      squares.getData().add(new XYChart.Data<>(i / 2, i * i));
+                  }
+                  System.out.println(squares.getData().size());
+                  System.out.println(squares.getData().get(3));
+                  System.out.println(squares.getData().get(4).getXValue());
+
+                  LineChart<Number, Number> chart = new LineChart<>(new NumberAxis(), new NumberAxis());
+                  chart.getData().add(squares);
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Squares");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "`i` is an int and so is `2`, so `i / 2` is integer division: 0, 0, 1, 1, 2. The loop still adds five points."
+          - "The point at index 3 was made when `i` was 3: x is `3 / 2`, and y is `3 * 3`. Printing a point gives `Data[x,y,null]`."
+
+  - id: charts-slider
+    slug: slider
+    title: A slider that redraws a chart
+    text: |
+      A chart can answer "what if?" questions: what if I paid more each month, what if the price were lower? A **slider** lets the user pick a number by dragging, and the program redraws the chart for it.
+
+      ### A slider and its value
+
+      Ana borrows 1200 euros from a friend, without interest, and pays the same amount back each month. A slider picks the amount:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.Slider;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Slider payment = new Slider(50, 300, 100);
+              payment.setShowTickLabels(true);
+              payment.setShowTickMarks(true);
+              payment.setMajorTickUnit(50);
+              Label amount = new Label("Pay 100 euros a month");
+              Label months = new Label("Paid back in 12 months");
+              payment.valueProperty().addListener((observable, oldValue, newValue) -> {
+                  int euros = newValue.intValue();
+                  amount.setText("Pay " + euros + " euros a month");
+                  months.setText("Paid back in " + this.monthsToPay(1200, euros) + " months");
+              });
+
+              stage.setScene(new Scene(new VBox(10, payment, amount, months)));
+              stage.setTitle("Paying back");
+              stage.show();
+          }
+
+          private int monthsToPay(int debt, int perMonth) {
+              return (debt + perMonth - 1) / perMonth;
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      set Slider 1 150
+      ```
+
+      The window is drawn after the event in the block under the code, `set Slider 1 150`: the first slider of the window, moved to 150. The checks of the challenges move sliders with such lines. When you run a program yourself ("Run with my input" in a challenge, or the Playground), you can drag its slider: when you let go of it, the program runs again from the start with the slider moved to where you let go, as a click on a button did in part 13.
+
+      - `new Slider(50, 300, 100)` goes from 50 (its **min**) to 300 (its **max**) and starts at 100. `getValue()` returns the value, a double, and `setValue(...)` moves the slider. A value outside the range is kept inside it: `setValue(500)` moves this slider to 300.
+      - `setShowTickMarks(true)` draws tick marks along the slider and `setShowTickLabels(true)` numbers under them, a number every `setMajorTickUnit(50)`, counted from the min.
+      - `payment.valueProperty()` is the value as a property, like the `textProperty()` of a text field in module 49, and `addListener` gives it a listener that runs at each real change. The old and the new value are **Numbers** here, not doubles: `newValue.intValue()` gives the whole part (137.8 gives 137), and `newValue.doubleValue()` the double. `newValue * 2` doesn't compile, since a Number isn't a double: get a double or an int out of it first.
+      - The listener runs only when the value changes. The labels must match the slider before anyone moves it, so `start` gives them the texts for 100.
+      - `(debt + perMonth - 1) / perMonth` rounds the division up: 1200 at 150 a month takes exactly 8 months, and 1200 at 250 takes 5 (the last month pays less).
+
+      ### Snapping to ticks
+
+      A payment of 137.4 euros is odd. With `setSnapToTicks(true)`, a slider that is let go moves to the nearest **tick**. The ticks are the major ticks, plus `setMinorTickCount(...)` small ticks between each two of them (3 by default). So with a major tick unit of 50 and a minor tick count of 4, there's a tick every 10: 50, 60, 70 and so on, and `set Slider 1 137` moves the slider to 140. With a minor tick count of 0, only the major ticks are left. Halfway between two ticks goes up.
+
+      In the window as text, a slider's line says its min, max and value, then what was set. For the payment slider above, with `setMinorTickCount(4)` and `setSnapToTicks(true)` added, after `set Slider 1 137`, it reads `Slider 50 to 300, value 140, tick labels, tick marks, major tick 50, snaps` (the minor tick count isn't listed, but it decides where the slider snaps).
+
+      ### Redrawing a chart
+
+      Now Ana's debt month by month, as a line chart that follows the slider. When the payment changes, the program **clears** the series and fills it again with the new points:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.Slider;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Slider payment = new Slider(50, 300, 100);
+              payment.setShowTickLabels(true);
+              payment.setMajorTickUnit(50);
+              payment.setMinorTickCount(4);
+              payment.setSnapToTicks(true);
+              Label amount = new Label("Pay 100 euros a month");
+
+              NumberAxis months = new NumberAxis("Month", 0, 24, 2);
+              NumberAxis owed = new NumberAxis("Still owed (euros)", 0, 1200, 200);
+              LineChart<Number, Number> chart = new LineChart<>(months, owed);
+              chart.setTitle("Paying back 1200 euros");
+              chart.setLegendVisible(false);
+              XYChart.Series<Number, Number> debt = new XYChart.Series<>();
+              debt.setName("Debt");
+              this.fill(debt, 100);
+              chart.getData().add(debt);
+
+              payment.valueProperty().addListener((observable, oldValue, newValue) -> {
+                  int euros = newValue.intValue();
+                  amount.setText("Pay " + euros + " euros a month");
+                  this.fill(debt, euros);
+              });
+
+              stage.setScene(new Scene(new VBox(10, payment, amount, chart)));
+              stage.setTitle("Paying back");
+              stage.show();
+          }
+
+          private void fill(XYChart.Series<Number, Number> debt, int perMonth) {
+              debt.getData().clear();
+              int owed = 1200;
+              int month = 0;
+              debt.getData().add(new XYChart.Data<>(month, owed));
+              while (owed > 0) {
+                  owed = Math.max(0, owed - perMonth);
+                  month++;
+                  debt.getData().add(new XYChart.Data<>(month, owed));
+              }
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      ```events
+      set Slider 1 237
+      ```
+
+      - The slider snaps: 237 becomes 240, so the debt is gone in 5 months.
+      - `fill` empties the series with `debt.getData().clear()`, then adds the points for the new payment: the debt at month 0, and after each month until nothing is owed. Without the `clear()`, the new points would come after the old ones, and the line would jump back to the start.
+      - `fill` runs once in `start`, for the first payment, and again in the listener at each change. Writing the filling once, in a method, keeps the two the same.
+      - The series stays in the chart the whole time, with its name and its color: only its points change.
+      - Both axes have fixed bounds. An auto-ranging axis would pick a new range at every move, and the line would seem to stay put while the numbers under it changed. Fixed bounds make the moves visible: a bigger payment makes the line fall faster.
+
+      **Your turn:** a pancake recipe needs, per person, 60 g of flour and 150 ml of milk. Fill in the blanks of the recipe scaler: its slider goes from 1 to 8 people, starts at 4 and snaps to whole numbers (a major tick every 1, no minor ticks), and its labels follow the slider. The task card shows the window after the slider is moved to 6, where the labels say `Pancakes for 6`, `Flour: 360 g` and `Milk: 900 ml`.
+    fill: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.control.Label;
+      import javafx.scene.control.Slider;
+      import javafx.scene.layout.VBox;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Slider people = new Slider(1, 8, 4);
+              people.setShowTickLabels(true);
+              people.setMajorTickUnit(1);
+              people.setMinorTickCount(0);
+              people.setSnapToTicks([[true]]);
+              Label title = new Label("Pancakes for 4");
+              Label flour = new Label("Flour: 240 g");
+              Label milk = new Label("Milk: 600 ml");
+              people.[[valueProperty]]().addListener((observable, oldValue, newValue) -> {
+                  int count = newValue.[[intValue]]();
+                  title.setText("Pancakes for " + count);
+                  flour.setText("Flour: " + count * 60 + " g");
+                  milk.setText("Milk: " + count * 150 + " ml");
+              });
+
+              stage.setScene(new Scene(new VBox(10, people, title, flour, milk)));
+              stage.setTitle("Pancakes");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "Which value turns snapping on? Which method of the slider gives its value as a property that a listener can go on, and which method of a Number gives an int?"
+      - "A slider snaps to its ticks when `setSnapToTicks` is given `true`. The listener goes on the slider's value as a property, `valueProperty()`, and the new value is a Number: `intValue()` gives it as an int."
+    tests:
+      - events: |
+          set Slider 1 6
+      - events: |
+          set Slider 1 2.4
+        hidden: true
+      - events: |
+          set Slider 1 8
+          set Slider 1 1
+        hidden: true
+      - events: []
+        hidden: true
+    more:
+      - task: |
+          A music app has a volume slider. What does this program print?
+        predict: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.control.Slider;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Slider volume = new Slider(0, 10, 5);
+                  volume.valueProperty().addListener((observable, oldValue, newValue) -> System.out.println(oldValue + " to " + newValue));
+                  volume.setValue(8);
+                  volume.setValue(12);
+                  volume.setValue(10);
+                  System.out.println(volume.getValue());
+
+                  stage.setScene(new Scene(new VBox(volume)));
+                  stage.setTitle("Volume");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The value is a double, and the listener gets Numbers that print as doubles do: `5.0`, not `5`. A value above the max is kept at the max."
+          - "So `setValue(12)` moves the slider to 10. Then `setValue(10)` changes nothing, and a listener runs only at a real change."
+      - task: |
+          A phone company has two plans. **Plan A** costs 10 euros a month plus 2 euros per GB of data. **Plan B** has no monthly fee, only a price per GB, and a slider tries out that price. The window is partly built: the slider, the label and the chart with Plan A. Add Plan B:
+
+          - a second series, `Plan B`, added to the chart after Plan A, with a point (gb, price * gb) for each gb from 0 to 10, where the price is the slider's value as an int
+          - when the slider moves, Plan B gets the points for the new price (it stays the second series), and the label says `Plan B: 4 euros per GB` with the new price
+
+          The slider goes from 1 to 5, starts at 3 and snaps to whole numbers. The task card shows the window after the slider is moved to 4.
+        seed: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.Slider;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Slider price = new Slider(1, 5, 3);
+                  price.setShowTickLabels(true);
+                  price.setMajorTickUnit(1);
+                  price.setMinorTickCount(0);
+                  price.setSnapToTicks(true);
+                  Label label = new Label("Plan B: 3 euros per GB");
+
+                  NumberAxis gigabytes = new NumberAxis("GB", 0, 10, 1);
+                  NumberAxis euros = new NumberAxis();
+                  euros.setLabel("Euros");
+                  LineChart<Number, Number> chart = new LineChart<>(gigabytes, euros);
+                  chart.setTitle("Monthly cost");
+                  XYChart.Series<Number, Number> planA = new XYChart.Series<>();
+                  planA.setName("Plan A");
+                  for (int gb = 0; gb <= 10; gb++) {
+                      planA.getData().add(new XYChart.Data<>(gb, 10 + 2 * gb));
+                  }
+                  chart.getData().add(planA);
+
+                  stage.setScene(new Scene(new VBox(10, price, label, chart)));
+                  stage.setTitle("Phone plans");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.scene.control.Label;
+          import javafx.scene.control.Slider;
+          import javafx.scene.layout.VBox;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  Slider price = new Slider(1, 5, 3);
+                  price.setShowTickLabels(true);
+                  price.setMajorTickUnit(1);
+                  price.setMinorTickCount(0);
+                  price.setSnapToTicks(true);
+                  Label label = new Label("Plan B: 3 euros per GB");
+
+                  NumberAxis gigabytes = new NumberAxis("GB", 0, 10, 1);
+                  NumberAxis euros = new NumberAxis();
+                  euros.setLabel("Euros");
+                  LineChart<Number, Number> chart = new LineChart<>(gigabytes, euros);
+                  chart.setTitle("Monthly cost");
+                  XYChart.Series<Number, Number> planA = new XYChart.Series<>();
+                  planA.setName("Plan A");
+                  for (int gb = 0; gb <= 10; gb++) {
+                      planA.getData().add(new XYChart.Data<>(gb, 10 + 2 * gb));
+                  }
+                  chart.getData().add(planA);
+
+                  XYChart.Series<Number, Number> planB = new XYChart.Series<>();
+                  planB.setName("Plan B");
+                  this.fill(planB, 3);
+                  chart.getData().add(planB);
+                  price.valueProperty().addListener((observable, oldValue, newValue) -> {
+                      int perGb = newValue.intValue();
+                      label.setText("Plan B: " + perGb + " euros per GB");
+                      this.fill(planB, perGb);
+                  });
+
+                  stage.setScene(new Scene(new VBox(10, price, label, chart)));
+                  stage.setTitle("Phone plans");
+                  stage.show();
+              }
+
+              private void fill(XYChart.Series<Number, Number> plan, int perGb) {
+                  plan.getData().clear();
+                  for (int gb = 0; gb <= 10; gb++) {
+                      plan.getData().add(new XYChart.Data<>(gb, perGb * gb));
+                  }
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "Write a method `fill(XYChart.Series<Number, Number> plan, int perGb)` that clears the series and adds the 11 points. Call it in `start` with 3, before adding Plan B to the chart."
+          - "In the listener of `price.valueProperty()`, take `newValue.intValue()`, set the label's text and call `fill` again with the new price."
+        tests:
+          - events: |
+              set Slider 1 4
+          - events: []
+            hidden: true
+          - events: |
+              set Slider 1 1.4
+            hidden: true
+          - events: |
+              set Slider 1 5
+              set Slider 1 2
+            hidden: true
+
+  - id: charts-bar-charts
+    slug: bar-charts
+    title: Bar charts for categories
+    text: |
+      A line chart has numbers on both axes, and its line says that the values change from one x to the next. Often the x values are names instead: days of the week, products, kinds of books. Such values are **categories**, and a **bar chart** compares them, with a bar per category whose height is its value.
+
+      ### A bar chart
+
+      A city's bike share counts the trips started on each day of one week:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              CategoryAxis days = new CategoryAxis();
+              days.setLabel("Day");
+              NumberAxis trips = new NumberAxis();
+              trips.setLabel("Trips");
+              BarChart<String, Number> chart = new BarChart<>(days, trips);
+              chart.setTitle("Bike share trips in a week");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<String, Number> week = new XYChart.Series<>();
+              week.setName("Trips");
+              week.getData().add(new XYChart.Data<>("Mon", 340));
+              week.getData().add(new XYChart.Data<>("Tue", 310));
+              week.getData().add(new XYChart.Data<>("Wed", 365));
+              week.getData().add(new XYChart.Data<>("Thu", 330));
+              week.getData().add(new XYChart.Data<>("Fri", 405));
+              week.getData().add(new XYChart.Data<>("Sat", 520));
+              week.getData().add(new XYChart.Data<>("Sun", 470));
+              chart.getData().add(week);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Bike share");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - A **CategoryAxis** is an axis of text values. Each category gets a place of its own along the axis, in the order the categories first appear in the data: here Mon to Sun, as they were added.
+      - `BarChart<String, Number>`: the x values are Strings and the y values Numbers, so the series and the points have the same two types, `XYChart.Series<String, Number>` and `new XYChart.Data<>("Mon", 340)`.
+      - Everything else is as in a line chart: titles, labels, series, legend. In the window as text, a category is in quotes: `("Mon", 340)`.
+      - A bar chart needs one category axis and one number axis. With the number axis first, `BarChart<Number, String>`, the bars lie sideways, which suits long category names.
+
+      ### Totals from a file
+
+      The bike share's file has a row per station and day. A station that was closed for the day (for repairs) has a `-`:
+
+      ```file trips.csv
+      day,station,trips
+      Mon,Harbor,180
+      Mon,Market,160
+      Tue,Harbor,150
+      Tue,Market,-
+      Wed,Harbor,170
+      Wed,Market,195
+      Thu,Harbor,165
+      Thu,Market,165
+      ```
+
+      The chart of the days needs each day's **total**, so the program adds the rows up in a map from the day to its total, as module 31 counted things. It also needs the days in order, and a HashMap's keys don't keep one, so a list keeps the days in the order they first appear in the file:
+
+      ```java window
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              Map<String, Integer> totals = new HashMap<>();
+              List<String> days = new ArrayList<>();
+              List<String> lines = Files.readAllLines(Paths.get("trips.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  String day = parts[0];
+                  if (!days.contains(day)) {
+                      days.add(day);
+                      totals.put(day, 0);
+                  }
+                  if (!parts[2].equals("-")) {
+                      totals.put(day, totals.get(day) + Integer.valueOf(parts[2]));
+                  }
+              }
+
+              CategoryAxis dayAxis = new CategoryAxis();
+              dayAxis.setLabel("Day");
+              NumberAxis tripAxis = new NumberAxis();
+              tripAxis.setLabel("Trips");
+              BarChart<String, Number> chart = new BarChart<>(dayAxis, tripAxis);
+              chart.setTitle("Trips per day, all stations");
+              chart.setLegendVisible(false);
+              XYChart.Series<String, Number> series = new XYChart.Series<>();
+              series.setName("Trips");
+              for (String day : days) {
+                  series.getData().add(new XYChart.Data<>(day, totals.get(day)));
+              }
+              chart.getData().add(series);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Bike share");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - A day enters the list and the map (with the total 0) at its first row, and every row with a number adds to its day's total. A closed station adds nothing to the total: no trips started there.
+      - The bars come from the list, in its order, and each bar's value from the map.
+
+      ### Bars side by side
+
+      To compare the stations, each station gets a series of its own, as each plant did in step 3. A bar chart puts the bars of a category side by side, one per series, and the legend tells the series apart:
+
+      ```file trips.csv
+      day,station,trips
+      Mon,Harbor,180
+      Mon,Market,160
+      Tue,Harbor,150
+      Tue,Market,-
+      Wed,Harbor,170
+      Wed,Market,195
+      Thu,Harbor,165
+      Thu,Market,165
+      ```
+
+      ```java window
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              Map<String, XYChart.Series<String, Number>> byStation = new HashMap<>();
+              List<String> lines = Files.readAllLines(Paths.get("trips.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  String station = parts[1];
+                  if (!byStation.containsKey(station)) {
+                      XYChart.Series<String, Number> series = new XYChart.Series<>();
+                      series.setName(station);
+                      byStation.put(station, series);
+                  }
+                  int trips = 0;
+                  if (!parts[2].equals("-")) {
+                      trips = Integer.valueOf(parts[2]);
+                  }
+                  byStation.get(station).getData().add(new XYChart.Data<>(parts[0], trips));
+              }
+
+              CategoryAxis dayAxis = new CategoryAxis();
+              dayAxis.setLabel("Day");
+              NumberAxis tripAxis = new NumberAxis();
+              tripAxis.setLabel("Trips");
+              BarChart<String, Number> chart = new BarChart<>(dayAxis, tripAxis);
+              chart.setTitle("Trips per station");
+              List<String> stations = new ArrayList<>(byStation.keySet());
+              Collections.sort(stations);
+              for (String station : stations) {
+                  chart.getData().add(byStation.get(station));
+              }
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Bike share");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      - Here a closed station gets a bar of 0 for its day, on purpose: every series then has the same categories in the same order, and the empty place next to Harbor's Tuesday bar shows that Market had no trips. (A `-` that meant "not measured" would instead be left out, as in step 1: then no bar, rather than a bar of 0.)
+      - The stations are sorted by name, as the plants were, so the series are in a fixed order.
+
+      **Your turn:** the school library counts its loans per genre in `genres.csv`:
+
+      ```text
+      genre,loans
+      Fantasy,128
+      Mystery,96
+      Comics,152
+      Science,61
+      ```
+
+      Fill in the blanks of a bar chart with a category axis labeled `Genre`, an auto-ranging number axis labeled `Loans`, the title `Loans by genre`, no legend, and one series, `Loans`, with a bar for each row, in the order of the file.
+    fill: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              CategoryAxis genres = new [[CategoryAxis]]();
+              genres.setLabel("Genre");
+              NumberAxis loans = new NumberAxis();
+              loans.setLabel("Loans");
+              BarChart<[[String]], Number> chart = new [[BarChart]]<>(genres, loans);
+              chart.setTitle("Loans by genre");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<String, Number> series = new XYChart.Series<>();
+              series.setName("Loans");
+              List<String> lines = Files.readAllLines(Paths.get("genres.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  series.getData().add(new XYChart.Data<>(parts[0], Integer.valueOf(parts[1])));
+              }
+              chart.getData().add(series);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Library");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "What kind of axis holds text values, and which chart class draws bars? The chart's first type is the type of its x values."
+      - "The axis of text values is a `CategoryAxis`, and the chart a `BarChart`. The genres are text, so the x type is `String`."
+    tests:
+      - files:
+          genres.csv: |
+            genre,loans
+            Fantasy,128
+            Mystery,96
+            Comics,152
+            Science,61
+        events: []
+      - files:
+          genres.csv: |
+            genre,loans
+            Poetry,12
+            History,40
+        events: []
+        hidden: true
+      - files:
+          genres.csv: |
+            genre,loans
+            Sports,77
+        events: []
+        hidden: true
+    more:
+      - task: |
+          A stand at a farmers' market writes down each sale as a row, `apples,3`: the product and the kilograms (whole numbers). For a bar chart of the day, it needs the totals and the products in order. Write the class `SalesLog` in `SalesLog.java`, with two methods:
+
+          - `public static Map<String, Integer> totals(List<String> rows)`: a map from each product to the sum of its kilograms
+          - `public static List<String> products(List<String> rows)`: each product once, in the order it first appears in the rows
+
+          The rows have no header. No JavaFX in it. The check runs:
+
+          ```java fragment
+          List<String> rows = new ArrayList<>();
+          rows.add("apples,3");
+          rows.add("pears,2");
+          rows.add("apples,5");
+          rows.add("plums,1");
+          rows.add("pears,4");
+          System.out.println(SalesLog.products(rows));
+          Map<String, Integer> totals = SalesLog.totals(rows);
+          System.out.println(totals.get("apples") + " " + totals.get("pears") + " " + totals.get("plums"));
+          ```
+
+          and expects:
+
+          ```
+          [apples, pears, plums]
+          8 6 1
+          ```
+        seed:
+          SalesLog.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+            import java.util.List;
+            import java.util.Map;
+
+            public class SalesLog {
+
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+            import java.util.Map;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<String> rows = new ArrayList<>();
+                    rows.add("apples,3");
+                    rows.add("pears,2");
+                    rows.add("apples,5");
+                    rows.add("plums,1");
+                    rows.add("pears,4");
+                    System.out.println(SalesLog.products(rows));
+                    Map<String, Integer> totals = SalesLog.totals(rows);
+                    System.out.println(totals.get("apples") + " " + totals.get("pears") + " " + totals.get("plums"));
+                }
+            }
+        solution:
+          SalesLog.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+            import java.util.List;
+            import java.util.Map;
+
+            public class SalesLog {
+
+                public static Map<String, Integer> totals(List<String> rows) {
+                    Map<String, Integer> totals = new HashMap<>();
+                    for (String row : rows) {
+                        String[] parts = row.split(",");
+                        int kilos = Integer.valueOf(parts[1]);
+                        totals.put(parts[0], totals.getOrDefault(parts[0], 0) + kilos);
+                    }
+                    return totals;
+                }
+
+                public static List<String> products(List<String> rows) {
+                    List<String> products = new ArrayList<>();
+                    for (String row : rows) {
+                        String product = row.split(",")[0];
+                        if (!products.contains(product)) {
+                            products.add(product);
+                        }
+                    }
+                    return products;
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+            import java.util.Map;
+
+            public class Main {
+                public static void main(String[] args) {
+                    List<String> rows = new ArrayList<>();
+                    rows.add("apples,3");
+                    rows.add("pears,2");
+                    rows.add("apples,5");
+                    rows.add("plums,1");
+                    rows.add("pears,4");
+                    System.out.println(SalesLog.products(rows));
+                    Map<String, Integer> totals = SalesLog.totals(rows);
+                    System.out.println(totals.get("apples") + " " + totals.get("pears") + " " + totals.get("plums"));
+                }
+            }
+        hints:
+          - "In `totals`, split each row and add its kilograms to the product's total: `totals.getOrDefault(product, 0)` gives 0 for a product not seen yet."
+          - "In `products`, add a product to the list only when `products.contains(product)` is false, so each one is there once, in the order of its first row."
+        forbid:
+          - pattern: \bjavafx\b
+            message: "Keep SalesLog free of JavaFX: it adds the numbers up, and a window can chart them."
+        tests:
+          - call: |
+              List<String> rows = new ArrayList<>();
+              rows.add("apples,3");
+              rows.add("pears,2");
+              rows.add("apples,5");
+              rows.add("plums,1");
+              rows.add("pears,4");
+              System.out.println(SalesLog.products(rows));
+              Map<String, Integer> totals = SalesLog.totals(rows);
+              System.out.println(totals.get("apples") + " " + totals.get("pears") + " " + totals.get("plums"));
+          - call: |
+              List<String> rows = new ArrayList<>();
+              rows.add("honey,1");
+              rows.add("honey,1");
+              rows.add("eggs,2");
+              rows.add("honey,10");
+              System.out.println(SalesLog.products(rows));
+              Map<String, Integer> totals = SalesLog.totals(rows);
+              System.out.println(totals.size() + " " + totals.get("honey") + " " + totals.get("eggs"));
+            hidden: true
+          - call: |
+              List<String> rows = new ArrayList<>();
+              System.out.println(SalesLog.products(rows));
+              System.out.println(SalesLog.totals(rows).isEmpty());
+              rows.add("kale,7");
+              System.out.println(SalesLog.products(rows) + " " + SalesLog.totals(rows).get("kale"));
+            hidden: true
+      - task: |
+          A small cinema shows three films, each in an afternoon and an evening show, and writes the tickets sold in `tickets.csv`, one column per show. A show that was canceled has a `-`:
+
+          ```text
+          film,Afternoon,Evening
+          Cartoon,64,22
+          Nature film,31,48
+          Comedy,40,-
+          ```
+
+          Write `start` so that the window, titled `Cinema`, shows a bar chart (the scene's root) with the title `Tickets sold`, a category axis labeled `Film`, an auto-ranging number axis labeled `Tickets` and a visible legend. It has a series for each show, named as in the header and in its order, with a bar (film, tickets) for each film, in the order of the file; a canceled show has no bar for that film. The file may have any number of shows. The task card shows the window for the file above.
+        seed: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.ArrayList;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.BarChart;
+          import javafx.scene.chart.CategoryAxis;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> lines = Files.readAllLines(Paths.get("tickets.csv"));
+
+                  stage.setTitle("Cinema");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.ArrayList;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.BarChart;
+          import javafx.scene.chart.CategoryAxis;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> lines = Files.readAllLines(Paths.get("tickets.csv"));
+                  CategoryAxis films = new CategoryAxis();
+                  films.setLabel("Film");
+                  NumberAxis tickets = new NumberAxis();
+                  tickets.setLabel("Tickets");
+                  BarChart<String, Number> chart = new BarChart<>(films, tickets);
+                  chart.setTitle("Tickets sold");
+
+                  String[] shows = lines.get(0).split(",");
+                  List<XYChart.Series<String, Number>> series = new ArrayList<>();
+                  for (int c = 1; c < shows.length; c++) {
+                      XYChart.Series<String, Number> show = new XYChart.Series<>();
+                      show.setName(shows[c]);
+                      series.add(show);
+                  }
+                  for (int i = 1; i < lines.size(); i++) {
+                      String[] parts = lines.get(i).split(",");
+                      for (int c = 1; c < parts.length; c++) {
+                          if (!parts[c].equals("-")) {
+                              series.get(c - 1).getData().add(new XYChart.Data<>(parts[0], Integer.valueOf(parts[c])));
+                          }
+                      }
+                  }
+                  chart.getData().addAll(series);
+
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Cinema");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "This is step 3's bakery chart with categories: a series per column of the header (from index 1), and in each row, column `c` goes to the series at index `c - 1`, as the point `(parts[0], tickets)`."
+          - "The chart is a `BarChart<String, Number>` made with a `CategoryAxis` and a `NumberAxis`, and every series is `XYChart.Series<String, Number>`."
+        tests:
+          - files:
+              tickets.csv: |
+                film,Afternoon,Evening
+                Cartoon,64,22
+                Nature film,31,48
+                Comedy,40,-
+            events: []
+          - files:
+              tickets.csv: |
+                film,Morning,Afternoon,Evening
+                Musical,-,55,90
+                Western,12,18,-
+            events: []
+            hidden: true
+          - files:
+              tickets.csv: |
+                film,Matinee
+                Silent film,9
+            events: []
+            hidden: true
+
+  - id: charts-honest-charts
+    slug: honest-charts
+    title: Honest charts
+    text: |
+      A chart can persuade: a picture makes a point faster than a table of numbers does. That's why a chart must show its numbers fairly. The same numbers can make a small difference look huge, by a choice that's easy to miss: where the y axis starts.
+
+      ### A truncated axis
+
+      Three brands of rechargeable batteries are compared by how many times a battery can be charged before it wears out. The brands and the numbers are made up:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              CategoryAxis brands = new CategoryAxis();
+              NumberAxis cycles = new NumberAxis("Charge cycles", 970, 1015, 5);
+              BarChart<String, Number> chart = new BarChart<>(brands, cycles);
+              chart.setTitle("Brand C lasts longest!");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<String, Number> series = new XYChart.Series<>();
+              series.setName("Cycles");
+              series.getData().add(new XYChart.Data<>("Brand A", 980));
+              series.getData().add(new XYChart.Data<>("Brand B", 1000));
+              series.getData().add(new XYChart.Data<>("Brand C", 1010));
+              chart.getData().add(series);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Batteries");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      Brand C's bar is four times as tall as Brand A's, yet its number is only 3 percent bigger (1010 against 980). The y axis starts at 970: it is **truncated**. Every bar loses the same 970 from its bottom, which takes away almost all of the short bars and leaves the differences.
+
+      The length of a bar is what the eye compares, so the length must stand for the value: a bar twice as long must mean twice as much. That holds only when the bars start at 0. The fair chart is the same program with another axis:
+
+      ```java window
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              CategoryAxis brands = new CategoryAxis();
+              NumberAxis cycles = new NumberAxis("Charge cycles", 0, 1200, 200);
+              BarChart<String, Number> chart = new BarChart<>(brands, cycles);
+              chart.setTitle("Charge cycles per battery");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<String, Number> series = new XYChart.Series<>();
+              series.setName("Cycles");
+              series.getData().add(new XYChart.Data<>("Brand A", 980));
+              series.getData().add(new XYChart.Data<>("Brand B", 1000));
+              series.getData().add(new XYChart.Data<>("Brand C", 1010));
+              chart.getData().add(series);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Batteries");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      ```
+
+      Now the bars are almost the same, as the numbers are. The title changed too: it says what is shown, and leaves the judging to the reader.
+
+      ### Rules of thumb
+
+      - **Bars start at 0.** An auto-ranging NumberAxis already includes 0, since its `forceZeroInRange` is `true` by default. `setForceZeroInRange(false)` lets it start near the smallest value instead, and so do bounds that you give. Never do either for bars.
+      - **Lines may zoom in, in plain sight.** A line chart shows how a value changes, and a y axis from 15 to 25 °C can be the right choice for a day's temperatures. The numbers on the axis say where it starts, so a reader can see that it zooms in.
+      - **Charts that are compared share their scale.** Two charts side by side with different y axes look alike when their numbers aren't.
+      - **Labels say what and in which unit**, and a title says what is shown, not what to think of it.
+
+      In this module's tasks, honest bounds are set with numbers (the window as text shows bounds that are set, and not `forceZeroInRange`).
+
+      ### Honest bounds, computed
+
+      When the data comes from a file, the program doesn't know the largest value in advance, so it computes the bounds: 0 at the bottom, and at the top the first tick at or above the largest value. A class without JavaFX does it:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Main {
+          public static void main(String[] args) {
+              List<Integer> cycles = new ArrayList<>();
+              cycles.add(980);
+              cycles.add(1000);
+              cycles.add(1010);
+              System.out.println(Bounds.upperBound(cycles, 200));
+              System.out.println(Bounds.upperBound(cycles, 10));
+              System.out.println(Bounds.upperBound(new ArrayList<>(), 50));
+          }
+      }
+      // ==== Bounds.java ====
+      import java.util.List;
+
+      public class Bounds {
+
+          public static int upperBound(List<Integer> values, int tick) {
+              int max = 0;
+              for (int value : values) {
+                  max = Math.max(max, value);
+              }
+              int upper = tick;
+              while (upper < max) {
+                  upper += tick;
+              }
+              return upper;
+          }
+      }
+      ```
+
+      ```output
+      1200
+      1010
+      50
+      ```
+
+      The upper bound is a whole number of ticks, so the top of the axis has a number, and it's at least one tick, so an axis for data of only zeros still has a range. The chart then uses `new NumberAxis("Charge cycles", 0, Bounds.upperBound(cycles, 200), 200)`.
+
+      **Your turn:** a delivery team's weekly report compares three made-up parcel services by the percentage of parcels they deliver on time, read from `ontime.csv`. Its y axis is truncated: it starts at 95, so a difference of 3 points looks huge, and its title doesn't say what the bars show. Change the y axis to go from 0 to 100 with a tick every 10 (keep its label `On time (%)`), and the chart's title to `Parcels delivered on time`. Everything else stays as it is. The task card shows the window for this file:
+
+      ```text
+      service,percent
+      Service A,96
+      Service B,97
+      Service C,99
+      ```
+    seed: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              CategoryAxis services = new CategoryAxis();
+              services.setLabel("Service");
+              NumberAxis percent = new NumberAxis("On time (%)", 95, 100, 1);
+              BarChart<String, Number> chart = new BarChart<>(services, percent);
+              chart.setTitle("Week 41");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<String, Number> series = new XYChart.Series<>();
+              series.setName("On time");
+              List<String> lines = Files.readAllLines(Paths.get("ontime.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  series.getData().add(new XYChart.Data<>(parts[0], Integer.valueOf(parts[1])));
+              }
+              chart.getData().add(series);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Parcels");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              CategoryAxis services = new CategoryAxis();
+              services.setLabel("Service");
+              NumberAxis percent = new NumberAxis("On time (%)", 0, 100, 10);
+              BarChart<String, Number> chart = new BarChart<>(services, percent);
+              chart.setTitle("Parcels delivered on time");
+              chart.setLegendVisible(false);
+
+              XYChart.Series<String, Number> series = new XYChart.Series<>();
+              series.setName("On time");
+              List<String> lines = Files.readAllLines(Paths.get("ontime.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  series.getData().add(new XYChart.Data<>(parts[0], Integer.valueOf(parts[1])));
+              }
+              chart.getData().add(series);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Parcels");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "The y axis is made by `new NumberAxis(\"On time (%)\", 95, 100, 1)`: the numbers are the lower bound, the upper bound and the tick unit."
+      - "A percentage goes from 0 to 100, so the honest axis is `new NumberAxis(\"On time (%)\", 0, 100, 10)`. Then change the text in `setTitle`."
+    tests:
+      - files:
+          ontime.csv: |
+            service,percent
+            Service A,96
+            Service B,97
+            Service C,99
+        events: []
+      - files:
+          ontime.csv: |
+            service,percent
+            Service D,88
+            Service E,91
+        events: []
+        hidden: true
+      - files:
+          ontime.csv: |
+            service,percent
+            Service F,100
+            Service G,95
+            Service H,97
+            Service I,98
+        events: []
+        hidden: true
+    more:
+      - task: |
+          Which tick unit to use? An auto-ranging axis picks a "nice" one, and `Bounds` can too. Add the method `public static int niceTick(int max)` to `Bounds` (in `Bounds.java`, next to `upperBound`). It returns the first number of the sequence 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, ... (each step multiplies by 2, then by 2.5, then by 2, as 1, 2, 5 repeat with one more zero) for which 10 ticks reach the largest value: `tick * 10 >= max`. So `niceTick(1010)` is 200 (100 gives only 1000), `niceTick(47)` is 5 and `niceTick(0)` is 1.
+
+          The check runs:
+
+          ```java fragment
+          System.out.println(Bounds.niceTick(1010));
+          System.out.println(Bounds.niceTick(47));
+          System.out.println(Bounds.niceTick(0));
+          ```
+
+          and expects:
+
+          ```
+          200
+          5
+          1
+          ```
+        seed:
+          Bounds.java: |
+            import java.util.List;
+
+            public class Bounds {
+
+                public static int upperBound(List<Integer> values, int tick) {
+                    int max = 0;
+                    for (int value : values) {
+                        max = Math.max(max, value);
+                    }
+                    int upper = tick;
+                    while (upper < max) {
+                        upper += tick;
+                    }
+                    return upper;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(Bounds.niceTick(1010));
+                    System.out.println(Bounds.niceTick(47));
+                    System.out.println(Bounds.niceTick(0));
+                }
+            }
+        solution:
+          Bounds.java: |
+            import java.util.List;
+
+            public class Bounds {
+
+                public static int upperBound(List<Integer> values, int tick) {
+                    int max = 0;
+                    for (int value : values) {
+                        max = Math.max(max, value);
+                    }
+                    int upper = tick;
+                    while (upper < max) {
+                        upper += tick;
+                    }
+                    return upper;
+                }
+
+                public static int niceTick(int max) {
+                    int power = 1;
+                    while (true) {
+                        if (power * 10 >= max) {
+                            return power;
+                        }
+                        if (power * 2 * 10 >= max) {
+                            return power * 2;
+                        }
+                        if (power * 5 * 10 >= max) {
+                            return power * 5;
+                        }
+                        power = power * 10;
+                    }
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(Bounds.niceTick(1010));
+                    System.out.println(Bounds.niceTick(47));
+                    System.out.println(Bounds.niceTick(0));
+                }
+            }
+        hints:
+          - "Go through the sequence by powers of ten: 1, 10, 100, ... For each power, try the power itself, then 2 times it, then 5 times it, and return the first whose 10 ticks reach `max`."
+          - "A `while (true)` loop can hold the three checks, each with a `return`, and multiply the power by 10 at its end."
+        tests:
+          - call: |
+              System.out.println(Bounds.niceTick(1010));
+              System.out.println(Bounds.niceTick(47));
+              System.out.println(Bounds.niceTick(0));
+          - call: |
+              System.out.println(Bounds.niceTick(10) + " " + Bounds.niceTick(11) + " " + Bounds.niceTick(20) + " " + Bounds.niceTick(21));
+              System.out.println(Bounds.niceTick(50) + " " + Bounds.niceTick(51) + " " + Bounds.niceTick(100) + " " + Bounds.niceTick(101));
+            hidden: true
+          - call: |
+              System.out.println(Bounds.niceTick(1) + " " + Bounds.niceTick(7) + " " + Bounds.niceTick(130) + " " + Bounds.niceTick(4999) + " " + Bounds.niceTick(5001));
+            hidden: true
+      - task: |
+          A youth club votes on where its trip goes, and the votes are in `votes.csv`. `Bounds` (with `upperBound` and `niceTick`) is ready. Write `start`: the window, titled `Club trip`, shows a bar chart (the scene's root) with the title `Where should the trip go?`, a category axis labeled `Place`, no legend, and one series, `Votes`, with a bar (place, votes) for each row, in the order of the file. Its y axis is labeled `Votes`, starts at 0 and has bounds computed from the data: the tick unit is `niceTick` of the largest number of votes, and the upper bound is `upperBound` of the votes with that tick unit. The task card shows the window for this file, where the axis goes from 0 to 50 with a tick every 5:
+
+          ```text
+          place,votes
+          Lake camp,34
+          Science museum,21
+          Zoo,47
+          Climbing hall,12
+          ```
+        seed:
+          Main.java: |
+            import java.nio.file.Files;
+            import java.nio.file.Paths;
+            import java.util.ArrayList;
+            import java.util.List;
+            import javafx.application.Application;
+            import javafx.scene.Scene;
+            import javafx.scene.chart.BarChart;
+            import javafx.scene.chart.CategoryAxis;
+            import javafx.scene.chart.NumberAxis;
+            import javafx.scene.chart.XYChart;
+            import javafx.stage.Stage;
+
+            public class Main extends Application {
+
+                @Override
+                public void start(Stage stage) throws Exception {
+                    List<String> lines = Files.readAllLines(Paths.get("votes.csv"));
+
+                    stage.setTitle("Club trip");
+                    stage.show();
+                }
+
+                public static void main(String[] args) {
+                    launch(Main.class);
+                }
+            }
+          Bounds.java: |
+            import java.util.List;
+
+            public class Bounds {
+
+                public static int upperBound(List<Integer> values, int tick) {
+                    int max = 0;
+                    for (int value : values) {
+                        max = Math.max(max, value);
+                    }
+                    int upper = tick;
+                    while (upper < max) {
+                        upper += tick;
+                    }
+                    return upper;
+                }
+
+                public static int niceTick(int max) {
+                    int power = 1;
+                    while (true) {
+                        if (power * 10 >= max) {
+                            return power;
+                        }
+                        if (power * 2 * 10 >= max) {
+                            return power * 2;
+                        }
+                        if (power * 5 * 10 >= max) {
+                            return power * 5;
+                        }
+                        power = power * 10;
+                    }
+                }
+            }
+        solution:
+          Main.java: |
+            import java.nio.file.Files;
+            import java.nio.file.Paths;
+            import java.util.ArrayList;
+            import java.util.List;
+            import javafx.application.Application;
+            import javafx.scene.Scene;
+            import javafx.scene.chart.BarChart;
+            import javafx.scene.chart.CategoryAxis;
+            import javafx.scene.chart.NumberAxis;
+            import javafx.scene.chart.XYChart;
+            import javafx.stage.Stage;
+
+            public class Main extends Application {
+
+                @Override
+                public void start(Stage stage) throws Exception {
+                    List<String> lines = Files.readAllLines(Paths.get("votes.csv"));
+                    List<String> places = new ArrayList<>();
+                    List<Integer> votes = new ArrayList<>();
+                    for (int i = 1; i < lines.size(); i++) {
+                        String[] parts = lines.get(i).split(",");
+                        places.add(parts[0]);
+                        votes.add(Integer.valueOf(parts[1]));
+                    }
+                    int max = 0;
+                    for (int count : votes) {
+                        max = Math.max(max, count);
+                    }
+                    int tick = Bounds.niceTick(max);
+
+                    CategoryAxis placeAxis = new CategoryAxis();
+                    placeAxis.setLabel("Place");
+                    NumberAxis voteAxis = new NumberAxis("Votes", 0, Bounds.upperBound(votes, tick), tick);
+                    BarChart<String, Number> chart = new BarChart<>(placeAxis, voteAxis);
+                    chart.setTitle("Where should the trip go?");
+                    chart.setLegendVisible(false);
+                    XYChart.Series<String, Number> series = new XYChart.Series<>();
+                    series.setName("Votes");
+                    for (int i = 0; i < places.size(); i++) {
+                        series.getData().add(new XYChart.Data<>(places.get(i), votes.get(i)));
+                    }
+                    chart.getData().add(series);
+
+                    stage.setScene(new Scene(chart));
+                    stage.setTitle("Club trip");
+                    stage.show();
+                }
+
+                public static void main(String[] args) {
+                    launch(Main.class);
+                }
+            }
+          Bounds.java: |
+            import java.util.List;
+
+            public class Bounds {
+
+                public static int upperBound(List<Integer> values, int tick) {
+                    int max = 0;
+                    for (int value : values) {
+                        max = Math.max(max, value);
+                    }
+                    int upper = tick;
+                    while (upper < max) {
+                        upper += tick;
+                    }
+                    return upper;
+                }
+
+                public static int niceTick(int max) {
+                    int power = 1;
+                    while (true) {
+                        if (power * 10 >= max) {
+                            return power;
+                        }
+                        if (power * 2 * 10 >= max) {
+                            return power * 2;
+                        }
+                        if (power * 5 * 10 >= max) {
+                            return power * 5;
+                        }
+                        power = power * 10;
+                    }
+                }
+            }
+        hints:
+          - "Read the rows into two lists first, the places and the votes, so that the bounds can be computed before the axis is made."
+          - "Find the largest vote, `int tick = Bounds.niceTick(max);`, then `new NumberAxis(\"Votes\", 0, Bounds.upperBound(votes, tick), tick)`."
+        tests:
+          - files:
+              votes.csv: |
+                place,votes
+                Lake camp,34
+                Science museum,21
+                Zoo,47
+                Climbing hall,12
+            events: []
+          - files:
+              votes.csv: |
+                place,votes
+                Beach,130
+                Old castle,64
+            events: []
+            hidden: true
+          - files:
+              votes.csv: |
+                place,votes
+                Nowhere,0
+            events: []
+            hidden: true
+
+  - id: charts-own-data
+    slug: own-data
+    title: Charts from your own data
+    text: |
+      This step puts the module together: a file of rows, some computing, and a chart that shows the result honestly. The last challenge is a small tool that charts any data written in its format.
+
+      ### From a file to a chart, the whole way
+
+      A household writes down its electricity meter's reading at the start of each month. The meter only counts up, so the electricity used in a month is the difference between two readings in a row:
+
+      ```file meter.csv
+      month,kWh
+      Jan,10250
+      Feb,10560
+      Mar,10830
+      Apr,11040
+      May,11190
+      ```
+
+      The computing goes in a class of its own, and the window charts what it returns:
+
+      ```java window
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.List;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.BarChart;
+      import javafx.scene.chart.CategoryAxis;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              List<String> months = new ArrayList<>();
+              List<Integer> readings = new ArrayList<>();
+              List<String> lines = Files.readAllLines(Paths.get("meter.csv"));
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  months.add(parts[0]);
+                  readings.add(Integer.valueOf(parts[1]));
+              }
+              List<Integer> used = Meter.differences(readings);
+              System.out.println(used);
+
+              CategoryAxis monthAxis = new CategoryAxis();
+              monthAxis.setLabel("Month");
+              NumberAxis kwhAxis = new NumberAxis();
+              kwhAxis.setLabel("Electricity used (kWh)");
+              BarChart<String, Number> chart = new BarChart<>(monthAxis, kwhAxis);
+              chart.setTitle("Electricity used per month");
+              chart.setLegendVisible(false);
+              XYChart.Series<String, Number> series = new XYChart.Series<>();
+              series.setName("kWh");
+              for (int i = 0; i < used.size(); i++) {
+                  series.getData().add(new XYChart.Data<>(months.get(i), used.get(i)));
+              }
+              chart.getData().add(series);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Electricity");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+      // ==== Meter.java ====
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class Meter {
+
+          public static List<Integer> differences(List<Integer> readings) {
+              List<Integer> used = new ArrayList<>();
+              for (int i = 1; i < readings.size(); i++) {
+                  used.add(readings.get(i) - readings.get(i - 1));
+              }
+              return used;
+          }
+      }
+      ```
+
+      ```output
+      [310, 270, 210, 150]
+      ```
+
+      Five readings give four differences: the reading of February minus that of January is what January used, so the bars are January to April. `months.get(i)` pairs difference `i` with the month it was used in.
+
+      Here are the choices that every chart of this module made, as a list to go through for a chart of your own:
+
+      1. **Read the rows**: skip the header, `split` on the separator, turn the text into numbers with `Integer.valueOf` or `Double.valueOf`, and decide what a missing value (`-`) means: left out, or 0 because nothing happened.
+      2. **Compute** what the chart shows (totals, differences, a formula) in a plain class, and print it to check it before any chart exists.
+      3. **Choose the chart**: a line chart when x is a number and the values change along it, a bar chart to compare categories, a scatter chart for points that have no order.
+      4. **Axes**: labels with units, bars from 0, fixed bounds when a slider changes the data, and the same scale for charts that are compared.
+      5. **Series**: a name for each, the legend when there are several, the points from the smallest x up, and series in an order you chose (the file's, or sorted names), never a HashMap's.
+
+      ### The end of section 14.1
+
+      This module followed the MOOC's section 14.1, on data visualization. You read rows of data into numbers, lists and maps, drew line charts with NumberAxis, XYChart.Series and XYChart.Data, made several series from a file's columns or from a map, computed series from a formula in a plain class, redrew a chart with a Slider and its `valueProperty()` listener, compared categories with a BarChart and a CategoryAxis, and kept charts honest. Module 52 follows the MOOC's section 14.2: it draws on a canvas with colors and the mouse, works with images pixel by pixel, and explains sound.
+
+      **Your turn:** a sensor outside a mountain hut reads the temperature three times a day, in whole degrees, and writes `temps.csv`. A failed reading has a `-` (careful: `-3` is a reading, 3 degrees below zero):
+
+      ```text
+      day,hour,temp
+      1,6,4
+      1,12,11
+      1,18,8
+      2,6,-3
+      2,12,-
+      2,18,6
+      3,6,5
+      3,12,14
+      3,18,10
+      ```
+
+      Write `start` so that the window, titled `Mountain hut`, shows a line chart (the scene's root) with the title `Coldest and warmest`, an auto-ranging x axis labeled `Day`, an auto-ranging y axis labeled `Temperature (°C)` and a visible legend. It has two series, first `Lowest`, then `Highest`: for each day with at least one reading, `Lowest` has the point (day, the day's lowest reading) and `Highest` the point (day, the day's highest reading), from the smallest day up. The rows may come in any order. The task card shows the window for the file above.
+    seed: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              List<String> lines = Files.readAllLines(Paths.get("temps.csv"));
+
+              stage.setTitle("Mountain hut");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import java.nio.file.Files;
+      import java.nio.file.Paths;
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.HashMap;
+      import java.util.List;
+      import java.util.Map;
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.chart.LineChart;
+      import javafx.scene.chart.NumberAxis;
+      import javafx.scene.chart.XYChart;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) throws Exception {
+              List<String> lines = Files.readAllLines(Paths.get("temps.csv"));
+              Map<Integer, Integer> lowest = new HashMap<>();
+              Map<Integer, Integer> highest = new HashMap<>();
+              for (int i = 1; i < lines.size(); i++) {
+                  String[] parts = lines.get(i).split(",");
+                  if (!parts[2].equals("-")) {
+                      int day = Integer.valueOf(parts[0]);
+                      int temp = Integer.valueOf(parts[2]);
+                      if (!lowest.containsKey(day) || temp < lowest.get(day)) {
+                          lowest.put(day, temp);
+                      }
+                      if (!highest.containsKey(day) || temp > highest.get(day)) {
+                          highest.put(day, temp);
+                      }
+                  }
+              }
+              List<Integer> days = new ArrayList<>(lowest.keySet());
+              Collections.sort(days);
+
+              NumberAxis dayAxis = new NumberAxis();
+              dayAxis.setLabel("Day");
+              NumberAxis tempAxis = new NumberAxis();
+              tempAxis.setLabel("Temperature (°C)");
+              LineChart<Number, Number> chart = new LineChart<>(dayAxis, tempAxis);
+              chart.setTitle("Coldest and warmest");
+              XYChart.Series<Number, Number> low = new XYChart.Series<>();
+              low.setName("Lowest");
+              XYChart.Series<Number, Number> high = new XYChart.Series<>();
+              high.setName("Highest");
+              for (int day : days) {
+                  low.getData().add(new XYChart.Data<>(day, lowest.get(day)));
+                  high.getData().add(new XYChart.Data<>(day, highest.get(day)));
+              }
+              chart.getData().add(low);
+              chart.getData().add(high);
+
+              stage.setScene(new Scene(chart));
+              stage.setTitle("Mountain hut");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "Keep two maps from the day to its lowest and its highest reading so far. For each row whose temperature isn't exactly `\"-\"`, update a day's lowest when the map has no value for the day yet or the reading is lower, and the highest the same way."
+      - "Then copy the days of a map into a list, sort it with `Collections.sort`, and add a point to both series for each day in that order."
+    tests:
+      - files:
+          temps.csv: |
+            day,hour,temp
+            1,6,4
+            1,12,11
+            1,18,8
+            2,6,-3
+            2,12,-
+            2,18,6
+            3,6,5
+            3,12,14
+            3,18,10
+        events: []
+      - files:
+          temps.csv: |
+            day,hour,temp
+            12,18,-1
+            10,6,-8
+            11,6,-
+            11,12,-
+            10,12,-2
+            12,6,-6
+            12,12,0
+        events: []
+        hidden: true
+      - files:
+          temps.csv: |
+            day,hour,temp
+            5,12,20
+        events: []
+        hidden: true
+    more:
+      - task: |
+          A program sums up a week of litter picking by day: the bags filled by each volunteer group. What does it print?
+        predict: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+          import java.util.List;
+          import java.util.Map;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.BarChart;
+          import javafx.scene.chart.CategoryAxis;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) {
+                  String[] rows = {"Tue,4", "Mon,3", "Tue,-", "Mon,5", "Wed,1"};
+                  Map<String, Integer> bags = new HashMap<>();
+                  List<String> days = new ArrayList<>();
+                  for (String row : rows) {
+                      String[] parts = row.split(",");
+                      if (!days.contains(parts[0])) {
+                          days.add(parts[0]);
+                      }
+                      if (!parts[1].equals("-")) {
+                          bags.put(parts[0], bags.getOrDefault(parts[0], 0) + Integer.valueOf(parts[1]));
+                      }
+                  }
+                  XYChart.Series<String, Number> series = new XYChart.Series<>();
+                  for (String day : days) {
+                      series.getData().add(new XYChart.Data<>(day, bags.get(day)));
+                  }
+                  System.out.println(series.getData().size());
+                  System.out.println(series.getData().get(0));
+                  System.out.println(series.getData().get(1).getYValue());
+
+                  BarChart<String, Number> chart = new BarChart<>(new CategoryAxis(), new NumberAxis());
+                  chart.getData().add(series);
+                  stage.setScene(new Scene(chart));
+                  stage.setTitle("Litter");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The list `days` keeps each day once, in the order it first appears in the rows: Tue, Mon, Wed. The map only holds the totals."
+          - "Tuesday's `-` adds nothing, so its total stays 4. Monday's rows add up to 8."
+      - task: |
+          A chart tool for your own data: it reads `chart.csv`, whose first line says the kind of chart and its title, separated by a comma (`bar,Books read` or `line,Books read`). The second line is the header, which names the x values and the y values, and the rows follow. A `-` is a missing value:
+
+          ```text
+          bar,Books read in the club
+          month,books
+          Jan,3
+          Feb,5
+          Mar,-
+          Apr,4
+          ```
+
+          Write `start`. The window, titled `My chart`, shows the chart (the scene's root) with the title from the first line, no legend and one series, named as the header's second value, with a point (x, y) for each row whose y isn't `-`, in the order of the file. Read the y values as doubles.
+
+          - For `bar`, it's a bar chart with a category axis labeled as the header's first value (here `month`) and an auto-ranging number axis labeled as the header's second value (here `books`).
+          - For `line`, it's a line chart with two auto-ranging number axes labeled the same way, and the x values are numbers too (read them as doubles).
+
+          The task card shows the window for the file above. The tool charts any file in this form, so on your own computer, with JavaFX installed (module 48 says where to find how), you can give it data of your own.
+        seed: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.BarChart;
+          import javafx.scene.chart.CategoryAxis;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> lines = Files.readAllLines(Paths.get("chart.csv"));
+                  String[] first = lines.get(0).split(",");
+                  String[] header = lines.get(1).split(",");
+
+                  stage.setTitle("My chart");
+                  stage.show();
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        solution: |
+          import java.nio.file.Files;
+          import java.nio.file.Paths;
+          import java.util.List;
+          import javafx.application.Application;
+          import javafx.scene.Scene;
+          import javafx.scene.chart.BarChart;
+          import javafx.scene.chart.CategoryAxis;
+          import javafx.scene.chart.LineChart;
+          import javafx.scene.chart.NumberAxis;
+          import javafx.scene.chart.XYChart;
+          import javafx.stage.Stage;
+
+          public class Main extends Application {
+
+              @Override
+              public void start(Stage stage) throws Exception {
+                  List<String> lines = Files.readAllLines(Paths.get("chart.csv"));
+                  String[] first = lines.get(0).split(",");
+                  String[] header = lines.get(1).split(",");
+
+                  if (first[0].equals("bar")) {
+                      stage.setScene(new Scene(this.barChart(first[1], header, lines)));
+                  } else {
+                      stage.setScene(new Scene(this.lineChart(first[1], header, lines)));
+                  }
+                  stage.setTitle("My chart");
+                  stage.show();
+              }
+
+              private BarChart<String, Number> barChart(String title, String[] header, List<String> lines) {
+                  CategoryAxis x = new CategoryAxis();
+                  x.setLabel(header[0]);
+                  NumberAxis y = new NumberAxis();
+                  y.setLabel(header[1]);
+                  BarChart<String, Number> chart = new BarChart<>(x, y);
+                  chart.setTitle(title);
+                  chart.setLegendVisible(false);
+                  XYChart.Series<String, Number> series = new XYChart.Series<>();
+                  series.setName(header[1]);
+                  for (int i = 2; i < lines.size(); i++) {
+                      String[] parts = lines.get(i).split(",");
+                      if (!parts[1].equals("-")) {
+                          series.getData().add(new XYChart.Data<>(parts[0], Double.valueOf(parts[1])));
+                      }
+                  }
+                  chart.getData().add(series);
+                  return chart;
+              }
+
+              private LineChart<Number, Number> lineChart(String title, String[] header, List<String> lines) {
+                  NumberAxis x = new NumberAxis();
+                  x.setLabel(header[0]);
+                  NumberAxis y = new NumberAxis();
+                  y.setLabel(header[1]);
+                  LineChart<Number, Number> chart = new LineChart<>(x, y);
+                  chart.setTitle(title);
+                  chart.setLegendVisible(false);
+                  XYChart.Series<Number, Number> series = new XYChart.Series<>();
+                  series.setName(header[1]);
+                  for (int i = 2; i < lines.size(); i++) {
+                      String[] parts = lines.get(i).split(",");
+                      if (!parts[1].equals("-")) {
+                          series.getData().add(new XYChart.Data<>(Double.valueOf(parts[0]), Double.valueOf(parts[1])));
+                      }
+                  }
+                  chart.getData().add(series);
+                  return chart;
+              }
+
+              public static void main(String[] args) {
+                  launch(Main.class);
+              }
+          }
+        hints:
+          - "The two kinds of chart have different types (`BarChart<String, Number>` and `LineChart<Number, Number>`), so a method for each keeps them apart. Both are nodes that a Scene can hold."
+          - "The rows start at index 2, after the first line and the header. In each method, skip a row whose `parts[1]` is `\"-\"`."
+        tests:
+          - files:
+              chart.csv: |
+                bar,Books read in the club
+                month,books
+                Jan,3
+                Feb,5
+                Mar,-
+                Apr,4
+            events: []
+          - files:
+              chart.csv: |
+                line,Seedling height
+                day,mm
+                1,2
+                3,-
+                4,9.5
+                7,21
+            events: []
+            hidden: true
+          - files:
+              chart.csv: |
+                bar,Favorite fruit
+                fruit,votes
+                Apple,12
+                Kiwi,7
+            events: []
+            hidden: true

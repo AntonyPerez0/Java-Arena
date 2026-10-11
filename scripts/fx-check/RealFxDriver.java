@@ -7,30 +7,49 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.CRC32;
 import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.css.StyleOrigin;
 import javafx.css.StyleableProperty;
 import javafx.event.ActionEvent;
+import javafx.event.EventType;
+import javafx.geometry.Point2D;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
+import javafx.scene.SnapshotParameters;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.chart.Axis;
+import javafx.scene.chart.CategoryAxis;
+import javafx.scene.chart.LineChart;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.ButtonBase;
 import javafx.scene.control.Labeled;
+import javafx.scene.control.Slider;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputControl;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelReader;
+import javafx.scene.image.WritableImage;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
@@ -39,6 +58,7 @@ import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import javafx.stage.Window;
@@ -56,8 +76,11 @@ import javafx.stage.Window;
  * start has returned (JavaFX's launcher thread then waits for the session to end), then applies
  * the events of EVENTS on the JavaFX Application Thread with the real API, each after the tasks
  * queued before it (Platform.runLater) have run, as Java Arena applies them: click calls fire(),
- * type calls appendText once per character, set calls setText, enter fires an ActionEvent at the
- * text field (what pressing Enter does), close closes the primary stage. Then it writes OUT and
+ * type calls appendText once per character, set calls setText (Slider.adjustValue for set Slider N
+ * value, what letting the thumb go there does), enter fires an ActionEvent at the text field (what
+ * pressing Enter does), close closes the primary stage, and press, drag, release and click at a
+ * point hand real MouseEvents to the scene as the toolkit does (see mouse); before the first event
+ * and after each one it lays the showing windows out, as JavaFX's next pulse would. Then it writes OUT and
  * calls Platform.exit(), so stop() runs and launch returns. When the session ends earlier
  * (Platform.exit(), or the last window closed), OUT says the windows were closed; when the
  * constructor, init or start fails, there is no OUT, as with Java Arena's JavaFX.
@@ -66,7 +89,8 @@ import javafx.stage.Window;
  * src/grader/window.ts (the same reading as the library's): one event per line, fields separated
  * by spaces, each field its UTF-16 code units as four hexadecimal digits ("=" for an empty text,
  * "-" for none): {@code P line problem} for a line that can't be read, or {@code E line command
- * kind type value text} where kind is none, number, id, text or index.
+ * kind type value text number x y} where kind is none, number, id, text or index, number is the
+ * number of set Slider 1 25 and x and y the point of a mouse event, each as written.
  *
  * <p>The window JSON follows engine/libraries/javafx/src/arena/fx/WindowJson.java, from the real
  * scene graph, but without the sizes of windows and scenes (the outline leaves them out, and real
@@ -74,6 +98,14 @@ import javafx.stage.Window;
  * a button's padding, count as not set: the program didn't choose them, and Java Arena's JavaFX
  * has no style sheet. Values that the program's own styles (setStyle) gave a node count as set,
  * since that is what the window shows.
+ *
+ * <p>Part 14's nodes are read from the real ones: a chart's title, legend, symbols, axes (with their
+ * bounds and categories as real JavaFX has them) and every series and data point; a slider's
+ * range, value and tick settings; an image view's image through the real PixelReader (its size,
+ * the CRC-32 of its ARGB values and its pixels, as arena.fx.Pixels writes them). Real JavaFX
+ * doesn't tell what was drawn on a canvas, so a canvas has no calls here ("calls":[]) but a
+ * snapshot of what it shows ("snapshot", with "snapshotWidth" and "snapshotHeight"), which
+ * fx-check compares with Java Arena's recorded calls drawn again on real JavaFX (CanvasReplay).
  */
 public final class RealFxDriver {
     private static final Object LOCK = new Object();
@@ -130,6 +162,11 @@ public final class RealFxDriver {
         String type;
         String value;
         String text;
+        /** The number of set Slider 1 25, as written; null otherwise. */
+        String number;
+        /** The point of a mouse event (press, drag, release, click ... at), as written; null otherwise. */
+        String x;
+        String y;
     }
 
     private static void readEvents(String file) {
@@ -148,6 +185,9 @@ public final class RealFxDriver {
                 e.type = field(f[4]);
                 e.value = field(f[5]);
                 e.text = field(f[6]);
+                e.number = field(f[7]);
+                e.x = field(f[8]);
+                e.y = field(f[9]);
             }
             EVENTS.add(e);
         }
@@ -249,6 +289,21 @@ public final class RealFxDriver {
             dump(true);
             return;
         }
+        // Where JavaFX's next pulse would lay the windows out: after start, and after each event.
+        layoutShowing();
+        if (clickRelease != null) {
+            // The second half of click ... at: the release, after the tasks the press queued.
+            Node node = clickRelease;
+            clickRelease = null;
+            if (showing(node)) {
+                release(node, clickX, clickY);
+                layoutShowing();
+            } else {
+                pressed = null;
+            }
+            later();
+            return;
+        }
         if (next < EVENTS.size()) {
             Event e = EVENTS.get(next++);
             String problem = e.problem;
@@ -256,17 +311,41 @@ public final class RealFxDriver {
                 try {
                     problem = apply(e);
                 } catch (Throwable t) {
-                    Thread.currentThread().getUncaughtExceptionHandler().uncaughtException(Thread.currentThread(), t);
+                    uncaught(t);
                 }
             }
             if (problem != null) {
                 PROBLEMS.add(e.line + ": " + problem);
             }
+            layoutShowing();
             later();
             return;
         }
         dump(false);
         Platform.exit();
+    }
+
+    /**
+     * Lays out every showing window right after an event, as JavaFX's next pulse would (a chart
+     * takes its categories and reads its data then), so what follows doesn't depend on when the
+     * pulse comes. What the layout throws goes to the uncaught exception handler, as in a pulse.
+     */
+    private static void layoutShowing() {
+        for (Window w : new ArrayList<Window>(Window.getWindows())) {
+            if (!w.isShowing() || w.getScene() == null || w.getScene().getRoot() == null) {
+                continue;
+            }
+            try {
+                w.getScene().getRoot().layout();
+            } catch (Throwable t) {
+                uncaught(t);
+            }
+        }
+    }
+
+    /** What an exception that escapes a handler or a pulse does in JavaFX: the thread's uncaught exception handler gets it. */
+    private static void uncaught(Throwable t) {
+        Thread.currentThread().getUncaughtExceptionHandler().uncaughtException(Thread.currentThread(), t);
     }
 
     /**
@@ -436,7 +515,13 @@ public final class RealFxDriver {
         }
         String kind = noun(typeName(node));
         String command = event.command;
+        if (event.x != null) {
+            return mouse(event, node, kind);
+        }
         if (command.equals("click")) {
+            if (node instanceof Canvas || node instanceof ImageView) {
+                return withArticle(kind) + " isn't clicked like a button: give the point, such as click " + typeName(node) + " 1 at 10 20";
+            }
             if (!(node instanceof ButtonBase)) {
                 return withArticle(kind) + " can't be clicked (only buttons can)";
             }
@@ -460,6 +545,16 @@ public final class RealFxDriver {
                 node.fireEvent(new ActionEvent());
             }
             return null;
+        }
+        // type and set
+        if (node instanceof Slider) {
+            if (event.number == null) {
+                return command.equals("set") ? "a slider is set to a number, not a text, such as set Slider 1 25" : "you can't type in a slider (set Slider 1 25 moves it)";
+            }
+            return slide((Slider) node, event.number);
+        }
+        if (event.number != null) {
+            return node instanceof TextInputControl ? "the text for " + withArticle(kind) + " goes in double quotes, such as set " + typeName(node) + " 1 \"" + event.number + "\"" : "only a slider is set to a number, not " + withArticle(kind);
         }
         if (!(node instanceof TextInputControl)) {
             return "you can't type in " + withArticle(kind) + " (only in text fields and text areas)";
@@ -486,6 +581,164 @@ public final class RealFxDriver {
             }
         }
         return null;
+    }
+
+    /**
+     * set Slider N value: the checks of Java Arena's event lines, then what letting the slider's
+     * thumb go at that value does in JavaFX: Slider.adjustValue (kept between min and max, snapped
+     * to the ticks when the slider snaps, then set once).
+     */
+    private static String slide(Slider slider, String number) {
+        String hidden = hidden(slider, "slider", "moved");
+        if (hidden != null) {
+            return hidden;
+        }
+        if (slider.isDisabled()) {
+            return (slider.isDisable() ? "the slider is disabled" : "the slider is in a disabled pane") + " (setDisable(true)), so it can't be moved";
+        }
+        double v = Double.parseDouble(number);
+        if (v < slider.getMin() || v > slider.getMax()) {
+            return "the slider goes from " + plain(slider.getMin()) + " to " + plain(slider.getMax()) + ", so it can't be moved to " + number;
+        }
+        slider.adjustValue(v);
+        return null;
+    }
+
+    private static String plain(double v) {
+        String s = Double.toString(v);
+        return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;
+    }
+
+    // ------------------------------------------------------------------ the mouse
+
+    /** The node the mouse was pressed on (until it is released), and where the mouse is, in its coordinates. */
+    private static Node pressed;
+    private static double atX;
+    private static double atY;
+    /** The node of a click ... at whose release comes in the next step, after the tasks its press queued; and the point. */
+    private static Node clickRelease;
+    private static double clickX;
+    private static double clickY;
+
+    /**
+     * press, drag, release and click at a point, with the checks of Java Arena's event lines (the
+     * same problems in the same words), then as a mouse does it: each is a real MouseEvent made with
+     * JavaFX's own constructor at the point in the scene's coordinates, handed to the scene as the
+     * toolkit hands it a mouse event (Scene.processMouseEvent), so real JavaFX picks the node under
+     * the point, sends the drags and the release to the node it was pressed on, and decides itself
+     * whether a MOUSE_CLICKED follows a release. As a mouse, the driver sends no drag when the point
+     * didn't change, and moves the mouse (a drag) before a release somewhere else. A click is a
+     * press, then (in the next step, after the tasks the press queued) a release at the same point.
+     */
+    private static String mouse(Event event, Node node, String kind) {
+        if (!(node instanceof Canvas || node instanceof ImageView)) {
+            return "the mouse events with a point go to a canvas or an image view, not to " + withArticle(kind) + " (Java Arena doesn't lay the other nodes out, so it can't tell where a point is on them)";
+        }
+        double x = Double.parseDouble(event.x);
+        double y = Double.parseDouble(event.y);
+        String where = "(" + event.x + ", " + event.y + ")";
+        if (event.command.equals("press") || event.command.equals("click")) {
+            String verb = event.command.equals("click") ? "clicked" : "pressed";
+            String hidden = hidden(node, kind, verb);
+            if (hidden != null) {
+                return hidden;
+            }
+            if (node.isDisabled()) {
+                return (node.isDisable() ? "the " + kind + " is disabled" : "the " + kind + " is in a disabled pane") + " (setDisable(true)), so it can't be " + verb;
+            }
+            if (pressed != null) {
+                return "the mouse is already pressed: release it first, such as release " + typeName(pressed) + " 1 at " + plain(atX) + " " + plain(atY);
+            }
+            if (node instanceof Canvas) {
+                Canvas c = (Canvas) node;
+                if (!node.contains(x, y)) {
+                    return where + " isn't on the canvas, which is " + plain(c.getWidth()) + " x " + plain(c.getHeight());
+                }
+            } else {
+                Image image = ((ImageView) node).getImage();
+                if (image == null) {
+                    return where + " isn't on the image view: it has no image";
+                }
+                if (image.isError()) {
+                    return where + " isn't on the image view: its image couldn't be read";
+                }
+                if (x < 0 || y < 0 || x >= image.getWidth() || y >= image.getHeight()) {
+                    return where + " isn't on the image view, whose image is " + plain(image.getWidth()) + " x " + plain(image.getHeight());
+                }
+                if (!node.contains(x, y)) {
+                    return "the image view's image is transparent at " + where + ", so the mouse goes through it";
+                }
+            }
+            pressed = node;
+            atX = x;
+            atY = y;
+            send(node, MouseEvent.MOUSE_PRESSED, x, y, true);
+            if (event.command.equals("click")) {
+                clickRelease = node;
+                clickX = x;
+                clickY = y;
+            }
+            return null;
+        }
+        if (pressed == null) {
+            return "the mouse isn't pressed: press it first, such as press " + typeName(node) + " 1 at 10 20";
+        }
+        if (pressed != node) {
+            return "the mouse is pressed on another node: " + event.command + " it on the " + noun(typeName(pressed)) + " it was pressed on";
+        }
+        if (event.command.equals("drag")) {
+            drag(node, x, y);
+        } else {
+            release(node, x, y);
+        }
+        return null;
+    }
+
+    private static void drag(Node node, double x, double y) {
+        if (x == atX && y == atY) {
+            return;
+        }
+        atX = x;
+        atY = y;
+        send(node, MouseEvent.MOUSE_DRAGGED, x, y, true);
+    }
+
+    private static void release(Node node, double x, double y) {
+        drag(node, x, y);
+        pressed = null;
+        send(node, MouseEvent.MOUSE_RELEASED, x, y, false);
+    }
+
+    private static boolean showing(Node node) {
+        Scene scene = node.getScene();
+        return scene != null && scene.getWindow() != null && scene.getWindow().isShowing();
+    }
+
+    private static Method processMouseEvent;
+
+    /**
+     * A mouse event at the point (in the node's coordinates) as the toolkit delivers one: in the
+     * scene's coordinates, to Scene.processMouseEvent. What a handler throws goes to the uncaught
+     * exception handler, as it does from a real mouse event.
+     */
+    private static void send(Node node, EventType<MouseEvent> type, double x, double y, boolean buttonDown) {
+        Scene scene = node.getScene();
+        Point2D p = node.localToScene(x, y);
+        Window w = scene.getWindow();
+        double screenX = p.getX() + scene.getX() + w.getX();
+        double screenY = p.getY() + scene.getY() + w.getY();
+        MouseEvent e = new MouseEvent(type, p.getX(), p.getY(), screenX, screenY, MouseButton.PRIMARY, 1, false, false, false, false, buttonDown, false, false, false, false, false, null);
+        try {
+            if (processMouseEvent == null) {
+                processMouseEvent = Scene.class.getDeclaredMethod("processMouseEvent", MouseEvent.class);
+                processMouseEvent.setAccessible(true);
+            }
+            processMouseEvent.invoke(scene, e);
+        } catch (InvocationTargetException ex) {
+            uncaught(ex.getCause());
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     private static String hidden(Node node, String kind, String verb) {
@@ -517,13 +770,16 @@ public final class RealFxDriver {
     // ------------------------------------------------------------------ outline order and names (as arena.fx.Outline)
 
     /** The node classes of Java Arena's JavaFX, by simple name. */
-    private static final List<String> TYPES = Arrays.asList("Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea");
+    private static final List<String> TYPES = Arrays.asList("Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea", "Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart");
+    /** The axis classes of Java Arena's JavaFX, by simple name. */
+    private static final List<String> AXES = Arrays.asList("Axis", "ValueAxis", "NumberAxis", "CategoryAxis");
 
     /** The nearest class that Java Arena's JavaFX has (a program's class MenuView extends VBox is a VBox). */
     private static String typeName(Node node) {
+        List<String> known = node instanceof Axis ? AXES : TYPES;
         for (Class<?> c = node.getClass(); c != null; c = c.getSuperclass()) {
             String name = c.getName();
-            if (name.startsWith("javafx.") && TYPES.contains(name.substring(name.lastIndexOf('.') + 1))) {
+            if (name.startsWith("javafx.") && known.contains(name.substring(name.lastIndexOf('.') + 1))) {
                 return name.substring(name.lastIndexOf('.') + 1);
             }
         }
@@ -561,6 +817,18 @@ public final class RealFxDriver {
                 return "control";
             case "Node":
                 return "node";
+            case "Canvas":
+                return "canvas";
+            case "ImageView":
+                return "image view";
+            case "Slider":
+                return "slider";
+            case "LineChart":
+                return "line chart";
+            case "BarChart":
+                return "bar chart";
+            case "ScatterChart":
+                return "scatter chart";
             default:
                 return type;
         }
@@ -575,6 +843,8 @@ public final class RealFxDriver {
             case "HBox":
             case "VBox":
                 return type + "es";
+            case "Canvas":
+                return "canvases";
             default:
                 return noun(type) + "s";
         }
@@ -644,6 +914,33 @@ public final class RealFxDriver {
         for (Node child : children(node)) {
             collect(child, all);
         }
+    }
+
+    // ------------------------------------------------------------------ pixels (as arena.fx.Pixels)
+
+    /** The CRC-32 of the ARGB values, row by row, each as 4 bytes (A, R, G, B), as 8 hexadecimal digits. */
+    private static String crc(int[] argb) {
+        CRC32 crc = new CRC32();
+        crc.update(argbBytes(argb, false));
+        String hex = Long.toHexString(crc.getValue());
+        return "00000000".substring(hex.length()) + hex;
+    }
+
+    /** The pixels as base64 of RGBA bytes (not premultiplied), row by row. */
+    private static String rgbaBase64(int[] argb) {
+        return Base64.getEncoder().encodeToString(argbBytes(argb, true));
+    }
+
+    private static byte[] argbBytes(int[] argb, boolean rgba) {
+        byte[] bytes = new byte[argb.length * 4];
+        for (int i = 0; i < argb.length; i++) {
+            int v = rgba ? (argb[i] << 8) | (argb[i] >>> 24) : argb[i];
+            bytes[4 * i] = (byte) (v >>> 24);
+            bytes[4 * i + 1] = (byte) (v >>> 16);
+            bytes[4 * i + 2] = (byte) (v >>> 8);
+            bytes[4 * i + 3] = (byte) v;
+        }
+        return bytes;
     }
 
     // ------------------------------------------------------------------ the window JSON (as arena.fx.WindowJson)
@@ -815,6 +1112,19 @@ public final class RealFxDriver {
             if ((node instanceof ButtonBase && ((ButtonBase) node).getOnAction() != null) || (node instanceof TextField && ((TextField) node).getOnAction() != null)) {
                 key("onAction").append("true");
             }
+            if (node instanceof Canvas) {
+                canvas((Canvas) node);
+            } else if (node instanceof ImageView) {
+                mouseHandlers(node);
+                imageView((ImageView) node);
+            } else {
+                mouseHandlers(node);
+                if (node instanceof Slider) {
+                    slider((Slider) node);
+                } else if (node instanceof XYChart) {
+                    chart((XYChart<?, ?>) node);
+                }
+            }
             if (node instanceof BorderPane) {
                 BorderPane b = (BorderPane) node;
                 region("top", b.getTop());
@@ -834,6 +1144,217 @@ public final class RealFxDriver {
                 sb.append(']');
             }
             sb.append('}');
+        }
+
+        private void mouseHandlers(Node node) {
+            if (node.getOnMousePressed() != null) {
+                key("onMousePressed").append("true");
+            }
+            if (node.getOnMouseDragged() != null) {
+                key("onMouseDragged").append("true");
+            }
+            if (node.getOnMouseReleased() != null) {
+                key("onMouseReleased").append("true");
+            }
+            if (node.getOnMouseClicked() != null) {
+                key("onMouseClicked").append("true");
+            }
+        }
+
+        /**
+         * A canvas: its size and mouse handlers, and, since real JavaFX doesn't tell what was drawn
+         * on it, no calls ("calls":[]) but "snapshot": what it shows, from Canvas.snapshot on a
+         * transparent background, as base64 of its RGBA bytes (not premultiplied), row by row, with
+         * "snapshotWidth" and "snapshotHeight". fx-check compares it with the calls Java Arena's
+         * JavaFX recorded, drawn with java.awt (see CanvasRaster.java).
+         */
+        private void canvas(Canvas canvas) {
+            key("width");
+            number(canvas.getWidth());
+            key("height");
+            number(canvas.getHeight());
+            mouseHandlers(canvas);
+            key("calls").append("[]");
+            if (canvas.getWidth() < 1 || canvas.getHeight() < 1) {
+                return;
+            }
+            SnapshotParameters params = new SnapshotParameters();
+            params.setFill(Color.TRANSPARENT);
+            WritableImage shot = canvas.snapshot(params, null);
+            int w = (int) shot.getWidth();
+            int h = (int) shot.getHeight();
+            int[] argb = new int[w * h];
+            PixelReader r = shot.getPixelReader();
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    argb[y * w + x] = r.getArgb(x, y);
+                }
+            }
+            key("snapshotWidth").append(w);
+            key("snapshotHeight").append(h);
+            key("snapshot").append('"').append(rgbaBase64(argb)).append('"');
+        }
+
+        /** An image view's image as Java Arena's JSON has it: null, {"error":...}, or its size, the CRC-32 of its pixels and (up to 512 x 512) the pixels. */
+        private void imageView(ImageView view) {
+            key("image");
+            Image image = view.getImage();
+            if (image == null) {
+                sb.append("null");
+                return;
+            }
+            if (image.isError()) {
+                sb.append("{\"error\":");
+                string(String.valueOf(image.getException()));
+                sb.append('}');
+                return;
+            }
+            int w = (int) image.getWidth();
+            int h = (int) image.getHeight();
+            int[] argb = new int[w * h];
+            PixelReader r = image.getPixelReader();
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    argb[y * w + x] = r.getArgb(x, y);
+                }
+            }
+            sb.append("{\"width\":");
+            number(image.getWidth());
+            key("height");
+            number(image.getHeight());
+            key("crc");
+            string(crc(argb));
+            if (w <= 512 && h <= 512) {
+                key("pixels").append('"').append(rgbaBase64(argb)).append('"');
+            }
+            sb.append('}');
+        }
+
+        private void slider(Slider slider) {
+            key("min");
+            number(slider.getMin());
+            key("max");
+            number(slider.getMax());
+            key("value");
+            number(slider.getValue());
+            key("majorTickUnit");
+            number(slider.getMajorTickUnit());
+            key("minorTickCount").append(slider.getMinorTickCount());
+            key("blockIncrement");
+            number(slider.getBlockIncrement());
+            if (slider.isShowTickLabels()) {
+                key("showTickLabels").append("true");
+            }
+            if (slider.isShowTickMarks()) {
+                key("showTickMarks").append("true");
+            }
+            if (slider.isSnapToTicks()) {
+                key("snapToTicks").append("true");
+            }
+        }
+
+        private void chart(XYChart<?, ?> chart) {
+            key("title");
+            string(chart.getTitle());
+            if (!chart.isLegendVisible()) {
+                key("legendVisible").append("false");
+            }
+            if (chart instanceof LineChart && !((LineChart<?, ?>) chart).getCreateSymbols()) {
+                key("createSymbols").append("false");
+            }
+            key("xAxis");
+            axis(chart.getXAxis());
+            key("yAxis");
+            axis(chart.getYAxis());
+            key("series");
+            if (chart.getData() == null) {
+                sb.append("null");
+                return;
+            }
+            sb.append('[');
+            List<? extends XYChart.Series<?, ?>> all = chart.getData();
+            for (int i = 0; i < all.size(); i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                XYChart.Series<?, ?> s = all.get(i);
+                if (s == null) {
+                    sb.append("null");
+                    continue;
+                }
+                sb.append("{\"name\":");
+                string(s.getName());
+                key("data");
+                if (s.getData() == null) {
+                    sb.append("null");
+                } else {
+                    sb.append('[');
+                    List<? extends XYChart.Data<?, ?>> points = s.getData();
+                    for (int j = 0; j < points.size(); j++) {
+                        if (j > 0) {
+                            sb.append(',');
+                        }
+                        XYChart.Data<?, ?> d = points.get(j);
+                        if (d == null) {
+                            sb.append("null");
+                        } else {
+                            sb.append('[');
+                            value(d.getXValue());
+                            sb.append(',');
+                            value(d.getYValue());
+                            sb.append(']');
+                        }
+                    }
+                    sb.append(']');
+                }
+                sb.append('}');
+            }
+            sb.append(']');
+        }
+
+        private void axis(Axis<?> axis) {
+            sb.append("{\"type\":");
+            string(typeName(axis));
+            key("label");
+            string(axis.getLabel());
+            key("autoRanging").append(axis.isAutoRanging());
+            if (axis instanceof NumberAxis) {
+                NumberAxis n = (NumberAxis) axis;
+                key("lowerBound");
+                number(n.getLowerBound());
+                key("upperBound");
+                number(n.getUpperBound());
+                key("tickUnit");
+                number(n.getTickUnit());
+                key("forceZeroInRange").append(n.isForceZeroInRange());
+                key("minorTickVisible").append(n.isMinorTickVisible());
+            } else if (axis instanceof CategoryAxis) {
+                key("categories").append('[');
+                List<String> categories = ((CategoryAxis) axis).getCategories();
+                for (int i = 0; i < categories.size(); i++) {
+                    if (i > 0) {
+                        sb.append(',');
+                    }
+                    string(categories.get(i));
+                }
+                sb.append(']');
+            }
+            sb.append('}');
+        }
+
+        /** A data point's value as Java Arena's JSON writes it: a number (whole numbers as they are), a text, or null. */
+        private void value(Object v) {
+            if (v == null) {
+                sb.append("null");
+            } else if (v instanceof Integer || v instanceof Long || v instanceof Short || v instanceof Byte || v instanceof java.math.BigInteger) {
+                sb.append(v.toString());
+            } else if (v instanceof Float && !((Float) v).isNaN() && !((Float) v).isInfinite()) {
+                sb.append(v.toString());
+            } else if (v instanceof Number) {
+                number(((Number) v).doubleValue());
+            } else {
+                string(String.valueOf(v));
+            }
         }
 
         private void region(String name, Node child) {

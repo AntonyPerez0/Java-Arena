@@ -17,14 +17,14 @@ test("without clicks and typing or arguments, the older words: input, files, cal
 test("tests with a window or other arguments: only what the other tests change", () => {
   const shown = { events: ['click Button "Add"'] };
   // A hidden test that checks the window as it opens changes the clicks, not the input.
-  assert.equal(otherTestsUse(shown, [{ events: [], hidden: true }]), "clicks and typing");
-  assert.equal(otherTestsUse(shown, [{ events: ['click Button "Add"', 'click Button "Add"'], hidden: true }]), "clicks and typing");
+  assert.equal(otherTestsUse(shown, [{ events: [], hidden: true }]), "things the user does");
+  assert.equal(otherTestsUse(shown, [{ events: ['click Button "Add"', 'click Button "Add"'], hidden: true }]), "things the user does");
   // Only the arguments differ (the gate challenge), or a test has none where the shown one has some (the tip calculator).
   assert.equal(otherTestsUse({ events: [], args: ["--flight=LH12", "--gate=B4"] }, [{ events: [], args: ["--flight=LH77"], hidden: true }]), "command-line arguments");
-  assert.equal(otherTestsUse({ events: ['set TextField 1 "45"'], args: ["--percent=20"] }, [{ events: ['set TextField 1 "30"'], hidden: true }]), "command-line arguments or clicks and typing");
+  assert.equal(otherTestsUse({ events: ['set TextField 1 "45"'], args: ["--percent=20"] }, [{ events: ['set TextField 1 "30"'], hidden: true }]), "command-line arguments or things the user does");
   // Input only when some test's standard input differs; files only when some test's files differ.
   assert.equal(otherTestsUse({ events: [], stdin: "Ada\n" }, [{ events: [], stdin: "Grace\n" }]), "input");
-  assert.equal(otherTestsUse({ events: [], files: { "a.txt": "1\n" } }, [{ events: [], files: { "a.txt": "1\n" } }, { events: ["close"], files: { "a.txt": "2\n" } }]), "files or clicks and typing");
+  assert.equal(otherTestsUse({ events: [], files: { "a.txt": "1\n" } }, [{ events: [], files: { "a.txt": "1\n" } }, { events: ["close"], files: { "a.txt": "2\n" } }]), "files or things the user does");
   // Arguments alone, with no window: a plain program's args.
   assert.equal(otherTestsUse({ args: ["3"] }, [{ args: ["5"], hidden: true }]), "command-line arguments");
 });

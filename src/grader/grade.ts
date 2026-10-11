@@ -4,6 +4,7 @@ import { compile, runClasses, DEFAULT_TIME_LIMIT_MS, type ClassFile, type Diagno
 import { explainCrash, explainDiagnostic } from "../engine/friendly";
 import type { Exercise } from "../content/types";
 import { CHECK_CLASS, CHECK_FILE, checkRules, checkSource, normalizeOutput } from "./assemble.js";
+import { AssetLoadError, programFiles, type GivenFile } from "./assets";
 import { explainCalls, withoutCheckFrames } from "./calls";
 import { splitFiles } from "./files.js";
 import { JAVAFX_LIBRARY, WINDOW_FILE, withoutArenaFiles } from "./javafx.js";
@@ -24,8 +25,8 @@ export type TestResult = {
   args?: string[];
   /** The code the check ran to call the learner's methods. */
   call?: string;
-  /** Files the program could read in this test. */
-  files?: Record<string, string>;
+  /** Files the program could read in this test: text, or an image of content/assets. */
+  files?: Record<string, GivenFile>;
   /** Files the test wanted the program to write, each with what it should hold and what it holds (null: not created). */
   writes?: WrittenFileCheck[];
   expected?: string;
@@ -63,6 +64,12 @@ export type GradeResult = {
   /** Why the check couldn't call the learner's methods (status "call-error"). */
   callProblems: string[];
   internalError?: string;
+  /**
+   * An image the tests give the program couldn't be downloaded from the site (status
+   * "internal-error" too, so it counts as no attempt): the sentence to show and announce instead of
+   * the engine's message.
+   */
+  assetError?: string;
   compileMs: number;
   /** The program has several files, so each message names its file. */
   multiFile?: boolean;
@@ -112,7 +119,33 @@ function handlerException(stderr: string, sources: (string | SourceFile)[]): str
   if (!crash) return undefined;
   const file = sources.length > 1 && crash.file ? `${crash.file}, ` : "";
   const where = crash.line && !crash.placed ? ` (${file}line ${crash.line})` : "";
+  const trace = stderr.slice(at, next < 0 ? undefined : next);
+  if (!throughHandler(trace, sources))
+    return `JavaFX reported ${crash.exception}${where}. ${crash.explanation} JavaFX found it while a list it watches changed, such as a chart's list of series, so it printed the exception and went on with the program, as it does.`;
   return `An event handler threw ${crash.exception}${where}. ${crash.explanation} JavaFX printed it and went on with the next click or typing, as it does, so the window shows what the handler had done before it.`;
+}
+
+/**
+ * Whether an exception printed on the JavaFX Application Thread went through an event handler or a
+ * listener of the program's own. The outermost frame in the learner's files of the first exception's
+ * trace (before any "Caused by") says, by what called it: when JavaFX's start-up of the program
+ * (arena.fx.Session$Launch) called it, it is start (or a method or lambda start called), and JavaFX's
+ * own list listener threw it while start changed a list, as a chart does for a series added twice.
+ * Anything else that called it (a button's fire, a slider's listeners, a mouse event) ran a handler,
+ * however many of the program's own methods it then called.
+ */
+function throughHandler(trace: string, sources: (string | SourceFile)[]): boolean {
+  const names = new Set(sources.map((s) => (typeof s === "string" ? s : s.path).split("/").pop()));
+  const top = trace.split(/\nCaused by: /)[0];
+  const frames = [...top.matchAll(/\n\s*at (?:[\w$.]+\/)?([\w$.]+)\.([\w$<>]+)\(([^)]*)\)/g)].map((m) => ({ cls: m[1], file: (m[3].match(/^([\w$]+\.java):\d+$/) ?? [])[1] }));
+  const own = (f: { cls: string; file?: string }) => !!f.file && names.has(f.file) && !/^(?:java|javax|javafx|jdk|sun|arena)\./.test(f.cls);
+  let outer = -1;
+  frames.forEach((f, i) => {
+    if (own(f)) outer = i;
+  });
+  if (outer < 0) return true;
+  const caller = frames[outer + 1];
+  return !(caller && /^arena\.fx\.Session\$Launch\b/.test(caller.cls));
 }
 
 /** Indentation problems in each file, named by file when there are several. */
@@ -124,6 +157,22 @@ function indentProblems(files: { path: string; text: string }[]): string[] {
 const JUNIT_TIME_LIMIT_MS = 30_000;
 /** A JavaFX run loads Java Arena's JavaFX classes and starts two threads before the program's start method. */
 const JAVAFX_TIME_LIMIT_MS = 15_000;
+
+/** The site's base address, where the images that tests give programs are served (see ./assets); "/" outside Vite (the unit tests bundle this file). */
+const BASE: string = import.meta.env?.BASE_URL ?? "/";
+
+/**
+ * The files of each run as the engine takes them (an image's bytes fetched from the site), or the
+ * sentence saying which image couldn't be downloaded.
+ */
+async function filesOfRuns(list: (Record<string, GivenFile> | undefined)[]): Promise<(Record<string, string | Uint8Array> | undefined)[] | string> {
+  try {
+    return await Promise.all(list.map((files) => programFiles(files, BASE)));
+  } catch (e) {
+    if (e instanceof AssetLoadError) return e.message;
+    throw e;
+  }
+}
 
 /** The time limit of a run with these libraries on its class path. */
 export const timeLimitFor = (libraries: string[]) => (libraries.includes(JUNIT_LIBRARY) ? JUNIT_TIME_LIMIT_MS : libraries.length ? JAVAFX_TIME_LIMIT_MS : DEFAULT_TIME_LIMIT_MS);
@@ -152,8 +201,11 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
   if (c.internalError) return { ...base, status: "internal-error", tests: [], internalError: c.internalError };
   if (callProblems.length) return { ...base, status: "call-error", tests: [] };
   if (!c.ok) return { ...base, status: "compile-error", tests: [] };
+  // A test's images come from the site; one that can't be loaded (offline before the site was saved) stops the check.
+  const given = await filesOfRuns(ex.tests.map((t) => t.files));
+  if (typeof given === "string") return { ...base, status: "internal-error", tests: [], internalError: given, assetError: given };
   // A test with events gives a JavaFX program its clicks and typing in .arena/events.txt, next to its files.
-  const inputs = ex.tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : t.args ? { args: t.args } : {}), ...(t.events ? { files: withEventsFile(t.files, t.events) } : t.files ? { files: t.files } : {}) }));
+  const inputs = ex.tests.map((t, i) => ({ stdin: t.stdin, ...(check ? { args: [String(i)] } : t.args ? { args: t.args } : {}), ...(t.events ? { files: withEventsFile(given[i], t.events) } : given[i] ? { files: given[i] } : {}) }));
   const runs = await runClasses(c.classes, check ? CHECK_CLASS : "Main", inputs, timeLimitFor(libraries), { libraries });
   if (runs.every((r) => r.internalError)) return { ...base, status: "internal-error", tests: [], internalError: runs[0]?.internalError };
   const tests = ex.tests.map((t, i): TestResult => {
@@ -162,7 +214,8 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
     // The files the test wants written, once the run has ended by itself (a stopped run keeps none).
     const writes: WrittenFileCheck[] | undefined = t.writes && r && !r.internalError && !r.timedOut ? compareWrites(t.writes, r.files) : undefined;
     // The window a JavaFX program left after the test's clicks and typing (none when the run was stopped, which the check then says).
-    const window: WindowCheck | undefined = t.events && r && !r.internalError ? { ...checkWindow({ events: t.events, outline: t.outline ?? "", window: t.window, hidden: t.hidden }, r.timedOut ? null : r.files?.[WINDOW_FILE]), ...(r.timedOut ? { stopped: true } : {}) } : undefined;
+    const windowFile = r?.files?.[WINDOW_FILE];
+    const window: WindowCheck | undefined = t.events && r && !r.internalError ? { ...checkWindow({ events: t.events, outline: t.outline ?? "", window: t.window, hidden: t.hidden }, r.timedOut || typeof windowFile !== "string" ? null : windowFile), ...(r.timedOut ? { stopped: true } : {}) } : undefined;
     const pass = !!r && !r.internalError && !r.timedOut && r.exitCode === 0 && got === t.expect && (!t.writes || !!writes?.every((f) => f.pass)) && (!t.events || !!window?.pass);
     let note = pass ? undefined : (describeRun(r, own, timeLimitFor(libraries)) ?? (writes && writesNote(writes, t.hidden)));
     // A run that ended normally (perhaps after a handler printed an exception) also says what is wrong with its window.
@@ -240,15 +293,15 @@ async function gradeJUnit(ex: Exercise, own: { path: string; text: string }[], r
  * A free run's program, compiled, with the input it got: the window panel runs it again from the
  * start with more clicks and typing (rerun) without compiling it again.
  */
-export type CompiledProgram = { classes: ClassFile[]; libraries: string[]; sources: SourceFile[]; stdin: string; files?: Record<string, string>; args?: string[] };
+export type CompiledProgram = { classes: ClassFile[]; libraries: string[]; sources: SourceFile[]; stdin: string; files?: Record<string, string | Uint8Array>; args?: string[] };
 
 export type FreeRun = {
   status: "ran" | "compile-error" | "internal-error";
   diagnostics: FriendlyDiagnostic[];
   javacOutput: string;
   run?: RunResult;
-  /** The files the program created or changed in its folder (not the files it was given, unchanged). */
-  written?: { name: string; text: string }[];
+  /** The files the program created or changed in its folder (not the files it was given, unchanged): text, or the bytes of one that isn't text. */
+  written?: WrittenFile[];
   /**
    * A JavaFX program's windows when its session ended (after the events given), as the library
    * wrote them to .arena/window.json; null when it wrote none (no launch, start failed, stopped).
@@ -260,16 +313,22 @@ export type FreeRun = {
   program?: CompiledProgram;
   note?: string;
   internalError?: string;
+  /** An image given to the program couldn't be downloaded from the site: the sentence to show instead of the engine's message (see GradeResult). */
+  assetError?: string;
   /** The program has several files, so each message names its file. */
   multiFile?: boolean;
 };
 
+/** A file a free run created or changed: its text, or its bytes when it isn't text. */
+export type WrittenFile = { name: string; text?: string; bytes?: Uint8Array };
+
 /**
- * Compile and run with the learner's own input (and any files the program reads), no grading. A
- * program with JUnit test classes and no main runs its tests instead. A JavaFX program gets
- * `events` (clicks and typing, one event line each) in .arena/events.txt, and main gets `args`.
+ * Compile and run with the learner's own input (and any files the program reads: text, or images
+ * of content/assets, fetched from the site), no grading. A program with JUnit test classes and no
+ * main runs its tests instead. A JavaFX program gets `events` (clicks and typing, one event line
+ * each) in .arena/events.txt, and main gets `args`.
  */
-export async function runOnly(code: string, stdin: string, files?: Record<string, string>, options: { events?: string[]; args?: string[] } = {}): Promise<FreeRun> {
+export async function runOnly(code: string, stdin: string, givenFiles?: Record<string, GivenFile>, options: { events?: string[]; args?: string[] } = {}): Promise<FreeRun> {
   const own = splitFiles(code) as { path: string; text: string }[];
   const libraries = librariesFor(own);
   const noMain = !/\bstatic\s+void\s+main\s*\(/.test(code);
@@ -280,8 +339,11 @@ export async function runOnly(code: string, stdin: string, files?: Record<string
   const base = { diagnostics: friendlyDiagnostics(c.diagnostics, own), javacOutput: c.output ?? "", multiFile: own.length > 1 };
   if (c.internalError) return { ...base, status: "internal-error", internalError: c.internalError };
   if (!c.ok) return { ...base, status: "compile-error" };
+  const resolved = await filesOfRuns([givenFiles]);
+  if (typeof resolved === "string") return { ...base, status: "internal-error", internalError: resolved, assetError: resolved };
+  const files = resolved[0];
   if (testClasses.length) {
-    const [run] = await runClasses(c.classes, TEST_RUNNER_CLASS, [{ args: testClasses }], JUNIT_TIME_LIMIT_MS, { libraries });
+    const [run] = await runClasses(c.classes, TEST_RUNNER_CLASS, [{ args: testClasses, ...(files ? { files } : {}) }], JUNIT_TIME_LIMIT_MS, { libraries });
     if (run?.internalError) return { ...base, status: "internal-error", internalError: run.internalError };
     return { ...base, status: "ran", run, written: changedFiles(files, run?.files), note: describeRun(run, own, JUNIT_TIME_LIMIT_MS) };
   }
@@ -303,7 +365,8 @@ async function runProgram(p: CompiledProgram, events?: string[]): Promise<Omit<F
   const clicks = javafx ? (events ?? []) : undefined;
   const [run] = await runClasses(p.classes, "Main", [{ stdin: p.stdin, ...(clicks ? { files: withEventsFile(p.files, clicks) } : p.files ? { files: p.files } : {}), ...(p.args ? { args: p.args } : {}) }], timeLimitFor(p.libraries), { libraries: p.libraries });
   if (run?.internalError) return { status: "internal-error", internalError: run.internalError };
-  const fx = javafx ? { window: run?.timedOut ? null : parseWindow(run?.files?.[WINDOW_FILE]), events: clicks, program: p } : {};
+  const windowFile = run?.files?.[WINDOW_FILE];
+  const fx = javafx ? { window: run?.timedOut || typeof windowFile !== "string" ? null : parseWindow(windowFile), events: clicks, program: p } : {};
   return { status: "ran", run, written: changedFiles(p.files, run?.files), note: describeRun(run, p.sources, timeLimitFor(p.libraries)), ...fx };
 }
 

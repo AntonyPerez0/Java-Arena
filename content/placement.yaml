@@ -946,3 +946,40 @@ questions:
       String second = ((javafx.scene.control.TextField) frame.getCenter()).getText();
       System.out.println("(" + first + ") (" + second + ")");
     why: "NameView makes its text field once, in the constructor, and `getView()` returns that same field every time, so `Ada` is still in it when the center switches back. CityView makes a new, empty field at each call of `getView()`, so `Oslo` went away with the old field. That prints `(Ada) ()`."
+  - module: charts
+    type: predict
+    prompt: "This code runs inside a JavaFX application's `start` method. What does it print? (JavaFX's classes are written with their full names, since there are no import lines.)"
+    body: |
+      javafx.scene.chart.XYChart.Series<Number, Number> series = new javafx.scene.chart.XYChart.Series<>();
+      javafx.scene.control.Slider slider = new javafx.scene.control.Slider(0, 10, 4);
+      slider.valueProperty().addListener((observable, oldValue, newValue) -> {
+          series.getData().clear();
+          for (int x = 1; x <= newValue.intValue(); x++) {
+              series.getData().add(new javafx.scene.chart.XYChart.Data<>(x, x * x));
+          }
+      });
+      slider.setValue(7);
+      slider.setValue(5.8);
+      System.out.println(series.getData().size() + " " + slider.getValue() + " " + series.getData().get(2).getYValue());
+    why: "The starting value 4 is given before the listener exists, so nothing runs for it. `setValue(7)` fills the series with 7 points. `setValue(5.8)` moves the slider down, and the listener clears the series and refills it. `newValue.intValue()` cuts 5.8 to 5, so x goes from 1 to 5: 5 points, and the third one, (3, 9), has the y value 9. The slider's value stays 5.8. It prints `5 5.8 9`."
+  - module: drawing-and-images
+    type: predict
+    prompt: "This code runs inside a JavaFX application's `start` method. What does it print? (JavaFX's classes are written with their full names, since there are no import lines.)"
+    body: |
+      javafx.scene.image.WritableImage photo = new javafx.scene.image.WritableImage(6, 6);
+      javafx.scene.image.PixelWriter writer = photo.getPixelWriter();
+      for (int y = 0; y < 6; y++) {
+          for (int x = 0; x < 6; x++) {
+              writer.setColor(x, y, javafx.scene.paint.Color.rgb(x * 10, y * 20, 0));
+          }
+      }
+      javafx.scene.image.PixelReader reader = photo.getPixelReader();
+      javafx.scene.image.WritableImage small = new javafx.scene.image.WritableImage(2, 2);
+      for (int y = 0; y < 2; y++) {
+          for (int x = 0; x < 2; x++) {
+              small.getPixelWriter().setColor(x, y, reader.getColor(x * 3, y * 3));
+          }
+      }
+      javafx.scene.paint.Color color = small.getPixelReader().getColor(1, 1);
+      System.out.println((int) small.getWidth() + " " + Math.round(color.getRed() * 255) + " " + Math.round(color.getGreen() * 255));
+    why: "The small copy keeps every third pixel, so it is 2 pixels wide, and its pixel (x, y) is the photo's pixel (x * 3, y * 3). Pixel (1, 1) comes from the photo's pixel (3, 3), whose red is 3 * 10 = 30 and whose green is 3 * 20 = 60. `getRed()` gives the amount from 0.0 to 1.0, and times 255 rounded it is 30 again; the green comes back as 60 the same way. It prints `2 30 60`."

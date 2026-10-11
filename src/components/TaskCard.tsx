@@ -4,6 +4,7 @@ import type { Exercise } from "../content/types";
 import { describeEvents } from "../grader/window";
 import Markdown from "./Markdown";
 import InputText from "./InputText";
+import { GivenFileView } from "./AssetImage";
 import { FileName } from "./Results";
 import { WindowFigure } from "./WindowView";
 
@@ -23,7 +24,7 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
   const others = ex.tests.filter((t) => t !== shown);
   const moreTests = others.length;
   const hiddenCount = others.filter((t) => t.hidden).length;
-  // What they use instead: "other input", "other command-line arguments", "other clicks and typing"...
+  // What they use instead: "other input", "other command-line arguments", "other things the user does"...
   const what = otherTestsUse(shown, others);
   // The expected output (and the check's code) get boxes of their own below, so copies in the task text are dropped.
   const text = shown?.expect ? withoutBlock(task, shown.expect, shown.call) : task;
@@ -95,18 +96,16 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
             ) : null}
             {shown.events ? (
               <div>
-                <div className="lbl">Clicks and typing</div>
+                <div className="lbl">What the user does</div>
                 <p className="task-events">{describeEvents(shown.events)}</p>
               </div>
             ) : null}
-            {Object.entries(shown.files ?? {}).map(([name, text]) => (
+            {Object.entries(shown.files ?? {}).map(([name, value]) => (
               <div key={name}>
                 <div className="lbl">
-                  The file <FileName name={name} />
+                  {typeof value === "string" ? "The file" : "The image"} <FileName name={name} />
                 </div>
-                <pre className="console tiny" tabIndex={0}>
-                  {text.replace(/\n$/, "")}
-                </pre>
+                <GivenFileView value={value} />
               </div>
             ))}
             <div>

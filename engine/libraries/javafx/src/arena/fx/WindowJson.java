@@ -32,7 +32,14 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.paint.Paint;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Line;
+import javafx.scene.shape.Path;
+import javafx.scene.shape.Polygon;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.shape.Shape;
 import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
@@ -88,6 +95,30 @@ import javafx.stage.Window;
  *
  * Last come the children: "children":[...] for panes, and "top", "left", "center", "right",
  * "bottom" for a BorderPane.
+ *
+ * <p>Part 14.3 adds, each only when it applies: a node's "f" (right after "type": its number in
+ * the frames, when frames ran and showed it); a Text's "text"; "translateX", "translateY",
+ * "layoutX", "layoutY" and "rotate" (after "style", each when it isn't 0, on any node);
+ * "onKeyPressed", "onKeyReleased", "onKeyTyped" (true when a node has its own key handler, which
+ * never runs here: key events go to the scene); and for a shape, after those: "points" (a
+ * Polygon's, x and y one after the other), "centerX", "centerY", "radius" (a Circle), "x", "y",
+ * "width", "height" (a Rectangle), "startX", "startY", "endX", "endY" (a Line), "x", "y" (a Text,
+ * whose font is "font" as for the other nodes), "area" (a Path from Shape.intersect: [minX, minY,
+ * maxX, maxY] or null), then "fill" (a color, or null for none: always), "stroke" (when it has
+ * one) and "strokeWidth" (when it isn't 1). A scene has "onKeyPressed", "onKeyReleased" and
+ * "onKeyTyped" (true when set) before "root"; its size is also the root pane's preferred size
+ * when it was made without one (Session.shown).
+ *
+ * <p>When frames ran, ,"frames":{"count":N,"list":[FRAME...]} comes after "problems": the count of
+ * all the frames and the first Frames.KEPT (3600) of them. A FRAME is a list of changes, each
+ * {"k":K,...}: K numbers the node in the frames (its "f"); the first time a frame shows a node it
+ * has its "type", its "fill", "stroke" (when it has one), "text" and "font" (also when they are
+ * the default), and its other keys when they aren't the default; after that only what changed
+ * since the frame before. The keys: "tx", "ty", "lx", "ly", "r" (translate, layout, rotate),
+ * "strokeWidth", the geometry keys above except "area" (a Path's box comes from the window after
+ * the last event), "visible", "fill", "stroke", "text", "font", and "children" (a pane's, as
+ * numbers K, when its children changed). Numbers are in hundredths (Hundredths). A
+ * change {"roots":[K...]} gives each showing window's root when they change.
  */
 final class WindowJson {
     private final StringBuilder out = new StringBuilder();
@@ -117,7 +148,9 @@ final class WindowJson {
             }
             json.string(problems.get(i));
         }
-        out.append("]}");
+        out.append(']');
+        Frames.write(out);
+        out.append('}');
         return out.toString();
     }
 
@@ -146,6 +179,15 @@ final class WindowJson {
                 number(size[1]);
                 out.append(',');
             }
+            if (scene.getOnKeyPressed() != null) {
+                out.append("\"onKeyPressed\":true,");
+            }
+            if (scene.getOnKeyReleased() != null) {
+                out.append("\"onKeyReleased\":true,");
+            }
+            if (scene.getOnKeyTyped() != null) {
+                out.append("\"onKeyTyped\":true,");
+            }
             out.append("\"root\":");
             node(scene.getRoot(), null);
             out.append('}');
@@ -157,6 +199,10 @@ final class WindowJson {
         out.append("{\"n\":").append(++count);
         key("type");
         string(Outline.typeName(node));
+        int frameKey = Frames.keyOf(node);
+        if (frameKey > 0) {
+            key("f").append(frameKey);
+        }
         if (grid != null) {
             Integer[] cell = GridCells.get(node);
             key("column").append(Outline.orZero(cell[0]));
@@ -176,6 +222,9 @@ final class WindowJson {
         if (Outline.hasText(node)) {
             key("text");
             string(Outline.textOf(node));
+        } else if (node instanceof Text) {
+            key("text");
+            string(((Text) node).getText());
         }
         if (node instanceof TextInputControl) {
             String prompt = ((TextInputControl) node).getPromptText();
@@ -196,20 +245,16 @@ final class WindowJson {
         if ((node instanceof Labeled && ((Labeled) node).isWrapText()) || (node instanceof TextArea && ((TextArea) node).isWrapText())) {
             key("wrapText").append("true");
         }
-        Font font = node instanceof Labeled ? ((Labeled) node).getFont() : node instanceof TextInputControl ? ((TextInputControl) node).getFont() : Font.getDefault();
-        if (font == null) {
-            key("font").append("null");
-        } else if (!font.equals(Font.getDefault())) {
-            key("font").append("{\"family\":");
-            string(font.getFamily());
-            key("size");
-            number(font.getSize());
-            out.append('}');
+        Font font = node instanceof Labeled ? ((Labeled) node).getFont() : node instanceof TextInputControl ? ((TextInputControl) node).getFont() : node instanceof Text ? ((Text) node).getFont() : Font.getDefault();
+        if (font == null || !font.equals(Font.getDefault())) {
+            key("font");
+            font(out, font);
         }
         if (!node.getStyle().isEmpty()) {
             key("style");
             string(node.getStyle());
         }
+        transforms(node);
         if (node instanceof Region) {
             Region r = (Region) node;
             if (r.getPrefWidth() != Region.USE_COMPUTED_SIZE) {
@@ -265,8 +310,12 @@ final class WindowJson {
         if (onAction != null) {
             key("onAction").append("true");
         }
+        keyHandlers(node);
         if (node instanceof Canvas) {
             canvas((Canvas) node);
+        } else if (node instanceof Shape) {
+            mouseHandlers(node);
+            shape((Shape) node);
         } else if (node instanceof ImageView) {
             imageView((ImageView) node);
         } else {
@@ -298,6 +347,130 @@ final class WindowJson {
             out.append(']');
         }
         out.append('}');
+    }
+
+    // ------------------------------------------------------------------ transforms, keys and shapes
+
+    /** "translateX", "translateY", "layoutX", "layoutY", "rotate": each when it isn't 0. */
+    private void transforms(Node node) {
+        nonZero("translateX", node.getTranslateX());
+        nonZero("translateY", node.getTranslateY());
+        nonZero("layoutX", node.getLayoutX());
+        nonZero("layoutY", node.getLayoutY());
+        nonZero("rotate", node.getRotate());
+    }
+
+    private void nonZero(String name, double value) {
+        if (value != 0 || Double.isNaN(value)) {
+            key(name);
+            number(value);
+        }
+    }
+
+    /** A node's own key handlers, which never run here (key events go to the scene): written so the page can say so. */
+    private void keyHandlers(Node node) {
+        if (node.getOnKeyPressed() != null) {
+            key("onKeyPressed").append("true");
+        }
+        if (node.getOnKeyReleased() != null) {
+            key("onKeyReleased").append("true");
+        }
+        if (node.getOnKeyTyped() != null) {
+            key("onKeyTyped").append("true");
+        }
+    }
+
+    /**
+     * A shape: its geometry ("points" of a polygon; "centerX", "centerY", "radius" of a circle;
+     * "x", "y", "width", "height" of a rectangle; "startX", "startY", "endX", "endY" of a line; "x",
+     * "y" of a text, whose text and font come with the other nodes'), then "fill" (a color, or null
+     * for none), "stroke" (when it has one) and "strokeWidth" (when it isn't 1).
+     */
+    private void shape(Shape shape) {
+        if (shape instanceof Polygon) {
+            key("points").append('[');
+            List<Double> points = ((Polygon) shape).getPoints();
+            for (int i = 0; i < points.size(); i++) {
+                if (i > 0) {
+                    out.append(',');
+                }
+                Double p = points.get(i);
+                if (p == null) {
+                    out.append("null");
+                } else {
+                    number(p);
+                }
+            }
+            out.append(']');
+        } else if (shape instanceof Circle) {
+            Circle c = (Circle) shape;
+            key("centerX");
+            number(c.getCenterX());
+            key("centerY");
+            number(c.getCenterY());
+            key("radius");
+            number(c.getRadius());
+        } else if (shape instanceof Rectangle) {
+            Rectangle r = (Rectangle) shape;
+            key("x");
+            number(r.getX());
+            key("y");
+            number(r.getY());
+            key("width");
+            number(r.getWidth());
+            key("height");
+            number(r.getHeight());
+        } else if (shape instanceof Line) {
+            Line l = (Line) shape;
+            key("startX");
+            number(l.getStartX());
+            key("startY");
+            number(l.getStartY());
+            key("endX");
+            number(l.getEndX());
+            key("endY");
+            number(l.getEndY());
+        } else if (shape instanceof Text) {
+            Text t = (Text) shape;
+            key("x");
+            number(t.getX());
+            key("y");
+            number(t.getY());
+        } else if (shape instanceof Path) {
+            float[] box = Geometry.localBox(shape);
+            key("area");
+            if (box == null) {
+                out.append("null");
+            } else {
+                out.append('[');
+                number(box[0]);
+                out.append(',');
+                number(box[1]);
+                out.append(',');
+                number(box[2]);
+                out.append(',');
+                number(box[3]);
+                out.append(']');
+            }
+        }
+        key("fill");
+        paint(shape.getFill());
+        if (shape.getStroke() != null) {
+            key("stroke");
+            paint(shape.getStroke());
+        }
+        if (shape.getStrokeWidth() != 1) {
+            key("strokeWidth");
+            number(shape.getStrokeWidth());
+        }
+    }
+
+    private void paint(Paint paint) {
+        if (paint == null) {
+            out.append("null");
+        } else {
+            out.append('"').append(color(paint)).append('"');
+        }
     }
 
     // ------------------------------------------------------------------ canvas, image view, slider, charts
@@ -579,6 +752,19 @@ final class WindowJson {
         }
     }
 
+    /** A font as {"family":..,"size":..}, or null. */
+    static void font(StringBuilder out, Font font) {
+        if (font == null) {
+            out.append("null");
+            return;
+        }
+        out.append("{\"family\":");
+        string(out, font.getFamily());
+        out.append(",\"size\":");
+        number(out, font.getSize());
+        out.append('}');
+    }
+
     private void region(String name, Node child) {
         if (child != null) {
             key(name);
@@ -594,8 +780,12 @@ final class WindowJson {
     /** The whole numbers 0 to 1023 as Java prints them as doubles ("12.0"), made when first needed. */
     private static final String[] WHOLE = new String[1024];
 
-    /** Writes the number as Java prints a double; NaN and the infinities as strings. */
     private void number(double value) {
+        number(out, value);
+    }
+
+    /** Writes the number as Java prints a double; NaN and the infinities as strings. */
+    static void number(StringBuilder out, double value) {
         if (Double.isNaN(value) || Double.isInfinite(value)) {
             out.append('"').append(Double.toString(value)).append('"');
         } else if (value == (int) value && (value != 0 || 1 / value > 0) && Math.abs(value) < 1e7) {
@@ -618,8 +808,12 @@ final class WindowJson {
         }
     }
 
-    /** A JSON string of ASCII characters only (others as \\u escapes), or null. */
     private void string(String s) {
+        string(out, s);
+    }
+
+    /** A JSON string of ASCII characters only (others as \\u escapes), or null. */
+    static void string(StringBuilder out, String s) {
         if (s == null) {
             out.append("null");
             return;

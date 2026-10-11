@@ -31,12 +31,13 @@ import { librariesFor } from "../src/grader/libraries.js";
 import { compareWrites, dataPathProblem, fileContent } from "../src/grader/writes.js";
 import { ASSET_FOLDER, assetProblem, isAssetFile, pngInfo, textOrBytes, toBase64 } from "../src/grader/assets.ts";
 // TypeScript, which Node runs as it is (it has only types to strip): shared with the browser's grader.
-import { checkWindow, eventLines, parseEventLine, parseWindow, windowOutline, withEventsFile } from "../src/grader/window.ts";
+import { TEST_FRAMES_WARN, checkWindow, eventLines, framesInEvents, parseEventLine, parseWindow, testWindow, windowOutline, withEventsFile } from "../src/grader/window.ts";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/suite.mjs";
 import { LAUNCHER_KEY, javaRunArgs } from "./javafx/reference.mjs";
 import { unpackLibrary } from "./libraries.mjs";
 import { ANY_CLASSES, drawClassDiagrams, UNDRAWN_CLASSES } from "./content/class-diagram.mjs";
 import { nondeterminism } from "./content/determinism.mjs";
+import { blockKindProblem } from "../src/components/code-blocks.ts";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const CACHE_FILE = path.join(ROOT, "node_modules", ".cache", "java-arena-content.json");
@@ -453,6 +454,10 @@ function readEvents(where, value) {
     const hint = Array.isArray(value) && /^(click|type|set|enter|press|drag|release)$/.test(line) ? " (in a YAML list, # after a space starts a comment: write the events as a block, events: |, or quote the line)" : "";
     if (e?.problem !== undefined) errors.push(`${where}: the event ${line} can't be read: ${e.problem}${hint}`);
   }
+  // Every frame runs the game's code in the learner's browser, where 300 frames of a game of 20
+  // shapes take about 3 seconds (and a phone is slower).
+  const frames = framesInEvents(lines);
+  if (frames > TEST_FRAMES_WARN) warnings.push(`${where}: runs ${frames} frames; the frames of a test run in the learner's browser every time it's checked (300 frames of a small game take about 3 seconds on a desktop, longer on a phone), so keep it to ${TEST_FRAMES_WARN} or fewer`);
   return lines;
 }
 
@@ -463,12 +468,15 @@ function readEvents(where, value) {
  */
 function solutionWindow(where, r, what = "the solution") {
   if (r.timedOut || r.exitCode !== 0) return null;
-  // The lesson file holds the window, which a phone downloads with the step: a canvas of thousands
-  // of calls or a large image makes it big.
-  const kb = Math.round((r.window?.length ?? 0) / 1024);
-  if (kb > WINDOW_KB_MAX) errors.push(`${where}: the window of ${what} is ${kb} KB of JSON (most of it a canvas's drawing calls or an image's pixels); the lesson file holds it, so keep it under ${WINDOW_KB_MAX} KB: draw fewer shapes, or use a smaller image`);
-  else if (kb > WINDOW_KB_WARN) warnings.push(`${where}: the window of ${what} is ${kb} KB of JSON, which the lesson file holds (a canvas's calls or an image's pixels); smaller is better on a phone`);
   const w = parseWindow(r.window);
+  // The lesson file holds the window, which a phone downloads with the step: a canvas of thousands
+  // of calls, a large image or many frames make it big. A test keeps its window without the frames
+  // (testWindow), an example with them (the page plays them).
+  const kept = w && what === "the solution" ? JSON.stringify(testWindow(w)) : r.window;
+  const kb = Math.round((kept?.length ?? 0) / 1024);
+  const why = w?.frames?.list.length && what !== "the solution" ? "most of it the frames of its animation, a canvas's drawing calls or an image's pixels" : "most of it a canvas's drawing calls or an image's pixels";
+  if (kb > WINDOW_KB_MAX) errors.push(`${where}: the window of ${what} is ${kb} KB of JSON (${why}); the lesson file holds it, so keep it under ${WINDOW_KB_MAX} KB: draw fewer shapes, run fewer frames, or use a smaller image`);
+  else if (kb > WINDOW_KB_WARN) warnings.push(`${where}: the window of ${what} is ${kb} KB of JSON (${why}), which the lesson file holds; smaller is better on a phone`);
   if (!w) errors.push(`${where}: ${what} leaves no window (main must call launch, and nothing may end the program before the library writes its window: System.exit in start or a handler, or an exception from start that main catches)`);
   else if (w.problems.length) errors.push(`${where}: some events can't happen in the window of ${what}:\n${w.problems.join("\n")}`);
   else if (!w.windows.length && !w.closed) errors.push(`${where}: no window is showing at the end of ${what}'s run (start must call stage.show())`);
@@ -551,6 +559,8 @@ async function checkExamples(where, text) {
   const eventsUsed = new Set();
   for (let i = 0; i < blocks.length; i++) {
     const info = blocks[i][1].trim();
+    const kindProblem = blockKindProblem(info);
+    if (kindProblem) errors.push(`${where}, example ${i + 1}: ${kindProblem}`);
     if (!/^java\b/.test(info)) continue;
     const [, kind, extra, ...rest] = info.split(/\s+/);
     const code = blocks[i][2];
@@ -934,7 +944,8 @@ async function buildExercise(where, raw) {
     const call = calls[i];
     const name = t.name ?? (call && !call.trim().includes("\n") ? call.trim() : testsRaw.length > 1 ? `Test ${i + 1}` : events ? (actual ? "Window and output" : "Window") : writes ? (actual ? "Output and files" : "Files") : "Output");
     // A test with events keeps the solution's window after them, and its outline, which the learner's is compared with.
-    const shown = events ? { events, window: window ?? { windows: [], problems: [] }, outline: windowOutline(window) } : {};
+    // (Without the frames themselves: the task card and the results show the window after the last event.)
+    const shown = events ? { events, window: window ? testWindow(window) : { windows: [], problems: [] }, outline: windowOutline(window) } : {};
     return { name, stdin: stdins[i], ...(argsOf[i] ? { args: argsOf[i] } : {}), ...(call ? { call } : {}), ...(inputFiles[i] ? { files: inputFiles[i] } : {}), ...(writes ? { writes } : {}), expect: actual, hidden: !!t.hidden, ...shown };
   });
   // The replay compares every file the run leaves in its folder, where a test checks written files,

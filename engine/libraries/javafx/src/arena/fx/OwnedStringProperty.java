@@ -33,6 +33,9 @@ public class OwnedStringProperty extends StringProperty {
         String stored = accept(newValue);
         if (!Objects.equals(value, stored)) {
             value = stored;
+            if (bean instanceof javafx.scene.Node) {
+                Frames.touch((javafx.scene.Node) bean, Frames.TEXTS);
+            }
             listeners.fire();
         }
     }

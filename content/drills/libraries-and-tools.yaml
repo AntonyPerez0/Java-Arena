@@ -1,0 +1,420 @@
+topic: libraries-and-tools
+drills:
+  - type: predict
+    after: build-tools
+    prompt: A dependency's coordinates, taken apart. What does this print?
+    body: |
+      String coordinates = "org.hamcrest:hamcrest-core:1.3";
+      String[] parts = coordinates.split(":");
+      System.out.println(parts.length + " " + parts[1]);
+      System.out.println(parts[0].replace(".", "/"));
+    why: "The colons split the coordinates into three parts: the groupId `org.hamcrest`, the artifactId `hamcrest-core` and the version `1.3`. The groupId's dots become slashes, as in the folders of Maven's local repository."
+
+  - type: predict
+    after: data-access-objects
+    prompt: A plant-watering log hands out ids. What does this print?
+    classes: |
+      class PlantLog {
+          private List<String> plants = new ArrayList<>();
+          private int nextId = 1;
+
+          public int add(String plant) {
+              this.plants.add(plant);
+              int id = this.nextId;
+              this.nextId++;
+              return id;
+          }
+
+          public void removeLast() {
+              this.plants.remove(this.plants.size() - 1);
+          }
+      }
+    body: |
+      PlantLog log = new PlantLog();
+      log.add("fern");
+      int cactus = log.add("cactus");
+      log.removeLast();
+      System.out.println(cactus + " " + log.add("basil"));
+    why: "The ids come from `nextId`, which only counts up. Removing the cactus makes the list shorter, but the next id is still 3: an id is never handed out twice, as with H2's identity column in step 4."
+
+  - type: predict
+    after: data-access-objects
+    prompt: A lost-and-found desk can return its list in two ways. What does this print?
+    classes: |
+      class Desk {
+          private List<String> found = new ArrayList<>();
+
+          public void add(String item) {
+              this.found.add(item);
+          }
+
+          public List<String> all() {
+              return this.found;
+          }
+
+          public List<String> copy() {
+              return new ArrayList<>(this.found);
+          }
+      }
+    body: |
+      Desk desk = new Desk();
+      desk.add("umbrella");
+      desk.add("glove");
+      desk.copy().clear();
+      System.out.println(desk.all().size());
+      desk.all().clear();
+      System.out.println(desk.all().size());
+    why: "`copy()` returns a new list, so clearing it leaves the desk's list as it was: 2. `all()` returns the desk's own list, and clearing that empties the desk: 0. That's why a DAO's `list()` returns a new list."
+
+  - type: predict
+    after: text-ui-over-a-dao
+    prompt: "A command loop, with the input `add`, `kite`, `list`, `add`, `scarf` and `quit`, one per line. The output doesn't show what was typed. What does it print?"
+    stdin: |
+      add
+      kite
+      list
+      add
+      scarf
+      quit
+    body: |
+      Scanner scanner = new Scanner(System.in);
+      List<String> items = new ArrayList<>();
+      while (true) {
+          System.out.print("> ");
+          String command = scanner.nextLine();
+          if (command.equals("quit")) {
+              System.out.println("bye");
+              break;
+          }
+          if (command.equals("add")) {
+              items.add(scanner.nextLine());
+              System.out.println(items.size());
+          } else {
+              System.out.println("?");
+          }
+      }
+    why: "Each command gets one `> `. `add` reads its item from the next line without a prompt of its own, so `kite` and `scarf` never show up as commands. `list` isn't a command this loop knows, so it prints `?`."
+
+  - type: predict
+    after: packaging-and-the-end
+    prompt: A review of streams. What does this print?
+    body: |
+      List<Integer> degrees = new ArrayList<>();
+      degrees.add(980);
+      degrees.add(1150);
+      degrees.add(1310);
+      degrees.add(1020);
+      System.out.println(degrees.stream().filter(d -> d > 1000).count());
+      System.out.println(degrees.stream().map(d -> d / 100).collect(java.util.stream.Collectors.toList()));
+    why: "Three of the four numbers are above 1000. `map` turns each number into its whole hundreds with integer division (`1310 / 100` is 13), and keeps all four, in order. Neither stream changes the list itself."
+
+  - type: fill
+    after: data-access-objects
+    prompt: "Fill in the blank, an expression, so that the plants get the ids 1, 2 and 3."
+    body: |
+      int nextId = 1;
+      String[] plants = {"fern", "cactus", "basil"};
+      for (String plant : plants) {
+          int id = nextId;
+          nextId = [[nextId + 1‖1 + nextId]];
+          System.out.println(id + " " + plant);
+      }
+    why: "The id is taken first and the counter moves on after it, so the first plant gets 1 and the next one 2. A DAO in memory hands out its ids the same way, from a counter that only counts up."
+
+  - type: fill
+    after: packaging-and-the-end
+    prompt: Fill in the blank so that each tag gets a list of its own the first time it comes up.
+    body: |
+      HashMap<String, List<String>> files = new HashMap<>();
+      String[] lines = {"notes.txt work", "beach.png trip", "plan.txt work"};
+      for (String line : lines) {
+          String[] parts = line.split(" ");
+          String tag = parts[1];
+          if (!files.[[containsKey‖keySet().contains]](tag)) {
+              files.put(tag, new ArrayList<>());
+          }
+          files.get(tag).add(parts[0]);
+      }
+      System.out.println(files.get("work"));
+    why: "`containsKey(tag)` is false the first time a tag comes up, so an empty list is put in the map for it. After that, `files.get(tag)` is that tag's list, and `add` puts the file name at its end, so the `work` tag gets `[notes.txt, plan.txt]`."
+
+  - type: bug
+    after: data-access-objects
+    prompt: "`update` should put the new title in place of the old one, but the list grows instead. Fix the marked line."
+    classes: |
+      class ReadingList {
+          private List<String> titles = new ArrayList<>();
+
+          public void add(String title) {
+              this.titles.add(title);
+          }
+
+          public boolean update(int index, String title) {
+              if (index >= this.titles.size()) {
+                  return false;
+              }
+              this.titles.add(index, title); // BUG
+              return true;
+          }
+
+          public List<String> list() {
+              return new ArrayList<>(this.titles);
+          }
+      }
+    body: |
+      ReadingList list = new ReadingList();
+      list.add("Dune");
+      list.add("Emma");
+      list.update(0, "Dune, second edition");
+      System.out.println(list.list());
+    fix: this.titles.set(index, title);
+    why: "`add(index, value)` squeezes a new element in and moves the others along, so the old title stays. `set(index, value)` replaces the element at that index, which is what an update does."
+
+  - type: bug
+    after: data-access-objects
+    prompt: "A bakery gives each order a number to call out when it's ready. After an order is collected, the next order gets a number that's still waiting, and an order gets lost. Fix the marked line, using the field `nextOrder`."
+    classes: |
+      class BakeryOrders {
+          private Map<Integer, String> orders = new HashMap<>();
+          private int nextOrder = 1;
+
+          public int place(String item) {
+              int number = this.orders.size() + 1; // BUG
+              this.orders.put(number, item);
+              return number;
+          }
+
+          public void collect(int number) {
+              this.orders.remove(number);
+          }
+
+          public int waiting() {
+              return this.orders.size();
+          }
+      }
+    body: |
+      BakeryOrders bakery = new BakeryOrders();
+      int a = bakery.place("sourdough loaf");
+      int b = bakery.place("cinnamon buns");
+      bakery.collect(a);
+      int c = bakery.place("apple pie");
+      System.out.println(a + " " + b + " " + c);
+      System.out.println(bakery.waiting() + " waiting");
+    fix: int number = this.nextOrder++;
+    why: "After the loaf is collected, one order is left, so `size() + 1` is 2 again: the apple pie gets number 2 and replaces the cinnamon buns in the map. Each order's number must be its own, and a counter that only counts up gives every new order a number no other order has."
+
+  - type: bug
+    after: packaging-and-the-end
+    prompt: "A delivery fee charges for every kilometer, but never less than a minimum. Short deliveries cost too little. Fix the marked line."
+    classes: |
+      class DeliveryFee {
+          private int perKm;
+          private int minimum;
+
+          public DeliveryFee(int perKm, int minimum) {
+              this.perKm = perKm;
+              this.minimum = minimum;
+          }
+
+          public int fee(int km) {
+              return Math.min(km * this.perKm, this.minimum); // BUG
+          }
+      }
+    body: |
+      DeliveryFee delivery = new DeliveryFee(80, 400);
+      System.out.println(delivery.fee(3) + " " + delivery.fee(10));
+    fix: return Math.max(km * this.perKm, this.minimum);
+    why: "A minimum is a least, so the fee is the larger of the two: `Math.max`. `Math.min` makes the minimum a most instead, so a 3 km delivery costs only 240 cents and a 10 km one no more than 400."
+
+  - type: compiles
+    after: data-access-objects
+    body: |
+      NoteDao dao = new MemoryNoteDao();
+      System.out.println(dao.list());
+    classes: |
+      interface NoteDao {
+          List<String> list();
+          int add(String note);
+      }
+
+      class MemoryNoteDao implements NoteDao {
+          private List<String> notes = new ArrayList<>();
+
+          public List<String> list() {
+              return new ArrayList<>(this.notes);
+          }
+      }
+    why: "A class that implements an interface must have every method of it. `MemoryNoteDao` has no `add`, so javac stops: MemoryNoteDao is not abstract and does not override `add(String)`."
+
+  - type: compiles
+    after: text-ui-over-a-dao
+    body: |
+      PlantDao dao = new MemoryPlantDao();
+      List<String> all = dao.list();
+      all.add("fern");
+      System.out.println(dao.list().size());
+    classes: |
+      interface PlantDao {
+          List<String> list();
+      }
+
+      class MemoryPlantDao implements PlantDao {
+          private List<String> plants = new ArrayList<>();
+
+          public List<String> list() {
+              return new ArrayList<>(this.plants);
+          }
+      }
+    why: "It compiles, and it prints 0. `list()` returns a `List<String>`, which has `add`. But it's a new list each time, so adding to it doesn't change what the DAO stores."
+
+  - type: choice
+    after: build-tools
+    prompt: In a Maven project, where do the unit test classes go?
+    choices:
+      - "`src/main/java`, next to the classes they test"
+      - "`src/test/java`, in the same packages as the classes they test"
+      - "`target/test-classes`"
+      - "Anywhere, as long as pom.xml lists them"
+    answer: 2
+    why: "Tests go in `src/test/java`, and the program's own classes in `src/main/java`. Using the same package lets a test use what it tests without imports, package-private parts included. `target` is where Maven puts what it makes, such as the compiled test classes, and it can be deleted any time."
+
+  - type: choice
+    after: build-tools
+    prompt: "A dependency in pom.xml has `<scope>test</scope>`. What does that mean?"
+    choices:
+      - The library is downloaded again for every test run
+      - The library is a test version that may have bugs
+      - The library is there when the tests are compiled and run, and not in the program itself
+      - The library's own tests run before each build
+    answer: 3
+    why: "The test scope is for libraries that only the tests use, such as JUnit. The program's own classes can't use them, and they aren't packed with the finished program. Maven keeps a downloaded library in its local repository and doesn't download it again."
+
+  - type: choice
+    after: databases
+    prompt: "Why should a JDBC program use `?` and `setString` for a value the user typed, rather than putting the text into the SQL with `+`?"
+    choices:
+      - It makes the statement run faster, and that's all
+      - With `?`, the text is sent as a value and never read as SQL, so typed text can't change what the statement does
+      - SQL can't contain text in quotes
+      - "`+` doesn't work with Strings that contain spaces"
+    answer: 2
+    why: "Text glued into the SQL becomes part of the statement: a `'` in it ends the quoted text early, and text such as `x' OR 'a'='a` turns one row into every row. That's SQL injection. A parameter keeps the value apart from the SQL."
+
+  - type: boss
+    after: data-access-objects
+    prompt: |
+      A plant-watering log stores each watering under an id. Write the class `WateringLog`:
+
+      - `int water(String plant)` logs a watering of that plant and returns its id; ids grow from 1 and are never handed out twice
+      - `List<Integer> idsFor(String plant)` returns the ids of that plant's waterings, from the smallest up (an empty list when there are none)
+      - `boolean remove(int id)` removes the watering with that id and returns `true`, or returns `false` when there's none
+
+      The program prints:
+
+      ```
+      [1, 3]
+      true false
+      [3]
+      4
+      ```
+    seed:
+      WateringLog.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class WateringLog {
+
+            public int water(String plant) {
+                return 0;
+            }
+
+            public List<Integer> idsFor(String plant) {
+                return new ArrayList<>();
+            }
+
+            public boolean remove(int id) {
+                return false;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                WateringLog log = new WateringLog();
+                log.water("fern");
+                log.water("cactus");
+                log.water("fern");
+                System.out.println(log.idsFor("fern"));
+                System.out.println(log.remove(1) + " " + log.remove(1));
+                System.out.println(log.idsFor("fern"));
+                System.out.println(log.water("basil"));
+            }
+        }
+    solution:
+      WateringLog.java: |
+        import java.util.ArrayList;
+        import java.util.HashMap;
+        import java.util.List;
+        import java.util.Map;
+
+        public class WateringLog {
+            private Map<Integer, String> waterings;
+            private int nextId;
+
+            public WateringLog() {
+                this.waterings = new HashMap<>();
+                this.nextId = 1;
+            }
+
+            public int water(String plant) {
+                int id = this.nextId;
+                this.nextId++;
+                this.waterings.put(id, plant);
+                return id;
+            }
+
+            public List<Integer> idsFor(String plant) {
+                List<Integer> ids = new ArrayList<>();
+                for (int id = 1; id < this.nextId; id++) {
+                    if (plant.equals(this.waterings.get(id))) {
+                        ids.add(id);
+                    }
+                }
+                return ids;
+            }
+
+            public boolean remove(int id) {
+                return this.waterings.remove(id) != null;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                WateringLog log = new WateringLog();
+                log.water("fern");
+                log.water("cactus");
+                log.water("fern");
+                System.out.println(log.idsFor("fern"));
+                System.out.println(log.remove(1) + " " + log.remove(1));
+                System.out.println(log.idsFor("fern"));
+                System.out.println(log.water("basil"));
+            }
+        }
+    hints:
+      - "Keep the waterings in a `Map<Integer, String>` from id to plant (or in a list of small objects), and the next id in a counter that only counts up."
+      - "For `idsFor`, go through the ids from 1 up to the counter, so the list comes out in order: a HashMap's own order isn't promised. `plant.equals(map.get(id))` is false for a removed id, where `get` returns `null`."
+    tests:
+      - name: Ferns and a cactus
+      - call: |
+          WateringLog log = new WateringLog();
+          System.out.println(log.idsFor("moss") + " " + log.remove(1));
+          for (int i = 0; i < 20; i++) {
+              log.water("ivy");
+              log.water("palm");
+          }
+          for (int id = 1; id <= 30; id++) {
+              log.remove(id);
+          }
+          System.out.println(log.idsFor("ivy"));
+          System.out.println(log.idsFor("palm"));
+          System.out.println(log.water("ivy"));
+        hidden: true

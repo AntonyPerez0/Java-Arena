@@ -11,11 +11,13 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { crc32, deflateSync } from "node:zlib";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { EVENTS_FILE, JAVAFX_LIBRARY, WINDOW_FILE, isArenaFile, usesJavaFX, withoutArenaFiles } from "../src/grader/javafx.js";
 import { librariesFor } from "../src/grader/libraries.js";
+import { KEY_CODES, KEY_NAMES } from "../src/grader/keycodes.js";
+import { FRAMES_KEPT, keyNameProblem, parseEventLine, windowOutline } from "../src/grader/window.ts";
 import { changedFiles, dataPathProblem } from "../src/grader/writes.js";
 import { REFERENCE_JVM_FLAGS, referenceJavaHome } from "./fidelity/suite.mjs";
 import { javaRunArgs, LAUNCHER_CLASS, LAUNCHER_KEY } from "./javafx/reference.mjs";
@@ -76,7 +78,7 @@ test("files in .arena/ are Java Arena's own: never shown as written, never usabl
 const javaHome = referenceJavaHome();
 const env = { ...process.env, LC_ALL: "C.UTF-8" };
 delete env.JAVA_TOOL_OPTIONS;
-const IMPORTS = ["javafx.application.*", "javafx.beans.property.*", "javafx.beans.value.*", "javafx.collections.*", "javafx.event.*", "javafx.geometry.*", "javafx.scene.*", "javafx.scene.canvas.*", "javafx.scene.chart.*", "javafx.scene.control.*", "javafx.scene.image.*", "javafx.scene.input.*", "javafx.scene.layout.*", "javafx.scene.paint.*", "javafx.scene.text.*", "javafx.stage.*", "java.util.*"]
+const IMPORTS = ["javafx.animation.*", "javafx.application.*", "javafx.beans.property.*", "javafx.beans.value.*", "javafx.collections.*", "javafx.event.*", "javafx.geometry.*", "javafx.scene.*", "javafx.scene.canvas.*", "javafx.scene.chart.*", "javafx.scene.control.*", "javafx.scene.image.*", "javafx.scene.input.*", "javafx.scene.layout.*", "javafx.scene.paint.*", "javafx.scene.shape.*", "javafx.scene.text.*", "javafx.stage.*", "java.util.*"]
   .map((p) => `import ${p};`)
   .join("\n");
 
@@ -86,9 +88,9 @@ const IMPORTS = ["javafx.application.*", "javafx.beans.property.*", "javafx.bean
  * working folder; `main` is the main class in the package.
  */
 const programs = [];
-function program(name, source, { events, args = [], main = "Main", files = {} } = {}) {
+function program(name, source, { events, args = [], main = "Main", files = {}, jvm = [] } = {}) {
   const id = `p${programs.length + 1}`;
-  const p = { id, name, source: `package ${id};\n${IMPORTS}\n${source}`, events, args, files, main: `${id}.${main}`, result: null };
+  const p = { id, name, source: `package ${id};\n${IMPORTS}\n${source}`, events, args, files, jvm, main: `${id}.${main}`, result: null };
   programs.push(p);
   return p;
 }
@@ -105,7 +107,7 @@ function run(p, classPath) {
       mkdirSync(join(cwd, ".arena"), { recursive: true });
       writeFileSync(join(cwd, EVENTS_FILE), p.events);
     }
-    const child = spawn(join(javaHome, "bin", "java"), [...REFERENCE_JVM_FLAGS, ...javaRunArgs({ javaHome, libraries: [JAVAFX_LIBRARY], classPath, mainClass: p.main, args: p.args })], { cwd, env });
+    const child = spawn(join(javaHome, "bin", "java"), [...REFERENCE_JVM_FLAGS, ...p.jvm, ...javaRunArgs({ javaHome, libraries: [JAVAFX_LIBRARY], classPath, mainClass: p.main, args: p.args })], { cwd, env });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8").on("data", (d) => (stdout += d));
@@ -115,7 +117,10 @@ function run(p, classPath) {
       clearTimeout(timer);
       const windowFile = join(cwd, WINDOW_FILE);
       const json = existsSync(windowFile) ? readFileSync(windowFile, "utf8") : null;
-      resolve({ stdout, stderr, exitCode, json, window: json && JSON.parse(json) });
+      // The windows after each event line, which the library writes only for npm run fx-check.
+      const arena = join(cwd, dirname(WINDOW_FILE));
+      const steps = existsSync(arena) ? readdirSync(arena).filter((n) => n.startsWith("window-step-")).sort() : [];
+      resolve({ stdout, stderr, exitCode, json, window: json && JSON.parse(json), steps: Object.fromEntries(steps.map((n) => [n, readFileSync(join(arena, n), "utf8")])) });
     });
   });
 }
@@ -226,6 +231,9 @@ const problems = program("problems", COUNTER, {
     "click",
     "Click #4",
     "jump #4",
+    "keys SPACE",
+    "pres key UP",
+    "fram 3",
     'type TextField 1 "open',
     'type TextField 1 "bad \\q"',
     'type TextField 1 "bad \\u12"',
@@ -259,7 +267,11 @@ test("events that can't happen are skipped, each with a problem in plain English
     'click "Add": the target comes before the text: a class and which one, such as click Button "OK"',
     'click: click needs a target, such as click Button "OK"',
     "Click #4: write the event in small letters: click",
-    "jump #4: there's no event called jump (the events are click, type, set, enter and close)",
+    "jump #4: there's no event called jump (the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)",
+    // A near miss names the event it is one letter off; a word that starts with fram is a frames line.
+    "keys SPACE: there's no event called keys (did you mean key? the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)",
+    "pres key UP: there's no event called pres (did you mean press? the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)",
+    "fram 3: write frames, such as frames 30",
     'type TextField 1 "open: the text has no closing double quote',
     'type TextField 1 "bad \\q": \\q isn\'t an escape Java knows (use \\" \\\\ \\n \\t or \\uXXXX)',
     'type TextField 1 "bad \\u12": \\u must be followed by four hexadecimal digits, such as \\u00e4',
@@ -2475,4 +2487,804 @@ test("a canvas text's font has its style when it isn't Regular (new Font(\"Monos
   assert.equal(r.stdout, "Bold Italic | Regular | Regular\n");
   const fonts = r.window.windows[0].scene.root.children[0].calls.map((c) => JSON.stringify(c.font));
   assert.deepEqual(fonts, ['{"family":"System","size":13}', '{"family":"Monospaced","size":12,"style":"Bold"}', '{"family":"Serif","size":14,"style":"Italic"}', '{"family":"System","size":9,"style":"Bold Italic"}']);
+});
+
+// ------------------------------------------------------------------ part 14.3: shapes, keys, timers and frames
+
+// What OpenJFX 21.0.12 printed for Checks.check() (run headless with Monocle, by the batch's
+// author, on the FX thread): shapes and their defaults, bounds (in float, as JavaFX keeps them),
+// Shape.intersect, Point2D, BoundingBox, KeyCode and KeyEvent. The library must print the same.
+const REAL_GEOMETRY = [
+  "Point2D [x = 3.0, y = 4.0] 17308231 5.0 Point2D [x = 0.6, y = 0.8] 4.924428900898052 73.73979529168804 29.16761337957779 Point2D [x = 0.75, y = 3.0] 3.5",
+  "Point2D [x = 1.5, y = 6.0] Point2D [x = 2.0, y = 3.0] Point2D [x = -1.5, y = -2.0] Point2D [x = 0.0, y = 0.0] true false",
+  "BoundingBox [minX:1.0, minY:2.0, minZ:0.0, width:3.0, height:4.0, depth:0.0, maxX:4.0, maxY:6.0, maxZ:0.0] -465330490 false true true false 2.5",
+  "BoundingBox [minX:0.0, minY:0.0, minZ:0.0, width:-1.0, height:-1.0, depth:0.0, maxX:-1.0, maxY:-1.0, maxZ:0.0] true false -1337221434",
+  "Polygon[points=[0.0, -10.0, 10.0, 10.0, -10.0, 10.0], fill=0x000000ff] null 1.0",
+  "BoundingBox [minX:-10.0, minY:-10.0, minZ:0.0, width:20.0, height:20.0, depth:0.0, maxX:10.0, maxY:10.0, maxZ:0.0]",
+  "BoundingBox [minX:-10.0, minY:-10.0, minZ:0.0, width:20.0, height:20.0, depth:0.0, maxX:10.0, maxY:10.0, maxZ:0.0]",
+  "BoundingBox [minX:-14.142135620117188, minY:-7.071067810058594, minZ:0.0, width:21.21320343017578, height:21.21320343017578, depth:0.0, maxX:7.071067810058594, maxY:14.142135620117188, maxZ:0.0]",
+  "BoundingBox [minX:285.85784912109375, minY:192.92892456054688, minZ:0.0, width:21.213226318359375, height:21.213211059570312, depth:0.0, maxX:307.0710754394531, maxY:214.1421356201172, maxZ:0.0]",
+  "BoundingBox [minX:290.85784912109375, minY:199.92892456054688, minZ:0.0, width:21.213226318359375, height:21.213211059570312, depth:0.0, maxX:312.0710754394531, maxY:221.1421356201172, maxZ:0.0] 20.0",
+  "BoundingBox [minX:-2.5, minY:-2.5, minZ:0.0, width:15.0, height:15.0, depth:0.0, maxX:12.5, maxY:12.5, maxZ:0.0]",
+  "Rectangle[x=10.0, y=10.0, width=40.0, height=20.0, fill=0x000000ff] BoundingBox [minX:10.0, minY:10.0, minZ:0.0, width:40.0, height:20.0, depth:0.0, maxX:50.0, maxY:30.0, maxZ:0.0]",
+  "BoundingBox [minX:6.996479034423828, minY:0.6567332744598389, minZ:0.0, width:46.007041931152344, height:38.68653106689453, depth:0.0, maxX:53.00352096557617, maxY:39.34326434135437, maxZ:0.0]",
+  "Circle[centerX=150.0, centerY=100.0, radius=20.0, fill=0x000000ff] BoundingBox [minX:130.0, minY:80.0, minZ:0.0, width:40.0, height:40.0, depth:0.0, maxX:170.0, maxY:120.0, maxZ:0.0]",
+  "BoundingBox [minX:130.0, minY:79.5, minZ:0.0, width:41.0, height:41.0, depth:0.0, maxX:171.0, maxY:120.5, maxZ:0.0]",
+  "Line[startX=0.0, startY=0.0, endX=100.0, endY=50.0, stroke=0x000000ff, strokeWidth=1.0] null BoundingBox [minX:-0.7071067690849304, minY:-0.7071067690849304, minZ:0.0, width:101.41421508789062, height:51.414215087890625, depth:0.0, maxX:100.7071083188057, maxY:50.707108318805695, maxZ:0.0]",
+  "BoundingBox [minX:24.29289436340332, minY:-25.707107543945312, minZ:0.0, width:51.414215087890625, height:101.41421508789062, depth:0.0, maxX:75.70710945129395, maxY:75.70710754394531, maxZ:0.0]",
+  "BoundingBox [minX:-0.5, minY:-0.5, minZ:0.0, width:101.0, height:1.0, depth:0.0, maxX:100.5, maxY:0.5, maxZ:0.0]",
+  "Circle[centerX=0.0, centerY=0.0, radius=5.0, fill=0x0000ffff] Rectangle[x=0.0, y=0.0, width=3.0, height=4.0, fill=0x008000ff] BoundingBox [minX:0.0, minY:0.0, minZ:0.0, width:-1.0, height:-1.0, depth:0.0, maxX:-1.0, maxY:-1.0, maxZ:0.0]",
+  "Text[text=\"Points: 30\", x=10.0, y=20.0, alignment=LEFT, origin=BASELINE, boundsType=LOGICAL, font=Font[name=System Regular, family=System, style=Regular, size=13.0], fontSmoothingType=GRAY, fill=0x000000ff] 0x000000ff",
+  "[]",
+  "BoundingBox [minX:0.0, minY:0.0, minZ:0.0, width:-1.0, height:-1.0, depth:0.0, maxX:-1.0, maxY:-1.0, maxZ:0.0] null 0x000000ff",
+  "overlap BoundingBox [minX:5.0, minY:5.0, minZ:0.0, width:5.0, height:5.0, depth:0.0, maxX:10.0, maxY:10.0, maxZ:0.0]",
+  "separate apart",
+  "edge apart, corner apart, same 10.0",
+  "inside BoundingBox [minX:2.0, minY:2.0, minZ:0.0, width:2.0, height:2.0, depth:0.0, maxX:4.0, maxY:4.0, maxZ:0.0]",
+  "no fill apart",
+  "hollow turned 30 BoundingBox [minX:0.0, minY:0.0, minZ:0.0, width:-1.0, height:-1.0, depth:0.0, maxX:-1.0, maxY:-1.0, maxZ:0.0]",
+  "hollow turned 90 BoundingBox [minX:-13.149999618530273, minY:2.0, minZ:0.0, width:1.0, height:1.0, depth:0.0, maxX:-12.149999618530273, maxY:3.0, maxZ:0.0]",
+  "stroke BoundingBox [minX:13.0, minY:0.0, minZ:0.0, width:2.0, height:10.0, depth:0.0, maxX:15.0, maxY:10.0, maxZ:0.0]",
+  "turned BoundingBox [minX:11.0, minY:4.0, minZ:0.0, width:1.0710678100585938, height:2.0710678100585938, depth:0.0, maxX:12.071067810058594, maxY:6.071067810058594, maxZ:0.0] apart",
+  "moved BoundingBox [minX:105.0, minY:5.0, minZ:0.0, width:5.0, height:5.0, depth:0.0, maxX:110.0, maxY:10.0, maxZ:0.0]",
+  "circles overlap apart overlap",
+  "circle and square overlap apart overlap apart",
+  "concave apart BoundingBox [minX:12.0, minY:5.0, minZ:0.0, width:6.0, height:5.0, depth:0.0, maxX:18.0, maxY:10.0, maxZ:0.0]",
+  "closed by hand overlap overlap apart overlap",
+  "rectangles 5.0 BoundingBox [minX:14.0, minY:4.0, minZ:0.0, width:1.0710678100585938, height:2.0710678100585938, depth:0.0, maxX:15.071067810058594, maxY:6.071067810058594, maxZ:0.0]",
+  "line overlap",
+  "Path 0x000000ff null",
+  "empty polygon: Index 0 out of bounds for length 0",
+  "224 Left 1 10 65 LEFT null SPACE",
+  "true true true true true true true true true true false",
+  "KeyEvent [S, eventType = KEY_PRESSED, consumed = false, character = \\0, text = a, code = A, shiftDown, altDown] [a] A truefalsetruefalsefalse",
+  "KeyEvent [S, eventType = KEY_TYPED, consumed = false, character = b, text = , code = UNDEFINED, controlDown, metaDown, shortcutDown] [] UNDEFINED falsetruefalsetruetrue",
+  "KEY KEY_RELEASED 1 0"
+];
+
+const geometry = program(
+  "shapes, bounds and intersect as OpenJFX 21.0.12 gives them",
+  `
+public class Main extends Application {
+    @Override
+    public void start(Stage stage) {
+        Checks.check();
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+
+class Checks {
+    static void p(Object o) {
+        System.out.println(String.valueOf(o).replace("\\0", "\\\\0"));
+    }
+
+    static Polygon square(double x, double y, double s) {
+        return new Polygon(x, y, x + s, y, x + s, y + s, x, y + s);
+    }
+
+    static String meet(Shape a, Shape b) {
+        Bounds r = Shape.intersect(a, b).getBoundsInLocal();
+        return r.getWidth() == -1 ? "apart" : "overlap";
+    }
+
+    static void check() {
+        Point2D a = new Point2D(3, 4);
+        Point2D b = new Point2D(-1.5, 2);
+        p(a + " " + a.hashCode() + " " + a.magnitude() + " " + a.normalize() + " " + a.distance(b) + " " + a.angle(b) + " " + a.angle(b, Point2D.ZERO) + " " + a.midpoint(b) + " " + a.dotProduct(b));
+        p(a.add(b) + " " + a.subtract(1, 1) + " " + a.multiply(-0.5) + " " + Point2D.ZERO.normalize() + " " + new Point2D(-0.0, 0).equals(Point2D.ZERO) + " " + new Point2D(Double.NaN, 0).equals(new Point2D(Double.NaN, 0)));
+        BoundingBox box = new BoundingBox(1, 2, 3, 4);
+        p(box + " " + box.hashCode() + " " + box.isEmpty() + " " + box.contains(4, 6) + " " + box.intersects(4, 6, 1, 1) + " " + box.intersects(4.0001, 6, 1, 1) + " " + box.getCenterX());
+        BoundingBox none = new BoundingBox(0, 0, -1, -1);
+        p(none + " " + none.isEmpty() + " " + none.contains(0, 0) + " " + none.hashCode());
+
+        Polygon tri = new Polygon(0, -10, 10, 10, -10, 10);
+        p(tri + " " + tri.getStroke() + " " + tri.getStrokeWidth());
+        p(tri.getBoundsInLocal());
+        tri.setRotate(90);
+        p(tri.getBoundsInParent());
+        tri.setRotate(45);
+        p(tri.getBoundsInParent());
+        tri.setTranslateX(300);
+        tri.setTranslateY(200);
+        p(tri.getBoundsInParent());
+        tri.setLayoutX(5);
+        tri.setLayoutY(7);
+        p(tri.getBoundsInParent() + " " + tri.getBoundsInLocal().getWidth());
+        Polygon stroked = new Polygon(0, 0, 10, 0, 10, 10, 0, 10);
+        stroked.setStroke(Color.RED);
+        stroked.setStrokeWidth(4);
+        p(stroked.getBoundsInLocal());
+        Rectangle rect = new Rectangle(10, 10, 40, 20);
+        p(rect + " " + rect.getBoundsInLocal());
+        rect.setStroke(Color.BLUE);
+        rect.setRotate(30);
+        p(rect.getBoundsInParent());
+        Circle circle = new Circle(150, 100, 20);
+        p(circle + " " + circle.getBoundsInLocal());
+        circle.setStroke(Color.RED);
+        circle.setRotate(90);
+        circle.setTranslateX(0.5);
+        p(circle.getBoundsInParent());
+        Line line = new Line(0, 0, 100, 50);
+        p(line + " " + line.getFill() + " " + line.getBoundsInLocal());
+        line.setRotate(90);
+        p(line.getBoundsInParent());
+        p(new Line(0, 0, 100, 0).getBoundsInLocal());
+        p(new Circle(5, Color.BLUE) + " " + new Rectangle(3, 4, Color.GREEN) + " " + new Polygon().getBoundsInLocal());
+        Text text = new Text(10, 20, "Points: 30");
+        p(text + " " + text.getFill());
+        text.setText(null);
+        p("[" + text.getText() + "]");
+        p(new Path().getBoundsInLocal() + " " + new Path().getFill() + " " + new Path().getStroke());
+
+        p("overlap " + Shape.intersect(square(0, 0, 10), square(5, 5, 10)).getBoundsInLocal());
+        p("separate " + meet(square(0, 0, 10), square(20, 20, 10)));
+        p("edge " + meet(square(0, 0, 10), square(10, 0, 10)) + ", corner " + meet(square(0, 0, 10), square(10, 10, 10)) + ", same " + Shape.intersect(square(0, 0, 10), square(0, 0, 10)).getBoundsInLocal().getWidth());
+        p("inside " + Shape.intersect(square(0, 0, 10), new Polygon(2, 2, 4, 2, 4, 4)).getBoundsInLocal());
+        Polygon noFill = square(0, 0, 10);
+        noFill.setFill(null);
+        p("no fill " + meet(noFill, square(5, 5, 10)));
+        // Covering nothing, its bounds in parent are empty, but after a quarter turn JavaFX gives 1 x 1 at the move.
+        Rectangle hollow = new Rectangle(10, 20, 30, 40);
+        hollow.setFill(null);
+        hollow.setTranslateX(-12.15);
+        hollow.setLayoutY(3);
+        hollow.setRotate(30);
+        p("hollow turned 30 " + hollow.getBoundsInParent());
+        hollow.setRotate(90);
+        p("hollow turned 90 " + hollow.getBoundsInParent());
+        Polygon thick = square(0, 0, 10);
+        thick.setStroke(Color.RED);
+        thick.setStrokeWidth(10);
+        p("stroke " + Shape.intersect(thick, square(13, 0, 10)).getBoundsInLocal());
+        Polygon turned = square(0, 0, 10);
+        turned.setRotate(45);
+        p("turned " + Shape.intersect(turned, square(11, 4, 10)).getBoundsInLocal() + " " + meet(turned, square(12.1, 4, 10)));
+        Polygon moved = square(0, 0, 10);
+        moved.setTranslateX(100);
+        Polygon laid = square(5, 5, 10);
+        laid.setLayoutX(100);
+        p("moved " + Shape.intersect(moved, laid).getBoundsInLocal());
+        p("circles " + meet(new Circle(0, 0, 10), new Circle(15, 0, 10)) + " " + meet(new Circle(0, 0, 10), new Circle(20, 0, 10)) + " " + meet(new Circle(0, 0, 10), new Circle(19.999, 0, 10)));
+        p("circle and square " + meet(new Circle(0, 0, 10), square(5, 5, 10)) + " " + meet(new Circle(0, 0, 10), square(10, -5, 10)) + " " + meet(new Circle(0, 0, 10), square(7.06, 7.06, 10)) + " " + meet(new Circle(0, 0, 10), square(7.075, 7.075, 10)));
+        p("concave " + meet(new Polygon(0, 0, 30, 0, 30, 30, 20, 30, 20, 10, 10, 10, 10, 30, 0, 30), square(12, 15, 6)) + " " + Shape.intersect(new Polygon(0, 0, 30, 0, 30, 30, 20, 30, 20, 10, 10, 10, 10, 30, 0, 30), square(12, 5, 6)).getBoundsInLocal());
+        // A dent next to a repeated point (the first point again at the end, or a point twice in the middle) is still a dent.
+        Polygon dent = new Polygon(4, 4, 0, 10, 0, 0, 10, 0, 4, 4);
+        p("closed by hand " + meet(dent, new Rectangle(9, -1, 2, 4)) + " " + meet(dent, new Circle(8, 0.5, 0.6)) + " " + meet(dent, new Circle(5.5, 4.2, 0.3)) + " " + meet(new Polygon(4, 4, 0, 10, 0, 10, 0, 0, 10, 0), new Rectangle(9, -1, 2, 4)));
+        Rectangle wall = new Rectangle(0, 0, 10, 10);
+        wall.setRotate(45);
+        wall.setLayoutX(3);
+        p("rectangles " + Shape.intersect(new Rectangle(0, 0, 10, 10), new Rectangle(5, 5, 10, 10)).getBoundsInLocal().getWidth() + " " + Shape.intersect(wall, new Rectangle(14, 4, 10, 10)).getBoundsInLocal());
+        p("line " + meet(new Line(0, 0, 10, 10), new Rectangle(5, 5, 10, 10)));
+        Shape result = Shape.intersect(new Rectangle(0, 0, 10, 10), new Rectangle(5, 5, 10, 10));
+        p(result.getClass().getSimpleName() + " " + result.getFill() + " " + result.getStroke());
+        try {
+            Shape.intersect(new Polygon(), square(0, 0, 1));
+        } catch (IndexOutOfBoundsException e) {
+            p("empty polygon: " + e.getMessage());
+        }
+
+        p(KeyCode.values().length + " " + KeyCode.LEFT.getName() + " " + KeyCode.DIGIT1.getName() + " " + (int) KeyCode.ENTER.getChar().charAt(0) + " " + KeyCode.A.getCode() + " " + KeyCode.getKeyCode("Left") + " " + KeyCode.getKeyCode("LEFT") + " " + KeyCode.valueOf("SPACE"));
+        p(KeyCode.LEFT.isArrowKey() + " " + KeyCode.KP_UP.isArrowKey() + " " + KeyCode.NUMPAD1.isDigitKey() + " " + KeyCode.NUMPAD1.isKeypadKey() + " " + KeyCode.Q.isLetterKey() + " " + KeyCode.SHIFT.isModifierKey() + " " + KeyCode.F5.isFunctionKey() + " " + KeyCode.HOME.isNavigationKey() + " " + KeyCode.TAB.isWhitespaceKey() + " " + KeyCode.MUTE.isMediaKey() + " " + KeyCode.SPACE.isLetterKey());
+        KeyEvent pressed = new KeyEvent(KeyEvent.KEY_PRESSED, "x", "a", KeyCode.A, true, false, true, false);
+        KeyEvent typed = new KeyEvent(KeyEvent.KEY_TYPED, "b", "zz", KeyCode.B, false, true, false, true);
+        for (KeyEvent e : new KeyEvent[] { pressed, typed }) {
+            p(e.toString().replaceAll("source = [^,]*, target = [^,]*", "S") + " [" + e.getText() + "] " + e.getCode() + " " + e.isShiftDown() + e.isControlDown() + e.isAltDown() + e.isMetaDown() + e.isShortcutDown());
+        }
+        p(KeyEvent.ANY + " " + KeyEvent.KEY_RELEASED + " " + KeyEvent.CHAR_UNDEFINED.length() + " " + (int) KeyEvent.CHAR_UNDEFINED.charAt(0));
+    }
+}
+`,
+);
+test("shapes, their bounds, Shape.intersect, Point2D, BoundingBox, KeyCode and KeyEvent print what OpenJFX 21.0.12 prints", async () => {
+  await runAll();
+  const r = geometry.result;
+  assert.equal(r.stderr, "");
+  assert.deepEqual(r.stdout.trimEnd().split("\n"), REAL_GEOMETRY);
+});
+
+const keysAndScene = program(
+  "key events go to the scene, a pane's preferred size sizes the scene",
+  `
+public class Main extends Application {
+    static String chars(String s) {
+        StringBuilder b = new StringBuilder();
+        for (char c : s.toCharArray()) {
+            b.append(b.length() == 0 ? "" : ",").append((int) c);
+        }
+        return "[" + b + "]";
+    }
+
+    @Override
+    public void start(Stage stage) {
+        Pane pane = new Pane();
+        pane.setPrefSize(200, 100);
+        Rectangle box = new Rectangle(10, 10, 20, 20);
+        pane.getChildren().add(box);
+        Scene scene = new Scene(pane);
+        scene.setOnKeyPressed(e -> System.out.println("pressed " + e.getCode() + " text " + chars(e.getText()) + " character " + chars(e.getCharacter()) + " " + e.getEventType() + " from the scene " + (e.getSource() == scene) + " shift " + e.isShiftDown()));
+        scene.setOnKeyTyped(e -> {
+            System.out.println("typed " + chars(e.getCharacter()) + " " + e.getCode() + " text " + chars(e.getText()));
+            if (e.getCharacter().equals("x")) {
+                throw new IllegalStateException("x is not allowed");
+            }
+        });
+        scene.setOnKeyReleased(e -> {
+            System.out.println("released " + e.getCode() + " text " + chars(e.getText()));
+            Platform.runLater(() -> System.out.println("a task the release queued"));
+        });
+        box.setOnKeyPressed(e -> System.out.println("never: no node has the focus"));
+        pane.setOnKeyReleased(e -> System.out.println("never either"));
+        box.requestFocus();
+        System.out.println("before show " + scene.getWidth() + " x " + scene.getHeight() + ", handlers " + (scene.getOnKeyPressed() != null) + " " + (box.getOnKeyPressed() != null) + " " + (box.getOnKeyTyped() == null));
+        stage.setScene(scene);
+        stage.show();
+        System.out.println("after show " + scene.getWidth() + " x " + scene.getHeight());
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+`,
+  { events: "press key A\nkey LEFT\nkey SPACE\nrelease key A\nkey ENTER\nkey DIGIT7\nkey X\nkey SHIFT\nkey NUMPAD1\nkey BRACELEFT\nrelease key LEFT\npress key B\npress key B\nkey B\nrelease key B\nrelease key B\npress key left\nkey ESC\nkey 5\nkey Spacebar\npress key\nkey \"A\"\nkey A A\nKEY A\nframes\nframes 0\nframes 3601\nframes 2.5\nframes 2 3\nframe 3\n" },
+);
+test("press key, release key and key: KEY_PRESSED, KEY_TYPED for a key that makes a character, KEY_RELEASED, to the scene's handlers; the problems of key lines", async () => {
+  await runAll();
+  const r = keysAndScene.result;
+  assert.equal(r.exitCode, 0);
+  const typed = (c) => [`pressed ${c[0]} text [${c[1]}] character [0] KEY_PRESSED from the scene true shift false`, `typed [${c[1]}] UNDEFINED text []`, `released ${c[0]} text [${c[1]}]`, "a task the release queued"];
+  const plain = (k) => [`pressed ${k} text [] character [0] KEY_PRESSED from the scene true shift false`, `released ${k} text []`, "a task the release queued"];
+  assert.deepEqual(r.stdout.split("\n"), [
+    // A scene made without a size takes its root pane's preferred size when its window shows, as in JavaFX.
+    "before show 0.0 x 0.0, handlers true true true",
+    "after show 200.0 x 100.0",
+    // press key A: pressed, then typed (as OpenJFX 21.0.12 fires them for a key that makes a character); no release yet.
+    "pressed A text [97] character [0] KEY_PRESSED from the scene true shift false",
+    "typed [97] UNDEFINED text []",
+    // key LEFT: an arrow makes no character, so no KEY_TYPED; the tasks of the press run before the release, those of the release after it.
+    ...plain("LEFT"),
+    "pressed SPACE text [32] character [0] KEY_PRESSED from the scene true shift false",
+    "typed [32] UNDEFINED text []",
+    "released SPACE text [32]",
+    "a task the release queued",
+    "released A text [97]",
+    "a task the release queued",
+    // Enter's text is a line feed (OpenJFX's headless platform), DIGIT7's "7"; X's typed handler throws, and the release still comes.
+    ...typed(["ENTER", 10]),
+    ...typed(["DIGIT7", 55]),
+    ...typed(["X", 120]),
+    ...plain("SHIFT"),
+    ...plain("NUMPAD1"),
+    ...typed(["BRACELEFT", 91]),
+    // press key B, then (after problems) release key B.
+    "pressed B text [98] character [0] KEY_PRESSED from the scene true shift false",
+    "typed [98] UNDEFINED text []",
+    "released B text [98]",
+    "a task the release queued",
+    "",
+  ]);
+  // The handler's exception goes to the thread's uncaught exception handler, as in JavaFX.
+  assert.match(r.stderr, /^Exception in thread "JavaFX Application Thread" java.lang.IllegalStateException: x is not allowed\n/);
+  const focus = "the program called requestFocus() on a node";
+  const problems = [
+    // The box has the requestFocus() and its own setOnKeyPressed, the pane around it a setOnKeyReleased: real JavaFX would run them first. Once per type.
+    `press key A: ${focus} with its own setOnKeyPressed, which real JavaFX would run first; in Java Arena keys go only to the scene's handlers (put it on the scene: scene.setOnKeyPressed)`,
+    `key LEFT: ${focus} inside a pane with its own setOnKeyReleased, which real JavaFX would run first; in Java Arena keys go only to the scene's handlers (put it on the scene: scene.setOnKeyReleased)`,
+    "release key LEFT: LEFT isn't held down: press key LEFT comes first",
+    "press key B: B is already held down (press key B came before): release key B first",
+    "key B: B is already held down (press key B came before): release key B first",
+    "release key B: B isn't held down: press key B comes first",
+    "press key left: write the key's name in capital letters, as KeyCode names it: LEFT",
+    "key ESC: there's no key called ESC (did you mean ESCAPE? keys are named as in KeyCode, such as LEFT, UP, SPACE, A and DIGIT1)",
+    "key 5: there's no key called 5 (did you mean DIGIT5? keys are named as in KeyCode, such as LEFT, UP, SPACE, A and DIGIT1)",
+    "key Spacebar: there's no key called Spacebar (did you mean SPACE? keys are named as in KeyCode, such as LEFT, UP, SPACE, A and DIGIT1)",
+    "press key: press key needs the name of a key, such as press key LEFT",
+    'key "A": write the key\'s name without quotes, such as key SPACE',
+    "key A A: there's something extra at the end of the line",
+    "KEY A: write the event in small letters: key",
+    "frames: frames needs how many frames to run, such as frames 30",
+    "frames 0: frames takes a whole number from 1 to 3600, such as frames 30",
+    "frames 3601: frames takes a whole number from 1 to 3600, such as frames 30",
+    "frames 2.5: frames takes a whole number from 1 to 3600, such as frames 30",
+    "frames 2 3: there's something extra at the end of the line",
+    "frame 3: write frames, such as frames 30",
+  ];
+  assert.deepEqual(r.window.problems, problems);
+  // parseEventLine reads every line that can't be read with the library's own words (the others are about the keys held).
+  for (const p of problems.slice(6)) {
+    const at = p.indexOf(": ");
+    assert.deepEqual(parseEventLine(p.slice(0, at)), { line: p.slice(0, at), problem: p.slice(at + 2) });
+  }
+  // The scene has key handlers; the rectangle's and the pane's (which never run here) are marked.
+  const scene = r.window.windows[0].scene;
+  assert.equal(scene.width, 200);
+  assert.equal(scene.onKeyPressed && scene.onKeyReleased && scene.onKeyTyped, true);
+  assert.equal(scene.root.onKeyReleased, true);
+  assert.equal(scene.root.children[0].onKeyPressed, true);
+  assert.equal(r.window.frames, undefined);
+});
+
+const nodeKeys = program(
+  "a pane with its own key handler and the focus, no handler on the scene",
+  `
+public class Main extends Application {
+    @Override
+    public void start(Stage stage) {
+        Pane pane = new Pane();
+        pane.setOnKeyPressed(e -> System.out.println("never here: " + e.getCode()));
+        Scene scene = new Scene(pane, 100, 100);
+        stage.setScene(scene);
+        stage.show();
+        pane.requestFocus();
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+`,
+  { events: "key RIGHT\nkey RIGHT\npress key UP\n" },
+);
+test("a key line says so (once) when requestFocus() went to a node with its own key handler: real JavaFX would run it, Java Arena runs only the scene's", async () => {
+  await runAll();
+  const r = nodeKeys.result;
+  assert.equal(r.exitCode, 0);
+  assert.equal(r.stdout, "");
+  assert.deepEqual(r.window.problems, [
+    "key RIGHT: the program called requestFocus() on a node with its own setOnKeyPressed, which real JavaFX would run first; in Java Arena keys go only to the scene's handlers (put it on the scene: scene.setOnKeyPressed)",
+  ]);
+  assert.equal(r.window.windows[0].scene.root.onKeyPressed, true);
+  assert.equal(r.window.windows[0].scene.onKeyPressed, undefined);
+});
+
+const timers = program(
+  "AnimationTimers in start order, started and stopped inside handle",
+  `
+public class Main extends Application {
+    static final List<String> log = new ArrayList<>();
+    static AnimationTimer a, b, c, d;
+    static long first, last;
+
+    @Override
+    public void start(Stage stage) {
+        // The same timers as a run on OpenJFX 21.0.12 (with its own pulses), which logged the order below.
+        a = new AnimationTimer() {
+            int n;
+
+            @Override
+            public void handle(long now) {
+                n++;
+                log.add("A" + n);
+                if (n == 1) {
+                    first = now;
+                }
+                last = now;
+                if (n == 2) {
+                    b.stop();
+                    log.add("A stops B");
+                }
+                if (n == 3) {
+                    d.start();
+                    log.add("A starts D");
+                }
+                if (n == 4) {
+                    c.stop();
+                    c.start();
+                    log.add("A restarts C");
+                }
+                if (n == 5) {
+                    a.stop();
+                    a.start();
+                    log.add("A restarts A");
+                }
+                if (n == 7) {
+                    stop();
+                    b.stop();
+                    c.stop();
+                    d.stop();
+                    Platform.exit();
+                }
+            }
+        };
+        b = new AnimationTimer() {
+            int n;
+
+            @Override
+            public void handle(long now) {
+                log.add("B" + ++n);
+            }
+        };
+        c = new AnimationTimer() {
+            int n;
+
+            @Override
+            public void handle(long now) {
+                log.add("C" + ++n);
+                if (n == 1) {
+                    start();
+                    log.add("C starts itself again");
+                }
+            }
+        };
+        d = new AnimationTimer() {
+            int n;
+
+            @Override
+            public void handle(long now) {
+                log.add("D" + ++n);
+            }
+        };
+        b.start();
+        a.start();
+        c.start();
+        b.start();
+        stage.setScene(new Scene(new Pane(new Rectangle(5, 5))));
+        stage.show();
+    }
+
+    @Override
+    public void stop() {
+        System.out.println(String.join(" ", log));
+        System.out.println("now: " + first + ", then " + (last - first) / 6 + " a frame");
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+`,
+  { events: "frames 2\nclick #2\nframes 30\nframes 5\n" },
+);
+test("AnimationTimers run once a frame in the order they were started, as OpenJFX 21.0.12 runs them; frames end with the session", async () => {
+  await runAll();
+  const r = timers.result;
+  assert.equal(r.stderr, "");
+  // OpenJFX 21.0.12 logged exactly this order (with Platform.exit() after A7, where its run stopped them).
+  assert.equal(
+    r.stdout,
+    "B1 A1 C1 C starts itself again B2 A2 A stops B C2 A3 A starts D C3 A4 A restarts C C4 D1 A5 A restarts A D2 C5 D3 C6 A6 D4 C7 A7\n" +
+      // The made-up clock: frame 1 at 1,000,000,000 + 16,666,667 ns, then 16,666,667 ns a frame.
+      "now: 1016666667, then 16666667 a frame\n",
+  );
+  // Platform.exit() in frame 7 ends the session: the frames after it don't run; the click couldn't happen.
+  assert.equal(r.window.frames.count, 7);
+  assert.deepEqual(r.window.problems, ["click #2: a rectangle can't be clicked (only buttons can)"]);
+  assert.equal(r.window.closed, true);
+});
+
+const throwingTimer = program(
+  "an AnimationTimer whose handle throws",
+  `
+public class Main extends Application {
+    static final List<String> log = new ArrayList<>();
+
+    @Override
+    public void start(Stage stage) {
+        new AnimationTimer() {
+            int n;
+
+            @Override
+            public void handle(long now) {
+                n++;
+                log.add("A" + n);
+                if (n == 2) {
+                    throw new IllegalStateException("frame 2");
+                }
+            }
+        }.start();
+        new AnimationTimer() {
+            int n;
+
+            @Override
+            public void handle(long now) {
+                log.add("B" + ++n);
+            }
+        }.start();
+        stage.setScene(new Scene(new Pane(new Rectangle(5, 5))));
+        stage.show();
+    }
+
+    @Override
+    public void stop() {
+        System.out.println(String.join(" ", log));
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+`,
+  { events: "frames 3\n" },
+);
+test("a timer whose handle throws ends that frame's timers, as JavaFX's pulse does: the exception is printed, the timers after it skip the frame, the next frame runs them all", async () => {
+  await runAll();
+  const r = throwingTimer.result;
+  assert.equal(r.stdout, "A1 B1 A2 A3 B2\n");
+  assert.match(r.stderr, /^Exception in thread "JavaFX Application Thread" java\.lang\.IllegalStateException: frame 2\n/);
+  assert.equal(r.window.frames.count, 3);
+});
+
+const animation = program(
+  "the frames a program ran, in the window JSON",
+  `
+public class Main extends Application {
+    @Override
+    public void start(Stage stage) {
+        Pane pane = new Pane();
+        pane.setPrefSize(100, 50);
+        Rectangle r = new Rectangle(0, 0, 10, 10);
+        Text t = new Text(5, 40, "0");
+        Label label = new Label("still");
+        pane.getChildren().addAll(r, t, label);
+        Circle[] c = new Circle[1];
+        new AnimationTimer() {
+            int n;
+
+            @Override
+            public void handle(long now) {
+                n++;
+                r.setTranslateX(r.getTranslateX() + 1.5);
+                if (n == 2) {
+                    c[0] = new Circle(3);
+                    c[0].setTranslateX(50);
+                    pane.getChildren().add(c[0]);
+                    t.setText("two");
+                    r.setFill(Color.RED);
+                    label.setText("moved");
+                    label.setLayoutX(0.125);
+                }
+                if (n == 3) {
+                    pane.getChildren().remove(c[0]);
+                    r.setVisible(false);
+                }
+                if (n == 4) {
+                    r.setRotate(33.3333);
+                    r.setWidth(12);
+                }
+            }
+        }.start();
+        stage.setScene(new Scene(pane));
+        stage.show();
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+`,
+  { events: "frames 2\nframes 3\n" },
+);
+test("the window JSON keeps the frames: each node's first frame with what isn't its default, then only what changed; nodes added and removed", async () => {
+  await runAll();
+  const r = animation.result;
+  assert.equal(r.stderr, "");
+  // Frame 1: every node (the pane's children in order), with what isn't its default (numbers in
+  // hundredths). Frame 2: a circle added (the pane's children again, the circle in full), a text,
+  // a label's layout (0.125 in hundredths) and a fill changed. Frame 3: the circle removed. Then
+  // only the rectangle, which moves every frame.
+  assert.equal(
+    JSON.stringify(r.window.frames),
+    JSON.stringify({
+      count: 5,
+      list: [
+        [{ roots: [1] }, { k: 1, type: "Pane", children: [2, 3, 4] }, { k: 2, type: "Rectangle", tx: 1.5, width: 10, height: 10, fill: "#000000" }, { k: 3, type: "Text", x: 5, y: 40, fill: "#000000", text: "0", font: { family: "System", size: 13 } }, { k: 4, type: "Label", text: "still" }],
+        [{ k: 1, children: [2, 3, 4, 5] }, { k: 2, tx: 3, fill: "#ff0000" }, { k: 3, text: "two" }, { k: 4, lx: 0.13, text: "moved" }, { k: 5, type: "Circle", tx: 50, radius: 3, fill: "#000000" }],
+        [{ k: 1, children: [2, 3, 4] }, { k: 2, tx: 4.5, visible: false }],
+        [{ k: 2, tx: 6, r: 33.33, width: 12 }],
+        [{ k: 2, tx: 7.5 }],
+      ],
+    }),
+  );
+  // The window after the last event, with each node's number in the frames ("f") and its exact values.
+  assert.ok(r.json.startsWith('{"windows":[{"title":null,"scene":{"width":100.0,"height":50.0,"root":{"n":1,"type":"Pane","f":1,"prefWidth":100.0,"prefHeight":50.0,"children":[{"n":2,"type":"Rectangle","f":2,"visible":false,"translateX":7.5,"rotate":33.3333,"x":0.0,"y":0.0,"width":12.0,"height":10.0,"fill":"#ff0000"},{"n":3,"type":"Text","f":3,"text":"two","x":5.0,"y":40.0,"fill":"#000000"},{"n":4,"type":"Label","f":4,"text":"moved","layoutX":0.125}]}}}],"problems":[],"frames":{"count":5,"list":[['));
+  assert.equal(
+    windowOutline(r.window),
+    ["Window without a title", "  Pane 100 x 50", "    Rectangle 12 x 10 at (0, 0), translate (7.5, 0), rotate 33.3333, fill #ff0000 (hidden)", '    Text "two" at (5, 40)', '    Label "moved", layout (0.125, 0)', "frames run: 5"].join("\n"),
+  );
+});
+
+const longGame = program(
+  "more frames than the window JSON keeps",
+  `
+public class Main extends Application {
+    @Override
+    public void start(Stage stage) {
+        Rectangle r = new Rectangle(4, 4);
+        new AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                r.setTranslateX((r.getTranslateX() + 1) % 100);
+            }
+        }.start();
+        stage.setScene(new Scene(new Pane(r), 100, 100));
+        stage.show();
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+`,
+  { events: "frames 3600\nframes 5\n" },
+);
+test("the window JSON keeps the first 3600 frames; after that only the count goes on", async () => {
+  await runAll();
+  const r = longGame.result;
+  assert.equal(r.stderr, "");
+  assert.equal(FRAMES_KEPT, 3600);
+  assert.equal(r.window.frames.count, 3605);
+  assert.equal(r.window.frames.list.length, 3600);
+  assert.deepEqual(r.window.frames.list[3599], [{ k: 2, tx: 0 }]);
+  assert.deepEqual(r.window.frames.list[3598], [{ k: 2, tx: 99 }]);
+  // The window is the one after the last frame (3605 moves).
+  assert.equal(r.window.windows[0].scene.root.children[0].translateX, 5);
+  assert.match(windowOutline(r.window), /\n {4}Rectangle 4 x 4 at \(0, 0\), translate \(5, 0\), fill #000000\nframes run: 3605$/);
+});
+
+const keyNames = program(
+  "KeyCode's names",
+  `
+public class Main {
+    public static void main(String[] args) {
+        StringBuilder names = new StringBuilder();
+        StringBuilder people = new StringBuilder();
+        for (KeyCode k : KeyCode.values()) {
+            names.append(k.name()).append('\\n');
+            people.append(k.getName()).append('\\n');
+        }
+        System.out.print(names + "--\\n" + people);
+    }
+}
+`,
+);
+test("the site's list of key names (src/grader/keycodes.js) is the library's KeyCode, in order, with the same names for people", async () => {
+  await runAll();
+  const [names, people] = keyNames.result.stdout.split("--\n");
+  assert.deepEqual(names.trimEnd().split("\n"), [...KEY_CODES]);
+  assert.deepEqual(people.trimEnd().split("\n"), [...KEY_NAMES]);
+  assert.equal(KEY_CODES.length, 224);
+  // The suggestions for wrong names are the library's (checked line by line above) and these.
+  assert.equal(keyNameProblem("LEFT"), null);
+  assert.match(keyNameProblem("Lfet"), /did you mean LEFT\?/);
+  assert.match(keyNameProblem("PAGEUP"), /did you mean PAGE_UP\?/);
+  assert.match(keyNameProblem("ctrl"), /did you mean CONTROL\?/);
+  assert.match(keyNameProblem("0"), /did you mean DIGIT0\?/);
+  assert.equal(keyNameProblem("space"), "write the key's name in capital letters, as KeyCode names it: SPACE");
+});
+
+const shapesWindow = program(
+  "shapes in the window JSON and the outline",
+  `
+public class Main extends Application {
+    @Override
+    public void start(Stage stage) {
+        Polygon ship = new Polygon(0, -10, 10, 10, -10, 10);
+        ship.setTranslateX(300);
+        ship.setTranslateY(200);
+        ship.setRotate(90);
+        ship.setLayoutX(0.5);
+        ship.setStroke(Color.RED);
+        ship.setStrokeWidth(2);
+        Circle ball = new Circle(150, 100, 20);
+        ball.setStroke(Color.BLUE);
+        Rectangle wall = new Rectangle(10, 10, 40, 20);
+        wall.setFill(Color.web("#00ff0080"));
+        Line line = new Line(0, 0, 100, 50);
+        Line thick = new Line(1, 2, 3, 4.5);
+        thick.setStrokeWidth(3);
+        thick.setFill(Color.BLUE);
+        Text points = new Text(10, 20, "Points: 30");
+        Text big = new Text("Big \\"one\\"");
+        big.setFont(Font.font("Serif", 20));
+        big.setFill(Color.RED);
+        Polygon none = new Polygon();
+        none.setFill(null);
+        Shape area = Shape.intersect(new Rectangle(0, 0, 10, 10), new Rectangle(5, 5, 10, 10));
+        Label label = new Label("Hi");
+        label.setTranslateY(-3);
+        label.setRotate(-45);
+        Pane game = new Pane(ship, ball, wall, line, thick, points, big, none, area, label);
+        game.setPrefSize(600, 400);
+        Pane narrow = new Pane();
+        narrow.setPrefWidth(30);
+        VBox root = new VBox(game, narrow);
+        stage.setScene(new Scene(root));
+        stage.show();
+        System.out.println("scene " + stage.getScene().getWidth());
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+`,
+);
+test("shapes in the window JSON (geometry, transforms, fill and stroke) and their outline lines", async () => {
+  await runAll();
+  const r = shapesWindow.result;
+  assert.equal(r.stderr, "");
+  // A scene whose root isn't a pane with a preferred size keeps no size.
+  assert.equal(r.stdout, "scene 0.0\n");
+  const game = r.window.windows[0].scene.root.children[0];
+  assert.equal(JSON.stringify(game.children[0]), '{"n":3,"type":"Polygon","translateX":300,"translateY":200,"layoutX":0.5,"rotate":90,"points":[0,-10,10,10,-10,10],"fill":"#000000","stroke":"#ff0000","strokeWidth":2}');
+  assert.equal(JSON.stringify(game.children[3]), '{"n":6,"type":"Line","startX":0,"startY":0,"endX":100,"endY":50,"fill":null,"stroke":"#000000"}');
+  assert.equal(JSON.stringify(game.children[6]), '{"n":9,"type":"Text","text":"Big \\"one\\"","font":{"family":"Serif","size":20},"x":0,"y":0,"fill":"#ff0000"}');
+  assert.equal(JSON.stringify(game.children[8]), '{"n":11,"type":"Path","area":[5,5,10,10],"fill":"#000000"}');
+  assert.equal(
+    windowOutline(r.window),
+    [
+      "Window without a title",
+      "  VBox",
+      "    Pane 600 x 400",
+      "      Polygon (0, -10) (10, 10) (-10, 10), at (300, 200), layout (0.5, 0), rotate 90, fill #000000, stroke #ff0000, width 2",
+      "      Circle radius 20 at (150, 100), fill #000000, stroke #0000ff",
+      "      Rectangle 40 x 20 at (10, 10), fill #00ff0080",
+      "      Line (0, 0) to (100, 50), stroke #000000",
+      "      Line (1, 2) to (3, 4.5), fill #0000ff, stroke #000000, width 3",
+      '      Text "Points: 30" at (10, 20)',
+      '      Text "Big \\"one\\"" at (0, 0), fill #ff0000, font Serif 20',
+      "      Polygon (no points), no fill",
+      "      Path area (5, 5) to (10, 10), fill #000000",
+      '      Label "Hi", translate (0, -3), rotate -45',
+      "    Pane pref width 30",
+    ].join("\n"),
+  );
+});
+
+// ------------------------------------------------------------------ for npm run fx-check
+
+const STEPS = `
+public class Main extends Application {
+    int frame;
+
+    @Override
+    public void start(Stage stage) {
+        Pane pane = new Pane();
+        pane.setPrefSize(100, 50);
+        Rectangle box = new Rectangle(10, 10);
+        pane.getChildren().add(box);
+        Scene scene = new Scene(pane);
+        scene.setOnKeyPressed(e -> box.setTranslateX(box.getTranslateX() + 5));
+        new AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                frame++;
+                box.setRotate(frame * 10);
+                if (frame == 4) {
+                    Platform.exit();
+                }
+            }
+        }.start();
+        stage.setScene(scene);
+        stage.show();
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+}
+`;
+const EVENTS = "key RIGHT\n// a comment doesn't count\nframes 2\nkey LEFTT\nframes 5\nkey RIGHT\n";
+const steps = program("the windows after each event line", STEPS, { events: EVENTS, jvm: ["-Darena.fx.stepWindows=1"] });
+const noSteps = program("no windows after each event line by default", STEPS, { events: EVENTS });
+
+test("for fx-check (the system property arena.fx.stepWindows), the window after each event line while the session goes on; never otherwise", async () => {
+  await runAll();
+  const r = steps.result;
+  assert.equal(r.stderr, "");
+  assert.deepEqual(Object.keys(r.steps), ["window-step-1.json", "window-step-2.json", "window-step-3.json"]);
+  const outline = (json) => windowOutline(JSON.parse(json));
+  assert.match(outline(r.steps["window-step-1.json"]), /Rectangle 10 x 10 at \(0, 0\), translate \(5, 0\), fill #000000$/m);
+  assert.doesNotMatch(outline(r.steps["window-step-1.json"]), /frames run/);
+  assert.match(outline(r.steps["window-step-2.json"]), /translate \(5, 0\), rotate 20,.*\n.*frames run: 2$/);
+  assert.equal(JSON.parse(r.steps["window-step-3.json"]).problems.length, 1);
+  assert.equal(r.steps["window-step-3.json"].replace(/"problems":\[[^\]]*\]/, ""), r.steps["window-step-2.json"].replace(/"problems":\[[^\]]*\]/, ""));
+  // Line 4 (frames 5) ends the session in its fourth frame: no window after it, and the closed window at the end.
+  assert.equal(r.window.closed, true);
+  assert.deepEqual(noSteps.result.steps, {});
+  assert.equal(noSteps.result.json, r.json);
 });

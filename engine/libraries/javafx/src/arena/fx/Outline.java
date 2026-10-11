@@ -32,7 +32,7 @@ import javafx.stage.Window;
  */
 public final class Outline {
     /** The node classes of Java Arena's JavaFX, by simple name. */
-    private static final String[] TYPES = { "Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea", "Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart" };
+    private static final String[] TYPES = { "Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea", "Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart", "Shape", "Polygon", "Circle", "Rectangle", "Line", "Text", "Path" };
 
     private Outline() {
     }
@@ -102,6 +102,20 @@ public final class Outline {
                 return "bar chart";
             case "ScatterChart":
                 return "scatter chart";
+            case "Shape":
+                return "shape";
+            case "Polygon":
+                return "polygon";
+            case "Circle":
+                return "circle";
+            case "Rectangle":
+                return "rectangle";
+            case "Line":
+                return "line";
+            case "Text":
+                return "text";
+            case "Path":
+                return "path";
             default:
                 return type;
         }

@@ -1055,7 +1055,7 @@ await test('part 13 mistakes are explained: an event handler that changes a loca
   await setCode(
     page,
     'import javafx.application.Application;\nimport javafx.beans.property.SimpleIntegerProperty;\nimport javafx.scene.Scene;\nimport javafx.scene.control.TextField;\nimport javafx.stage.Stage;\n\n' +
-      'public class Main extends Application {\n    @Override\n    public void start(Stage stage) {\n        TextField name = new TextField();\n        name.setOnKeyPressed(e -> System.out.println("key"));\n        stage.setScene(new Scene(name));\n        stage.show();\n    }\n\n    public static void main(String[] args) {\n        launch(args);\n    }\n}\n',
+      'public class Main extends Application {\n    @Override\n    public void start(Stage stage) {\n        TextField name = new TextField();\n        name.setOnMouseMoved(e -> System.out.println("moved"));\n        stage.setScene(new Scene(name));\n        stage.show();\n    }\n\n    public static void main(String[] args) {\n        launch(args);\n    }\n}\n',
   );
   out = await check(page);
   expect(out.includes('name.textProperty().addListener((observable,') && out.includes('(javafx.beans.property.SimpleIntegerProperty)'), out);
@@ -1081,6 +1081,30 @@ await test('part 14 mistakes are explained: XYChart.Series without its import, r
   await setCode(page, app('import javafx.scene.canvas.Canvas;\nimport javafx.scene.canvas.GraphicsContext;\nimport javafx.scene.paint.Color;\n', '        Canvas canvas = new Canvas(100, 50);\n        GraphicsContext painter = canvas.getGraphicsContext2D();\n        int red = 200 + 100;\n        painter.setFill(Color.rgb(red, 0, 0));\n        VBox box = new VBox(canvas);'));
   out = await check(page);
   expect(out.includes('crashed with IllegalArgumentException') && out.includes('its first line in your code is Main.java, line 15, in start') && out.includes('Color.rgb(red, green, blue) takes each part of the color as a whole number from 0 to 255, and its red was 300') && out.includes('Math.min(255, value)'), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('part 14.3 and 14.4 mistakes are explained: a name that is no KeyCode constant, a timer whose handle takes an int, and java.sql, which the page does not have', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  const app = (imports, body) =>
+    'import javafx.animation.AnimationTimer;\nimport javafx.application.Application;\nimport javafx.scene.Scene;\nimport javafx.scene.input.KeyCode;\nimport javafx.scene.layout.Pane;\nimport javafx.stage.Stage;\n' + imports + '\n' +
+    'public class Main extends Application {\n    @Override\n    public void start(Stage stage) {\n        Pane pane = new Pane();\n        Scene scene = new Scene(pane, 600, 400);\n' + body + '\n        stage.setScene(scene);\n        stage.show();\n    }\n\n' +
+    '    public static void main(String[] args) {\n        launch(args);\n    }\n}\n';
+  // KeyCode.LEFT_ARROW: the note names the closest real constant.
+  await setCode(page, app('', '        scene.setOnKeyPressed(event -> {\n            if (event.getCode() == KeyCode.LEFT_ARROW) {\n                pane.setRotate(pane.getRotate() - 5);\n            }\n        });'));
+  let out = await check(page);
+  expect(/line 14/i.test(out) && out.includes('cannot find symbol') && out.includes('KeyCode has no constant LEFT_ARROW. Did you mean KeyCode.LEFT (the key called Left)?'), out);
+  // A timer whose handle takes an int: both of javac's errors are explained, each saying handle takes a long.
+  await setCode(page, app('', '        new AnimationTimer() {\n            @Override\n            public void handle(int now) {\n                pane.setRotate(pane.getRotate() + 1);\n            }\n        }.start();'));
+  out = await check(page);
+  expect(out.includes('does not override abstract method handle(long) in AnimationTimer') && out.includes('Its handle takes (int now) instead, so to Java it\'s another method') && out.includes("@Override says that handle replaces AnimationTimer's handle, but AnimationTimer's takes exactly one parameter, a long"), out);
+  // java.sql: the page's Java has only java.base, so the import doesn't compile here, and the note says why plainly.
+  await setCode(page, 'import java.sql.Connection;\nimport java.sql.DriverManager;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        Connection connection = DriverManager.getConnection("jdbc:h2:./todo", "sa", "");\n        System.out.println(connection);\n    }\n}\n');
+  out = await check(page);
+  expect(/line 1/i.test(out) && out.includes('package java.sql does not exist') && out.includes('This page has no database') && out.includes('module 54, "Libraries, Maven and databases"'), out);
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
@@ -2057,6 +2081,313 @@ const part14 = (() => {
   return { example, challenge };
 })();
 
+// ------------------------------------------------------------------ part 14.3: a game in the window panel
+
+// A small game: a ship turned with Left and Right and pushed with Up, a rock, and a line of text; A
+// (named in the code, so the key row offers it) prints when it is pressed.
+const FX_GAME = fxProgram(
+  ['java.util.HashMap', 'java.util.Map', 'javafx.animation.AnimationTimer', 'javafx.application.Application', 'javafx.geometry.Point2D', 'javafx.scene.Scene', 'javafx.scene.input.KeyCode', 'javafx.scene.layout.Pane', 'javafx.scene.paint.Color', 'javafx.scene.shape.Circle', 'javafx.scene.shape.Polygon', 'javafx.scene.text.Text', 'javafx.stage.Stage'],
+  [
+    '    private final Map<KeyCode, Boolean> pressed = new HashMap<>();',
+    '    private Point2D speed = new Point2D(0, 0);',
+    '    private int frames = 0;',
+    '',
+    '    @Override',
+    '    public void start(Stage stage) {',
+    '        Pane pane = new Pane();',
+    '        pane.setPrefSize(600, 400);',
+    '        Text text = new Text(10, 20, "Frames: 0");',
+    '        Circle rock = new Circle(450, 200, 25, Color.GRAY);',
+    '        Polygon ship = new Polygon(-5, -5, 10, 0, -5, 5);',
+    '        ship.setTranslateX(300);',
+    '        ship.setTranslateY(200);',
+    '        pane.getChildren().addAll(text, rock, ship);',
+    '        Scene scene = new Scene(pane);',
+    '        scene.setOnKeyPressed(event -> {',
+    '            pressed.put(event.getCode(), Boolean.TRUE);',
+    '            if (event.getCode() == KeyCode.A) {',
+    '                System.out.println("A at frame " + frames);',
+    '            }',
+    '        });',
+    '        scene.setOnKeyReleased(event -> pressed.put(event.getCode(), Boolean.FALSE));',
+    '        new AnimationTimer() {',
+    '            @Override',
+    '            public void handle(long now) {',
+    '                frames++;',
+    '                if (pressed.getOrDefault(KeyCode.LEFT, false)) {',
+    '                    ship.setRotate(ship.getRotate() - 3);',
+    '                }',
+    '                if (pressed.getOrDefault(KeyCode.RIGHT, false)) {',
+    '                    ship.setRotate(ship.getRotate() + 3);',
+    '                }',
+    '                if (pressed.getOrDefault(KeyCode.UP, false)) {',
+    '                    double angle = Math.toRadians(ship.getRotate());',
+    '                    speed = speed.add(Math.cos(angle) * 0.05, Math.sin(angle) * 0.05);',
+    '                }',
+    '                ship.setTranslateX(ship.getTranslateX() + speed.getX());',
+    '                ship.setTranslateY(ship.getTranslateY() + speed.getY());',
+    '                text.setText("Frames: " + frames);',
+    '            }',
+    '        }.start();',
+    '        stage.setTitle("Game");',
+    '        stage.setScene(scene);',
+    '        stage.show();',
+    '    }',
+  ],
+);
+/** The window panel's player: its counter, Play or Pause, whether it draws a frame (not the window after the last event). */
+const playerState = (page) =>
+  page.evaluate(() => {
+    const panel = document.querySelector('.fx-panel');
+    const anim = panel?.querySelector('.fx-anim');
+    return {
+      count: panel?.querySelector('.fx-pl-count')?.textContent ?? null,
+      play: panel?.querySelector('.fx-pl-btn[data-act="play"], .fx-pl-btn[data-act="pause"]')?.getAttribute('aria-label') ?? null,
+      frame: !!anim?.hasAttribute('data-on'),
+      said: panel?.querySelector('.fx-player [aria-live]')?.textContent ?? '',
+    };
+  });
+/** Notes, from now on, every counter the panel's player shows while it draws a frame (window.__frames). */
+const watchPlayer = (page) =>
+  page.evaluate(() => {
+    window.__frames = [];
+    new MutationObserver(() => {
+      const panel = document.querySelector('.fx-panel');
+      const c = panel?.querySelector('.fx-pl-count')?.textContent;
+      if (c && panel.querySelector('.fx-anim[data-on]') && window.__frames.at(-1) !== c) window.__frames.push(c);
+    }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+/** The ship as the window's own drawing shows it: its SVG transform. */
+const shipTransform = (page, layer) => page.locator(`.fx-panel .fx-desktop${layer === 'anim' ? '.fx-anim' : ':not(.fx-anim)'} polygon`).getAttribute('transform');
+
+await test('playground: a game: shapes drawn as SVG; keys held with the key row (buttons and the keyboard), Run 30 or 60 frames sends them and plays the new frames, which pause, step and scrub; the last frame is the window the outline gives; a Tap; Start over; out of date, it stays at the end and never plays; axe in both themes at 320 and 390 px', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, FX_GAME);
+  await check(page);
+  const win = page.getByRole('group', { name: 'Window: Game' });
+  await win.waitFor();
+  // The shapes, at their real coordinates in a 600 x 400 pane.
+  const svg = win.locator('svg.fx-shapes');
+  expect((await svg.getAttribute('viewBox')) === '0 0 600 400', await svg.getAttribute('viewBox'));
+  expect((await svg.locator('text').textContent()) === 'Frames: 0' && (await svg.locator('circle').getAttribute('r')) === '25' && (await svg.locator('circle').getAttribute('fill')) === '#808080', 'the text and the rock');
+  expect((await shipTransform(page)) === 'translate(300 200)', await shipTransform(page));
+  const box = await svg.boundingBox();
+  expect(Math.round(box.width) === 600 && Math.round(box.height) === 400, `drawn at its size: ${box.width} x ${box.height}`);
+  // The key row: the arrow keys, Space and A (the code names KeyCode.A); the note; no player yet.
+  const keys = page.getByRole('group', { name: 'Keys to hold' });
+  const names = await keys.getByRole('button').evaluateAll((bs) => bs.map((b) => b.querySelector('.fx-key-name').textContent));
+  expect(names.join(',') === 'Left,Right,Up,Down,Space,A', names.join(','));
+  expect((await page.locator('.fx-panel').innerText()).includes("The game doesn't run live here: choose the keys to hold, run some frames, and the page shows them as an animation."), 'the note');
+  expect(!(await page.locator('.fx-player').count()), 'no frames ran: no player');
+  // Hold Up, run 30 frames: one run with press key UP and frames 30, and the 30 frames play.
+  await keys.getByRole('button', { name: 'Up' }).click();
+  expect((await keys.getByRole('button', { name: 'Up' }).getAttribute('aria-pressed')) === 'true', 'Up is held');
+  await watchPlayer(page);
+  let n = await runCount(page);
+  await page.getByRole('button', { name: 'Run 30 frames' }).click();
+  await nextRun(page, n);
+  await page.waitForFunction(() => document.querySelector('.fx-pl-count')?.textContent === 'frame 30 of 30' && !document.querySelector('.fx-anim[data-on]'));
+  let seen = await page.evaluate(() => window.__frames);
+  expect(seen[0] === 'frame 1 of 30' && seen.length >= 3, `played: ${seen.join(', ')}`);
+  let outline = await outlineOf(page);
+  expect(outline.includes('Text "Frames: 30" at (10, 20)') && outline.endsWith('frames run: 30') && /Polygon \(-5, -5\) \(10, 0\) \(-5, 5\), at \(323\.2[45]\d*, 200\), fill #000000/.test(outline), outline);
+  expect((await shipTransform(page)) === 'translate(323.25 200)', await shipTransform(page));
+  // Hold Right too: a run sends only press key RIGHT and frames 60, and plays only the new frames (31 to 90).
+  await keys.getByRole('button', { name: 'Right' }).click();
+  await watchPlayer(page);
+  n = await runCount(page);
+  await page.getByRole('button', { name: 'Run 60 frames' }).click();
+  await nextRun(page, n);
+  await page.waitForFunction(() => document.querySelector('.fx-pl-count')?.textContent === 'frame 90 of 90' && !document.querySelector('.fx-anim[data-on]'));
+  seen = await page.evaluate(() => window.__frames);
+  expect(seen[0] === 'frame 31 of 90', `the new frames played: ${seen.slice(0, 3).join(', ')}...`);
+  outline = await outlineOf(page);
+  expect(outline.endsWith('frames run: 90') && outline.includes('Text "Frames: 90"') && /rotate 180, fill #000000/.test(outline), outline);
+  // The last frame is the window the outline gives: the ship where the outline puts it.
+  const [, x, y] = /\), at \(([\d.]+), ([\d.]+)\), rotate 180/.exec(outline);
+  const t = await shipTransform(page);
+  const m = /^translate\(([\d.]+) ([\d.]+)\) rotate\(180 2\.5 0\)$/.exec(t);
+  expect(m && Math.abs(Number(m[1]) - Number(x)) < 0.001 && Math.abs(Number(m[2]) - Number(y)) < 0.001, `${t} for ${x}, ${y}`);
+  // Restart at a quarter of the speed, pause: a frame is drawn in place of the window; the counter isn't announced while playing.
+  await page.getByRole('combobox', { name: 'Speed' }).selectOption('0.25');
+  await page.getByRole('button', { name: 'Restart' }).click();
+  await page.waitForTimeout(400);
+  expect((await playerState(page)).play === 'Pause', 'playing');
+  await page.getByRole('button', { name: 'Pause' }).click();
+  let st = await playerState(page);
+  const k = Number(/frame (\d+) of 90/.exec(st.count)?.[1]);
+  expect(k > 1 && k < 30 && st.frame && st.play === 'Play' && st.said === '', JSON.stringify(st));
+  expect(!(await page.locator('.fx-panel .fx-desktop:not(.fx-anim)').isVisible()) && (await page.locator('.fx-panel .fx-anim').isVisible()), 'the frame stands in for the window');
+  await panelShot(page, 'playground-game-paused');
+  // Step forward and back: the counter moves by one, and is said.
+  await page.getByRole('button', { name: 'Forward one frame' }).click();
+  st = await playerState(page);
+  expect(st.count === `frame ${k + 1} of 90` && st.said === `frame ${k + 1} of 90`, JSON.stringify(st));
+  await page.getByRole('button', { name: 'Back one frame' }).click();
+  await page.getByRole('button', { name: 'Back one frame' }).click();
+  st = await playerState(page);
+  expect(st.count === `frame ${k - 1} of 90` && st.said === `frame ${k - 1} of 90`, JSON.stringify(st));
+  // Frame 30's ship is where the first run left it; the slider at the end shows the window again.
+  const slider = page.getByRole('slider', { name: 'Frame' });
+  await slider.fill('30');
+  expect((await shipTransform(page, 'anim')) === 'translate(323.25 200)' && (await slider.getAttribute('aria-valuetext')) === 'frame 30 of 90', await shipTransform(page, 'anim'));
+  await slider.fill('90');
+  st = await playerState(page);
+  expect(st.count === 'frame 90 of 90' && !st.frame && (await page.locator('.fx-panel .fx-desktop:not(.fx-anim)').isVisible()), JSON.stringify(st));
+  // The keyboard on the key row: Left holds Left, again lets go; a holds A; Space on the row holds Space.
+  await keys.focus();
+  await page.keyboard.press('ArrowLeft');
+  expect((await keys.getByRole('button', { name: 'Left' }).getAttribute('aria-pressed')) === 'true', 'Left held from the keyboard');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('a');
+  await page.keyboard.press(' ');
+  const pressedNow = await keys.locator('button[aria-pressed="true"]').evaluateAll((bs) => bs.map((b) => b.querySelector('.fx-key-name').textContent));
+  expect(pressedNow.join(',') === 'Right,Up,Space,A', pressedNow.join(','));
+  // Only a held key shows a state word ("held"); a key that isn't held shows none, so the Up key never reads "Up UP".
+  const states = await keys.getByRole('button').evaluateAll((bs) => bs.map((b) => b.querySelector('.fx-key-state').textContent.trim() + (b.getAttribute('aria-pressed') === 'true' ? '+' : '-')));
+  expect(states.every((s) => s === 'held+' || s === '-'), states.join(','));
+  expect((await page.evaluate(() => document.activeElement?.classList.contains('fx-key-row'))), 'the row keeps the focus');
+  // Let go of them again (the next run's lines only change what changed).
+  await page.keyboard.press('a');
+  await page.keyboard.press(' ');
+  // A Tap: key A, with no frames, runs once; the program sees the press. Up is held, so its Tap can't be used.
+  await page.locator('.fx-tap > summary').click();
+  expect((await page.getByRole('button', { name: 'Tap Up' }).getAttribute('aria-disabled')) === 'true', 'a held key has no Tap');
+  n = await runCount(page);
+  await page.getByRole('button', { name: 'Tap A' }).click();
+  await nextRun(page, n);
+  expect((await outputOf(page)).includes('A at frame 90'), await outputOf(page));
+  expect((await outlineOf(page)).endsWith('frames run: 90'), 'a Tap runs no frames');
+  await shot(page, 'playground-game');
+  await panelShot(page, 'playground-game-desktop');
+  await bothThemes(page, 'a game in the window panel', 'playground-game');
+  await onPhones(page, 'a game in the window panel', 'playground-game');
+  // On a 390 px phone the keys are big enough for a finger, and the 600 px window scrolls inside its frame.
+  await page.setViewportSize({ width: 390, height: 860 });
+  const sizes = await page.locator('.fx-key, .fx-run-frames, .fx-pl-btn').evaluateAll((els) => els.map((e) => [e.getBoundingClientRect().width, e.getBoundingClientRect().height]));
+  expect(sizes.every(([w, h]) => w >= 44 && h >= 44), JSON.stringify(sizes));
+  expect((await frames(page)).some((f) => f.wide && f.noted), 'the window scrolls inside its frame');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Start over: no keys held, no frames, no player.
+  n = await runCount(page);
+  await page.getByRole('button', { name: 'Start over' }).click();
+  await nextRun(page, n);
+  expect(!(await keys.locator('button[aria-pressed="true"]').count()) && !(await page.locator('.fx-player').count()) && !(await outlineOf(page)).includes('frames run'), 'started over');
+  // An out-of-date window (the code changed, then a run that didn't compile) shows the window after
+  // the last event, frame 30 of 30, and never plays by itself, in view or not.
+  n = await runCount(page);
+  await page.getByRole('button', { name: 'Run 30 frames' }).click();
+  await nextRun(page, n);
+  await page.waitForFunction(() => document.querySelector('.fx-pl-count')?.textContent === 'frame 30 of 30' && !document.querySelector('.fx-anim[data-on]'));
+  const staysAtEnd = async (why) => {
+    const s0 = await playerState(page);
+    await page.locator('.fx-panel').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(800);
+    const s1 = await playerState(page);
+    const played = await page.evaluate(() => window.__frames);
+    expect([s0, s1].every((s) => s.count === 'frame 30 of 30' && !s.frame && s.play === 'Play') && !played.length, `${why}: ${JSON.stringify([s0, s1])} played ${played.join(', ')}`);
+  };
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await watchPlayer(page);
+  await setCode(page, FX_GAME.replace('stage.setTitle("Game");', 'stage.setTitle("Game");\n        // changed'));
+  await page.locator('.fx-stale-note', { hasText: 'your code changed' }).waitFor();
+  await staysAtEnd('the code changed');
+  await watchPlayer(page);
+  await setCode(page, FX_GAME.replace('stage.show();', 'stage.show()'));
+  const failedRun = await check(page);
+  expect(/didn't compile/i.test(failedRun) && (await page.locator('.fx-stale-note', { hasText: "your code didn't compile" }).count()) === 1, failedRun);
+  await staysAtEnd("the run didn't compile");
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('playground: a game with reduced motion: the new frames never play by themselves; Play plays them', async () => {
+  const { ctx, page, errors } = await newPage({ reducedMotion: 'reduce' });
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, FX_GAME);
+  await check(page);
+  await page.getByRole('group', { name: 'Window: Game' }).waitFor();
+  await page.getByRole('group', { name: 'Keys to hold' }).getByRole('button', { name: 'Left' }).click();
+  await watchPlayer(page);
+  const n = await runCount(page);
+  await page.getByRole('button', { name: 'Run 30 frames' }).click();
+  await nextRun(page, n);
+  await page.locator('.fx-player').waitFor();
+  await page.waitForTimeout(800);
+  let st = await playerState(page);
+  expect(st.count === 'frame 30 of 30' && st.play === 'Play' && !st.frame && (await page.evaluate(() => window.__frames.length)) === 0, JSON.stringify(st));
+  await page.getByRole('button', { name: 'Play' }).click();
+  await page.waitForFunction(() => document.querySelector('.fx-pl-count')?.textContent === 'frame 30 of 30' && !document.querySelector('.fx-anim[data-on]'));
+  expect((await page.evaluate(() => window.__frames))[0] === 'frame 1 of 30', 'Play plays from the start');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// An animation with no key handlers: a ball that moves to the right.
+const FX_TIMER_ONLY = fxProgram(
+  ['javafx.animation.AnimationTimer', 'javafx.application.Application', 'javafx.scene.Scene', 'javafx.scene.layout.Pane', 'javafx.scene.shape.Circle', 'javafx.stage.Stage'],
+  [
+    '    @Override',
+    '    public void start(Stage stage) {',
+    '        Pane pane = new Pane();',
+    '        pane.setPrefSize(300, 400);',
+    '        Circle ball = new Circle(20, 200, 10);',
+    '        pane.getChildren().add(ball);',
+    '        new AnimationTimer() {',
+    '            @Override',
+    '            public void handle(long now) {',
+    '                ball.setTranslateX(ball.getTranslateX() + 2);',
+    '            }',
+    '        }.start();',
+    '        stage.setTitle("Ball");',
+    '        stage.setScene(new Scene(pane));',
+    '        stage.show();',
+    '    }',
+  ],
+);
+
+await test('playground: an animation with no key handlers: only the Run buttons and a note that names no keys; on a phone, frames a learner runs with most of the window scrolled away still play', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  await setCode(page, FX_TIMER_ONLY);
+  await check(page);
+  await page.getByRole('group', { name: 'Window: Ball' }).waitFor();
+  const text = await page.locator('.fx-panel').innerText();
+  expect(!(await page.getByRole('group', { name: 'Keys to hold' }).count()) && !(await page.locator('.fx-tap').count()), 'no key row and no Tap menu');
+  expect(text.includes("The animation doesn't run live here: run some frames, and the page shows them as an animation.") && !text.includes('choose the keys'), text);
+  // A first run, with the window in view: its frames play.
+  let n = await runCount(page);
+  await page.getByRole('button', { name: 'Run 30 frames' }).click();
+  await nextRun(page, n);
+  await page.waitForFunction(() => document.querySelector('.fx-pl-count')?.textContent === 'frame 30 of 30' && !document.querySelector('.fx-anim[data-on]'));
+  // Scroll so only the bottom 30 px of the window's frame are on screen (well under a quarter), the Run buttons below it.
+  await page.evaluate(() => {
+    const r = document.querySelector('.fx-panel .fx-frame').getBoundingClientRect();
+    window.scrollBy(0, r.bottom - 30);
+  });
+  const seenBefore = await page.evaluate(() => {
+    const r = document.querySelector('.fx-panel .fx-frame').getBoundingClientRect();
+    const b = [...document.querySelectorAll('.fx-run-frames')].find((e) => e.textContent.includes('Run 30')).getBoundingClientRect();
+    return { part: (Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)) / r.height, button: b.top >= 0 && b.bottom <= innerHeight };
+  });
+  expect(seenBefore.part > 0 && seenBefore.part < 0.25 && seenBefore.button, JSON.stringify(seenBefore));
+  // The next run's new frames (31 to 60) play at once, though most of the window is scrolled away.
+  await watchPlayer(page);
+  n = await runCount(page);
+  await page.getByRole('button', { name: 'Run 30 frames' }).evaluate((b) => b.click());
+  await nextRun(page, n);
+  await page.waitForFunction(() => document.querySelector('.fx-pl-count')?.textContent === 'frame 60 of 60' && !document.querySelector('.fx-anim[data-on]'), null, { timeout: 15000 });
+  const seen = await page.evaluate(() => window.__frames);
+  expect(seen[0] === 'frame 31 of 60' && seen.length >= 3, `played: ${seen.join(', ')}`);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
 await test('part 14 in lessons: a java window example with a chart, canvas, image view or slider is drawn in the lesson text and in the pre-rendered page (a canvas as SVG there); a challenge with one draws it on its task card and in both windows of its results; the model solution passes', async () => {
   const { example, challenge } = part14;
   if (!example && !challenge) {
@@ -2505,6 +2836,336 @@ await test('module 52 mouse-drawing challenge, "Run with my input": drawing the 
   // The model solution passes.
   const passed = await check(page);
   expect(passed.includes('All tests passed'), passed);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// ------------------------------------------------------------------ part 14.3 to 14.5 lesson pages (modules 53 and 54)
+
+/** A frame's shape, from a window's frames list: the merged state of the first node of `type` after frame j (from 1). */
+function frameShape(list, j, type) {
+  let key = null;
+  const s = {};
+  for (const changes of list.slice(0, j)) {
+    for (const c of changes) {
+      if (key == null && c.type === type) key = c.k;
+      if (c.k != null && c.k === key) Object.assign(s, c);
+    }
+  }
+  return s;
+}
+/** An SVG transform's translate and rotate: { x, y, r } (0 when left out). */
+function moveOf(t) {
+  const tr = /translate\(([-\d.e]+) ([-\d.e]+)\)/.exec(t ?? '');
+  const rot = /rotate\(([-\d.e]+)/.exec(t ?? '');
+  return { x: tr ? Number(tr[1]) : 0, y: tr ? Number(tr[2]) : 0, r: rot ? Number(rot[1]) : 0 };
+}
+/** The player of a lesson figure: its counter, Play or Pause, whether it draws a frame. */
+const figurePlayer = (figure) =>
+  figure.evaluate((f) => ({
+    count: f.querySelector('.fx-pl-count')?.textContent ?? null,
+    play: f.querySelector('.fx-pl-btn[data-act="play"], .fx-pl-btn[data-act="pause"]')?.getAttribute('aria-label') ?? null,
+    frame: !!f.querySelector('.fx-anim[data-on]'),
+    said: f.querySelector('.fx-player [aria-live]')?.textContent ?? '',
+  }));
+/** Waits until the player inside `where` stands at its last frame (of `total`) with nothing playing. */
+async function playedToEnd(page, where, total) {
+  await page.waitForFunction(([e, words]) => e.querySelector('.fx-pl-count')?.textContent === words && !e.querySelector('.fx-anim[data-on]'), [await where.elementHandle(), `frame ${total} of ${total}`], { timeout: 30_000 });
+}
+/** Notes, from now on, every counter a lesson figure's player shows while it draws a frame (window.__figFrames). */
+const watchFigure = (figure) =>
+  figure.evaluate((f) => {
+    window.__figFrames = [];
+    new MutationObserver(() => {
+      const c = f.querySelector('.fx-pl-count')?.textContent;
+      if (c && f.querySelector('.fx-anim[data-on]') && window.__figFrames.at(-1) !== c) window.__figFrames.push(c);
+    }).observe(f, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+
+await test('module 53 lesson: a game example is drawn in the lesson after its keys and frames, with its animation player, which plays once in view and ends at the window after the last event; steps and the slider draw earlier frames; the pre-rendered page has the same shapes and no player; reduced motion never plays; axe in both themes and at 320 px', async () => {
+  const found = windowExample('asteroids', (b) => (b.window.frames?.list?.length ?? 0) >= 10 && b.events.some((e) => /^press key /.test(e)) && windowNodes(b.window).some((n) => n.type === 'Polygon') && /rotate -?\d/.test(b.outline));
+  expect(found, 'no game example in module 53 with keys, at least 10 frames and a turned polygon');
+  const { step, k, block } = found;
+  const list = block.window.frames.list;
+  const total = list.length;
+  const ran = block.events.filter((e) => e.startsWith('frames ')).reduce((a, e) => a + Number(e.split(' ')[1]), 0);
+  expect(block.window.frames.count === ran && total === ran && block.outline.endsWith(`frames run: ${ran}`), `the example ran ${ran} frames: ${JSON.stringify({ count: block.window.frames.count, kept: total })}`);
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + `learn/asteroids/${step.slug}/`);
+  await lessonReady(page);
+  const figure = page.locator('article.step-text figure.fx-figure').nth(k);
+  await figure.locator('.fx-player').waitFor();
+  expect((await figure.locator('.fx-events').innerText()) === `After: ${describeEvents(block.events)}`, await figure.locator('.fx-events').innerText());
+  // The player: real buttons with names, the speed, the slider labelled; it's a group of its own.
+  const player = figure.getByRole('group', { name: 'The animation of the frames' });
+  for (const name of ['Restart', 'Back one frame', 'Play', 'Forward one frame']) expect((await player.getByRole('button', { name, exact: true }).count()) === 1, `the player has ${name}`);
+  expect((await player.getByRole('slider', { name: 'Frame' }).getAttribute('max')) === String(total) && (await player.getByRole('combobox', { name: 'Speed' }).count()) === 1, 'the slider and the speed');
+  // It plays once, from frame 1, when it comes into view, and stops at the last frame.
+  await watchFigure(figure);
+  await figure.scrollIntoViewIfNeeded();
+  await playedToEnd(page, figure, total);
+  const seen = await page.evaluate(() => window.__figFrames);
+  expect(seen[0] === `frame 1 of ${total}` && seen.length >= 3, `played: ${seen.slice(0, 4).join(', ')} (${seen.length})`);
+  let st = await figurePlayer(figure);
+  expect(st.count === `frame ${total} of ${total}` && st.play === 'Play' && !st.frame && st.said === '', JSON.stringify(st));
+  // At the end, the window after the last event: the polygon where the outline puts it, turned as it says.
+  const svg = figure.locator('.fx-desktop:not(.fx-anim) svg.fx-shapes');
+  expect((await svg.count()) === 1, 'the lesson draws the shapes as SVG');
+  const [, ox, oy, or] = /^\s+Polygon [^\n]*, at \(([-\d.]+), ([-\d.]+)\), rotate (-?[\d.]+)/m.exec(block.outline).map(Number);
+  const endT = await svg.locator('polygon').first().getAttribute('transform');
+  const end = moveOf(endT);
+  expect(end.x === ox && end.y === oy && end.r === or, `the polygon is drawn ${endT}, the outline says at (${ox}, ${oy}), rotate ${or}`);
+  expect((await svg.locator('polygon, circle, rect, line, text').count()) === windowNodes(block.window).filter((n) => ['Polygon', 'Circle', 'Rectangle', 'Line', 'Text'].includes(n.type)).length, 'a shape per node');
+  // The slider halfway: that frame is drawn in place of the window, the polygon where the frames list puts it.
+  const mid = Math.ceil(total / 2);
+  await player.getByRole('slider', { name: 'Frame' }).fill(String(mid));
+  st = await figurePlayer(figure);
+  expect(st.count === `frame ${mid} of ${total}` && st.frame, JSON.stringify(st));
+  const want = frameShape(list, mid, 'Polygon');
+  const midT = await figure.locator('.fx-anim polygon').first().getAttribute('transform');
+  const got = moveOf(midT);
+  expect(got.x === (want.tx ?? 0) && got.y === (want.ty ?? 0) && got.r === (want.r ?? 0), `frame ${mid}: ${midT}, the frames list says ${JSON.stringify(want)}`);
+  // A step forward and back: the counter moves by one and is said.
+  await player.getByRole('button', { name: 'Forward one frame' }).click();
+  st = await figurePlayer(figure);
+  expect(st.count === `frame ${mid + 1} of ${total}` && st.said === `frame ${mid + 1} of ${total}`, JSON.stringify(st));
+  await player.getByRole('button', { name: 'Back one frame' }).click();
+  await player.getByRole('button', { name: 'Back one frame' }).click();
+  st = await figurePlayer(figure);
+  expect(st.count === `frame ${mid - 1} of ${total}` && st.said === `frame ${mid - 1} of ${total}` && st.frame, JSON.stringify(st));
+  // Play from there: it plays to the end and shows the window again.
+  await player.getByRole('button', { name: 'Play', exact: true }).click();
+  await playedToEnd(page, figure, total);
+  expect((await svg.locator('polygon').first().getAttribute('transform')) === endT, 'the window after the last event again');
+  const details = figure.locator('details.fx-astext');
+  await details.locator('summary').click();
+  expect((await details.locator('pre').innerText()) === block.outline, `as text: ${await details.locator('pre').innerText()}`);
+  // The pre-rendered page: the same shapes, the window after the last event, its words, and no player (the page adds it).
+  const html = await (await page.request.get(BASE + `learn/asteroids/${step.slug}/`)).text();
+  const fig = (html.match(/<figure class="fx-figure">[\s\S]*?<\/figure>/g) ?? [])[k] ?? '';
+  expect(fig.includes(`After: ${describeEvents(block.events)}`.replace(/&/g, '&amp;')), `the pre-rendered events: ${fig.slice(0, 300)}`);
+  const preSvg = fig.match(/<svg class="fx-shapes"[\s\S]*?<\/svg>/)?.[0] ?? '';
+  expect(preSvg && (preSvg.match(/<polygon /g) ?? []).length === (await svg.locator('polygon').count()), `the pre-rendered shapes: ${preSvg.slice(0, 300)}`);
+  expect(/<polygon [^>]*transform="([^"]*)"/.exec(preSvg)?.[1] === endT, `the pre-rendered polygon: ${/<polygon [^>]*>/.exec(preSvg)?.[0]}, the page's ${endT}`);
+  expect(!fig.includes('fx-player') && !fig.includes('fx-anim'), 'the pre-rendered page has no player');
+  expect(htmlText(fig.match(/<pre[^>]*><code>([\s\S]*?)<\/code><\/pre>/)?.[1] ?? '') === block.outline, 'the pre-rendered window as text');
+  await lessonBothThemes(page, 'a module 53 lesson');
+  await lessonOnPhone(page, 'a module 53 lesson');
+  await threeShots(page, 'm53-game-example', figure);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+  // With reduced motion the player never plays by itself: it shows the last frame (the window).
+  const r = await newPage({ reducedMotion: 'reduce' });
+  await r.page.goto(BASE + `learn/asteroids/${step.slug}/`);
+  await lessonReady(r.page);
+  const rf = r.page.locator('article.step-text figure.fx-figure').nth(k);
+  await rf.locator('.fx-player').waitFor();
+  await watchFigure(rf);
+  await rf.scrollIntoViewIfNeeded();
+  await r.page.waitForTimeout(800);
+  st = await figurePlayer(rf);
+  expect(st.count === `frame ${total} of ${total}` && !st.frame && st.play === 'Play' && (await r.page.evaluate(() => window.__figFrames.length)) === 0, `reduced motion: ${JSON.stringify(st)}`);
+  expect(r.errors.length === 0, r.errors.join('\n'));
+  await r.ctx.close();
+});
+
+await test('module 53 game challenge: the task card says the keys and frames in words and draws the window they leave (no player: a test keeps only the count); a wrong program shows both windows with the differing line marked and its own frames in a player; axe in both themes and at 320 px; the model solution passes', async () => {
+  const found = challengesOf(moduleOf('asteroids')).find(({ ex }) => ex.kind === 'code' && (cardTest(ex)?.events ?? []).filter((e) => e.startsWith('frames ')).length >= 2 && cardTest(ex).events.some((e) => /^press key /.test(e)) && cardTest(ex).expect === '' && /^\s+Polygon /m.test(cardTest(ex).outline) && /launch\(/.test(ex.seed));
+  expect(found, 'no module 53 code challenge whose task card holds a key, runs frames twice and prints nothing');
+  const { ex } = found;
+  const shown = cardTest(ex);
+  const ran = shown.events.filter((e) => e.startsWith('frames ')).reduce((a, e) => a + Number(e.split(' ')[1]), 0);
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'asteroids', found);
+  const card = page.locator('.task-card');
+  const words = await card.locator('.task-events').innerText();
+  expect(words === describeEvents(shown.events) && /^Hold \w+, run \d+ frames/.test(words), words);
+  expect((await card.locator('svg.fx-shapes polygon').count()) >= 1, 'the task card draws the shapes');
+  expect((await card.locator('.fx-player').count()) === 0, 'the task card has no player');
+  expect((await card.locator('details.fx-astext pre').textContent()) === shown.outline && shown.outline.endsWith(`frames run: ${ran}`), `the task card's window as text: ${await card.locator('details.fx-astext pre').textContent()}`);
+  // The starter code is wrong: the polygon doesn't end where it should.
+  await setProgram(page, ex.seed);
+  const out = await check(page);
+  expect(out.includes('Not yet'), out);
+  const failed = page.locator('.t-fail', { hasText: shown.name }).first();
+  const cmp = failed.locator('.fx-compare');
+  expect((await cmp.count()) === 1, `no window comparison: ${out}`);
+  const sides = cmp.locator(':scope > div');
+  expect((await sides.nth(0).locator('svg.fx-shapes polygon').count()) >= 1 && (await sides.nth(1).locator('svg.fx-shapes polygon').count()) >= 1, 'both windows draw the shapes');
+  const marks = async (side) => (await sides.nth(side).locator('mark.fx-differs').allTextContents()).map((t) => t.replace(/^Differs: /, '').trim());
+  const should = await marks(0);
+  const yours = await marks(1);
+  expect(should.length >= 1 && should.every((l) => l.startsWith('Polygon ')) && shown.outline.split('\n').map((l) => l.trim()).includes(should[0]), `marked in the expected window: ${should}`);
+  expect(yours.length === should.length && yours[0].startsWith('Polygon ') && yours[0] !== should[0], `marked in your window: ${yours}`);
+  // Only the learner's run has its frames: a player under their window, which plays to the end; the expected window has none.
+  expect((await sides.nth(0).locator('.fx-player').count()) === 0 && (await sides.nth(1).locator('.fx-player').count()) === 1, 'a player under your window only');
+  const yourCount = sides.nth(1).locator('.fx-pl-count');
+  await sides.nth(1).scrollIntoViewIfNeeded();
+  await playedToEnd(page, sides.nth(1), ran);
+  expect((await yourCount.textContent()) === `frame ${ran} of ${ran}`, await yourCount.textContent());
+  await page.setViewportSize({ width: 320, height: 800 });
+  await noOverflow(page, 'a failed game challenge at 320 px');
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `a failed game challenge at 320 px, ${colorScheme} theme`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await lessonBothThemes(page, 'a failed game challenge');
+  await threeShots(page, 'm53-game-challenge-card', card.locator('.task-events'));
+  await threeShots(page, 'm53-game-challenge-failed', cmp);
+  await setProgram(page, ex.solution);
+  const passed = await check(page);
+  expect(passed.includes('All tests passed'), passed);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 53 keys challenge, "Run with my input": the key row offers the keys the code names; holding one and running 30 frames sends them, plays the 30 frames and ends as the task card shows; letting go and running 30 more plays only the new ones; axe in both themes and at 320 and 390 px', async () => {
+  const found = challengesOf(moduleOf('asteroids')).find(({ ex }) => {
+    const ev = cardTest(ex)?.events ?? [];
+    return ex.kind === 'code' && ev.length === 3 && /^press key (\w+)$/.test(ev[0]) && ev[1] === 'frames 30' && ev[2] === ev[0].replace('press', 'release');
+  });
+  expect(found, 'no module 53 code challenge whose task card holds a key for 30 frames and lets go');
+  const { ex } = found;
+  const shown = cardTest(ex);
+  const key = /^press key (\w+)$/.exec(shown.events[0])[1];
+  const keyName = key[0] + key.slice(1).toLowerCase();
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'asteroids', found);
+  expect((await page.locator('.task-card .task-events').innerText()) === `Hold ${keyName}, run 30 frames, then let go of ${keyName}`, await page.locator('.task-card .task-events').innerText());
+  await setProgram(page, ex.solution);
+  const panel = await runWithMyInput(page);
+  const title = shown.window.windows[0].title;
+  await panel.getByRole('group', { name: `Window: ${title}` }).waitFor();
+  const keys = panel.getByRole('group', { name: 'Keys to hold' });
+  const names = await keys.getByRole('button').evaluateAll((bs) => bs.map((b) => b.querySelector('.fx-key-name').textContent));
+  const named = [...new Set([...ex.solution.matchAll(/KeyCode\.(\w+)/g)].map((m) => m[1]))].filter((c) => !['LEFT', 'RIGHT', 'UP', 'DOWN', 'SPACE'].includes(c));
+  expect(names.slice(0, 5).join(',') === 'Left,Right,Up,Down,Space' && names.length === 5 + named.length, `the keys offered: ${names}`);
+  expect((await panel.innerText()).includes("The game doesn't run live here: choose the keys to hold, run some frames, and the page shows them as an animation."), 'the note under the key row');
+  // Hold the key and run 30 frames: one run, the 30 frames play from the first, and the window is the task card's.
+  await keys.getByRole('button', { name: keyName, exact: true }).click();
+  expect((await keys.getByRole('button', { name: keyName, exact: true }).getAttribute('aria-pressed')) === 'true', `${keyName} is held`);
+  await watchPlayer(page);
+  let n = await runCount(page);
+  await panel.getByRole('button', { name: 'Run 30 frames' }).click();
+  await nextRun(page, n);
+  await page.waitForFunction(() => document.querySelector('.fx-panel .fx-pl-count')?.textContent === 'frame 30 of 30' && !document.querySelector('.fx-panel .fx-anim[data-on]'), null, { timeout: 30_000 });
+  expect((await runCount(page)) === n + 1, `Run 30 frames ran the program ${(await runCount(page)) - n} times`);
+  let seen = await page.evaluate(() => window.__frames);
+  expect(seen[0] === 'frame 1 of 30' && seen.length >= 3, `played: ${seen.slice(0, 4).join(', ')} (${seen.length})`);
+  const outline = await outlineOf(page);
+  expect(outline === shown.outline, `the window after holding ${keyName} for 30 frames:\n${outline}\nnot\n${shown.outline}`);
+  const [, ox, oy] = /^\s+Polygon [^\n]*, at \(([-\d.]+), ([-\d.]+)\)/m.exec(shown.outline).map(Number);
+  const at = moveOf(await shipTransform(page));
+  expect(at.x === ox && at.y === oy, `the polygon is drawn at (${at.x}, ${at.y}), the task card's at (${ox}, ${oy})`);
+  // Let go and run 30 more: the program gets the release, only frames 31 to 60 play, and nothing moves.
+  await keys.getByRole('button', { name: keyName, exact: true }).click();
+  await watchPlayer(page);
+  n = await runCount(page);
+  await panel.getByRole('button', { name: 'Run 30 frames' }).click();
+  await nextRun(page, n);
+  await page.waitForFunction(() => document.querySelector('.fx-panel .fx-pl-count')?.textContent === 'frame 60 of 60' && !document.querySelector('.fx-panel .fx-anim[data-on]'), null, { timeout: 30_000 });
+  seen = await page.evaluate(() => window.__frames);
+  expect(seen[0] === 'frame 31 of 60', `the new frames played: ${seen.slice(0, 3).join(', ')}`);
+  const after = await outlineOf(page);
+  expect(after === shown.outline.replace(/frames run: 30$/, 'frames run: 60'), `after letting go and 30 more frames:\n${after}`);
+  expect(!(await page.locator('.freerun .fx-stale-note').count()), 'the window is up to date');
+  await bothThemes(page, 'a module 53 keys challenge run with my input', null);
+  await onPhones(page, 'a module 53 keys challenge run with my input', null);
+  await threeShots(page, 'm53-keys-run', panel);
+  const passed = await check(page);
+  expect(passed.includes('All tests passed'), passed);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 54 lesson: an xml block is shown colored under its file\'s name (pom.xml), and a java fragment (JDBC) is shown colored, never run; both reachable with the keyboard and the same in the pre-rendered page; axe in both themes and at 320 px', async () => {
+  const mod = moduleOf('libraries-and-tools');
+  const pomStep = mod.steps.find((s) => /^```xml pom\.xml$/m.test(s.text));
+  expect(pomStep, 'no ```xml pom.xml block in module 54');
+  // The fragment's text, from the module's own file (the build turns ```java fragment into ```java).
+  const raw = readFileSync(new URL('../content/modules/54-libraries-and-tools.yaml', import.meta.url), 'utf8');
+  const frag = [...raw.matchAll(/^( *)```java fragment\n([\s\S]*?)\n\1```$/gm)].find((m) => m[2].includes('PreparedStatement'));
+  expect(frag && frag[2].includes('PreparedStatement'), 'no java fragment with JDBC in module 54');
+  const fragText = frag[2].split('\n').map((l) => l.slice(frag[1].length)).join('\n');
+  const fragStep = mod.steps.find((s) => s.text.includes(fragText));
+  expect(fragStep, 'the JDBC fragment is in no step of the build');
+  const { ctx, page, errors } = await newPage();
+  // pom.xml: a figure with the file's name, the XML colored (tag names, comments, the <?xml ?> line).
+  await page.goto(BASE + `learn/libraries-and-tools/${pomStep.slug}/`);
+  await lessonReady(page);
+  const pom = page.locator('article.step-text figure.code-file', { has: page.locator('figcaption', { hasText: /^pom\.xml$/ }) }).first();
+  await pom.waitFor();
+  const pomPre = pom.locator('pre.code-xml');
+  const pomText = await pomPre.textContent();
+  const pomBlock = /^```xml pom\.xml\n([\s\S]*?)\n```$/m.exec(pomStep.text)[1];
+  expect(pomText === pomBlock, `the pom.xml block shows its text exactly:\n${pomText}`);
+  const kinds = await pomPre.locator('span[class^="tk-"]').evaluateAll((els) => [...new Set(els.map((e) => e.className))].sort());
+  expect(['tk-kw'].every((c) => kinds.includes(c)) && (await pomPre.locator('span.tk-kw', { hasText: /^project$/ }).count()) >= 1, `the XML is colored: ${kinds}`);
+  expect((await pomPre.getAttribute('tabindex')) === '0', 'the xml block takes the keyboard focus to scroll');
+  // Nothing about it can be run: no run button in the figure.
+  expect((await pom.locator('button').count()) === 0, 'the xml block has a button');
+  const pomHtml = await (await page.request.get(BASE + `learn/libraries-and-tools/${pomStep.slug}/`)).text();
+  const preFig = /<figure class="code-file"><figcaption>pom\.xml<\/figcaption><pre tabindex="0" class="code-xml"><code>([\s\S]*?)<\/code><\/pre><\/figure>/.exec(pomHtml);
+  expect(preFig && htmlText(preFig[1]) === pomBlock && preFig[1].includes('<span class="tk-kw">project</span>'), 'the pre-rendered pom.xml, colored');
+  await lessonBothThemes(page, 'a module 54 lesson with pom.xml');
+  await lessonOnPhone54(page, 'a module 54 lesson with pom.xml');
+  await threeShots(page, 'm54-pom-xml', pom);
+  // The JDBC fragment: Java colored like the other examples, a block to read only.
+  // (Its first challenge may be a "What does it print?", which loads no Java engine: wait for the text.)
+  await page.goto(BASE + `learn/libraries-and-tools/${fragStep.slug}/`);
+  await page.locator('article.step-text pre.code-java').first().waitFor({ timeout: ENGINE_TIMEOUT });
+  const javaPres = page.locator('article.step-text pre.code-java');
+  const texts = await javaPres.allTextContents();
+  const i = texts.indexOf(fragText);
+  expect(i >= 0, `no Java block shows the fragment exactly (${texts.length} Java blocks)`);
+  const fragPre = javaPres.nth(i);
+  expect((await fragPre.locator('span.tk-kw', { hasText: /^try$/ }).count()) >= 1 && (await fragPre.locator('span.tk-str').count()) >= 1, 'the fragment is colored');
+  expect((await fragPre.getAttribute('tabindex')) === '0', 'the fragment takes the keyboard focus to scroll');
+  expect((await fragPre.locator('xpath=..').locator('button').count()) === 0, 'the fragment has a button');
+  const fragHtml = await (await page.request.get(BASE + `learn/libraries-and-tools/${fragStep.slug}/`)).text();
+  expect([...fragHtml.matchAll(/<pre tabindex="0" class="code-java"><code>([\s\S]*?)<\/code><\/pre>/g)].some((m) => htmlText(m[1]) === fragText), 'the pre-rendered page shows the fragment');
+  // An xml block with no file's name (the H2 dependency) is colored too, without a caption.
+  const plainXml = page.locator('article.step-text pre.code-xml');
+  if (await plainXml.count()) expect((await plainXml.first().locator('xpath=..').evaluate((e) => e.tagName)) !== 'FIGURE' && (await plainXml.first().locator('span.tk-kw').count()) > 0, 'an xml block without a name');
+  await lessonBothThemes(page, 'a module 54 lesson with JDBC');
+  await lessonOnPhone54(page, 'a module 54 lesson with JDBC');
+  await threeShots(page, 'm54-jdbc-fragment', fragPre);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+/** A lesson without windows on a 320 px phone: nothing scrolls the page sideways (a code block scrolls inside itself), axe in both themes. */
+async function lessonOnPhone54(page, label) {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await noOverflow(page, `${label} at 320 px`);
+  const wide = await page.locator('article.step-text pre').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.getAttribute('tabindex')));
+  expect(wide.every((t) => t === '0'), `${label} at 320 px: a code block that scrolls can't be reached with the keyboard`);
+  for (const colorScheme of ['light', 'dark']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await axe(page, `${label} at 320 px, ${colorScheme} theme`);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ colorScheme: 'light' });
+}
+
+await test('module 54 DAO challenge: the starter code in its file tabs fails the method calls; the model solution (an in-memory DAO) passes', async () => {
+  const found = challengesOf(moduleOf('libraries-and-tools')).find(({ ex }) => ex.kind === 'code' && /Dao\b/.test(ex.task) && splitFiles(ex.seed).length >= 2 && ex.tests.some((t) => t.call));
+  expect(found, 'no module 54 code challenge of several files with a DAO and method calls');
+  const { ex } = found;
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'libraries-and-tools', found);
+  const paths = await tabPaths(page);
+  expect(JSON.stringify(paths) === JSON.stringify(splitFiles(ex.seed).map((f) => f.path)), `the file tabs: ${paths}`);
+  expect(paths.some((p) => /Dao\.java$/.test(p)), `a DAO file: ${paths}`);
+  const out = await check(page);
+  expect(!out.includes('All tests passed'), `the starter code passes: ${out}`);
+  await setProgram(page, ex.solution);
+  const passed = await check(page);
+  expect(passed.includes('All tests passed'), passed);
+  await threeShots(page, 'm54-dao-passed', page.locator('.workbench .results').first());
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });

@@ -16,6 +16,7 @@ public final class GridCells {
 
     public static synchronized void set(Node node, Integer column, Integer row, Integer columnSpan, Integer rowSpan) {
         CELLS.put(node, new Integer[] { column, row, columnSpan, rowSpan });
+        Frames.structureChanged();
     }
 
     /** { column, row, columnSpan, rowSpan }, each null when not set. */

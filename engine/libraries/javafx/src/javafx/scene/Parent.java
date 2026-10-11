@@ -1,6 +1,7 @@
 // Part of Java Arena's practice version of JavaFX: written for this site, not OpenJFX's code.
 package javafx.scene;
 
+import arena.fx.Frames;
 import arena.fx.Removals;
 import arena.fx.Session;
 import java.util.AbstractList;
@@ -114,6 +115,7 @@ public abstract class Parent extends Node {
                 node.parent = Parent.this;
             }
             modCount++;
+            Frames.structureChanged();
         }
 
         private void detach(Node old) {
@@ -170,6 +172,7 @@ public abstract class Parent extends Node {
             Session.checkSceneThread(Parent.this);
             Node old = list.remove(index);
             modCount++;
+            Frames.structureChanged();
             detach(old);
             return old;
         }

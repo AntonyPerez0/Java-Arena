@@ -2,7 +2,8 @@
 // version of JavaFX on real OpenJFX 21 (headless, with Monocle) and on Java Arena's JavaFX (the
 // engine's javafx library, on the reference JDK), with the same input, arguments, files and clicks
 // and typing, mouse events and slider moves, and compares what they print and the windows they
-// leave (as the canonical outline of src/grader/window.ts, plus the events that couldn't happen);
+// leave (as the canonical outline of src/grader/window.ts, plus the events that couldn't happen),
+// at the end and after every event line before it (the library's arena.fx.stepWindows);
 // a canvas's drawing is compared as pixels (canvas.mjs). See scripts/fx-check/README.md.
 //
 // The programs: every lesson program that uses JavaFX (from fidelity/out/content-checks.json, which
@@ -236,8 +237,12 @@ function folderFiles(dir, prefix = "", out = {}) {
   return withoutArenaFiles(out);
 }
 
-/** Runs `java args` in a new folder holding `files`; returns stdout, stderr, the exit code, the window file (or null) and the files left in the folder. */
-function runJava(args, { stdin, files, windowFile }) {
+/**
+ * Runs `java args` in a new folder holding `files`; returns stdout, stderr, the exit code, the
+ * window file (or null), the windows after each event line (`stepFiles(cwd)`: a Map from the
+ * line's number, counted from 1, to its window JSON) and the files left in the folder.
+ */
+function runJava(args, { stdin, files, windowFile, stepFiles }) {
   return limit(
     () =>
       new Promise((resolve) => {
@@ -262,12 +267,25 @@ function runJava(args, { stdin, files, windowFile }) {
           clearTimeout(timer);
           const wf = windowFile(cwd);
           const window = existsSync(wf) ? readFileSync(wf, "utf8") : null;
+          const steps = stepFiles(cwd);
           const written = folderFiles(cwd);
           rmSync(cwd, { recursive: true, force: true });
-          resolve({ stdout, stderr, exitCode: timedOut ? null : code, timedOut, window, written });
+          resolve({ stdout, stderr, exitCode: timedOut ? null : code, timedOut, window, steps, written });
         });
       }),
   );
+}
+
+/** The window files `prefix` + N in `dir`, as a Map from N to their text. */
+function stepWindows(dir, prefix, suffix = "") {
+  const steps = new Map();
+  if (!existsSync(dir)) return steps;
+  for (const name of readdirSync(dir)) {
+    if (!name.startsWith(prefix) || !name.endsWith(suffix)) continue;
+    const n = name.slice(prefix.length, name.length - suffix.length);
+    if (/^\d+$/.test(n)) steps.set(Number(n), readFileSync(join(dir, name), "utf8"));
+  }
+  return steps;
 }
 
 const hex = (s) => (s == null ? "-" : s === "" ? "=" : [...Array(s.length).keys()].map((i) => s.charCodeAt(i).toString(16).padStart(4, "0")).join(""));
@@ -284,7 +302,7 @@ function driverEvents(eventsText) {
     }
     const t = e.target;
     const [kind, type, value] = !t ? ["none", null, null] : t.kind === "number" ? ["number", null, String(t.n)] : t.kind === "id" ? ["id", null, t.id] : t.kind === "text" ? ["text", t.type, t.text] : ["index", t.type, String(t.index)];
-    rows.push(["E", hex(e.line), hex(e.command), hex(kind), hex(type), hex(value), hex(e.text ?? null), hex(e.number ?? null), hex(e.point?.x ?? null), hex(e.point?.y ?? null)].join(" "));
+    rows.push(["E", hex(e.line), hex(e.command), hex(kind), hex(type), hex(value), hex(e.text ?? null), hex(e.number ?? null), hex(e.point?.x ?? null), hex(e.point?.y ?? null), hex(e.key ?? null)].join(" "));
   }
   return rows.join("\n") + "\n";
 }
@@ -294,10 +312,12 @@ async function runBoth(program, run, tmp, jars, driver, key) {
   const others = libraries.filter((l) => l !== JAVAFX_LIBRARY).map(libraryDir);
   // Java Arena's JavaFX on the reference JDK, as the content build runs it (.arena/events.txt in its folder).
   const oursFiles = { ...run.files, ...(run.eventsText != null ? { [EVENTS_FILE]: run.eventsText } : {}) };
-  const ours = runJava([...REFERENCE_JVM_FLAGS, ...javaRunArgs({ javaHome: JAVA_HOME, libraries, classPath: [program.ours.classes, ...others, libraryDir(JAVAFX_LIBRARY)].join(delimiter), mainClass: program.mainClass, args: run.args })], {
+  // arena.fx.stepWindows: the library also writes the window after each event line (.arena/window-step-N.json).
+  const ours = runJava([...REFERENCE_JVM_FLAGS, "-Darena.fx.stepWindows=1", ...javaRunArgs({ javaHome: JAVA_HOME, libraries, classPath: [program.ours.classes, ...others, libraryDir(JAVAFX_LIBRARY)].join(delimiter), mainClass: program.mainClass, args: run.args })], {
     stdin: run.stdin,
     files: oursFiles,
     windowFile: (cwd) => join(cwd, WINDOW_FILE),
+    stepFiles: (cwd) => stepWindows(join(cwd, dirname(WINDOW_FILE)), "window-step-", ".json"),
   });
   // Real JavaFX through the driver, with the same files in its folder (the events too, though only the driver reads them).
   const spec = join(tmp, `events-${key}.txt`);
@@ -307,6 +327,7 @@ async function runBoth(program, run, tmp, jars, driver, key) {
     stdin: run.stdin,
     files: oursFiles,
     windowFile: () => out,
+    stepFiles: () => stepWindows(tmp, `window-${key}.json.step-`),
   });
   return { ours: await ours, real: await real };
 }
@@ -382,25 +403,69 @@ function differences(ours, real, run, drawn) {
   const rw = run.rw;
   if ((ow == null) !== (rw == null)) out.push(ow ? "only Java Arena's JavaFX left a window file" : "only real JavaFX left a window file");
   else if (ow && rw) {
-    const oo = windowOutline(withoutCalls(ow));
-    const ro = windowOutline(withoutCalls(rw));
-    if (oo !== ro) {
-      const { expected, got } = compareOutlines(ro, oo);
-      const mark = (lines) => lines.map((l) => `${l.differs ? "  > " : "    "}${l.text}`).join("\n");
-      let text = `the window differs (lines marked >)\n  --- real JavaFX\n${mark(expected)}\n  --- Java Arena's JavaFX\n${mark(got)}`;
-      const families = [...ow.windows.reduce((set, w) => fontFamilies(w.scene?.root, set), new Set())];
-      if (families.length) text += `\n  (The font famil${families.length > 1 ? "ies" : "y"} ${families.join(", ")} isn't one of JavaFX's own (System, Serif, SansSerif, Monospaced): real JavaFX shows it only on a computer that has it, and falls back to System elsewhere.)`;
-      const styles = [...ow.windows.reduce((set, w) => layoutStyles(w.scene?.root, set), new Set())];
-      if (styles.length) text += `\n  (Real JavaFX applies a style such as ${JSON.stringify(styles[0])} to the font, padding, spacing, gaps, alignment or sizes; Java Arena's JavaFX only stores it. Set those with setFont, setPadding and the like instead.)`;
-      out.push(text);
-    }
+    const text = outlineDifference(ow, rw, "the window differs");
+    if (text) out.push(text);
     for (const c of run.canvases) {
       const d = compareCanvas(c.node, c.real, drawn.get(c.name), c.name);
       if (d) out.push(d);
     }
     if (JSON.stringify(ow.problems) !== JSON.stringify(rw.problems)) out.push(`the events that couldn't happen differ\n  --- real JavaFX\n${indent(rw.problems.join("\n") || "(none)")}\n  --- Java Arena's JavaFX\n${indent(ow.problems.join("\n") || "(none)")}`);
+    // The window after each event line before the last (the last one's is the window above), as
+    // both sides wrote it: the first line after which it differs (later ones follow from it).
+    if (!real.timedOut && !ours.timedOut) {
+      const lines = eventLineTexts(run.run.eventsText);
+      for (let n = 1; n < lines.length; n++) {
+        const o = ours.steps.get(n);
+        const r = real.steps.get(n);
+        if (o == null && r == null) break;
+        const after = `after the event line ${n} (${lines[n - 1]})`;
+        if (o == null || r == null) {
+          out.push(`${after}, the session goes on only with ${o == null ? "real JavaFX" : "Java Arena's JavaFX"}`);
+          break;
+        }
+        const so = parseWindow(o);
+        const sr = parseWindow(r);
+        stepsCompared++;
+        const d = outlineDifference(so, sr, `${after}, the window differs`);
+        if (d) {
+          out.push(d);
+          break;
+        }
+        if (JSON.stringify(so.problems) !== JSON.stringify(sr.problems)) {
+          out.push(`${after}, the events that couldn't happen differ\n  --- real JavaFX\n${indent(sr.problems.join("\n") || "(none)")}\n  --- Java Arena's JavaFX\n${indent(so.problems.join("\n") || "(none)")}`);
+          break;
+        }
+      }
+    }
   }
   return out;
+}
+
+/** How many windows after an event line before the last were compared (the summary says it). */
+let stepsCompared = 0;
+
+/** The text of each event line that counts (blank lines and comments don't), in order. */
+function eventLineTexts(eventsText) {
+  return (eventsText ?? "")
+    .split("\n")
+    .map((raw) => parseEventLine(raw))
+    .filter(Boolean)
+    .map((e) => e.line);
+}
+
+/** The difference between two window states' outlines (canvases by place and size), as text headed `what`, or null. */
+function outlineDifference(ow, rw, what) {
+  const oo = windowOutline(withoutCalls(ow));
+  const ro = windowOutline(withoutCalls(rw));
+  if (oo === ro) return null;
+  const { expected, got } = compareOutlines(ro, oo);
+  const mark = (lines) => lines.map((l) => `${l.differs ? "  > " : "    "}${l.text}`).join("\n");
+  let text = `${what} (lines marked >)\n  --- real JavaFX\n${mark(expected)}\n  --- Java Arena's JavaFX\n${mark(got)}`;
+  const families = [...ow.windows.reduce((set, w) => fontFamilies(w.scene?.root, set), new Set())];
+  if (families.length) text += `\n  (The font famil${families.length > 1 ? "ies" : "y"} ${families.join(", ")} isn't one of JavaFX's own (System, Serif, SansSerif, Monospaced): real JavaFX shows it only on a computer that has it, and falls back to System elsewhere.)`;
+  const styles = [...ow.windows.reduce((set, w) => layoutStyles(w.scene?.root, set), new Set())];
+  if (styles.length) text += `\n  (Real JavaFX applies a style such as ${JSON.stringify(styles[0])} to the font, padding, spacing, gaps, alignment or sizes; Java Arena's JavaFX only stores it. Set those with setFont, setPadding and the like instead.)`;
+  return text;
 }
 
 // ---------------------------------------------------------------- canvases
@@ -566,6 +631,8 @@ async function main() {
     for (const r of bad) console.log(`DIFF ${r.program.where}\n  ${r.problems.join("\n").replace(/\n/g, "\n  ")}`);
   }
   report.canvasesNotCompared = uncompared;
+  report.windowsAfterEventLines = stepsCompared;
+  console.log(`\nBesides the window at the end of each run, ${stepsCompared} windows after an earlier event line were compared.`);
   if (uncompared.length) console.log(`\nDrawings not compared with real JavaFX (the rest of the window was):\n  ${uncompared.join("\n  ")}`);
   mkdirSync(join(ROOT, "fidelity", "out"), { recursive: true });
   writeFileSync(join(ROOT, "fidelity", "out", "fx-check.json"), JSON.stringify(report, null, 1));

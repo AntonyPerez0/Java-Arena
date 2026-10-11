@@ -983,3 +983,24 @@ questions:
       javafx.scene.paint.Color color = small.getPixelReader().getColor(1, 1);
       System.out.println((int) small.getWidth() + " " + Math.round(color.getRed() * 255) + " " + Math.round(color.getGreen() * 255));
     why: "The small copy keeps every third pixel, so it is 2 pixels wide, and its pixel (x, y) is the photo's pixel (x * 3, y * 3). Pixel (1, 1) comes from the photo's pixel (3, 3), whose red is 3 * 10 = 30 and whose green is 3 * 20 = 60. `getRed()` gives the amount from 0.0 to 1.0, and times 255 rounded it is 30 again; the green comes back as 60 the same way. It prints `2 30 60`."
+  - module: asteroids
+    type: predict
+    prompt: "This code runs inside a JavaFX application's `start` method. What does it print? (JavaFX's classes are written with their full names, since there are no import lines.)"
+    body: |
+      javafx.geometry.Point2D position = new javafx.geometry.Point2D(350, 100);
+      javafx.geometry.Point2D velocity = new javafx.geometry.Point2D(20, 0);
+      position.add(velocity);
+      position = position.add(velocity);
+      double x = (position.getX() % 360 + 360) % 360;
+      System.out.println(x + " " + position.getY());
+    why: "A Point2D is immutable: the first `position.add(velocity)` returns a new point that nobody keeps, so only the second add counts and x is 370. Wrapped at a width of 360, 370 becomes 10, so it prints `10.0 100.0`; someone who expects add to change the point gets 390, which wraps to 30."
+  - module: libraries-and-tools
+    type: choice
+    prompt: "A text UI class keeps its data access object in a field of type `RecipeDao`, an interface, and `main` creates `new InMemoryRecipeDao()` and passes it to the UI's constructor. To make the program keep its recipes in a database instead, what has to change?"
+    choices:
+      - "Every method of the UI class that reads or adds recipes, so that it runs SQL"
+      - "A new class implementing `RecipeDao` and the line in `main` that creates the DAO"
+      - "The `RecipeDao` interface, so that its methods take SQL and a connection"
+      - "The UI's constructor, so that it takes a database connection instead of a DAO"
+    answer: 2
+    why: "The UI only calls the methods of the `RecipeDao` interface, so it works with any class that implements it. A database DAO is one more implementation, and `main` is the only place that names which DAO is used."

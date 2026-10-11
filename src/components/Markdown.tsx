@@ -1,12 +1,29 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { marked } from "marked";
 import { codeLinesHtml } from "./code-lines";
 import { highlightHtml } from "./highlight";
+import { readOnlyBlockHtml } from "./code-blocks";
 import { assetExample, assetFigureHtml } from "../grader/assets";
 import { splitFiles } from "../grader/files.js";
-import { windowExample } from "../grader/window";
+import { windowExample, type WindowState } from "../grader/window";
 import { windowFigureHtml } from "./window-drawing";
 import { useWindowFrames } from "./window-frame";
+import { hasFrames } from "./window-frames";
+import { attachPlayer } from "./window-player";
+
+/**
+ * The windows of the java window examples with frames in a text, in order (as the renderer numbers
+ * their players): the same code blocks marked walks to.
+ */
+function examplesWithFrames(text: string) {
+  const out: WindowState[] = [];
+  marked.walkTokens(marked.lexer(text), (t) => {
+    if (t.type !== "code" || t.lang !== "window") return;
+    const ex = windowExample(t.text);
+    if (ex && hasFrames(ex.window)) out.push(ex.window);
+  });
+  return out;
+}
 
 const LABELS: Record<string, string> = { output: "Output", input: "Input", javac: "What javac prints", crash: "The program crashes with" };
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -16,6 +33,8 @@ marked.setOptions({ gfm: true, breaks: false });
 // (a boss rep's "The check runs" and "and expects") wrap on a phone like the drill's own code (see
 // CodeView's `wrap`).
 let wrapCode = false;
+// The java window examples with frames seen so far while a text is parsed: each gets a player, in order (see Markdown).
+let playing = 0;
 marked.use({
   renderer: {
     code({ text, lang }) {
@@ -31,7 +50,7 @@ marked.use({
       // A java window example's window, which the build stored after its code: drawn (not usable),
       // with the window as text under it (scripts/prerender.mjs draws it the same way).
       const shown = lang === "window" ? windowExample(text) : null;
-      if (shown) return windowFigureHtml(shown);
+      if (shown) return windowFigureHtml(shown, hasFrames(shown.window) ? playing++ : undefined);
       const file = lang ? /^file\s+(\S+)$/.exec(lang) : null;
       if (file) return `<figure class="io io-file"><figcaption>The file ${esc(file[1])}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       // An image of content/assets that the next example reads (the build stored where it's served): drawn, with its name and size.
@@ -42,6 +61,9 @@ marked.use({
       if (lang === "input" && /\n$/.test(text))
         return `<figure class="io io-input"><figcaption>${label}</figcaption><pre><code>${esc(text.replace(/\n$/, ""))}\n<span class="input-empty">(an empty line)</span></code></pre></figure>\n`;
       if (label) return `<figure class="io io-${lang}"><figcaption>${label}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
+      // Code to read in another language (```xml, ```xml pom.xml) and commands for your own computer (```shell): shown, never run.
+      const other = readOnlyBlockHtml(lang, text);
+      if (other) return other;
       // Any other block (no language, "text", "java fragment") is plain text, line by line in a drill.
       if (wrapCode) return `<pre class="wraps"><code>${codeLinesHtml(text.replace(/\n$/, ""), false)}</code></pre>\n`;
       return false;
@@ -69,6 +91,7 @@ export function shiftHeadings(html: string, top: number): string {
  */
 export function markdownHtml(text: string, top?: number, wrap = false): string {
   wrapCode = wrap;
+  playing = 0;
   let parsed: string;
   try {
     parsed = marked.parse(text, { async: false }) as string;
@@ -86,6 +109,19 @@ export default function Markdown({ text, className = "", top, wrapCode = false }
   // A window drawn in the text says so when it's wider than the column (see window-frame.ts).
   const ref = useRef<HTMLDivElement>(null);
   useWindowFrames(ref, [html]);
+  // A game's example: its player, which plays the frames once when it comes into view.
+  useEffect(() => {
+    const el = ref.current;
+    const boxes = el ? [...el.querySelectorAll<HTMLElement>(".fx-player-box[data-fx-play]")] : [];
+    if (!boxes.length) return;
+    const windows = examplesWithFrames(text);
+    const stops = boxes.map((box) => {
+      const w = windows[Number(box.dataset.fxPlay)];
+      const anim = box.previousElementSibling?.querySelector<HTMLElement>(":scope > .fx-scroll > .fx-anim");
+      return w && anim ? attachPlayer({ controls: box, anim, window: w, autoplay: true }) : () => {};
+    });
+    return () => stops.forEach((stop) => stop());
+  }, [html, text]);
   return <div ref={ref} className={"md " + className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 

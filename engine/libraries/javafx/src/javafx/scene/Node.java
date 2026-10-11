@@ -1,12 +1,32 @@
 // Part of Java Arena's practice version of JavaFX: written for this site, not OpenJFX's code.
 package javafx.scene;
 
+import arena.fx.Frames;
+import arena.fx.Geometry;
 import arena.fx.Outline;
 import javafx.event.EventHandler;
+import javafx.geometry.Bounds;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
 
 /** Anything in a scene: a button, a label, a text field, or a pane that holds other nodes. */
 public abstract class Node {
+    static {
+        arena.fx.NodeData.register(new arena.fx.NodeData.Access() {
+            @Override
+            public Object get(Node node) {
+                return node.arenaData;
+            }
+
+            @Override
+            public void set(Node node, Object data) {
+                node.arenaData = data;
+            }
+        });
+    }
+
+    /** The library's own data about this node (arena.fx.NodeData). */
+    private Object arenaData;
     private String id;
     private boolean disable;
     private boolean visible = true;
@@ -19,8 +39,117 @@ public abstract class Node {
     private EventHandler<? super MouseEvent> onMouseDragged;
     private EventHandler<? super MouseEvent> onMouseReleased;
     private EventHandler<? super MouseEvent> onMouseClicked;
+    private EventHandler<? super KeyEvent> onKeyPressed;
+    private EventHandler<? super KeyEvent> onKeyReleased;
+    private EventHandler<? super KeyEvent> onKeyTyped;
+    private double translateX;
+    private double translateY;
+    private double layoutX;
+    private double layoutY;
+    private double rotate;
 
     protected Node() {
+    }
+
+    /** Moves the node right by this much from where its layout puts it. */
+    public final void setTranslateX(double value) {
+        translateX = value;
+        Frames.touch(this, Frames.TRANSLATE_X);
+    }
+
+    public final double getTranslateX() {
+        return translateX;
+    }
+
+    /** Moves the node down by this much from where its layout puts it. */
+    public final void setTranslateY(double value) {
+        translateY = value;
+        Frames.touch(this, Frames.TRANSLATE_Y);
+    }
+
+    public final double getTranslateY() {
+        return translateY;
+    }
+
+    /** Where the node's layout puts it (a Pane leaves it as set; Java Arena's other panes don't change it either). */
+    public final void setLayoutX(double value) {
+        layoutX = value;
+        Frames.touch(this, Frames.LAYOUT_X);
+    }
+
+    public final double getLayoutX() {
+        return layoutX;
+    }
+
+    public final void setLayoutY(double value) {
+        layoutY = value;
+        Frames.touch(this, Frames.LAYOUT_Y);
+    }
+
+    public final double getLayoutY() {
+        return layoutY;
+    }
+
+    /** Turns the node by this many degrees, clockwise on the screen, about the center of its own bounds. */
+    public final void setRotate(double value) {
+        rotate = value;
+        Frames.touch(this, Frames.ROTATE);
+    }
+
+    public final double getRotate() {
+        return rotate;
+    }
+
+    /**
+     * The box around the node in its own coordinates (before its translate, layout and rotate), as
+     * JavaFX computes it for shapes. For other nodes Java Arena doesn't lay windows out, so it is
+     * an estimate: a pane's preferred size (or 0) with its children, a canvas's size.
+     */
+    public final Bounds getBoundsInLocal() {
+        return Geometry.boundsInLocal(this);
+    }
+
+    /** The box around the node where its layout, translate and rotate put it in its parent. */
+    public final Bounds getBoundsInParent() {
+        return Geometry.boundsInParent(this);
+    }
+
+    /**
+     * The code to run when a key is pressed while this node has the focus. In Java Arena no node
+     * has the focus, so key events go to the scene (Scene.setOnKeyPressed) and this never runs.
+     */
+    public final void setOnKeyPressed(EventHandler<? super KeyEvent> value) {
+        onKeyPressed = value;
+    }
+
+    public final EventHandler<? super KeyEvent> getOnKeyPressed() {
+        return onKeyPressed;
+    }
+
+    /** Stored: in Java Arena key events go to the scene (Scene.setOnKeyReleased). */
+    public final void setOnKeyReleased(EventHandler<? super KeyEvent> value) {
+        onKeyReleased = value;
+    }
+
+    public final EventHandler<? super KeyEvent> getOnKeyReleased() {
+        return onKeyReleased;
+    }
+
+    /** Stored: in Java Arena key events go to the scene (Scene.setOnKeyTyped). */
+    public final void setOnKeyTyped(EventHandler<? super KeyEvent> value) {
+        onKeyTyped = value;
+    }
+
+    public final EventHandler<? super KeyEvent> getOnKeyTyped() {
+        return onKeyTyped;
+    }
+
+    /**
+     * No node gets the focus in Java Arena: key events go to the scene. The node is remembered, so
+     * that a key line can say when real JavaFX would run this node's own key handlers first.
+     */
+    public void requestFocus() {
+        arena.fx.Keys.focusRequested(this);
     }
 
     /** The node's id, for lookup("#id"). */
@@ -54,6 +183,7 @@ public abstract class Node {
 
     public final void setVisible(boolean value) {
         visible = value;
+        Frames.touch(this, Frames.VISIBLE);
     }
 
     public final boolean isVisible() {

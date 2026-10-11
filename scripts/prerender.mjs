@@ -11,6 +11,7 @@ import { assetExample, assetFigureHtml } from "../src/grader/assets.ts";
 import { FILE_MARK, splitFiles } from "../src/grader/files.js";
 import { windowExample } from "../src/grader/window.ts";
 import { windowFigureHtml } from "../src/components/window-drawing.ts";
+import { readOnlyBlockHtml } from "../src/components/code-blocks.ts";
 import { withoutClassDiagrams } from "./content/class-diagram.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -51,6 +52,9 @@ marked.use({
         return splitFiles(text).map((f) => `<figure class="code-file"><figcaption>${esc(f.path)}</figcaption><pre class="code-java"><code>${esc(f.text.replace(/\n$/, ""))}</code></pre></figure>\n`).join("");
       if (lang === "input" && /\n$/.test(text))
         return `<figure class="io io-input"><figcaption>Input</figcaption><pre><code>${esc(text.replace(/\n$/, ""))}\n<span class="input-empty">(an empty line)</span></code></pre></figure>\n`;
+      // Code to read in another language and commands for your own computer, as the page shows them.
+      const other = readOnlyBlockHtml(lang, text);
+      if (other) return other;
       if (lang && LABELS[lang]) return `<figure class="io io-${lang}"><figcaption>${LABELS[lang]}</figcaption><pre><code>${esc(text)}</code></pre></figure>\n`;
       return `<pre${lang === "java" ? ' class="code-java"' : ""}><code>${esc(text)}</code></pre>\n`;
     },

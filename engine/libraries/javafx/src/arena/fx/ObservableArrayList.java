@@ -33,6 +33,11 @@ public final class ObservableArrayList<E> extends AbstractList<E> implements Obs
         list.addAll(items);
     }
 
+    /** How many changes the list has had (each add, set or remove counts). */
+    public int changes() {
+        return modCount;
+    }
+
     public synchronized void addHook(Hook<E> hook) {
         hooks.add(hook);
     }

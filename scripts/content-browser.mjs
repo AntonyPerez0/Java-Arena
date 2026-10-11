@@ -8,13 +8,14 @@
 // program is fetched from the built site, as the grader fetches it.
 // Usage: npm run build && node scripts/content-browser.mjs
 // CONTENT_ONLY=<regular expression> replays only the programs whose place matches (while working on something).
+// A program whose runs with frames (a game) take more than 3 seconds each is listed as SLOW at the end, without failing.
 import { readFileSync, existsSync } from "node:fs";
 import { launchChromium } from "./browser.mjs";
 import { serve } from "./serve.mjs";
 import { normalizeOutput } from "../src/grader/assemble.js";
 import { WINDOW_FILE, withoutArenaFiles } from "../src/grader/javafx.js";
 import { librariesFor } from "../src/grader/libraries.js";
-import { withEventsFile } from "../src/grader/window.ts";
+import { TEST_FRAMES_WARN, framesInEvents, withEventsFile } from "../src/grader/window.ts";
 import { stderrKey } from "./fidelity/suite.mjs";
 
 const file = new URL("../fidelity/out/content-checks.json", import.meta.url).pathname;
@@ -36,6 +37,8 @@ await page.evaluate(() => window.javaArena.engineReady());
 
 let failures = 0;
 let runs = 0;
+/** Programs whose runs with frames took longer than a game's test should here (see "slow" below). */
+const slow = [];
 /** A file's contents for a message: its text, or how many bytes a binary one has. */
 const shown = (v) => (typeof v === "string" ? v : `(${Buffer.from(v?.binary ?? "", "base64").length} bytes that aren't text)\n`);
 const t0 = Date.now();
@@ -50,7 +53,10 @@ for (const c of checks) {
       return new Uint8Array(await res.arrayBuffer());
     };
     const given = await Promise.all(inputs.map(async (input) => (input.files ? { ...input, files: Object.fromEntries(await Promise.all(Object.entries(input.files).map(async ([n, v]) => [n, typeof v === "string" ? v : await bytes(v)]))) } : input)));
+    // Only the runs are timed (not the compile, the images' fetches or the way back to Node): that is what a test's frames cost.
+    const runStarted = performance.now();
     const runs = await window.javaArena.runClasses(r.classes, mainClass, given, 30_000, { libraries });
+    const runMs = performance.now() - runStarted;
     // A file that isn't text comes back as its bytes: as base64, which crosses to Node as text.
     const b64 = (u8) => {
       let s = "";
@@ -58,8 +64,14 @@ for (const c of checks) {
       return btoa(s);
     };
     const left = (fs) => fs && Object.fromEntries(Object.entries(fs).map(([n, v]) => [n, typeof v === "string" ? v : { binary: b64(v) }]));
-    return { compile: { ok: r.ok, output: r.output }, runs: runs.map((x) => ({ stdout: x.stdout, stderr: x.stderr, exitCode: x.exitCode, timedOut: x.timedOut, internalError: x.internalError, files: left(x.files) })) };
+    return { compile: { ok: r.ok, output: r.output }, runMs, runs: runs.map((x) => ({ stdout: x.stdout, stderr: x.stderr, exitCode: x.exitCode, timedOut: x.timedOut, internalError: x.internalError, files: left(x.files) })) };
   }, { files: c.files, mainClass: c.mainClass ?? "Main", inputs: c.kind === "run" ? c.tests.map((t) => ({ stdin: t.stdin, ...(t.args ? { args: t.args } : {}), ...(t.events ? { files: withEventsFile(t.files, t.events) } : t.files ? { files: t.files } : {}) })) : null, libraries: librariesFor(c.files), base: url });
+  // A game's test runs in the learner's browser every time it's checked: its frames should take
+  // seconds, not more (TEST_FRAMES_WARN frames of a small game take about 3 seconds here). Timed in
+  // the page around the runs alone, so the compile (once per check) doesn't count.
+  const frames = c.kind === "run" ? c.tests.reduce((n, t) => n + framesInEvents(t.events ?? []), 0) : 0;
+  const seconds = (got.runMs ?? 0) / 1000;
+  if (frames && seconds / c.tests.length > 3) slow.push(`${c.where}: ${c.tests.length} run${c.tests.length > 1 ? "s" : ""} with ${frames} frames in all took ${seconds.toFixed(1)}s, not counting the compile (keep a test to ${TEST_FRAMES_WARN} frames of a small game, about 3 seconds)`);
   const problems = [];
   if (got.compile.internalError) problems.push(`engine error: ${got.compile.internalError}`);
   else if (c.kind === "error") {
@@ -106,5 +118,7 @@ for (const c of checks) {
 }
 await browser.close();
 server.close();
+// Not a failure (a busy machine is slower), but worth a look.
+for (const s of slow) console.log(`SLOW ${s}`);
 console.log(`${checks.length - failures} of ${checks.length} lesson programs (${runs} runs) behave the same in the browser engine as on ${jdk}, in ${((Date.now() - t0) / 1000).toFixed(1)}s.`);
 process.exit(failures ? 1 : 0);

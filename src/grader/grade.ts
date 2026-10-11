@@ -120,6 +120,8 @@ function handlerException(stderr: string, sources: (string | SourceFile)[]): str
   const file = sources.length > 1 && crash.file ? `${crash.file}, ` : "";
   const where = crash.line && !crash.placed ? ` (${file}line ${crash.line})` : "";
   const trace = stderr.slice(at, next < 0 ? undefined : next);
+  if (callerOfOwn(trace, sources) === "frames")
+    return `An AnimationTimer's handle threw ${crash.exception}${where}. ${crash.explanation} JavaFX printed it and went on with the next frame, as it does (the timers after it skipped the frame it threw in), so the window shows what the frames had done before it.`;
   if (!throughHandler(trace, sources))
     return `JavaFX reported ${crash.exception}${where}. ${crash.explanation} JavaFX found it while a list it watches changed, such as a chart's list of series, so it printed the exception and went on with the program, as it does.`;
   return `An event handler threw ${crash.exception}${where}. ${crash.explanation} JavaFX printed it and went on with the next click or typing, as it does, so the window shows what the handler had done before it.`;
@@ -135,6 +137,15 @@ function handlerException(stderr: string, sources: (string | SourceFile)[]): str
  * however many of the program's own methods it then called.
  */
 function throughHandler(trace: string, sources: (string | SourceFile)[]): boolean {
+  return callerOfOwn(trace, sources) !== "start";
+}
+
+/**
+ * What called the outermost frame in the learner's files of the first exception's trace: JavaFX's
+ * start-up of the program ("start"), the frames that run the started AnimationTimers ("frames"), or
+ * anything else, such as a button's fire or a key event ("other", also when no frame is the learner's).
+ */
+function callerOfOwn(trace: string, sources: (string | SourceFile)[]): "start" | "frames" | "other" {
   const names = new Set(sources.map((s) => (typeof s === "string" ? s : s.path).split("/").pop()));
   const top = trace.split(/\nCaused by: /)[0];
   const frames = [...top.matchAll(/\n\s*at (?:[\w$.]+\/)?([\w$.]+)\.([\w$<>]+)\(([^)]*)\)/g)].map((m) => ({ cls: m[1], file: (m[3].match(/^([\w$]+\.java):\d+$/) ?? [])[1] }));
@@ -143,9 +154,11 @@ function throughHandler(trace: string, sources: (string | SourceFile)[]): boolea
   frames.forEach((f, i) => {
     if (own(f)) outer = i;
   });
-  if (outer < 0) return true;
+  if (outer < 0) return "other";
   const caller = frames[outer + 1];
-  return !(caller && /^arena\.fx\.Session\$Launch\b/.test(caller.cls));
+  if (caller && /^arena\.fx\.Session\$Launch\b/.test(caller.cls)) return "start";
+  if (caller && /^arena\.fx\.Frames$/.test(caller.cls)) return "frames";
+  return "other";
 }
 
 /** Indentation problems in each file, named by file when there are several. */

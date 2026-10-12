@@ -1,0 +1,1681 @@
+id: switch-and-text
+summary: An extra module, not part of the MOOC. The switch statement and its fall-through, switch expressions with arrows and yield, switch on strings and enums (and how javac checks that every constant is covered), var for local variables, and text blocks with String.format and printf for lining up columns.
+steps:
+  - id: switch-and-text-switch-statements
+    slug: switch-statements
+    title: The switch statement
+    text: |
+      This module is an extra: the MOOC doesn't cover it. It shows three pieces of Java that the course never needed, but that you'll meet in a lot of Java code written today: `switch`, which picks one of several branches by a value; `var`, which lets the compiler work out a local variable's type; and text blocks with `String.format`, for text of several lines and for lining up columns. None of them lets a program do something it couldn't do before. They make some code shorter, and often easier to read.
+
+      ### One value, many branches
+
+      A snack machine has numbered buttons. With the tools of the course, a program that names the snack behind a button is a chain of `if` and `else if`:
+
+      ```java main
+      int button = 3;
+      if (button == 1) {
+          System.out.println("Chips");
+      } else if (button == 2) {
+          System.out.println("Chocolate bar");
+      } else if (button == 3) {
+          System.out.println("Apple");
+      } else {
+          System.out.println("No such button");
+      }
+      ```
+
+      ```output
+      Apple
+      ```
+
+      Every condition compares the same variable with a different value. The `switch` statement says exactly that:
+
+      ```java main
+      int button = 3;
+      switch (button) {
+          case 1:
+              System.out.println("Chips");
+              break;
+          case 2:
+              System.out.println("Chocolate bar");
+              break;
+          case 3:
+              System.out.println("Apple");
+              break;
+          default:
+              System.out.println("No such button");
+      }
+      ```
+
+      ```output
+      Apple
+      ```
+
+      - `switch (button)` works out the value in the parentheses once. Then the program jumps to the `case` label with the same value, here `case 3:`, and runs the statements after it.
+      - `break` ends the switch: the program goes on after its closing brace.
+      - `default:` is where the program jumps when no label matches. It's optional: without it, a value that matches no label does nothing.
+      - A label is a constant: a literal such as `3`, `'x'` or `"tea"`, or a `final` variable given a literal. Two labels of one switch can't have the same value; javac stops with "duplicate case label".
+      - A switch on constants works on an `int` (and on the smaller whole-number types and `char`), on a String (since Java 7, step 3) and on an enum (step 3). It doesn't work on a `double`, a `long` or a `boolean`: `switch (price)` with a double price gives javac's error "selector type double is not allowed".
+
+      ### Falling through
+
+      Here's what happens when a `break` is missing:
+
+      ```java main
+      int button = 1;
+      switch (button) {
+          case 1:
+              System.out.println("Chips");
+          case 2:
+              System.out.println("Chocolate bar");
+              break;
+          case 3:
+              System.out.println("Apple");
+              break;
+      }
+      ```
+
+      ```output
+      Chips
+      Chocolate bar
+      ```
+
+      A `case` label only marks where the program starts. Once it's running the statements of a case, it keeps going, past the next label and into the next case's statements, until a `break` (or the end of the switch). This is called **falling through**. A forgotten `break` is the classic switch bug: javac says nothing, and the program does too much. The arrow labels of step 2 don't fall through, which is one reason they're preferred today.
+
+      ### Several values, one branch
+
+      Falling through has one honest use: several labels in a row share the statements after the last of them. Buttons 4 and 5 are both water, still and sparkling:
+
+      ```java main
+      int button = 5;
+      switch (button) {
+          case 1:
+              System.out.println("Chips");
+              break;
+          case 4:
+          case 5:
+              System.out.println("Water");
+              break;
+          default:
+              System.out.println("Something else");
+      }
+      ```
+
+      ```output
+      Water
+      ```
+
+      `case 4:` has no statements of its own, so it falls straight through to `case 5:`. Since Java 14, the same can be written on one line, with the values separated by commas: `case 4, 5:`.
+
+      **Your turn:** a weekly pill organizer numbers its boxes from 1 (Monday) to 7 (Sunday). Read a day's number, a whole number on one line, and print the day's name with a switch: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday` or `Sunday`. For any other number, print `No such day`. With the input `3`, the program prints:
+
+      ```
+      Wednesday
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int day = Integer.valueOf(scanner.nextLine());
+              // print the day's name with a switch
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int day = Integer.valueOf(scanner.nextLine());
+              switch (day) {
+                  case 1:
+                      System.out.println("Monday");
+                      break;
+                  case 2:
+                      System.out.println("Tuesday");
+                      break;
+                  case 3:
+                      System.out.println("Wednesday");
+                      break;
+                  case 4:
+                      System.out.println("Thursday");
+                      break;
+                  case 5:
+                      System.out.println("Friday");
+                      break;
+                  case 6:
+                      System.out.println("Saturday");
+                      break;
+                  case 7:
+                      System.out.println("Sunday");
+                      break;
+                  default:
+                      System.out.println("No such day");
+              }
+          }
+      }
+    hints:
+      - "Start with `switch (day) {`, then one `case` per day: `case 1:`, the line that prints `Monday`, and `break;`."
+      - "`default:` at the end catches every other number, such as 0 or 9. Check that every case ends with `break;`, or a day prints the next day's name too."
+    require:
+      - pattern: \bswitch\s*\(\s*day\s*\)
+        message: "Choose the name with `switch (day)`."
+    forbid:
+      - pattern: \bif\s*\(
+        message: "Use the switch's labels instead of `if`."
+    tests:
+      - stdin: "3"
+      - stdin: "1"
+        hidden: true
+      - stdin: "6"
+        hidden: true
+      - stdin: "7"
+        hidden: true
+      - stdin: "0"
+        hidden: true
+      - stdin: "12"
+        hidden: true
+    more:
+      - task: |
+          In the board game Ladder Race, a roll of the die decides what you do. The program reads a roll, a whole number on one line, and prints what it means. With a roll of 2 it should print `Pick a card`, but it prints two lines. Find the bug and fix it, keeping the switch. With the input `2`, the program prints:
+
+          ```
+          Pick a card
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int roll = Integer.valueOf(scanner.nextLine());
+                  switch (roll) {
+                      case 1:
+                          System.out.println("Miss a turn");
+                          break;
+                      case 2:
+                          System.out.println("Pick a card");
+                      case 3:
+                          System.out.println("Move 3 squares");
+                          break;
+                      case 4:
+                          System.out.println("Swap places with the leader");
+                          break;
+                      case 5:
+                          System.out.println("Move 5 squares");
+                          break;
+                      case 6:
+                          System.out.println("Move 6 squares");
+                          System.out.println("Roll again");
+                          break;
+                      default:
+                          System.out.println("Not a roll of a die");
+                  }
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int roll = Integer.valueOf(scanner.nextLine());
+                  switch (roll) {
+                      case 1:
+                          System.out.println("Miss a turn");
+                          break;
+                      case 2:
+                          System.out.println("Pick a card");
+                          break;
+                      case 3:
+                          System.out.println("Move 3 squares");
+                          break;
+                      case 4:
+                          System.out.println("Swap places with the leader");
+                          break;
+                      case 5:
+                          System.out.println("Move 5 squares");
+                          break;
+                      case 6:
+                          System.out.println("Move 6 squares");
+                          System.out.println("Roll again");
+                          break;
+                      default:
+                          System.out.println("Not a roll of a die");
+                  }
+              }
+          }
+        hints:
+          - "Which line does it print after `Pick a card`? That's the first line of the next case: the program fell through into it."
+          - "Every case needs a `break;` at its end. One of them doesn't have one."
+        require:
+          - pattern: \bswitch\s*\(\s*roll\s*\)
+            message: "Keep the `switch (roll)`."
+        tests:
+          - stdin: "2"
+          - stdin: "1"
+            hidden: true
+          - stdin: "3"
+            hidden: true
+          - stdin: "6"
+            hidden: true
+          - stdin: "8"
+            hidden: true
+      - task: |
+          The pill organizer's reminder now only needs to know the kind of day. Read a day's number (1 is Monday, 7 is Sunday), a whole number on one line, and print `weekday` for 1 to 5, `weekend` for 6 and 7, and `No such day` for any other number. Use a switch where several labels share one branch, so that the program has only three `println` lines. With the input `6`, the program prints:
+
+          ```
+          weekend
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int day = Integer.valueOf(scanner.nextLine());
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int day = Integer.valueOf(scanner.nextLine());
+                  switch (day) {
+                      case 1, 2, 3, 4, 5:
+                          System.out.println("weekday");
+                          break;
+                      case 6, 7:
+                          System.out.println("weekend");
+                          break;
+                      default:
+                          System.out.println("No such day");
+                  }
+              }
+          }
+        hints:
+          - "Labels in a row share the statements after the last of them: `case 6:` followed straight by `case 7:`. Or put the values on one line: `case 6, 7:`."
+          - "Days 1 to 5 are one label line too: `case 1, 2, 3, 4, 5:`. Then `default:` for everything else."
+        require:
+          - pattern: \bswitch\s*\(\s*day\s*\)
+            message: "Choose the kind of day with `switch (day)`."
+          - pattern: System\.out\.println
+            max: 3
+            message: "Use three `println` lines at most: let the days that print the same word share one branch."
+        forbid:
+          - pattern: \bif\s*\(
+            message: "Use the switch's labels instead of `if`."
+        tests:
+          - stdin: "6"
+          - stdin: "7"
+            hidden: true
+          - stdin: "1"
+            hidden: true
+          - stdin: "5"
+            hidden: true
+          - stdin: "8"
+            hidden: true
+          - stdin: "-1"
+            hidden: true
+
+  - id: switch-and-text-switch-expressions
+    slug: switch-expressions
+    title: switch expressions and arrows
+    text: |
+      Since Java 14, a case can be written with an arrow, `->`, in place of the colon. An arrow case runs only what's after its arrow, and never falls through, so it needs no `break`:
+
+      ```java main
+      int button = 2;
+      switch (button) {
+          case 1 -> System.out.println("Chips");
+          case 2 -> System.out.println("Chocolate bar");
+          case 4, 5 -> System.out.println("Water");
+          default -> System.out.println("No such button");
+      }
+      ```
+
+      ```output
+      Chocolate bar
+      ```
+
+      After an arrow comes one statement, or a block in braces for several. Several values share a case with commas, `case 4, 5 ->`. One switch uses either colons or arrows, not both.
+
+      ### A switch that gives a value
+
+      Most switches choose a value: the name of a snack, a price, a number of points. Since Java 14, a switch can be an **expression**, which gives a value like `a + b` does. The value of each case is what comes after its arrow:
+
+      ```java main
+      int button = 4;
+      String snack = switch (button) {
+          case 1 -> "Chips";
+          case 2 -> "Chocolate bar";
+          case 3 -> "Apple";
+          case 4, 5 -> "Water";
+          default -> "nothing";
+      };
+      System.out.println("You get: " + snack);
+      ```
+
+      ```output
+      You get: Water
+      ```
+
+      - The whole `switch (...) { ... }` is the value given to `snack`, so the statement ends with a semicolon after the closing brace.
+      - Every case gives a value of the same kind, here a String.
+      - A switch expression can be used wherever a value can: assigned to a variable, printed, or returned, as in `return switch (button) { ... };`.
+
+      ### Every value needs a case
+
+      A variable must get a value, so a switch expression must have a case for every value its selector can have. For an int, that means a `default`:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              int button = 4;
+              String snack = switch (button) {
+                  case 1 -> "Chips";
+                  case 2 -> "Chocolate bar";
+              };
+              System.out.println(snack);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: the switch expression does not cover all possible input values
+              String snack = switch (button) {
+                             ^
+      1 error
+      ```
+
+      A switch *statement* with arrows, like the first example of this step, has no such rule: a value without a case simply does nothing.
+
+      ### Several statements: yield
+
+      When a case needs a few statements to work out its value, the arrow is followed by a block, and `yield` gives the block's value. Buttons 6 to 9 are sandwiches, which cost more on the weekend:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(price(2, false));
+              System.out.println(price(7, false));
+              System.out.println(price(7, true));
+          }
+
+          public static int price(int button, boolean weekend) {
+              return switch (button) {
+                  case 1, 2, 3 -> 150;
+                  case 4, 5 -> 120;
+                  case 6, 7, 8, 9 -> {
+                      int base = 350;
+                      if (weekend) {
+                          base = base + 50;
+                      }
+                      yield base;
+                  }
+                  default -> 0;
+              };
+          }
+      }
+      ```
+
+      ```output
+      150
+      350
+      400
+      ```
+
+      `yield base;` ends the block, and `base` becomes the value of the switch. It's `yield`, not `return`: a `return` would try to leave the whole method, and javac doesn't allow it inside a switch expression. A block that reaches its end without a `yield` doesn't compile either: javac says "switch rule completes without providing a value".
+
+      **Your turn:** a shopping mall's directory sign shows what is on each level. The program reads a floor's number, a whole number on one line, and prints its place, with a chain of `if` and `else if`. Rewrite it so that a switch expression with arrows gives the place, and the program prints it. Keep what it prints the same: `Parking` for -1, `Lobby` for 0, `Shops` for 1, `Food court` for 2, and `Offices` for any other floor. With the input `2`, the program prints:
+
+      ```
+      Food court
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int floor = Integer.valueOf(scanner.nextLine());
+              String place;
+              if (floor == -1) {
+                  place = "Parking";
+              } else if (floor == 0) {
+                  place = "Lobby";
+              } else if (floor == 1) {
+                  place = "Shops";
+              } else if (floor == 2) {
+                  place = "Food court";
+              } else {
+                  place = "Offices";
+              }
+              System.out.println(place);
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int floor = Integer.valueOf(scanner.nextLine());
+              String place = switch (floor) {
+                  case -1 -> "Parking";
+                  case 0 -> "Lobby";
+                  case 1 -> "Shops";
+                  case 2 -> "Food court";
+                  default -> "Offices";
+              };
+              System.out.println(place);
+          }
+      }
+    hints:
+      - "Start with `String place = switch (floor) {` and give each floor a line such as `case 0 -> \"Lobby\";`."
+      - "The `else` becomes `default -> \"Offices\";`. Remember the semicolon after the switch's closing brace: the whole switch is the value of `place`."
+    require:
+      - pattern: (=|return|\()\s*switch\s*\(
+        message: "Get the place from a switch expression, such as `String place = switch (floor) { ... };`."
+      - pattern: ->
+        message: "Write the cases with arrows, such as `case 0 -> \"Lobby\";`."
+    forbid:
+      - pattern: \bif\s*\(
+        message: "Replace the `if` chain with the switch."
+    tests:
+      - stdin: "2"
+      - stdin: "-1"
+        hidden: true
+      - stdin: "0"
+        hidden: true
+      - stdin: "1"
+        hidden: true
+      - stdin: "14"
+        hidden: true
+      - stdin: "-2"
+        hidden: true
+    more:
+      - task: |
+          A calendar needs the number of days in each month of a year that isn't a leap year. Write the method `daysInMonth(int month)`, which returns the number of days in the month (1 is January, 12 is December) with a switch expression with arrows: 31 for months 1, 3, 5, 7, 8, 10 and 12, 30 for months 4, 6, 9 and 11, and 28 for month 2. For any other number it returns 0. Give each number of days one case, with several values per case. The check runs `System.out.println(daysInMonth(4));`, which prints:
+
+          ```
+          30
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(daysInMonth(4));
+              }
+
+              public static int daysInMonth(int month) {
+                  return 0;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(daysInMonth(4));
+              }
+
+              public static int daysInMonth(int month) {
+                  return switch (month) {
+                      case 1, 3, 5, 7, 8, 10, 12 -> 31;
+                      case 4, 6, 9, 11 -> 30;
+                      case 2 -> 28;
+                      default -> 0;
+                  };
+              }
+          }
+        hints:
+          - "A case can list several values with commas: `case 4, 6, 9, 11 -> 30;`."
+          - "Return the switch's value straight away: `return switch (month) { ... };`, with `default -> 0;` as the last case."
+        require:
+          - pattern: \bswitch\s*\(\s*month\s*\)
+            message: "Choose the number with `switch (month)`."
+          - pattern: \bcase\s+\d+\s*,\s*\d+
+            message: "List the months that have the same number of days in one case, such as `case 4, 6, 9, 11 -> 30;`."
+          - pattern: ->
+            message: "Write the cases with arrows."
+        forbid:
+          - pattern: \bif\s*\(
+            message: "Use the switch instead of `if`."
+        tests:
+          - call: System.out.println(daysInMonth(4));
+          - call: System.out.println(daysInMonth(1) + " " + daysInMonth(2) + " " + daysInMonth(3));
+            hidden: true
+          - call: System.out.println(daysInMonth(7) + " " + daysInMonth(8) + " " + daysInMonth(9));
+            hidden: true
+          - call: System.out.println(daysInMonth(11) + " " + daysInMonth(12) + " " + daysInMonth(13) + " " + daysInMonth(0));
+            hidden: true
+      - task: |
+          A parcel service charges by zone, in cents. Write the method `postage(int zone, int grams)` with a switch expression on the zone:
+
+          - zone 1 (the same town): 150, whatever the weight
+          - zone 2 (the same country): 300, whatever the weight
+          - zone 3 (abroad): 800, plus 50 for each full 100 grams over 500 grams. A parcel of 1250 grams is 750 grams over, which holds seven full hundreds, so it costs 800 + 7 * 50 = 1150.
+          - any other zone: -1
+
+          Work out zone 3's price in a block that ends with `yield`. The check runs `System.out.println(postage(3, 1250));`, which prints:
+
+          ```
+          1150
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(postage(3, 1250));
+              }
+
+              public static int postage(int zone, int grams) {
+                  return 0;
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(postage(3, 1250));
+              }
+
+              public static int postage(int zone, int grams) {
+                  return switch (zone) {
+                      case 1 -> 150;
+                      case 2 -> 300;
+                      case 3 -> {
+                          int over = Math.max(0, grams - 500);
+                          yield 800 + over / 100 * 50;
+                      }
+                      default -> -1;
+                  };
+              }
+          }
+        hints:
+          - "Zone 3's case is a block: `case 3 -> { ... yield price; }`. Inside it, work out how many grams the parcel is over 500. A parcel under 500 grams is over by 0, not by a negative number: `Math.max(0, grams - 500)`."
+          - "Integer division drops the rest: `750 / 100` is 7, the number of full hundreds. Then `yield 800 + over / 100 * 50;`."
+        require:
+          - pattern: \bswitch\s*\(\s*zone\s*\)
+            message: "Choose the price with `switch (zone)`."
+          - pattern: \byield\b
+            message: "Work out zone 3's price in a block that ends with `yield`."
+        tests:
+          - call: System.out.println(postage(3, 1250));
+          - call: System.out.println(postage(1, 2000) + " " + postage(2, 300));
+            hidden: true
+          - call: System.out.println(postage(3, 400) + " " + postage(3, 500) + " " + postage(3, 599));
+            hidden: true
+          - call: System.out.println(postage(3, 600) + " " + postage(3, 3000));
+            hidden: true
+          - call: System.out.println(postage(4, 100) + " " + postage(0, 100));
+            hidden: true
+
+  - id: switch-and-text-strings-and-enums
+    slug: strings-and-enums
+    title: switch on strings and enums
+    text: |
+      ### Strings
+
+      Since Java 7, a switch can choose by a String. The labels are String literals, and a label matches when the String `equals` it, exactly: capitals count, and so do spaces. A radio reads commands:
+
+      ```java main
+      Scanner scanner = new Scanner(System.in);
+      int volume = 5;
+      while (true) {
+          String command = scanner.nextLine();
+          if (command.equals("off")) {
+              break;
+          }
+          switch (command) {
+              case "louder" -> volume++;
+              case "quieter" -> volume--;
+              case "status" -> System.out.println("Volume " + volume);
+              default -> System.out.println("Unknown command: " + command);
+          }
+      }
+      System.out.println("Radio off at volume " + volume);
+      ```
+
+      ```input
+      louder
+      louder
+      status
+      Quieter
+      off
+      ```
+
+      ```output
+      Volume 7
+      Unknown command: Quieter
+      Radio off at volume 7
+      ```
+
+      `Quieter` with a capital Q isn't `quieter`, so it goes to `default`. A program that should take both can switch on `command.toLowerCase()`.
+
+      The check for `off` stays an `if` before the switch, and here's why: inside a switch, `break` ends the switch, not the loop around it. A `break` in a case would leave the switch and go on reading commands.
+
+      One more thing to know: a switch on a String that is `null` throws a NullPointerException, as calling a method on it would.
+
+      ### Enums
+
+      A switch on an enum (module 39) uses the constants' names as labels. A cinema's tickets come in three kinds:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(price(Ticket.CHILD));
+              System.out.println(price(Ticket.ADULT) + price(Ticket.SENIOR));
+          }
+
+          public static int price(Ticket ticket) {
+              return switch (ticket) {
+                  case CHILD -> 6;
+                  case ADULT -> 12;
+                  case SENIOR -> 8;
+              };
+          }
+      }
+      // ==== Ticket.java ====
+      public enum Ticket {
+          CHILD, ADULT, SENIOR
+      }
+      ```
+
+      ```output
+      6
+      20
+      ```
+
+      - A label is the constant's name alone, `case CHILD`, not `case Ticket.CHILD`: the switch already knows the enum. (Since Java 21 the long name is allowed too, but the short one is the custom.)
+      - This switch expression has no `default`, and it doesn't need one: an enum has only the values it lists, and the three cases cover them all, so javac knows the switch always gives a value.
+
+      ### When the enum grows
+
+      Leaving out `default` pays off when someone adds a constant. Say the cinema starts selling STUDENT tickets:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(price(Ticket.STUDENT));
+          }
+
+          public static int price(Ticket ticket) {
+              return switch (ticket) {
+                  case CHILD -> 6;
+                  case ADULT -> 12;
+                  case SENIOR -> 8;
+              };
+          }
+      }
+      // ==== Ticket.java ====
+      public enum Ticket {
+          CHILD, ADULT, SENIOR, STUDENT
+      }
+      ```
+
+      ```javac
+      Main.java:7: error: the switch expression does not cover all possible input values
+              return switch (ticket) {
+                     ^
+      1 error
+      ```
+
+      javac points at every switch expression that has no case for STUDENT, and once each has one, the program is complete again. With `default -> 0;` in the switch, it would have compiled, and every student would have got in for free without anyone noticing. So for an enum, list every constant and leave `default` out.
+
+      A switch *statement* on an enum, with arrows or with colons, may leave constants out, like a switch statement on an int.
+
+      **Your turn:** a drinks machine is run by commands, one per line, until the line `quit`. It keeps a credit of coins, at first 0. Write the switch on the command, so that:
+
+      - `coin` adds one coin to the credit and prints the credit, like `Credit: 2`
+      - `tea` costs 2 coins: if the credit is at least 2, it takes them and prints `Here is your tea`; otherwise it prints `Tea costs 2 coins`
+      - `refund` prints the coins given back, like `Returned 3 coins`, and sets the credit to 0
+      - any other command prints `Unknown command: ` and the command
+
+      The loop and the check for `quit` are written. With this input:
+
+      ```input
+      coin
+      tea
+      coin
+      coin
+      coin
+      tea
+      refund
+      dance
+      quit
+      ```
+
+      the program prints:
+
+      ```
+      Credit: 1
+      Tea costs 2 coins
+      Credit: 2
+      Credit: 3
+      Credit: 4
+      Here is your tea
+      Returned 2 coins
+      Unknown command: dance
+      Bye
+      ```
+    seed: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int credit = 0;
+              while (true) {
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      break;
+                  }
+                  // react to the command here, with a switch
+
+              }
+              System.out.println("Bye");
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              int credit = 0;
+              while (true) {
+                  String command = scanner.nextLine();
+                  if (command.equals("quit")) {
+                      break;
+                  }
+                  switch (command) {
+                      case "coin" -> {
+                          credit++;
+                          System.out.println("Credit: " + credit);
+                      }
+                      case "tea" -> {
+                          if (credit >= 2) {
+                              credit -= 2;
+                              System.out.println("Here is your tea");
+                          } else {
+                              System.out.println("Tea costs 2 coins");
+                          }
+                      }
+                      case "refund" -> {
+                          System.out.println("Returned " + credit + " coins");
+                          credit = 0;
+                      }
+                      default -> System.out.println("Unknown command: " + command);
+                  }
+              }
+              System.out.println("Bye");
+          }
+      }
+    hints:
+      - "Write `switch (command) {` with a case for each word: `case \"coin\" -> { ... }`. A case with two statements needs braces."
+      - "The `tea` case holds an `if`: enough credit or not. `default -> ...` catches every other word."
+    require:
+      - pattern: \bswitch\s*\(\s*command\s*\)
+        message: "Choose what to do with `switch (command)`."
+    forbid:
+      - pattern: \.equals\s*\(\s*"(coin|tea|refund)"
+        message: "Let the switch's labels compare the command: `case \"coin\" -> ...`."
+    tests:
+      - stdin: |
+          coin
+          tea
+          coin
+          coin
+          coin
+          tea
+          refund
+          dance
+          quit
+      - stdin: |
+          refund
+          coin
+          coin
+          coin
+          coin
+          tea
+          tea
+          tea
+          Coin
+          refund
+          quit
+        hidden: true
+      - stdin: |
+          quit
+        hidden: true
+    more:
+      - task: |
+          A car wash charges by the program. `Wash.java` has the enum `Wash`, with the constants `BASIC`, `FOAM` and `DELUXE`. In `Main.java`, write the method `washPrice(Wash wash)`, which returns the price in euros with a switch expression: 4 for BASIC, 7 for FOAM and 12 for DELUXE. Cover every constant, and leave out `default`. The check runs `System.out.println(washPrice(Wash.FOAM));`, which prints:
+
+          ```
+          7
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(washPrice(Wash.FOAM));
+                }
+
+                public static int washPrice(Wash wash) {
+                    return 0;
+                }
+            }
+          Wash.java: |
+            public enum Wash {
+                BASIC, FOAM, DELUXE
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(washPrice(Wash.FOAM));
+                }
+
+                public static int washPrice(Wash wash) {
+                    return switch (wash) {
+                        case BASIC -> 4;
+                        case FOAM -> 7;
+                        case DELUXE -> 12;
+                    };
+                }
+            }
+          Wash.java: |
+            public enum Wash {
+                BASIC, FOAM, DELUXE
+            }
+        hints:
+          - "The labels are the constants' names alone: `case BASIC -> 4;`."
+          - "`return switch (wash) { ... };` with a case for each of the three constants compiles without a `default`, since nothing else is left."
+        require:
+          - pattern: \bswitch\s*\(\s*wash\s*\)
+            message: "Choose the price with `switch (wash)`."
+        forbid:
+          - pattern: \bdefault\b
+            message: "Leave out `default`: cover each of the three constants with its own case, so that javac tells you when a new one is added."
+          - pattern: \bif\s*\(
+            message: "Use the switch instead of `if`."
+        tests:
+          - call: System.out.println(washPrice(Wash.FOAM));
+          - call: System.out.println(washPrice(Wash.BASIC) + " " + washPrice(Wash.DELUXE));
+            hidden: true
+          - call: |
+              int total = 0;
+              for (Wash w : Wash.values()) {
+                  total += washPrice(w) * 3;
+              }
+              System.out.println(total);
+            hidden: true
+      - task: |
+          A puzzle game sets the player's lives and time limit by the difficulty. The designer has just added a fourth difficulty, `EXPERT`, to the enum in `Difficulty.java`, and now `Main.java` doesn't compile: javac says that the switch expressions don't cover all possible input values. Press Run to see it. Fix both methods: an expert game gives 1 life and 60 seconds. Don't add a `default`. The check runs:
+
+          ```java fragment
+          System.out.println("Lives: " + startingLives(Difficulty.EXPERT) + ", time: " + timeLimit(Difficulty.EXPERT) + " seconds");
+          ```
+
+          which prints:
+
+          ```
+          Lives: 1, time: 60 seconds
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    for (Difficulty difficulty : Difficulty.values()) {
+                        System.out.println(difficulty + ": lives " + startingLives(difficulty) + ", time " + timeLimit(difficulty) + " seconds");
+                    }
+                }
+
+                public static int startingLives(Difficulty difficulty) {
+                    return switch (difficulty) {
+                        case EASY -> 5;
+                        case NORMAL -> 3;
+                        case HARD -> 2;
+                    };
+                }
+
+                public static int timeLimit(Difficulty difficulty) {
+                    return switch (difficulty) {
+                        case EASY, NORMAL -> 300;
+                        case HARD -> 180;
+                    };
+                }
+            }
+          Difficulty.java: |
+            public enum Difficulty {
+                EASY, NORMAL, HARD, EXPERT
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    for (Difficulty difficulty : Difficulty.values()) {
+                        System.out.println(difficulty + ": lives " + startingLives(difficulty) + ", time " + timeLimit(difficulty) + " seconds");
+                    }
+                }
+
+                public static int startingLives(Difficulty difficulty) {
+                    return switch (difficulty) {
+                        case EASY -> 5;
+                        case NORMAL -> 3;
+                        case HARD -> 2;
+                        case EXPERT -> 1;
+                    };
+                }
+
+                public static int timeLimit(Difficulty difficulty) {
+                    return switch (difficulty) {
+                        case EASY, NORMAL -> 300;
+                        case HARD -> 180;
+                        case EXPERT -> 60;
+                    };
+                }
+            }
+          Difficulty.java: |
+            public enum Difficulty {
+                EASY, NORMAL, HARD, EXPERT
+            }
+        hints:
+          - "javac names two lines, one per switch expression. Each is missing a case for the new constant."
+          - "Add `case EXPERT -> 1;` to `startingLives` and `case EXPERT -> 60;` to `timeLimit`."
+        forbid:
+          - pattern: \bdefault\b
+            message: "Don't add `default`: give EXPERT its own case in each switch."
+        tests:
+          - call: |
+              System.out.println("Lives: " + startingLives(Difficulty.EXPERT) + ", time: " + timeLimit(Difficulty.EXPERT) + " seconds");
+          - stdin: ""
+            hidden: true
+          - call: System.out.println(startingLives(Difficulty.HARD) + timeLimit(Difficulty.NORMAL));
+            hidden: true
+
+  - id: switch-and-text-var
+    slug: var
+    title: var for local variables
+    text: |
+      Apart from lambda parameters (module 37), every variable in this course has had its type written in front of its name. Since Java 10, a local variable (one declared inside a method) can be declared with `var` instead, and javac works out its type from the value it's given:
+
+      ```java main
+      var name = "Ada";
+      var age = 36;
+      var height = 1.65;
+      var languages = new ArrayList<String>();
+      languages.add("Java");
+      System.out.println(name.length() + age + " " + height + " " + languages);
+      ```
+
+      ```output
+      39 1.65 [Java]
+      ```
+
+      `name` is a String, `age` an int, `height` a double and `languages` an `ArrayList<String>`, exactly as if the types were written out. `var` isn't a type of its own, and it doesn't make Java a language where a variable can hold anything: the type is decided once, when the variable is declared, and stays.
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              var count = 0;
+              count = "many";
+              System.out.println(count);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: incompatible types: String cannot be converted to int
+              count = "many";
+                      ^
+      1 error
+      ```
+
+      ### Where var helps
+
+      `var` is at its best when the type is long and the right-hand side already shows it:
+
+      ```java fragment
+      HashMap<String, ArrayList<Integer>> scores = new HashMap<String, ArrayList<Integer>>();
+      var scores = new HashMap<String, ArrayList<Integer>>();
+      ```
+
+      Both lines declare the same variable; the second says the type once. Note that the type arguments move to the right: `var scores = new HashMap<>();` would give javac nothing to work them out from, and it makes a `HashMap<Object, Object>`.
+
+      Where the right-hand side doesn't show the type, `var` makes code harder to read: in `var result = calculate(data);`, the reader has to look up `calculate` to know what `result` is. Many teams use `var` only when the type is plain to see.
+
+      ### Where var isn't allowed
+
+      javac must be able to work out the type from the declaration itself, so `var` needs a value right away, and `null` doesn't say which type is meant:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              var total;
+              var best = null;
+              System.out.println("Done");
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:3: error: cannot infer type for local variable total
+              var total;
+                  ^
+        (cannot use 'var' on variable without initializer)
+      Main.java:4: error: cannot infer type for local variable best
+              var best = null;
+                  ^
+        (variable initializer is 'null')
+      2 errors
+      ```
+
+      `var` is only for local variables (the loop variables of `for` included) and a lambda's parameters. Instance and static variables, method parameters and return types still need their types written out: javac answers a `var` there with "'var' is not allowed here".
+
+      ### var in loops, and a map's entries
+
+      A for-each loop's variable can be `var` too. That's handy for going through a map. So far, the course went through a map's keys with `keySet()` and looked up each value with `get`. A map's `entrySet()` gives its **entries** instead, each a key and its value together, with `getKey()` and `getValue()`. An entry's type is `Map.Entry<String, Integer>` here, a mouthful that `var` saves you from writing. A `TreeMap`, which module 31 mentioned, keeps its keys sorted, so the loop goes through them in alphabetical order:
+
+      ```java run
+      import java.util.TreeMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              var stock = new TreeMap<String, Integer>();
+              stock.put("water", 12);
+              stock.put("apple", 4);
+              stock.put("chips", 0);
+              for (var entry : stock.entrySet()) {
+                  if (entry.getValue() == 0) {
+                      System.out.println(entry.getKey() + ": sold out");
+                  } else {
+                      System.out.println(entry.getKey() + ": " + entry.getValue());
+                  }
+              }
+          }
+      }
+      ```
+
+      ```output
+      apple: 4
+      chips: sold out
+      water: 12
+      ```
+
+      **Your turn:** a dice tournament reads rolls, one per line as a player's name and the roll, such as `Noor 5`, until the line `end`, and prints each player's total, in the order the players first rolled. The program works, but its types make it wordy. Declare every local variable with `var` instead of its type: the ones inside the loops and the loops' own variables too. What it prints stays the same. With this input:
+
+      ```input
+      Noor 5
+      Elif 6
+      Noor 3
+      Elif 6
+      end
+      ```
+
+      the program prints:
+
+      ```
+      Noor: 8
+      Elif: 12
+      ```
+    seed: |
+      import java.util.ArrayList;
+      import java.util.HashMap;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayList<String> players = new ArrayList<String>();
+              HashMap<String, ArrayList<Integer>> rolls = new HashMap<String, ArrayList<Integer>>();
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.equals("end")) {
+                      break;
+                  }
+                  String[] parts = line.split(" ");
+                  String player = parts[0];
+                  if (!rolls.containsKey(player)) {
+                      players.add(player);
+                      rolls.put(player, new ArrayList<Integer>());
+                  }
+                  rolls.get(player).add(Integer.valueOf(parts[1]));
+              }
+              for (String player : players) {
+                  int total = 0;
+                  for (int roll : rolls.get(player)) {
+                      total += roll;
+                  }
+                  System.out.println(player + ": " + total);
+              }
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+      import java.util.HashMap;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              var scanner = new Scanner(System.in);
+              var players = new ArrayList<String>();
+              var rolls = new HashMap<String, ArrayList<Integer>>();
+              while (true) {
+                  var line = scanner.nextLine();
+                  if (line.equals("end")) {
+                      break;
+                  }
+                  var parts = line.split(" ");
+                  var player = parts[0];
+                  if (!rolls.containsKey(player)) {
+                      players.add(player);
+                      rolls.put(player, new ArrayList<Integer>());
+                  }
+                  rolls.get(player).add(Integer.valueOf(parts[1]));
+              }
+              for (var player : players) {
+                  var total = 0;
+                  for (var roll : rolls.get(player)) {
+                      total += roll;
+                  }
+                  System.out.println(player + ": " + total);
+              }
+          }
+      }
+    hints:
+      - "Each declaration loses its type and gets `var`: `var line = scanner.nextLine();`. In the loops too: `for (var player : players)`."
+      - "When the right-hand side is `new ArrayList<String>()`, keep the type argument there: `var players = new ArrayList<String>();`. With `<>`, javac couldn't tell what the list holds."
+    require:
+      - pattern: \bvar\b
+        min: 9
+        message: "Declare all nine local variables with `var`: scanner, players, rolls, line, parts, both player variables, total and roll."
+    forbid:
+      - pattern: \b(Scanner|ArrayList\s*<[^>]*>|HashMap\s*<.*>|String(\s*\[\s*\])?|int)\s+\w+\s*[=:]
+        message: "A local variable still has its type written out. Use `var` for every one of them."
+    tests:
+      - stdin: |
+          Noor 5
+          Elif 6
+          Noor 3
+          Elif 6
+          end
+      - stdin: |
+          Tomas 2
+          Ines 4
+          Rafa 1
+          Ines 3
+          Tomas 6
+          Tomas 1
+          end
+        hidden: true
+      - stdin: |
+          Solo 4
+          end
+        hidden: true
+    more:
+      - task: |
+          A dice game reads rolls, one per line as a name and the roll, such as `Ada 4`, until the line `end`, and prints the winner: the first player with the highest roll. Someone wrote it with `var` everywhere, and now it doesn't compile. Press Run to see javac's errors and fix each line it names, then run again: javac names more lines once the first ones are fixed. Keep going until the program works. With this input:
+
+          ```input
+          Ada 4
+          Bo 6
+          Cy 6
+          end
+          ```
+
+          the program prints:
+
+          ```
+          Bo wins with 6
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  var scanner = new Scanner(System.in);
+                  var highest;
+                  var winner = null;
+                  while (true) {
+                      var line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      var parts = line.split(" ");
+                      var roll = Integer.valueOf(parts[1]);
+                      if (winner == null || roll > highest) {
+                          highest = roll;
+                          winner = parts[0];
+                      }
+                  }
+                  announce(winner, highest);
+              }
+
+              public static void announce(var name, var roll) {
+                  System.out.println(name + " wins with " + roll);
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  var scanner = new Scanner(System.in);
+                  var highest = 0;
+                  String winner = null;
+                  while (true) {
+                      var line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      var parts = line.split(" ");
+                      var roll = Integer.valueOf(parts[1]);
+                      if (winner == null || roll > highest) {
+                          highest = roll;
+                          winner = parts[0];
+                      }
+                  }
+                  announce(winner, highest);
+              }
+
+              public static void announce(String name, int roll) {
+                  System.out.println(name + " wins with " + roll);
+              }
+          }
+        hints:
+          - "A method's parameters can't be `var` at all: give `announce` the parameters `String name, int roll`."
+          - "`var highest;` has no value to work out a type from: give it one, `var highest = 0;`, or write its type, `int highest = 0;`. And `null` doesn't say which type `winner` is: write `String winner = null;`."
+        tests:
+          - stdin: |
+              Ada 4
+              Bo 6
+              Cy 6
+              end
+          - stdin: |
+              Eve 2
+              Finn 1
+              Gus 5
+              Hal 3
+              end
+            hidden: true
+          - stdin: |
+              Ivy 1
+              end
+            hidden: true
+      - task: |
+          A board game club checks its dice by counting how often each face comes up. The program reads rolls, one whole number per line, until the line `end`, and counts them in a `TreeMap`. Write the loop that prints each face that came up and its count, like `3: 2`, smallest face first. Go through the map's `entrySet()` with a `var` loop variable. With this input:
+
+          ```input
+          6
+          3
+          6
+          1
+          3
+          6
+          end
+          ```
+
+          the program prints:
+
+          ```
+          1: 1
+          3: 2
+          6: 3
+          ```
+        seed: |
+          import java.util.Scanner;
+          import java.util.TreeMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  var scanner = new Scanner(System.in);
+                  var counts = new TreeMap<Integer, Integer>();
+                  while (true) {
+                      var line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      var face = Integer.valueOf(line);
+                      counts.put(face, counts.getOrDefault(face, 0) + 1);
+                  }
+                  // print each face and its count
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+          import java.util.TreeMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  var scanner = new Scanner(System.in);
+                  var counts = new TreeMap<Integer, Integer>();
+                  while (true) {
+                      var line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      var face = Integer.valueOf(line);
+                      counts.put(face, counts.getOrDefault(face, 0) + 1);
+                  }
+                  for (var entry : counts.entrySet()) {
+                      System.out.println(entry.getKey() + ": " + entry.getValue());
+                  }
+              }
+          }
+        hints:
+          - "`for (var entry : counts.entrySet()) {` goes through the entries, smallest key first, since a TreeMap keeps its keys sorted."
+          - "Each entry has `getKey()`, the face, and `getValue()`, its count."
+        require:
+          - pattern: for\s*\(\s*var\s+\w+\s*:\s*counts\s*\.\s*entrySet\s*\(\s*\)\s*\)
+            message: "Go through the entries with `for (var entry : counts.entrySet())`."
+        tests:
+          - stdin: |
+              6
+              3
+              6
+              1
+              3
+              6
+              end
+          - stdin: |
+              2
+              2
+              5
+              4
+              2
+              end
+            hidden: true
+          - stdin: |
+              4
+              end
+            hidden: true
+
+  - id: switch-and-text-text-blocks
+    slug: text-blocks-and-format
+    title: Text blocks and formatted text
+    text: |
+      ### Text blocks
+
+      Text of several lines, such as a ticket, has so far been many `println` calls, or one String full of `\n`. Since Java 15, a **text block** holds text of several lines as it looks. It starts with three double quotes and a line break, and ends with three double quotes:
+
+      ```java main
+      String ticket = """
+              FERRY TICKET
+              From: Harbor A
+              To:   Island Pier
+                Deck seat 14
+              """;
+      System.out.print(ticket);
+      ```
+
+      ```output
+      FERRY TICKET
+      From: Harbor A
+      To:   Island Pier
+        Deck seat 14
+      ```
+
+      - The text starts on the line after the opening `"""`. Nothing but spaces may follow the opening quotes on their line.
+      - The lines are indented to fit the code, and javac removes that indentation: it finds the line with the fewest spaces in front (lines with nothing else on them don't count), counting the line of the closing `"""` too, and removes that many spaces from every line. Here the closing quotes are as far in as `FERRY TICKET`, so `FERRY TICKET` starts at the left edge, and `Deck seat 14`, two spaces further in, keeps its two spaces.
+      - Since the closing `"""` is on a line of its own, the text ends with a line break, after `Deck seat 14`. That's why the example uses `print`: `println` would add a second line break, an empty line. Write the closing quotes right after the last word, `Deck seat 14""";`, for a text block without that last line break.
+      - A double quote inside a text block needs no backslash: `Seat "14"` can be written as it is. `\n` and `\t` still work, a backslash at the very end of a line joins it with the next one, and spaces at the end of a line are removed (write `\s` for a space that must stay).
+
+      Text on the line of the opening quotes doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              String sign = """Closed
+                  today""";
+              System.out.println(sign);
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:3: error: illegal text block open delimiter sequence, missing line terminator
+              String sign = """Closed
+                               ^
+      Main.java:4: error: illegal text block open delimiter sequence, missing line terminator
+                  today""";
+                          ^
+      2 errors
+      ```
+
+      A text block is an ordinary String once it's made: `ticket.length()`, `ticket.split("\n")` and the rest work as always.
+
+      ### String.format
+
+      Building a line from text and values with `+` gets hard to read when there are many of them. `String.format` takes a **format**, a String with places marked by `%`, and the values to put there, in order:
+
+      ```java main
+      String name = "Ada";
+      int seat = 14;
+      double price = 23.5;
+      String line = String.format("%s sits in seat %d and paid %.2f euros", name, seat, price);
+      System.out.println(line);
+      System.out.printf("Seat %d of %d%n", seat, 120);
+      ```
+
+      ```output
+      Ada sits in seat 14 and paid 23.50 euros
+      Seat 14 of 120
+      ```
+
+      - `%s` puts a value as text (any value: a String, a number, an object's `toString`), `%d` a whole number, and `%f` a decimal number. `%.2f` rounds it to two decimals.
+      - `System.out.printf` formats and prints in one go. Unlike `println`, it adds no line break: `%n` in the format is one.
+      - Since Java 15, a String has the method `formatted`, which does the same with the String as the format: `"Seat %d".formatted(seat)`. It goes well with a text block: write the text block with `%s` and `%d` in it, and call `.formatted(...)` on it.
+      - `%%` prints a percent sign.
+      - The decimal point follows the language settings of the computer: on Java Arena it's a point, but `String.format("%.2f", 23.5)` gives `23,50` on a computer set up for a language that writes a comma, such as German or Finnish.
+
+      A value of the wrong kind for its place is an error only when the program runs: `%d` with a double crashes.
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              double weight = 2.5;
+              System.out.println(String.format("%d kg", weight));
+          }
+      }
+      ```
+
+      ```crash
+      Exception in thread "main" java.util.IllegalFormatConversionException: d != java.lang.Double
+      	at Main.main(Main.java:4)
+      ```
+
+      ### Columns
+
+      A number between the `%` and the letter is a **width**: the value takes at least that many characters, padded with spaces in front, so that it's right-aligned. A minus sign pads after the value instead, which aligns it left. `%8.2f` is a decimal number with two decimals in eight characters, `%-10s` a text left-aligned in ten, and `%03d` pads a whole number with zeros instead of spaces:
+
+      ```java main
+      System.out.println(String.format("%-10s|%8.2f|", "tea", 3.5));
+      System.out.println(String.format("%-10s|%8.2f|", "cake", 12.25));
+      System.out.println(String.format("Locker %03d", 7));
+      ```
+
+      ```output
+      tea       |    3.50|
+      cake      |   12.25|
+      Locker 007
+      ```
+
+      Every line has its name in the same ten characters and its price in the same eight, so the columns line up, whatever the lengths. A value longer than its width isn't cut: it just takes more room.
+
+      **Your turn:** an ice rink prints a sign for its skate nights. Print this sign with one text block and one `System.out.print` or `System.out.println`. Watch the indentation: the second and third lines start with four spaces.
+
+      ```
+      *** SKATE NIGHT ***
+          Friday at 19:00
+          Rink B
+      Skates for rent at the desk
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              String sign = "";
+              System.out.print(sign);
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              String sign = """
+                      *** SKATE NIGHT ***
+                          Friday at 19:00
+                          Rink B
+                      Skates for rent at the desk
+                      """;
+              System.out.print(sign);
+          }
+      }
+    hints:
+      - "Start the text block with `\"\"\"` at the end of the line `String sign = \"\"\"`, and write the lines of the sign on the lines after it."
+      - "javac removes the indentation that the least indented line has, counting the closing quotes. Put the closing `\"\"\"` as far in as `*** SKATE NIGHT ***`, and the lines with `Friday` and `Rink B` four spaces further."
+    require:
+      - pattern: '"""'
+        raw: true
+        message: "Write the sign in a text block, between `\"\"\"` and `\"\"\"`."
+      - pattern: System\.out\.print
+        max: 1
+        message: "Print the sign with one `print` or `println`."
+    forbid:
+      - pattern: \\n
+        raw: true
+        message: "Let the text block's own line breaks make the lines, without `\\n`."
+    tests:
+      - expect: |
+          *** SKATE NIGHT ***
+              Friday at 19:00
+              Rink B
+          Skates for rent at the desk
+    more:
+      - task: |
+          A dice game shows a line after each round. Write the method `roundLine(String player, int points, int round)`, which returns a line like `Round 03: Mia scored 12 points`: the round with at least two digits, padded with a zero in front, the player and the points. Build it with `String.format` (or `formatted`), without `+`. The check runs `System.out.println(roundLine("Mia", 12, 3));`, which prints:
+
+          ```
+          Round 03: Mia scored 12 points
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(roundLine("Mia", 12, 3));
+              }
+
+              public static String roundLine(String player, int points, int round) {
+                  return "";
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(roundLine("Mia", 12, 3));
+              }
+
+              public static String roundLine(String player, int points, int round) {
+                  return String.format("Round %02d: %s scored %d points", round, player, points);
+              }
+          }
+        hints:
+          - "The values fill the places in order, so the round comes first: `String.format(\"Round %02d: ...\", round, ...)`."
+          - "`%02d` is a whole number in at least two characters, padded with zeros: 3 becomes `03`, 12 stays `12`. Then `%s` for the player and `%d` for the points."
+        require:
+          - pattern: String\.format\s*\(|\.formatted\s*\(
+            message: "Build the line with `String.format(...)` or `formatted(...)`."
+        forbid:
+          - pattern: \+
+            message: "Let the format put the values in place, without `+`."
+        tests:
+          - call: System.out.println(roundLine("Mia", 12, 3));
+          - call: System.out.println(roundLine("Jonas", 0, 10));
+            hidden: true
+          - call: System.out.println(roundLine("Li", 105, 1));
+            hidden: true
+          - call: System.out.println(roundLine("Ana", 7, 123));
+            hidden: true
+      - task: |
+          A snack bar prints receipts. The program reads lines, each an item, its price and a quantity separated by spaces, such as `coffee 2.80 2`, until the line `end`. For each item it prints the name left-aligned in 10 characters and the item's total (price times quantity) right-aligned in 8 characters with two decimals. Then it prints a line of 18 minus signs, and `TOTAL` with the sum of the totals in the same two columns. With this input:
+
+          ```input
+          coffee 2.80 2
+          bagel 3.25 1
+          juice 4.10 3
+          end
+          ```
+
+          the program prints:
+
+          ```
+          coffee        5.60
+          bagel         3.25
+          juice        12.30
+          ------------------
+          TOTAL        21.15
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  var scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  var scanner = new Scanner(System.in);
+                  var sum = 0.0;
+                  while (true) {
+                      var line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      var parts = line.split(" ");
+                      var price = Double.valueOf(parts[1]);
+                      var quantity = Integer.valueOf(parts[2]);
+                      var total = price * quantity;
+                      sum += total;
+                      System.out.println(String.format("%-10s%8.2f", parts[0], total));
+                  }
+                  System.out.println("------------------");
+                  System.out.println(String.format("%-10s%8.2f", "TOTAL", sum));
+              }
+          }
+        hints:
+          - "Split each line with `split(\" \")`: the name, the price (`Double.valueOf`) and the quantity (`Integer.valueOf`). Keep a running sum of the totals."
+          - "`String.format(\"%-10s%8.2f\", name, total)` makes one line of the receipt, and the TOTAL line uses the same format."
+        require:
+          - pattern: '%-10s'
+            raw: true
+            message: "Left-align the names with `%-10s`."
+          - pattern: '%8\.2f'
+            raw: true
+            message: "Right-align the amounts with `%8.2f`."
+        tests:
+          - stdin: |
+              coffee 2.80 2
+              bagel 3.25 1
+              juice 4.10 3
+              end
+          - stdin: |
+              cinnamon 3.90 4
+              tea 2.10 1
+              end
+            hidden: true
+          - stdin: |
+              cheesecake 5.45 12
+              water 1.20 3
+              scone 2.65 2
+              end
+            hidden: true
+          - stdin: |
+              end
+            hidden: true

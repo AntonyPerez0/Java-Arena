@@ -1,0 +1,309 @@
+topic: records
+drills:
+  - type: predict
+    after: declaring-a-record
+    classes: |
+      record Postcard(String city, int year) {
+      }
+
+      record Shoebox(String owner, Postcard oldest) {
+      }
+    body: |
+      Shoebox box = new Shoebox("Ilse", new Postcard("Lima", 1953));
+      System.out.println(box);
+    why: "A record's `toString` gives its name and each component as `name=value` in square brackets. The component `oldest` is a record too, so it's written with its own `toString`, brackets and all. Strings are written without quotes."
+
+  - type: predict
+    after: declaring-a-record
+    classes: |
+      record TeamScore(String team, int points) {
+      }
+    body: |
+      TeamScore home = new TeamScore("Otters", 3);
+      TeamScore away = new TeamScore("Herons", 12);
+      System.out.println(home.team() + away.points() / home.points() + home.points());
+    why: "The accessors are methods named after the components. Division comes first: `12 / 3` is 4. Then, from the left, `\"Otters\" + 4` is the String `Otters4`, and adding `home.points()` to a String joins a `3` to it."
+
+  - type: predict
+    after: equals-and-hashcode
+    classes: |
+      record PianoKey(char note, int octave) {
+      }
+    body: |
+      HashSet<PianoKey> pressed = new HashSet<>();
+      pressed.add(new PianoKey('A', 1));
+      pressed.add(new PianoKey('B', 1));
+      pressed.add(new PianoKey('A', 1));
+      pressed.add(new PianoKey('a', 1));
+      System.out.println(pressed.size() + " " + pressed.contains(new PianoKey('B', 1)));
+    why: "Records are equal when all their components are equal, and their `hashCode` agrees, so the second `PianoKey('A', 1)` isn't added again. `'a'` is a different char from `'A'`, so that key is new: 3 keys. `contains` finds a new but equal `PianoKey('B', 1)`."
+
+  - type: predict
+    after: compact-constructors
+    classes: |
+      record Grade(String course, int points) {
+          public Grade {
+              course = course.toUpperCase();
+              if (points > 10) {
+                  points = 10;
+              }
+          }
+      }
+    body: |
+      Grade essay = new Grade("art", 14);
+      Grade quiz = new Grade("Art", 10);
+      System.out.println(essay.course() + " " + essay.points() + " " + essay.equals(quiz));
+    why: "The compact constructor runs first and changes its parameters; the record keeps the changed values. So `essay` holds `ART` and 10, the same as `quiz`, which makes the two equal."
+
+  - type: predict
+    after: methods-and-factories
+    classes: |
+      record Lamp(String room, boolean on) {
+          public Lamp toggled() {
+              return new Lamp(this.room, !this.on);
+          }
+      }
+    body: |
+      Lamp hall = new Lamp("hall", false);
+      Lamp later = hall.toggled().toggled().toggled();
+      hall.toggled();
+      System.out.println(hall.on() + " " + later.on());
+    why: "`toggled` returns a new Lamp and never changes the one it's called on: a record can't change. So `hall` stays off. `later` is toggled three times from off: on, off, on. The lone `hall.toggled();` makes a Lamp that nobody keeps."
+
+  - type: fill
+    after: declaring-a-record
+    prompt: "Fill in the blank, one word, so that `Bookmark` is declared in the shortest way and the program prints `Chapter 4 at page 62`."
+    classes: |
+      [[record]] Bookmark(String label, int page) {
+      }
+    body: |
+      Bookmark mark = new Bookmark("Chapter 4", 62);
+      System.out.println(mark.label() + " at page " + mark.page());
+    why: "`record` declares a class whose components are listed after its name. Java writes the constructor and the accessors `label()` and `page()`. With `class` the parentheses after the name wouldn't compile."
+
+  - type: fill
+    after: class-or-record
+    prompt: "Fill in the blank, an accessor's name, so that the bridges are sorted from the oldest to the newest. (Comparator is written with its package, `java.util.Comparator`, since a drill has no import lines.)"
+    classes: |
+      record Bridge(String name, int year) {
+      }
+    body: |
+      ArrayList<Bridge> bridges = new ArrayList<>();
+      bridges.add(new Bridge("Iron Bridge", 1779));
+      bridges.add(new Bridge("Millau Viaduct", 2004));
+      bridges.add(new Bridge("Golden Gate", 1937));
+      bridges.sort(java.util.Comparator.comparing(Bridge::[[year]]));
+      System.out.println(bridges.get(0).name() + ", " + bridges.get(2).name());
+    why: "An accessor is a method, so `Bridge::year` is a method reference that `Comparator.comparing` can use: it compares the bridges by the value `year()` gives."
+
+  - type: bug
+    after: declaring-a-record
+    prompt: "The program should print `Card 4021 belongs to Mira`. Which line is wrong?"
+    classes: |
+      record GymPass(String holder, int number) {
+      }
+    body: |
+      GymPass card = new GymPass("Mira", 4021);
+      int number = card.getNumber(); // BUG
+      System.out.println("Card " + number + " belongs to " + card.holder());
+    fix: "int number = card.number();"
+    why: "A record's accessors are named exactly like its components, with no `get` in front: `number()`. `getNumber()` doesn't exist, so the program doesn't compile."
+
+  - type: bug
+    after: compact-constructors
+    prompt: "The program should print `Lumi`. Which line is wrong?"
+    classes: |
+      record Pet(String name, int age) {
+          public Pet {
+              this.name = name.trim(); // BUG
+          }
+      }
+    body: |
+      Pet pet = new Pet("  Lumi ", 3);
+      System.out.println(pet.name());
+    fix: "name = name.trim();"
+    why: "In a compact constructor, change the parameter: Java stores the parameters in the final instance variables after your code has run. Assigning `this.name` yourself doesn't compile: `cannot assign a value to final variable name`."
+
+  - type: bug
+    after: methods-and-factories
+    prompt: "The program should print `Seedlings[plant=tomato, count=40] Seedlings[plant=tomato, count=55]`. Which line is wrong?"
+    classes: |
+      record Seedlings(String plant, int count) {
+          public Seedlings withCount(int newCount) {
+              return new Seedlings(this.plant, this.count); // BUG
+          }
+      }
+    body: |
+      Seedlings before = new Seedlings("tomato", 40);
+      Seedlings after = before.withCount(55);
+      System.out.println(before + " " + after);
+    fix: "return new Seedlings(this.plant, newCount);"
+    why: "A with-method makes a new record with one value replaced and the rest copied. This one copied both values, so `after` was just a copy of `before`. The new record needs `newCount`."
+
+  - type: compiles
+    after: methods-and-factories
+    classes: |
+      record Counter(String name) {
+          private int clicks;
+
+          public void click() {
+              this.clicks++;
+          }
+      }
+    body: |
+      Counter counter = new Counter("door");
+      counter.click();
+      System.out.println(counter);
+    why: "No. A record can't have instance variables besides its components: javac says `field declaration must be static`. Something that counts changes over time, so it should be a class."
+
+  - type: compiles
+    after: class-or-record
+    classes: |
+      interface Priced {
+          int price();
+      }
+
+      record Sticker(String name, int price) implements Priced {
+          public static Sticker free(String name) {
+              return new Sticker(name, 0);
+          }
+      }
+    body: |
+      Priced gift = Sticker.free("rocket");
+      System.out.println(gift.price());
+    why: "Yes. A record can implement an interface, and the accessor `price()` is the method Priced asks for. Static methods are allowed in a record too. It prints 0."
+
+  - type: choice
+    after: equals-and-hashcode
+    prompt: What does this print?
+    classes: |
+      record Pin(int x, int y) {
+      }
+    body: |
+      Pin a = new Pin(1, 2);
+      Pin b = new Pin(1, 2);
+      System.out.println((a == b) + " " + a.equals(b));
+    choices:
+      - "`true true`"
+      - "`false true`"
+      - "`false false`"
+      - "`true false`"
+    answer: 2
+    verify: output
+    why: "`new` makes two objects, so `==`, which asks whether they're the very same object, is `false`. A record's `equals` compares the components, which are the same: `true`."
+
+  - type: choice
+    after: class-or-record
+    prompt: "Which of these is the best fit for a record?"
+    choices:
+      - "A step counter whose count goes up with every step"
+      - "A bank account whose balance changes with deposits"
+      - "A color given by its red, green and blue values"
+      - "A shopping cart that items are added to"
+    answer: 3
+    why: "A record's values never change once it's made, so it fits an object that simply is its values: two colors with the same red, green and blue values are the same color. A counter, a balance and a cart all change over time, which needs a class."
+
+  - type: boss
+    after: class-or-record
+    prompt: |
+      A fabric shop cuts cloth in fractions of a yard, such as 3/4 of a yard. In `Fraction.java`, write the record `Fraction(int top, int bottom)` with:
+
+      - a compact constructor that reduces the fraction to its lowest terms, so that `new Fraction(6, 8)` holds 3 and 4. Divide both by their greatest common divisor: the largest number that divides both evenly (you can find it by counting down from the smaller of the two). The bottom is always positive and the top is positive or 0; `new Fraction(0, 5)` holds 0 and 1;
+      - `plus(Fraction other)`, which returns the sum, `a/b + c/d = (a*d + c*b) / (b*d)`;
+      - `times(int count)`, which returns the fraction multiplied by a whole number;
+      - `toString()`, which returns the fraction as `3/4`.
+
+      Since the fractions are always reduced, the record's own `equals` makes `2/4` equal to `1/2`. The check runs:
+
+      ```java fragment
+      Fraction piece = new Fraction(6, 8);
+      System.out.println(piece + " " + piece.top() + " " + piece.bottom());
+      System.out.println(piece.plus(new Fraction(1, 4)));
+      System.out.println(new Fraction(1, 6).times(3));
+      System.out.println(new Fraction(2, 4).equals(new Fraction(1, 2)));
+      ```
+
+      and expects:
+
+      ```
+      3/4 3 4
+      1/1
+      1/2
+      true
+      ```
+    seed:
+      Fraction.java: |
+        public record Fraction(int top, int bottom) {
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Fraction piece = new Fraction(6, 8);
+                System.out.println(piece + " " + piece.top() + " " + piece.bottom());
+                System.out.println(piece.plus(new Fraction(1, 4)));
+                System.out.println(new Fraction(1, 6).times(3));
+                System.out.println(new Fraction(2, 4).equals(new Fraction(1, 2)));
+            }
+        }
+    solution:
+      Fraction.java: |
+        public record Fraction(int top, int bottom) {
+            public Fraction {
+                if (top == 0) {
+                    bottom = 1;
+                }
+                int divisor = Math.min(top, bottom);
+                while (divisor > 1) {
+                    if (top % divisor == 0 && bottom % divisor == 0) {
+                        break;
+                    }
+                    divisor--;
+                }
+                if (divisor > 1) {
+                    top = top / divisor;
+                    bottom = bottom / divisor;
+                }
+            }
+
+            public Fraction plus(Fraction other) {
+                return new Fraction(this.top * other.bottom + other.top * this.bottom, this.bottom * other.bottom);
+            }
+
+            public Fraction times(int count) {
+                return new Fraction(this.top * count, this.bottom);
+            }
+
+            @Override
+            public String toString() {
+                return this.top + "/" + this.bottom;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Fraction piece = new Fraction(6, 8);
+                System.out.println(piece + " " + piece.top() + " " + piece.bottom());
+                System.out.println(piece.plus(new Fraction(1, 4)));
+                System.out.println(new Fraction(1, 6).times(3));
+                System.out.println(new Fraction(2, 4).equals(new Fraction(1, 2)));
+            }
+        }
+    hints:
+      - "In the compact constructor, start a divisor at `Math.min(top, bottom)` and count down until it divides both `top` and `bottom` evenly (`%` gives 0). Then divide both parameters by it. A top of 0 is a special case: make the bottom 1."
+      - "`plus` and `times` just return `new Fraction(...)` with the unreduced result: the compact constructor reduces it. `toString` is `this.top + \"/\" + this.bottom`."
+    require:
+      - pattern: public\s+Fraction\s*\{
+        message: "Reduce the fraction in a compact constructor, `public Fraction { ... }`."
+    tests:
+      - call: |
+          Fraction piece = new Fraction(6, 8);
+          System.out.println(piece + " " + piece.top() + " " + piece.bottom());
+          System.out.println(piece.plus(new Fraction(1, 4)));
+          System.out.println(new Fraction(1, 6).times(3));
+          System.out.println(new Fraction(2, 4).equals(new Fraction(1, 2)));
+      - call: |
+          System.out.println(new Fraction(0, 5) + " " + new Fraction(7, 7) + " " + new Fraction(12, 18) + " " + new Fraction(5, 3));
+          System.out.println(new Fraction(1, 3).plus(new Fraction(1, 6)) + " " + new Fraction(2, 3).plus(new Fraction(2, 3)));
+          System.out.println(new Fraction(3, 10).times(5) + " " + new Fraction(3, 8).times(0) + " " + new Fraction(9, 12).times(4));
+          System.out.println(new Fraction(10, 4).equals(new Fraction(5, 2)) + " " + new Fraction(1, 2).equals(new Fraction(1, 3)));
+        hidden: true

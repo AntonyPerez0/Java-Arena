@@ -1,0 +1,3034 @@
+id: linked-structures
+summary: An extra module, not part of the MOOC. Data structures built from small objects that refer to each other. Nodes and the links between them, a linked list class with a head and a tail, stacks and queues on linked nodes, Java's ArrayDeque as a stack and as a queue, binary search trees with recursive methods, and the sorted maps and sets TreeMap and TreeSet.
+steps:
+  - id: linked-structures-nodes
+    slug: nodes-and-links
+    title: Nodes and links
+    text: |
+      This module is an extra: the MOOC doesn't cover it. It's about data structures built from small objects that refer to each other: linked lists, stacks, queues and trees. They're worth knowing for three reasons. Java's own collections use them (LinkedList is a chain of such objects, and TreeMap and TreeSet keep their values in a tree). They explain why some operations of a collection take the same few steps however big it is, while others go through every value. And they come up in programming interviews. The module uses recursion (module 55) and `var` (module 57).
+
+      ### A node
+
+      Module 45 built a list on an array: the values sit side by side, and `get(7)` goes straight to place 7 of the array. A **linked list** keeps each value in an object of its own, a **node**, and each node holds a reference to the next node.
+
+      A scavenger hunt works the same way. Each clue is at a place, is worth some points, and tells you where the next clue is. Here's a class for one clue:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Clue first = new Clue("the mailbox", 10);
+              Clue second = new Clue("the old oak", 20);
+              Clue third = new Clue("the bike shed", 30);
+              first.next = second;
+              second.next = third;
+
+              System.out.println(first.place);
+              System.out.println(first.next.place);
+              System.out.println(first.next.next.place);
+              System.out.println(third.next);
+          }
+      }
+      // ==== Clue.java ====
+      public class Clue {
+          String place;
+          int points;
+          Clue next;
+
+          public Clue(String place, int points) {
+              this.place = place;
+              this.points = points;
+              this.next = null;
+          }
+      }
+      ```
+
+      ```output
+      the mailbox
+      the old oak
+      the bike shed
+      null
+      ```
+
+      - The instance variable `next` has the type `Clue`, the class's own type. A Clue doesn't hold another Clue inside it: `next` holds a reference to one (module 22), or `null` when there's no next clue.
+      - `first.next.place` follows one link: `first.next` is the second clue, and `.place` is its place. `first.next.next.place` follows two.
+      - The variables of Clue have no access modifier, so they're package-private (module 41): Main, in the same package, reads and sets them directly. Clue is a small helper whose only job is to hold a value and a link. Step 2 hides nodes like it inside a list class, where nothing else can reach them.
+
+      The three clues and their links look like this, with an arrow for each reference:
+
+      ```text
+      first             second            third
+      [the mailbox] --> [the old oak] --> [the bike shed] --> null
+      ```
+
+      ### Walking along the chain
+
+      To go through the hunt, a variable `current` starts at the first clue and moves on with `current = current.next`, until it's `null`:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Clue first = new Clue("the mailbox", 10);
+              first.next = new Clue("the old oak", 20);
+              first.next.next = new Clue("the bike shed", 30);
+
+              int total = 0;
+              Clue current = first;
+              while (current != null) {
+                  total += current.points;
+                  current = current.next;
+              }
+              System.out.println("The hunt is worth " + total + " points");
+              System.out.println("It starts at " + first.place);
+          }
+      }
+      // ==== Clue.java ====
+      public class Clue {
+          String place;
+          int points;
+          Clue next;
+
+          public Clue(String place, int points) {
+              this.place = place;
+              this.points = points;
+              this.next = null;
+          }
+      }
+      ```
+
+      ```output
+      The hunt is worth 60 points
+      It starts at the mailbox
+      ```
+
+      `current` is only a reference that moves along the chain. Moving it changes no link, so `first` still refers to the first clue after the loop. The loop stops after the last clue, whose `next` is `null`.
+
+      ### One step too far
+
+      A hunt with no clues at all has no first clue: the variable for it is `null`. This method looks for the place of the last clue, and works for a hunt of one clue, but not for an empty one:
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Clue gate = new Clue("the gate", 5);
+              System.out.println(lastPlace(gate));
+              System.out.println(lastPlace(null));
+          }
+
+          public static String lastPlace(Clue first) {
+              Clue current = first;
+              while (current.next != null) {
+                  current = current.next;
+              }
+              return current.place;
+          }
+      }
+      // ==== Clue.java ====
+      public class Clue {
+          String place;
+          int points;
+          Clue next;
+
+          public Clue(String place, int points) {
+              this.place = place;
+              this.points = points;
+              this.next = null;
+          }
+      }
+      ```
+
+      ```output
+      the gate
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.NullPointerException: Cannot read field "next" because "<local1>" is null
+      	at Main.lastPlace(Main.java:10)
+      	at Main.main(Main.java:5)
+      ```
+
+      The second call gets `null`, so `current` is `null`, and `current.next` asks a missing object for its `next`. Java's message names the field it tried to read, and the variable that was `null`. Java numbers a method's parameters and variables from 0, here `first` 0 and `current` 1, and when a class is compiled without their names kept, as here, the message gives the number: `<local1>` is `current`. The fix is a check before the loop: `if (first == null) { return "no clues"; }`.
+
+      Every loop over nodes has two edges to think about: an empty chain, where the first reference is already `null`, and the last node, whose `next` is `null`.
+
+      **Your turn:** fill in the blanks so that the hunt goes from the gate to the pond to the red bench, and the loop prints each clue's place and points. The program prints:
+
+      ```
+      the gate: 5
+      the pond: 15
+      the red bench: 25
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              Clue gate = new Clue("the gate", 5);
+              Clue pond = new Clue("the pond", 15);
+              Clue bench = new Clue("the red bench", 25);
+              gate.next = [[pond]];
+              pond.[[next]] = bench;
+
+              Clue current = gate;
+              while (current [[!=]] null) {
+                  System.out.println(current.place + ": " + current.points);
+                  current = [[current.next]];
+              }
+          }
+      }
+      // ==== Clue.java ====
+      public class Clue {
+          String place;
+          int points;
+          Clue next;
+
+          public Clue(String place, int points) {
+              this.place = place;
+              this.points = points;
+              this.next = null;
+          }
+      }
+    hints:
+      - "The gate's `next` should refer to the pond, and the pond's `next` to the bench. The bench's `next` stays `null`."
+      - "The loop runs while `current` refers to a clue, so the test is `current != null`. Each round moves it one clue on: `current = current.next;`."
+    tests:
+      - expect: |
+          the gate: 5
+          the pond: 15
+          the red bench: 25
+    more:
+      - task: |
+          Write the method `route(Clue first)` in `Main.java`. It returns the places of the hunt in order, each followed by ` -> `, and then the word `finish`. An empty hunt (`first` is `null`) gives just `finish`. Go along the chain with a loop over `next`. The check runs:
+
+          ```java fragment
+          Clue gate = new Clue("the gate", 5);
+          gate.next = new Clue("the pond", 15);
+          gate.next.next = new Clue("the red bench", 25);
+          System.out.println(route(gate));
+          System.out.println(route(gate.next.next));
+          System.out.println(route(null));
+          ```
+
+          and expects:
+
+          ```
+          the gate -> the pond -> the red bench -> finish
+          the red bench -> finish
+          finish
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Clue gate = new Clue("the gate", 5);
+                    gate.next = new Clue("the pond", 15);
+                    gate.next.next = new Clue("the red bench", 25);
+                    System.out.println(route(gate));
+                    System.out.println(route(gate.next.next));
+                    System.out.println(route(null));
+                }
+
+                public static String route(Clue first) {
+                    return "";
+                }
+            }
+          Clue.java: |
+            public class Clue {
+                String place;
+                int points;
+                Clue next;
+
+                public Clue(String place, int points) {
+                    this.place = place;
+                    this.points = points;
+                    this.next = null;
+                }
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Clue gate = new Clue("the gate", 5);
+                    gate.next = new Clue("the pond", 15);
+                    gate.next.next = new Clue("the red bench", 25);
+                    System.out.println(route(gate));
+                    System.out.println(route(gate.next.next));
+                    System.out.println(route(null));
+                }
+
+                public static String route(Clue first) {
+                    String result = "";
+                    Clue current = first;
+                    while (current != null) {
+                        result += current.place + " -> ";
+                        current = current.next;
+                    }
+                    return result + "finish";
+                }
+            }
+          Clue.java: |
+            public class Clue {
+                String place;
+                int points;
+                Clue next;
+
+                public Clue(String place, int points) {
+                    this.place = place;
+                    this.points = points;
+                    this.next = null;
+                }
+            }
+        hints:
+          - "Start with an empty String and a variable `current` at `first`. While `current` isn't `null`, add its place and ` -> `, and move on."
+          - "After the loop, add `finish`. For an empty hunt the loop doesn't run at all, so the result is just `finish`, with no special case needed."
+        tests:
+          - call: |
+              Clue gate = new Clue("the gate", 5);
+              gate.next = new Clue("the pond", 15);
+              gate.next.next = new Clue("the red bench", 25);
+              System.out.println(route(gate));
+              System.out.println(route(gate.next.next));
+              System.out.println(route(null));
+          - call: |
+              Clue well = new Clue("the well", 8);
+              Clue barn = new Clue("the barn", 12);
+              Clue hill = new Clue("the hill", 3);
+              Clue shop = new Clue("the corner shop", 40);
+              well.next = barn;
+              barn.next = hill;
+              hill.next = shop;
+              System.out.println(route(well));
+              System.out.println(route(barn));
+              System.out.println(route(shop));
+            hidden: true
+      - task: |
+          Write two methods in `Main.java`:
+
+          - `count(Clue first)` returns how many clues the hunt has (0 for an empty hunt);
+          - `best(Clue first)` returns the clue worth the most points. When two clues tie, it returns the first of them. For an empty hunt it returns `null`.
+
+          The check runs:
+
+          ```java fragment
+          Clue well = new Clue("the well", 8);
+          well.next = new Clue("the barn", 30);
+          well.next.next = new Clue("the hill", 12);
+          well.next.next.next = new Clue("the shop", 30);
+          System.out.println(count(well) + " clues");
+          System.out.println("Best: " + best(well).place);
+          System.out.println(count(null) + " clues");
+          System.out.println(best(null) == null);
+          ```
+
+          and expects:
+
+          ```
+          4 clues
+          Best: the barn
+          0 clues
+          true
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Clue well = new Clue("the well", 8);
+                    well.next = new Clue("the barn", 30);
+                    well.next.next = new Clue("the hill", 12);
+                    well.next.next.next = new Clue("the shop", 30);
+                    System.out.println(count(well) + " clues");
+                    System.out.println("Best: " + best(well).place);
+                    System.out.println(count(null) + " clues");
+                    System.out.println(best(null) == null);
+                }
+
+                public static int count(Clue first) {
+                    return 0;
+                }
+
+                public static Clue best(Clue first) {
+                    return first;
+                }
+            }
+          Clue.java: |
+            public class Clue {
+                String place;
+                int points;
+                Clue next;
+
+                public Clue(String place, int points) {
+                    this.place = place;
+                    this.points = points;
+                    this.next = null;
+                }
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Clue well = new Clue("the well", 8);
+                    well.next = new Clue("the barn", 30);
+                    well.next.next = new Clue("the hill", 12);
+                    well.next.next.next = new Clue("the shop", 30);
+                    System.out.println(count(well) + " clues");
+                    System.out.println("Best: " + best(well).place);
+                    System.out.println(count(null) + " clues");
+                    System.out.println(best(null) == null);
+                }
+
+                public static int count(Clue first) {
+                    int count = 0;
+                    Clue current = first;
+                    while (current != null) {
+                        count++;
+                        current = current.next;
+                    }
+                    return count;
+                }
+
+                public static Clue best(Clue first) {
+                    Clue best = first;
+                    Clue current = first;
+                    while (current != null) {
+                        if (current.points > best.points) {
+                            best = current;
+                        }
+                        current = current.next;
+                    }
+                    return best;
+                }
+            }
+          Clue.java: |
+            public class Clue {
+                String place;
+                int points;
+                Clue next;
+
+                public Clue(String place, int points) {
+                    this.place = place;
+                    this.points = points;
+                    this.next = null;
+                }
+            }
+        hints:
+          - "`count` is the walking loop of the lesson with a counter in place of the sum."
+          - "In `best`, keep the best clue so far in a variable that starts at `first` (which is `null` for an empty hunt, the right answer then). Replace it only when a clue has strictly more points, so that the first of a tie stays."
+        tests:
+          - call: |
+              Clue well = new Clue("the well", 8);
+              well.next = new Clue("the barn", 30);
+              well.next.next = new Clue("the hill", 12);
+              well.next.next.next = new Clue("the shop", 30);
+              System.out.println(count(well) + " clues");
+              System.out.println("Best: " + best(well).place);
+              System.out.println(count(null) + " clues");
+              System.out.println(best(null) == null);
+          - call: |
+              Clue only = new Clue("the gate", 5);
+              System.out.println(count(only) + " " + best(only).place);
+              Clue a = new Clue("the pier", 2);
+              a.next = new Clue("the lighthouse", 7);
+              a.next.next = new Clue("the dunes", 9);
+              a.next.next.next = new Clue("the cafe", 1);
+              a.next.next.next.next = new Clue("the boathouse", 9);
+              System.out.println(count(a) + " " + best(a).place);
+              System.out.println(count(a.next.next.next) + " " + best(a.next.next.next).place);
+            hidden: true
+          - call: |
+              Clue a = new Clue("the tower", -3);
+              a.next = new Clue("the stairs", -1);
+              a.next.next = new Clue("the cellar", -5);
+              System.out.println(count(a) + " " + best(a).place);
+            hidden: true
+
+  - id: linked-structures-list-class
+    slug: a-linked-list
+    title: A linked list class
+    text: |
+      Step 1 changed the links by hand in `main`, where one wrong assignment cuts off the rest of the chain. A list class keeps its nodes to itself: the code that uses it calls methods such as `addFirst`, and never sees a node. Here's a reading list of book titles, with the newest wish at the front:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              ReadingList list = new ReadingList();
+              list.addFirst("Emma");
+              list.addFirst("Dune");
+              list.addFirst("Beloved");
+              System.out.println(list.size() + " books");
+              list.printAll();
+          }
+      }
+      // ==== ReadingList.java ====
+      public class ReadingList {
+          private TitleNode head;
+          private int size;
+
+          public ReadingList() {
+              this.head = null;
+              this.size = 0;
+          }
+
+          public void addFirst(String title) {
+              this.head = new TitleNode(title, this.head);
+              this.size++;
+          }
+
+          public int size() {
+              return this.size;
+          }
+
+          public void printAll() {
+              TitleNode current = this.head;
+              while (current != null) {
+                  System.out.println(current.title);
+                  current = current.next;
+              }
+          }
+      }
+      // ==== TitleNode.java ====
+      public class TitleNode {
+          String title;
+          TitleNode next;
+
+          public TitleNode(String title, TitleNode next) {
+              this.title = title;
+              this.next = next;
+          }
+      }
+      ```
+
+      ```output
+      3 books
+      Beloved
+      Dune
+      Emma
+      ```
+
+      ```classes
+      class ReadingList
+      - head: TitleNode
+      - size: int
+      + ReadingList()
+      + addFirst(title: String): void
+      + size(): int
+      + printAll(): void
+
+      class TitleNode
+      ~ title: String
+      ~ next: TitleNode
+      + TitleNode(title: String, next: TitleNode)
+
+      ReadingList --> 0..1 TitleNode : head
+      ```
+
+      Each TitleNode's `next` refers to another TitleNode (a diagram can't draw a class connected to itself, so it's shown as the field).
+
+      - `head` refers to the first node, or is `null` while the list is empty.
+      - `addFirst` makes a node whose `next` is the old first node, and then moves `head` to the new node. On an empty list, the old head is `null`, so the new node's `next` is `null`: the same line works for both.
+      - The list counts its values in `size`. Counting the nodes would mean walking the whole list every time.
+
+      Adding at the front takes the same few steps however long the list is. An ArrayList's `add(0, value)` has to move every value in its array one place along first (module 45).
+
+      ### Adding at the end
+
+      To add at the end, the list needs its last node, so that it can set that node's `next`. Walking from `head` to the last node takes one step per node:
+
+      ```java fragment
+      TitleNode current = this.head;
+      while (current.next != null) {
+          current = current.next;
+      }
+      current.next = new TitleNode(title, null);
+      ```
+
+      This loop also crashes on an empty list, as in step 1. A list that adds at the end often keeps a second reference, `tail`, to its last node. Then adding at the end takes a few steps too: link the new node after `tail`, and move `tail` to it. Every method that changes the list must keep `tail` right. When the list is empty, `head` and `tail` are both `null`; after the first value, both refer to the same node.
+
+      ### Reading and removing
+
+      - **get(index)** has no array to jump into: it starts at `head` and follows `next` index times. An ArrayList's `get` goes straight to the place in its array, so it takes the same steps for any index; a linked list's `get(1000)` follows 1,000 links.
+      - **removeFirst()** moves `head` to the second node, `this.head = this.head.next;`. Nothing refers to the old first node any more, so Java's garbage collector can free its memory. When the list becomes empty, `tail` must become `null` too, or it would still refer to the removed node.
+      - Bad input gets an exception, as in module 45: `throw new IndexOutOfBoundsException(...)` for an index outside the list.
+
+      **Your turn:** `ReadingList.java` is the class above, without `printAll`. Give it a method `toString()` that returns the titles from front to back, in square brackets and separated by a comma and a space, like an ArrayList prints: `[Beloved, Dune, Emma]`. An empty list gives `[]`. The check runs:
+
+      ```java fragment
+      ReadingList list = new ReadingList();
+      System.out.println(list);
+      list.addFirst("Emma");
+      list.addFirst("Dune");
+      list.addFirst("Beloved");
+      System.out.println(list);
+      System.out.println(list.size());
+      ```
+
+      and expects:
+
+      ```
+      []
+      [Beloved, Dune, Emma]
+      3
+      ```
+    seed:
+      ReadingList.java: |
+        public class ReadingList {
+            private TitleNode head;
+            private int size;
+
+            public ReadingList() {
+                this.head = null;
+                this.size = 0;
+            }
+
+            public void addFirst(String title) {
+                this.head = new TitleNode(title, this.head);
+                this.size++;
+            }
+
+            public int size() {
+                return this.size;
+            }
+        }
+      TitleNode.java: |
+        public class TitleNode {
+            String title;
+            TitleNode next;
+
+            public TitleNode(String title, TitleNode next) {
+                this.title = title;
+                this.next = next;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ReadingList list = new ReadingList();
+                System.out.println(list);
+                list.addFirst("Emma");
+                list.addFirst("Dune");
+                list.addFirst("Beloved");
+                System.out.println(list);
+                System.out.println(list.size());
+            }
+        }
+    solution:
+      ReadingList.java: |
+        public class ReadingList {
+            private TitleNode head;
+            private int size;
+
+            public ReadingList() {
+                this.head = null;
+                this.size = 0;
+            }
+
+            public void addFirst(String title) {
+                this.head = new TitleNode(title, this.head);
+                this.size++;
+            }
+
+            public int size() {
+                return this.size;
+            }
+
+            @Override
+            public String toString() {
+                String result = "[";
+                TitleNode current = this.head;
+                while (current != null) {
+                    result += current.title;
+                    if (current.next != null) {
+                        result += ", ";
+                    }
+                    current = current.next;
+                }
+                return result + "]";
+            }
+        }
+      TitleNode.java: |
+        public class TitleNode {
+            String title;
+            TitleNode next;
+
+            public TitleNode(String title, TitleNode next) {
+                this.title = title;
+                this.next = next;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ReadingList list = new ReadingList();
+                System.out.println(list);
+                list.addFirst("Emma");
+                list.addFirst("Dune");
+                list.addFirst("Beloved");
+                System.out.println(list);
+                System.out.println(list.size());
+            }
+        }
+    hints:
+      - "The header is `public String toString()`, with `@Override` above it. Walk from `this.head` with a `current` variable, as `printAll` did, and build a String."
+      - "Put `, ` between titles, not after the last one: add it only when `current.next != null`. Start with `[` and end with `]`."
+    tests:
+      - call: |
+          ReadingList list = new ReadingList();
+          System.out.println(list);
+          list.addFirst("Emma");
+          list.addFirst("Dune");
+          list.addFirst("Beloved");
+          System.out.println(list);
+          System.out.println(list.size());
+      - call: |
+          ReadingList list = new ReadingList();
+          list.addFirst("Ulysses");
+          System.out.println(list);
+          list.addFirst("Middlemarch");
+          System.out.println(list);
+          list.addFirst("Kindred");
+          list.addFirst("Persuasion");
+          System.out.println(list + " " + list.size());
+        hidden: true
+    more:
+      - task: |
+          Give `ReadingList` a reference to its last node, so that it can add at the end in a few steps:
+
+          - add an instance variable `private TitleNode tail;`;
+          - make `addFirst` keep it right: after adding to an empty list, `tail` refers to the new node too;
+          - write `addLast(String title)`, which adds the title at the end, using `tail` and no loop.
+
+          The check runs:
+
+          ```java fragment
+          ReadingList list = new ReadingList();
+          list.addLast("Emma");
+          list.addLast("Dune");
+          list.addFirst("Beloved");
+          list.addLast("Ulysses");
+          System.out.println(list);
+          System.out.println(list.size());
+          ```
+
+          and expects:
+
+          ```
+          [Beloved, Emma, Dune, Ulysses]
+          4
+          ```
+        seed:
+          ReadingList.java: |
+            public class ReadingList {
+                private TitleNode head;
+                private int size;
+
+                public ReadingList() {
+                    this.head = null;
+                    this.size = 0;
+                }
+
+                public void addFirst(String title) {
+                    this.head = new TitleNode(title, this.head);
+                    this.size++;
+                }
+
+                public void addLast(String title) {
+
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                @Override
+                public String toString() {
+                    String result = "[";
+                    TitleNode current = this.head;
+                    while (current != null) {
+                        result += current.title;
+                        if (current.next != null) {
+                            result += ", ";
+                        }
+                        current = current.next;
+                    }
+                    return result + "]";
+                }
+            }
+          TitleNode.java: |
+            public class TitleNode {
+                String title;
+                TitleNode next;
+
+                public TitleNode(String title, TitleNode next) {
+                    this.title = title;
+                    this.next = next;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    ReadingList list = new ReadingList();
+                    list.addLast("Emma");
+                    list.addLast("Dune");
+                    list.addFirst("Beloved");
+                    list.addLast("Ulysses");
+                    System.out.println(list);
+                    System.out.println(list.size());
+                }
+            }
+        solution:
+          ReadingList.java: |
+            public class ReadingList {
+                private TitleNode head;
+                private TitleNode tail;
+                private int size;
+
+                public ReadingList() {
+                    this.head = null;
+                    this.tail = null;
+                    this.size = 0;
+                }
+
+                public void addFirst(String title) {
+                    this.head = new TitleNode(title, this.head);
+                    if (this.tail == null) {
+                        this.tail = this.head;
+                    }
+                    this.size++;
+                }
+
+                public void addLast(String title) {
+                    TitleNode node = new TitleNode(title, null);
+                    if (this.tail == null) {
+                        this.head = node;
+                    } else {
+                        this.tail.next = node;
+                    }
+                    this.tail = node;
+                    this.size++;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                @Override
+                public String toString() {
+                    String result = "[";
+                    TitleNode current = this.head;
+                    while (current != null) {
+                        result += current.title;
+                        if (current.next != null) {
+                            result += ", ";
+                        }
+                        current = current.next;
+                    }
+                    return result + "]";
+                }
+            }
+          TitleNode.java: |
+            public class TitleNode {
+                String title;
+                TitleNode next;
+
+                public TitleNode(String title, TitleNode next) {
+                    this.title = title;
+                    this.next = next;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    ReadingList list = new ReadingList();
+                    list.addLast("Emma");
+                    list.addLast("Dune");
+                    list.addFirst("Beloved");
+                    list.addLast("Ulysses");
+                    System.out.println(list);
+                    System.out.println(list.size());
+                }
+            }
+        hints:
+          - "In `addLast`, make the new node with `next` as `null`. If the list is empty (`tail` is `null`), it's the first node too: `this.head = node;`. Otherwise link it after the last node: `this.tail.next = node;`. Either way, `this.tail = node;` and add 1 to the size."
+          - "In `addFirst`, the new node is also the last one when the list was empty: after setting `head`, `if (this.tail == null) { this.tail = this.head; }`."
+        require:
+          - pattern: TitleNode\s+tail\b
+            message: "Keep the last node in an instance variable: `private TitleNode tail;`."
+        tests:
+          - call: |
+              ReadingList list = new ReadingList();
+              list.addLast("Emma");
+              list.addLast("Dune");
+              list.addFirst("Beloved");
+              list.addLast("Ulysses");
+              System.out.println(list);
+              System.out.println(list.size());
+          - call: |
+              ReadingList list = new ReadingList();
+              list.addFirst("Kindred");
+              list.addLast("Persuasion");
+              list.addLast("Middlemarch");
+              System.out.println(list + " " + list.size());
+              ReadingList other = new ReadingList();
+              other.addFirst("Ulysses");
+              other.addFirst("Emma");
+              other.addLast("Dune");
+              System.out.println(other + " " + other.size());
+            hidden: true
+      - task: |
+          `ReadingList` now has `head`, `tail`, `addFirst`, `addLast` and `toString`. Write two more methods:
+
+          - `get(int index)` returns the title at the index, counting from 0 at the front. For an index below 0 or at least the size, it throws an `IndexOutOfBoundsException` with the message `Index 5 out of bounds for size 3` (with the index and the size it got).
+          - `removeFirst()` removes the first title and returns it. On an empty list it throws an `IllegalStateException` with the message `The reading list is empty`. When the last title goes, `tail` must become `null` too, so that `addLast` still works afterwards.
+
+          The check runs:
+
+          ```java fragment
+          ReadingList list = new ReadingList();
+          list.addLast("Emma");
+          list.addLast("Dune");
+          list.addLast("Ulysses");
+          System.out.println(list.get(0) + ", " + list.get(2));
+          try {
+              list.get(5);
+          } catch (IndexOutOfBoundsException e) {
+              System.out.println(e.getMessage());
+          }
+          System.out.println("Read " + list.removeFirst());
+          System.out.println(list + " " + list.size());
+          ```
+
+          and expects:
+
+          ```
+          Emma, Ulysses
+          Index 5 out of bounds for size 3
+          Read Emma
+          [Dune, Ulysses] 2
+          ```
+        seed:
+          ReadingList.java: |
+            public class ReadingList {
+                private TitleNode head;
+                private TitleNode tail;
+                private int size;
+
+                public ReadingList() {
+                    this.head = null;
+                    this.tail = null;
+                    this.size = 0;
+                }
+
+                public void addFirst(String title) {
+                    this.head = new TitleNode(title, this.head);
+                    if (this.tail == null) {
+                        this.tail = this.head;
+                    }
+                    this.size++;
+                }
+
+                public void addLast(String title) {
+                    TitleNode node = new TitleNode(title, null);
+                    if (this.tail == null) {
+                        this.head = node;
+                    } else {
+                        this.tail.next = node;
+                    }
+                    this.tail = node;
+                    this.size++;
+                }
+
+                public String get(int index) {
+                    return null;
+                }
+
+                public String removeFirst() {
+                    return null;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                @Override
+                public String toString() {
+                    String result = "[";
+                    TitleNode current = this.head;
+                    while (current != null) {
+                        result += current.title;
+                        if (current.next != null) {
+                            result += ", ";
+                        }
+                        current = current.next;
+                    }
+                    return result + "]";
+                }
+            }
+          TitleNode.java: |
+            public class TitleNode {
+                String title;
+                TitleNode next;
+
+                public TitleNode(String title, TitleNode next) {
+                    this.title = title;
+                    this.next = next;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    ReadingList list = new ReadingList();
+                    list.addLast("Emma");
+                    list.addLast("Dune");
+                    list.addLast("Ulysses");
+                    System.out.println(list.get(0) + ", " + list.get(2));
+                    try {
+                        list.get(5);
+                    } catch (IndexOutOfBoundsException e) {
+                        System.out.println(e.getMessage());
+                    }
+                    System.out.println("Read " + list.removeFirst());
+                    System.out.println(list + " " + list.size());
+                }
+            }
+        solution:
+          ReadingList.java: |
+            public class ReadingList {
+                private TitleNode head;
+                private TitleNode tail;
+                private int size;
+
+                public ReadingList() {
+                    this.head = null;
+                    this.tail = null;
+                    this.size = 0;
+                }
+
+                public void addFirst(String title) {
+                    this.head = new TitleNode(title, this.head);
+                    if (this.tail == null) {
+                        this.tail = this.head;
+                    }
+                    this.size++;
+                }
+
+                public void addLast(String title) {
+                    TitleNode node = new TitleNode(title, null);
+                    if (this.tail == null) {
+                        this.head = node;
+                    } else {
+                        this.tail.next = node;
+                    }
+                    this.tail = node;
+                    this.size++;
+                }
+
+                public String get(int index) {
+                    if (index < 0 || index >= this.size) {
+                        throw new IndexOutOfBoundsException("Index " + index + " out of bounds for size " + this.size);
+                    }
+                    TitleNode current = this.head;
+                    for (int i = 0; i < index; i++) {
+                        current = current.next;
+                    }
+                    return current.title;
+                }
+
+                public String removeFirst() {
+                    if (this.head == null) {
+                        throw new IllegalStateException("The reading list is empty");
+                    }
+                    String title = this.head.title;
+                    this.head = this.head.next;
+                    if (this.head == null) {
+                        this.tail = null;
+                    }
+                    this.size--;
+                    return title;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+
+                @Override
+                public String toString() {
+                    String result = "[";
+                    TitleNode current = this.head;
+                    while (current != null) {
+                        result += current.title;
+                        if (current.next != null) {
+                            result += ", ";
+                        }
+                        current = current.next;
+                    }
+                    return result + "]";
+                }
+            }
+          TitleNode.java: |
+            public class TitleNode {
+                String title;
+                TitleNode next;
+
+                public TitleNode(String title, TitleNode next) {
+                    this.title = title;
+                    this.next = next;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    ReadingList list = new ReadingList();
+                    list.addLast("Emma");
+                    list.addLast("Dune");
+                    list.addLast("Ulysses");
+                    System.out.println(list.get(0) + ", " + list.get(2));
+                    try {
+                        list.get(5);
+                    } catch (IndexOutOfBoundsException e) {
+                        System.out.println(e.getMessage());
+                    }
+                    System.out.println("Read " + list.removeFirst());
+                    System.out.println(list + " " + list.size());
+                }
+            }
+        hints:
+          - "`get` first checks the index: `if (index < 0 || index >= this.size) { throw new IndexOutOfBoundsException(\"Index \" + index + \" out of bounds for size \" + this.size); }`. Then it starts at `head` and moves `current = current.next;` index times."
+          - "`removeFirst` keeps the first title in a variable, moves `head` on with `this.head = this.head.next;`, and lowers the size. If `head` is now `null`, the list is empty: set `tail` to `null` too."
+        require:
+          - pattern: throw\s+new\s+IndexOutOfBoundsException
+            message: "Refuse a bad index with `throw new IndexOutOfBoundsException(...)`."
+          - pattern: throw\s+new\s+IllegalStateException
+            message: "Refuse to remove from an empty list with `throw new IllegalStateException(\"The reading list is empty\")`."
+        tests:
+          - call: |
+              ReadingList list = new ReadingList();
+              list.addLast("Emma");
+              list.addLast("Dune");
+              list.addLast("Ulysses");
+              System.out.println(list.get(0) + ", " + list.get(2));
+              try {
+                  list.get(5);
+              } catch (IndexOutOfBoundsException e) {
+                  System.out.println(e.getMessage());
+              }
+              System.out.println("Read " + list.removeFirst());
+              System.out.println(list + " " + list.size());
+          - call: |
+              ReadingList list = new ReadingList();
+              list.addLast("Kindred");
+              list.addFirst("Persuasion");
+              System.out.println(list.get(1));
+              try {
+                  list.get(-1);
+              } catch (IndexOutOfBoundsException e) {
+                  System.out.println(e.getMessage());
+              }
+              try {
+                  list.get(2);
+              } catch (IndexOutOfBoundsException e) {
+                  System.out.println(e.getMessage());
+              }
+              System.out.println(list.removeFirst() + " " + list.removeFirst());
+              System.out.println(list + " " + list.size());
+              try {
+                  list.removeFirst();
+              } catch (IllegalStateException e) {
+                  System.out.println(e.getMessage());
+              }
+              list.addLast("Middlemarch");
+              list.addLast("Emma");
+              System.out.println(list + " " + list.size() + " " + list.get(1));
+            hidden: true
+
+  - id: linked-structures-stacks-queues
+    slug: stacks-and-queues
+    title: Stacks and queues on linked nodes
+    text: |
+      Many programs don't need a list's `get(index)` at all. They only add and remove at the ends, and two ways of doing that have names of their own.
+
+      ### A stack: last in, first out
+
+      A **stack** adds and removes at one end only, its **top**, like a pile of plates: the plate you put on last is the first you take off. Its operations are usually called `push` (put on top), `pop` (take the top one off and return it), `peek` (look at the top one without taking it) and `isEmpty`. The call stack (module 11, and module 55's recursion) is one: the newest call is on top, and it's the first to finish.
+
+      On linked nodes the top is the head: `push` is `addFirst`, and `pop` is `removeFirst`. Both take a few steps whatever the size. This stack of whole numbers gives back 1, 2, 3 and 4 in the opposite order:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              NumberStack stack = new NumberStack();
+              for (int digit = 1; digit <= 4; digit++) {
+                  stack.push(digit);
+              }
+              while (!stack.isEmpty()) {
+                  System.out.print(stack.pop() + " ");
+              }
+              System.out.println();
+          }
+      }
+      // ==== NumberStack.java ====
+      public class NumberStack {
+          private NumberNode top;
+
+          public void push(int value) {
+              this.top = new NumberNode(value, this.top);
+          }
+
+          public int pop() {
+              int value = this.top.value;
+              this.top = this.top.next;
+              return value;
+          }
+
+          public boolean isEmpty() {
+              return this.top == null;
+          }
+      }
+      // ==== NumberNode.java ====
+      public class NumberNode {
+          int value;
+          NumberNode next;
+
+          public NumberNode(int value, NumberNode next) {
+              this.value = value;
+              this.next = next;
+          }
+      }
+      ```
+
+      ```output
+      4 3 2 1
+      ```
+
+      NumberStack has no constructor of its own, so Java gives it a default constructor that takes no parameters, and `top` starts as `null`, the default value of a reference variable. This `pop` crashes on an empty stack with a NullPointerException; a better one checks first and throws an exception with a clear message.
+
+      ### A queue: first in, first out
+
+      A **queue** adds at one end, its back, and removes at the other, its front, like a line at a counter: whoever came first is served first. Its operations are often called `enqueue` (join at the back) and `dequeue` (leave from the front).
+
+      On linked nodes, the front is the head and the back is the tail, with the links pointing from front to back:
+
+      ```text
+      head                                   tail
+      [report.pdf] --> [map.png] --> [menu.txt] --> null
+      ```
+
+      - `enqueue` is step 2's `addLast`: link the new node after `tail`, and move `tail` to it.
+      - `dequeue` is `removeFirst`: take the head's value, and move `head` to `head.next`. When the queue becomes empty, set `tail` to `null` as well.
+
+      Why not the other way round, adding at the head and removing at the tail? To remove the last node, a list must set the `next` of the node before it to `null`, and the only way to find that node is to walk from the head. With the links pointing front to back, both operations take a few steps.
+
+      ### Checking brackets with a stack
+
+      Brackets in a formula must close in the opposite order to the one they opened in: `([])` is fine, `([)]` isn't. A stack checks this. Go through the characters one by one:
+
+      - an opening bracket, `(`, `[` or `{`, is pushed;
+      - a closing bracket must match the opening bracket on top of the stack, which is popped. If the stack is empty, or the top is the wrong kind, the brackets aren't balanced;
+      - other characters are skipped.
+
+      At the end, the stack must be empty: anything left on it was never closed.
+
+      **Your turn:** an office keeps incoming letters in a tray, and the newest letter is always on top. In `InTray.java`, write a stack of Strings on linked nodes (the class `LetterNode` is ready), with:
+
+      - `push(String letter)` puts a letter on top;
+      - `pop()` takes the top letter off and returns it;
+      - `peek()` returns the top letter without taking it off;
+      - `isEmpty()` and `size()`.
+
+      `pop` and `peek` on an empty tray throw an `IllegalStateException` with the message `The tray is empty`. The check runs:
+
+      ```java fragment
+      InTray tray = new InTray();
+      tray.push("invoice");
+      tray.push("postcard");
+      tray.push("tax form");
+      System.out.println(tray.peek() + ", " + tray.size() + " letters");
+      System.out.println(tray.pop());
+      System.out.println(tray.pop());
+      System.out.println(tray.size() + " " + tray.isEmpty());
+      ```
+
+      and expects:
+
+      ```
+      tax form, 3 letters
+      tax form
+      postcard
+      1 false
+      ```
+    seed:
+      InTray.java: |
+        public class InTray {
+
+        }
+      LetterNode.java: |
+        public class LetterNode {
+            String letter;
+            LetterNode next;
+
+            public LetterNode(String letter, LetterNode next) {
+                this.letter = letter;
+                this.next = next;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                InTray tray = new InTray();
+                tray.push("invoice");
+                tray.push("postcard");
+                tray.push("tax form");
+                System.out.println(tray.peek() + ", " + tray.size() + " letters");
+                System.out.println(tray.pop());
+                System.out.println(tray.pop());
+                System.out.println(tray.size() + " " + tray.isEmpty());
+            }
+        }
+    solution:
+      InTray.java: |
+        public class InTray {
+            private LetterNode top;
+            private int size;
+
+            public InTray() {
+                this.top = null;
+                this.size = 0;
+            }
+
+            public void push(String letter) {
+                this.top = new LetterNode(letter, this.top);
+                this.size++;
+            }
+
+            public String pop() {
+                String letter = peek();
+                this.top = this.top.next;
+                this.size--;
+                return letter;
+            }
+
+            public String peek() {
+                if (this.top == null) {
+                    throw new IllegalStateException("The tray is empty");
+                }
+                return this.top.letter;
+            }
+
+            public boolean isEmpty() {
+                return this.top == null;
+            }
+
+            public int size() {
+                return this.size;
+            }
+        }
+      LetterNode.java: |
+        public class LetterNode {
+            String letter;
+            LetterNode next;
+
+            public LetterNode(String letter, LetterNode next) {
+                this.letter = letter;
+                this.next = next;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                InTray tray = new InTray();
+                tray.push("invoice");
+                tray.push("postcard");
+                tray.push("tax form");
+                System.out.println(tray.peek() + ", " + tray.size() + " letters");
+                System.out.println(tray.pop());
+                System.out.println(tray.pop());
+                System.out.println(tray.size() + " " + tray.isEmpty());
+            }
+        }
+    hints:
+      - "Two instance variables: `private LetterNode top;` and `private int size;`. `push` is `this.top = new LetterNode(letter, this.top);` and one more in the size."
+      - "`peek` and `pop` both start with `if (this.top == null) { throw new IllegalStateException(\"The tray is empty\"); }`. `pop` then keeps `this.top.letter`, moves `top` to `this.top.next`, and lowers the size."
+    require:
+      - pattern: throw\s+new\s+IllegalStateException
+        message: "On an empty tray, throw an IllegalStateException: `throw new IllegalStateException(\"The tray is empty\");`."
+    forbid:
+      - pattern: \b(ArrayList|LinkedList|ArrayDeque|Stack)\b
+        message: "Build the stack on LetterNode objects, not on one of Java's collections."
+    tests:
+      - call: |
+          InTray tray = new InTray();
+          tray.push("invoice");
+          tray.push("postcard");
+          tray.push("tax form");
+          System.out.println(tray.peek() + ", " + tray.size() + " letters");
+          System.out.println(tray.pop());
+          System.out.println(tray.pop());
+          System.out.println(tray.size() + " " + tray.isEmpty());
+      - call: |
+          InTray tray = new InTray();
+          System.out.println(tray.isEmpty() + " " + tray.size());
+          try {
+              tray.pop();
+          } catch (IllegalStateException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              tray.peek();
+          } catch (IllegalStateException e) {
+              System.out.println(e.getMessage());
+          }
+          tray.push("memo");
+          System.out.println(tray.pop() + " " + tray.isEmpty() + " " + tray.size());
+          tray.push("bill");
+          tray.push("flyer");
+          System.out.println(tray.peek() + " " + tray.size());
+        hidden: true
+    more:
+      - task: |
+          An office printer prints documents in the order they were sent. In `PrintQueue.java`, write a queue of document names on linked nodes (`JobNode` is ready). Keep references to both the first node and the last one (`head` and `tail`), so that neither method walks through the queue:
+
+          - `enqueue(String document)` adds a document at the back;
+          - `dequeue()` removes the document at the front and returns it. On an empty queue it throws an `IllegalStateException` with the message `Nothing to print`;
+          - `isEmpty()` and `size()`.
+
+          The check runs:
+
+          ```java fragment
+          PrintQueue queue = new PrintQueue();
+          queue.enqueue("report.pdf");
+          queue.enqueue("map.png");
+          System.out.println("Printing " + queue.dequeue());
+          queue.enqueue("menu.txt");
+          while (!queue.isEmpty()) {
+              System.out.println("Printing " + queue.dequeue() + ", " + queue.size() + " left");
+          }
+          ```
+
+          and expects:
+
+          ```
+          Printing report.pdf
+          Printing map.png, 1 left
+          Printing menu.txt, 0 left
+          ```
+        seed:
+          PrintQueue.java: |
+            public class PrintQueue {
+
+            }
+          JobNode.java: |
+            public class JobNode {
+                String document;
+                JobNode next;
+
+                public JobNode(String document) {
+                    this.document = document;
+                    this.next = null;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    PrintQueue queue = new PrintQueue();
+                    queue.enqueue("report.pdf");
+                    queue.enqueue("map.png");
+                    System.out.println("Printing " + queue.dequeue());
+                    queue.enqueue("menu.txt");
+                    while (!queue.isEmpty()) {
+                        System.out.println("Printing " + queue.dequeue() + ", " + queue.size() + " left");
+                    }
+                }
+            }
+        solution:
+          PrintQueue.java: |
+            public class PrintQueue {
+                private JobNode head;
+                private JobNode tail;
+                private int size;
+
+                public PrintQueue() {
+                    this.head = null;
+                    this.tail = null;
+                    this.size = 0;
+                }
+
+                public void enqueue(String document) {
+                    JobNode node = new JobNode(document);
+                    if (this.tail == null) {
+                        this.head = node;
+                    } else {
+                        this.tail.next = node;
+                    }
+                    this.tail = node;
+                    this.size++;
+                }
+
+                public String dequeue() {
+                    if (this.head == null) {
+                        throw new IllegalStateException("Nothing to print");
+                    }
+                    String document = this.head.document;
+                    this.head = this.head.next;
+                    if (this.head == null) {
+                        this.tail = null;
+                    }
+                    this.size--;
+                    return document;
+                }
+
+                public boolean isEmpty() {
+                    return this.head == null;
+                }
+
+                public int size() {
+                    return this.size;
+                }
+            }
+          JobNode.java: |
+            public class JobNode {
+                String document;
+                JobNode next;
+
+                public JobNode(String document) {
+                    this.document = document;
+                    this.next = null;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    PrintQueue queue = new PrintQueue();
+                    queue.enqueue("report.pdf");
+                    queue.enqueue("map.png");
+                    System.out.println("Printing " + queue.dequeue());
+                    queue.enqueue("menu.txt");
+                    while (!queue.isEmpty()) {
+                        System.out.println("Printing " + queue.dequeue() + ", " + queue.size() + " left");
+                    }
+                }
+            }
+        hints:
+          - "Three instance variables: `head`, `tail` (both JobNodes) and `size`. `enqueue` is step 2's `addLast`: on an empty queue the new node becomes the head, otherwise `this.tail.next = node;`, and then `this.tail = node;`."
+          - "`dequeue` is `removeFirst`: check for an empty queue, keep the head's document, move `head` on. If the queue is now empty, set `tail` to `null`, or the next `enqueue` would link the new node after a removed one."
+        require:
+          - pattern: JobNode\s+tail\b
+            message: "Keep the last node in an instance variable `tail`, so that `enqueue` doesn't walk the queue."
+          - pattern: throw\s+new\s+IllegalStateException
+            message: "On an empty queue, `dequeue` throws an IllegalStateException with the message `Nothing to print`."
+        forbid:
+          - pattern: \b(ArrayList|LinkedList|ArrayDeque)\b
+            message: "Build the queue on JobNode objects, not on one of Java's collections."
+        tests:
+          - call: |
+              PrintQueue queue = new PrintQueue();
+              queue.enqueue("report.pdf");
+              queue.enqueue("map.png");
+              System.out.println("Printing " + queue.dequeue());
+              queue.enqueue("menu.txt");
+              while (!queue.isEmpty()) {
+                  System.out.println("Printing " + queue.dequeue() + ", " + queue.size() + " left");
+              }
+          - call: |
+              PrintQueue queue = new PrintQueue();
+              System.out.println(queue.isEmpty() + " " + queue.size());
+              try {
+                  queue.dequeue();
+              } catch (IllegalStateException e) {
+                  System.out.println(e.getMessage());
+              }
+              queue.enqueue("a.txt");
+              System.out.println(queue.dequeue() + " " + queue.isEmpty());
+              queue.enqueue("b.txt");
+              queue.enqueue("c.txt");
+              queue.enqueue("d.txt");
+              System.out.println(queue.dequeue() + " " + queue.size());
+              queue.enqueue("e.txt");
+              while (!queue.isEmpty()) {
+                  System.out.print(queue.dequeue() + " ");
+              }
+              System.out.println(queue.size());
+            hidden: true
+      - task: |
+          A spreadsheet checks the brackets in a formula before it calculates anything. Write the method `balanced(String formula)` in `Main.java`. It returns `true` when every bracket, `(`, `[` and `{`, is closed by the matching `)`, `]` or `}` in the right order, and `false` otherwise. Other characters don't matter. Use the stack of characters in `CharStack.java` (it has `push`, `pop`, `peek` and `isEmpty`; `pop` and `peek` throw an exception on an empty stack, so check `isEmpty()` first), the way the lesson describes. The check runs:
+
+          ```java fragment
+          System.out.println(balanced("=SUM((A1+B2)*[C3])"));
+          System.out.println(balanced("=MAX(A1,{B2)}"));
+          System.out.println(balanced("=(A1+B2"));
+          System.out.println(balanced("=A1)"));
+          ```
+
+          and expects:
+
+          ```
+          true
+          false
+          false
+          false
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(balanced("=SUM((A1+B2)*[C3])"));
+                    System.out.println(balanced("=MAX(A1,{B2)}"));
+                    System.out.println(balanced("=(A1+B2"));
+                    System.out.println(balanced("=A1)"));
+                }
+
+                public static boolean balanced(String formula) {
+                    return true;
+                }
+            }
+          CharStack.java: |
+            public class CharStack {
+                private CharNode top;
+
+                public void push(char value) {
+                    this.top = new CharNode(value, this.top);
+                }
+
+                public char pop() {
+                    char value = peek();
+                    this.top = this.top.next;
+                    return value;
+                }
+
+                public char peek() {
+                    if (this.top == null) {
+                        throw new IllegalStateException("The stack is empty");
+                    }
+                    return this.top.value;
+                }
+
+                public boolean isEmpty() {
+                    return this.top == null;
+                }
+            }
+          CharNode.java: |
+            public class CharNode {
+                char value;
+                CharNode next;
+
+                public CharNode(char value, CharNode next) {
+                    this.value = value;
+                    this.next = next;
+                }
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(balanced("=SUM((A1+B2)*[C3])"));
+                    System.out.println(balanced("=MAX(A1,{B2)}"));
+                    System.out.println(balanced("=(A1+B2"));
+                    System.out.println(balanced("=A1)"));
+                }
+
+                public static boolean balanced(String formula) {
+                    CharStack open = new CharStack();
+                    for (int i = 0; i < formula.length(); i++) {
+                        char c = formula.charAt(i);
+                        if (c == '(' || c == '[' || c == '{') {
+                            open.push(c);
+                        } else if (c == ')' || c == ']' || c == '}') {
+                            if (open.isEmpty()) {
+                                return false;
+                            }
+                            char opening = open.pop();
+                            if (c == ')' && opening != '(') {
+                                return false;
+                            }
+                            if (c == ']' && opening != '[') {
+                                return false;
+                            }
+                            if (c == '}' && opening != '{') {
+                                return false;
+                            }
+                        }
+                    }
+                    return open.isEmpty();
+                }
+            }
+          CharStack.java: |
+            public class CharStack {
+                private CharNode top;
+
+                public void push(char value) {
+                    this.top = new CharNode(value, this.top);
+                }
+
+                public char pop() {
+                    char value = peek();
+                    this.top = this.top.next;
+                    return value;
+                }
+
+                public char peek() {
+                    if (this.top == null) {
+                        throw new IllegalStateException("The stack is empty");
+                    }
+                    return this.top.value;
+                }
+
+                public boolean isEmpty() {
+                    return this.top == null;
+                }
+            }
+          CharNode.java: |
+            public class CharNode {
+                char value;
+                CharNode next;
+
+                public CharNode(char value, CharNode next) {
+                    this.value = value;
+                    this.next = next;
+                }
+            }
+        hints:
+          - "Go through the formula with `charAt`. Push each opening bracket. For a closing bracket, return `false` at once if the stack is empty; otherwise pop and compare: a `)` needs a `(`, a `]` a `[`, and a `}` a `{`."
+          - "After the loop, every opening bracket must have been closed: `return open.isEmpty();`."
+        require:
+          - pattern: new\s+CharStack\s*\(
+            message: "Keep the opening brackets on a `new CharStack()`."
+        tests:
+          - call: |
+              System.out.println(balanced("=SUM((A1+B2)*[C3])"));
+              System.out.println(balanced("=MAX(A1,{B2)}"));
+              System.out.println(balanced("=(A1+B2"));
+              System.out.println(balanced("=A1)"));
+          - call: |
+              System.out.println(balanced(""));
+              System.out.println(balanced("=A1*2"));
+              System.out.println(balanced("{[()()]}"));
+              System.out.println(balanced(")("));
+              System.out.println(balanced("(]"));
+              System.out.println(balanced("([)]"));
+              System.out.println(balanced("{{[[(())]]}}"));
+              System.out.println(balanced("(()"));
+            hidden: true
+
+  - id: linked-structures-array-deque
+    slug: array-deque
+    title: ArrayDeque from the library
+    text: |
+      Java has a ready-made class for stacks and queues: `ArrayDeque`, in `java.util`. A **deque** (said "deck", short for double-ended queue) can add and remove at both of its ends, so it can be a stack or a queue. Unlike the classes this module has built so far, an ArrayDeque keeps its values in an array, not in nodes: an array that it replaces with a bigger one when it's full, like an ArrayList. Unlike an ArrayList, it doesn't shift the other values along when you add or remove at the front. Java's documentation says that most of its operations run in amortized constant time: the same few steps whatever the size, apart from the occasional copy into a bigger array.
+
+      ### As a stack
+
+      `push`, `pop` and `peek` work at the front of the deque, which is the stack's top. A painter puts coats of paint on a wall; the last coat is the one you see:
+
+      ```java run
+      import java.util.ArrayDeque;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayDeque<String> coats = new ArrayDeque<>();
+              coats.push("primer");
+              coats.push("white");
+              coats.push("sea blue");
+              System.out.println(coats);
+              System.out.println("Scraped off: " + coats.pop());
+              System.out.println("Now showing: " + coats.peek());
+              System.out.println(coats + ", " + coats.size() + " coats");
+          }
+      }
+      ```
+
+      ```output
+      [sea blue, white, primer]
+      Scraped off: sea blue
+      Now showing: white
+      [white, primer], 2 coats
+      ```
+
+      Printing a deque, or going through it with a for-each loop, goes from the front to the back. For a stack, that's top first.
+
+      Java also has an old class called `Stack`. Its own documentation recommends using a Deque such as ArrayDeque in preference to it.
+
+      ### As a queue
+
+      `offer` adds at the back, and `poll` removes from the front and returns what it removed. `peek` looks at the front. A juice bar makes the drinks in the order they were ordered:
+
+      ```java run
+      import java.util.ArrayDeque;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayDeque<String> orders = new ArrayDeque<>();
+              orders.offer("orange");
+              orders.offer("mango");
+              orders.offer("beet and apple");
+              System.out.println("Making " + orders.poll());
+              System.out.println("Next up: " + orders.peek());
+              System.out.println("Waiting: " + orders);
+              orders.poll();
+              orders.poll();
+              System.out.println(orders.poll());
+              System.out.println(orders.isEmpty());
+          }
+      }
+      ```
+
+      ```output
+      Making orange
+      Next up: mango
+      Waiting: [mango, beet and apple]
+      null
+      true
+      ```
+
+      On an empty deque, `poll` and `peek` return `null`, while `pop` throws a NoSuchElementException. An ArrayDeque doesn't accept `null` as a value (adding one throws a NullPointerException), so a `null` from `poll` always means that the deque was empty.
+
+      ### Both ends
+
+      Each end has its own methods too: `addFirst` and `addLast`, `offerFirst` and `offerLast`, `removeFirst` and `removeLast`, `peekFirst` and `peekLast`, `pollFirst` and `pollLast`. `push` is the same as `addFirst`, `pop` as `removeFirst`, `offer` as `offerLast` and `poll` as `pollFirst`. A deque used as a stack at its back end (`addLast` and `removeLast`) keeps its values in the order they were added, which is handy when you print them. `clear()` empties a deque.
+
+      The variable can have the interface's type, as with `List` and ArrayList: `Deque<String> coats = new ArrayDeque<>();` (with `import java.util.Deque;`). With `var` (module 57), `var coats = new ArrayDeque<String>();` works too.
+
+      **Your turn:** a web browser keeps the pages you've opened on a stack, so that its back button can return to the page before. The program reads lines until the line `end`:
+
+      - `back` closes the page on top and prints `back to ` and the page that is now on top. When fewer than two pages are open, it prints `can't go back` instead and changes nothing.
+      - Any other line is the name of a page to open: it goes on top.
+
+      At `end`, the program prints `now at ` and the page on top, or `no page open` if there is none. Use an ArrayDeque as the stack, with `push`, `pop` and `peek`. With this input:
+
+      ```input
+      home
+      news
+      weather
+      back
+      sports
+      back
+      back
+      back
+      end
+      ```
+
+      the program prints:
+
+      ```
+      back to news
+      back to news
+      back to home
+      can't go back
+      now at home
+      ```
+    seed: |
+      import java.util.ArrayDeque;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayDeque<String> pages = new ArrayDeque<>();
+
+          }
+      }
+    solution: |
+      import java.util.ArrayDeque;
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              ArrayDeque<String> pages = new ArrayDeque<>();
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.equals("end")) {
+                      break;
+                  }
+                  if (line.equals("back")) {
+                      if (pages.size() < 2) {
+                          System.out.println("can't go back");
+                      } else {
+                          pages.pop();
+                          System.out.println("back to " + pages.peek());
+                      }
+                  } else {
+                      pages.push(line);
+                  }
+              }
+              if (pages.isEmpty()) {
+                  System.out.println("no page open");
+              } else {
+                  System.out.println("now at " + pages.peek());
+              }
+          }
+      }
+    hints:
+      - "Read lines in a `while (true)` loop that breaks at `end`. A page is opened with `pages.push(line);`."
+      - "For `back`, check `pages.size() < 2` first. Otherwise `pages.pop();` closes the top page, and `pages.peek()` is the page you're back to."
+    require:
+      - pattern: \.push\s*\(
+        message: "Open a page by pushing it onto the ArrayDeque with `push`."
+    tests:
+      - stdin: |
+          home
+          news
+          weather
+          back
+          sports
+          back
+          back
+          back
+          end
+      - stdin: |
+          end
+        hidden: true
+      - stdin: |
+          back
+          recipes
+          back
+          soup
+          bread
+          back
+          back
+          end
+        hidden: true
+      - stdin: |
+          maps
+          maps
+          back
+          end
+        hidden: true
+    more:
+      - task: |
+          A ticket office serves people in the order they joined the line. The program reads lines until `end`:
+
+          - `join ` and a name: the person joins the back of the line;
+          - `serve`: the person at the front leaves the line, and the program prints `serving ` and their name, or `nobody in line` when the line is empty.
+
+          At `end`, it prints `still waiting: ` and the line, front first, as an ArrayDeque prints itself. Use an ArrayDeque as a queue, with `offer` and `poll`. With this input:
+
+          ```input
+          join Ada
+          join Bo
+          serve
+          join Cy
+          join Dee
+          serve
+          end
+          ```
+
+          the program prints:
+
+          ```
+          serving Ada
+          serving Bo
+          still waiting: [Cy, Dee]
+          ```
+        seed: |
+          import java.util.ArrayDeque;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.ArrayDeque;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayDeque<String> line = new ArrayDeque<>();
+                  while (true) {
+                      String command = scanner.nextLine();
+                      if (command.equals("end")) {
+                          break;
+                      }
+                      if (command.startsWith("join ")) {
+                          line.offer(command.substring(5));
+                      } else if (command.equals("serve")) {
+                          String name = line.poll();
+                          if (name == null) {
+                              System.out.println("nobody in line");
+                          } else {
+                              System.out.println("serving " + name);
+                          }
+                      }
+                  }
+                  System.out.println("still waiting: " + line);
+              }
+          }
+        hints:
+          - "`command.startsWith(\"join \")` spots a join, and `command.substring(5)` is the name after it. `line.offer(name);` puts the person at the back."
+          - "`line.poll()` returns the person at the front, or `null` when the line is empty. At the end, `\"still waiting: \" + line` prints the deque in square brackets."
+        require:
+          - pattern: new\s+ArrayDeque\s*<
+            message: "Keep the line in an ArrayDeque."
+          - pattern: \.poll\s*\(
+            message: "Serve the front of the line with `poll`."
+        tests:
+          - stdin: |
+              join Ada
+              join Bo
+              serve
+              join Cy
+              join Dee
+              serve
+              end
+          - stdin: |
+              serve
+              join Eve
+              serve
+              serve
+              end
+            hidden: true
+          - stdin: |
+              join Finn
+              join Gus
+              join Hal
+              end
+            hidden: true
+      - task: |
+          A small text editor has undo and redo. The program reads lines until `end`:
+
+          - `undo` takes back the last word typed that is still in the text. It prints `nothing to undo` when the text is empty.
+          - `redo` puts back the word that the last `undo` took away (after two undos, two redos put both words back, in their order). It prints `nothing to redo` when there's nothing to put back. Typing a new word forgets everything that could still be redone.
+          - Any other line is a word typed: it goes at the end of the text.
+
+          At `end`, the program prints the text, its words separated by single spaces, or `(empty)` when it has no words. Use two ArrayDeques: one for the words of the text, and one as a stack of the words that undo took away. With this input:
+
+          ```input
+          dear
+          old
+          friend
+          undo
+          undo
+          redo
+          pal
+          redo
+          end
+          ```
+
+          the program prints:
+
+          ```
+          nothing to redo
+          dear old pal
+          ```
+        seed: |
+          import java.util.ArrayDeque;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayDeque<String> words = new ArrayDeque<>();
+                  ArrayDeque<String> undone = new ArrayDeque<>();
+
+              }
+          }
+        solution: |
+          import java.util.ArrayDeque;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  ArrayDeque<String> words = new ArrayDeque<>();
+                  ArrayDeque<String> undone = new ArrayDeque<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      if (line.equals("undo")) {
+                          if (words.isEmpty()) {
+                              System.out.println("nothing to undo");
+                          } else {
+                              undone.push(words.removeLast());
+                          }
+                      } else if (line.equals("redo")) {
+                          if (undone.isEmpty()) {
+                              System.out.println("nothing to redo");
+                          } else {
+                              words.addLast(undone.pop());
+                          }
+                      } else {
+                          words.addLast(line);
+                          undone.clear();
+                      }
+                  }
+                  if (words.isEmpty()) {
+                      System.out.println("(empty)");
+                  } else {
+                      System.out.println(String.join(" ", words));
+                  }
+              }
+          }
+        hints:
+          - "Keep the text in `words` with `addLast` and take the last word back with `removeLast`, so the words stay in the order they were typed. `undo` pushes the removed word onto `undone`."
+          - "`redo` pops from `undone` and adds that word at the end of `words`. A typed word is added with `words.addLast(line);` and then `undone.clear();`. At the end, `String.join(\" \", words)` joins the words with spaces (module 39)."
+        tests:
+          - stdin: |
+              dear
+              old
+              friend
+              undo
+              undo
+              redo
+              pal
+              redo
+              end
+          - stdin: |
+              undo
+              redo
+              end
+            hidden: true
+          - stdin: |
+              see
+              you
+              soon
+              undo
+              undo
+              undo
+              undo
+              redo
+              redo
+              redo
+              redo
+              end
+            hidden: true
+          - stdin: |
+              hello
+              undo
+              world
+              end
+            hidden: true
+
+  - id: linked-structures-search-trees
+    slug: binary-search-trees
+    title: Binary search trees
+    text: |
+      A list's nodes have one link each. A **tree**'s nodes can have several. In a **binary tree**, each node has two links, `left` and `right`, either of which can be `null`. The top node is the **root**, and a node with no children is a **leaf**. A node's left link leads to its **left subtree**: that node and everything under it.
+
+      ### The search tree rule
+
+      A **binary search tree** keeps one rule at every node: everything in its left subtree is smaller than the node's value, and everything in its right subtree is bigger. Adding 50, 30, 70, 20, 40 and 60, in that order, gives this tree:
+
+      ```text
+              50
+             /  \
+           30    70
+          /  \   /
+        20   40 60
+      ```
+
+      To find 40, start at the root: 40 is smaller than 50, so go left; bigger than 30, so go right; there it is. Each comparison goes one level down and skips a whole subtree, so a search visits at most one node per level. A value that isn't in the tree is found missing the same way, when the next link to follow is `null`. Ten levels can hold up to 1,023 values, so a tree of 1,000 values with a good shape needs only 10 comparisons to find any of them.
+
+      The shape depends on the order the values come in. Added in sorted order, 20, 30, 40, 50 and so on, each value goes to the right of the one before, and the tree is a chain as long as a linked list. Java's TreeMap (step 6) avoids that: its tree rebalances itself as values are added (it's a kind called a red-black tree).
+
+      ### Adding, recursively
+
+      A tree is made of smaller trees, so recursion (module 55) fits it well. To add a value to a subtree: if the subtree is empty (`null`), the result is a new node; otherwise add it to the left or the right subtree, whichever the rule says, and the node stays where it was:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              NumberTree tree = new NumberTree();
+              int[] values = {50, 30, 70, 20, 40, 60, 40};
+              for (int value : values) {
+                  tree.add(value);
+              }
+              System.out.println(tree.size() + " values");
+              System.out.println("Sum " + tree.sum());
+          }
+      }
+      // ==== NumberTree.java ====
+      public class NumberTree {
+          private NumberNode root;
+
+          public void add(int value) {
+              this.root = add(this.root, value);
+          }
+
+          private NumberNode add(NumberNode node, int value) {
+              if (node == null) {
+                  return new NumberNode(value);
+              }
+              if (value < node.value) {
+                  node.left = add(node.left, value);
+              } else if (value > node.value) {
+                  node.right = add(node.right, value);
+              }
+              return node;
+          }
+
+          public int size() {
+              return size(this.root);
+          }
+
+          private int size(NumberNode node) {
+              if (node == null) {
+                  return 0;
+              }
+              return size(node.left) + 1 + size(node.right);
+          }
+
+          public int sum() {
+              return sum(this.root);
+          }
+
+          private int sum(NumberNode node) {
+              if (node == null) {
+                  return 0;
+              }
+              return sum(node.left) + node.value + sum(node.right);
+          }
+      }
+      // ==== NumberNode.java ====
+      public class NumberNode {
+          int value;
+          NumberNode left;
+          NumberNode right;
+
+          public NumberNode(int value) {
+              this.value = value;
+              this.left = null;
+              this.right = null;
+          }
+      }
+      ```
+
+      ```output
+      6 values
+      Sum 270
+      ```
+
+      - Each public method calls a private helper of the same name that takes a node: the helper does the work on a subtree, and the public method starts it at the root. Code that uses the tree never sees a node.
+      - The recursive `add` returns the subtree's root. For an empty subtree, that's the new node, and `node.left = add(node.left, value);` links it in; for any other subtree, it's the node that was there, so the assignment changes nothing.
+      - The second 40 is neither smaller nor bigger than the 40 in the tree, so this tree ignores it, like a set.
+      - `size` and `sum` visit every node: the empty tree is the base case, and a tree is its left subtree, its root and its right subtree.
+      - Each call goes one level down, so the depth of the recursion is the height of the tree. Keep that in mind for a tree that's a long chain.
+
+      ### Visiting in order
+
+      `sum` adds the left subtree, then the node, then the right subtree. Visiting the nodes in that order, left, node, right, is called an **in-order** walk, and in a search tree it visits the values from smallest to biggest: everything left of a node is smaller, and everything right of it bigger. Printing the values on such a walk prints them sorted.
+
+      Strings are compared with `compareTo` (module 38): `word.compareTo(node.word)` is negative when `word` comes first in alphabetical order, positive when it comes after, and 0 when they're equal.
+
+      **Your turn:** a glossary keeps its words in a binary search tree. In `WordTree.java`, write `add(String word)`, which adds a word with the search tree rule, comparing with `compareTo`. A word that's already in the tree is ignored. You can write it recursively, like NumberTree, or with a loop. The class already has `printShape()`, which prints the tree with each child under its parent, indented and marked `L:` or `R:`. The check runs:
+
+      ```java fragment
+      WordTree glossary = new WordTree();
+      glossary.add("loop");
+      glossary.add("array");
+      glossary.add("method");
+      glossary.add("class");
+      glossary.add("variable");
+      glossary.add("array");
+      glossary.printShape();
+      ```
+
+      and expects:
+
+      ```
+      loop
+        L: array
+          R: class
+        R: method
+          R: variable
+      ```
+    seed:
+      WordTree.java: |
+        public class WordTree {
+            private WordNode root;
+
+            public void add(String word) {
+
+            }
+
+            public void printShape() {
+                printShape(this.root, "", "");
+            }
+
+            private void printShape(WordNode node, String indent, String label) {
+                if (node == null) {
+                    return;
+                }
+                System.out.println(indent + label + node.word);
+                printShape(node.left, indent + "  ", "L: ");
+                printShape(node.right, indent + "  ", "R: ");
+            }
+        }
+      WordNode.java: |
+        public class WordNode {
+            String word;
+            WordNode left;
+            WordNode right;
+
+            public WordNode(String word) {
+                this.word = word;
+                this.left = null;
+                this.right = null;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                WordTree glossary = new WordTree();
+                glossary.add("loop");
+                glossary.add("array");
+                glossary.add("method");
+                glossary.add("class");
+                glossary.add("variable");
+                glossary.add("array");
+                glossary.printShape();
+            }
+        }
+    solution:
+      WordTree.java: |
+        public class WordTree {
+            private WordNode root;
+
+            public void add(String word) {
+                this.root = add(this.root, word);
+            }
+
+            private WordNode add(WordNode node, String word) {
+                if (node == null) {
+                    return new WordNode(word);
+                }
+                int comparison = word.compareTo(node.word);
+                if (comparison < 0) {
+                    node.left = add(node.left, word);
+                } else if (comparison > 0) {
+                    node.right = add(node.right, word);
+                }
+                return node;
+            }
+
+            public void printShape() {
+                printShape(this.root, "", "");
+            }
+
+            private void printShape(WordNode node, String indent, String label) {
+                if (node == null) {
+                    return;
+                }
+                System.out.println(indent + label + node.word);
+                printShape(node.left, indent + "  ", "L: ");
+                printShape(node.right, indent + "  ", "R: ");
+            }
+        }
+      WordNode.java: |
+        public class WordNode {
+            String word;
+            WordNode left;
+            WordNode right;
+
+            public WordNode(String word) {
+                this.word = word;
+                this.left = null;
+                this.right = null;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                WordTree glossary = new WordTree();
+                glossary.add("loop");
+                glossary.add("array");
+                glossary.add("method");
+                glossary.add("class");
+                glossary.add("variable");
+                glossary.add("array");
+                glossary.printShape();
+            }
+        }
+    hints:
+      - "Follow NumberTree: `add(String word)` sets `this.root = add(this.root, word);`, and a private helper `add(WordNode node, String word)` returns `new WordNode(word)` when `node` is `null`."
+      - "Otherwise compare: `int comparison = word.compareTo(node.word);`. Below 0, `node.left = add(node.left, word);`; above 0, the same on the right; at 0, nothing. Return `node`."
+    tests:
+      - call: |
+          WordTree glossary = new WordTree();
+          glossary.add("loop");
+          glossary.add("array");
+          glossary.add("method");
+          glossary.add("class");
+          glossary.add("variable");
+          glossary.add("array");
+          glossary.printShape();
+      - call: |
+          WordTree tree = new WordTree();
+          tree.add("cat");
+          tree.printShape();
+          String[] words = {"ant", "bee", "cow", "dog", "eel"};
+          WordTree chain = new WordTree();
+          for (String word : words) {
+              chain.add(word);
+          }
+          chain.printShape();
+        hidden: true
+      - call: |
+          WordTree tree = new WordTree();
+          String[] words = {"mango", "fig", "pear", "apple", "grape", "kiwi", "plum", "date", "fig", "nut"};
+          for (String word : words) {
+              tree.add(word);
+          }
+          tree.printShape();
+        hidden: true
+    more:
+      - task: |
+          Give `WordTree` the method `contains(String word)`, which returns `true` when the word is in the tree. Use the search tree rule: from the root, go left or right at each node, so that it visits at most one node on each level. A loop or recursion both work. The check runs:
+
+          ```java fragment
+          WordTree glossary = new WordTree();
+          String[] words = {"loop", "array", "method", "class", "variable"};
+          for (String word : words) {
+              glossary.add(word);
+          }
+          System.out.println(glossary.contains("class"));
+          System.out.println(glossary.contains("variable"));
+          System.out.println(glossary.contains("string"));
+          System.out.println(new WordTree().contains("loop"));
+          ```
+
+          and expects:
+
+          ```
+          true
+          true
+          false
+          false
+          ```
+        seed:
+          WordTree.java: |
+            public class WordTree {
+                private WordNode root;
+
+                public void add(String word) {
+                    this.root = add(this.root, word);
+                }
+
+                private WordNode add(WordNode node, String word) {
+                    if (node == null) {
+                        return new WordNode(word);
+                    }
+                    int comparison = word.compareTo(node.word);
+                    if (comparison < 0) {
+                        node.left = add(node.left, word);
+                    } else if (comparison > 0) {
+                        node.right = add(node.right, word);
+                    }
+                    return node;
+                }
+
+                public boolean contains(String word) {
+                    return false;
+                }
+            }
+          WordNode.java: |
+            public class WordNode {
+                String word;
+                WordNode left;
+                WordNode right;
+
+                public WordNode(String word) {
+                    this.word = word;
+                    this.left = null;
+                    this.right = null;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    WordTree glossary = new WordTree();
+                    String[] words = {"loop", "array", "method", "class", "variable"};
+                    for (String word : words) {
+                        glossary.add(word);
+                    }
+                    System.out.println(glossary.contains("class"));
+                    System.out.println(glossary.contains("variable"));
+                    System.out.println(glossary.contains("string"));
+                    System.out.println(new WordTree().contains("loop"));
+                }
+            }
+        solution:
+          WordTree.java: |
+            public class WordTree {
+                private WordNode root;
+
+                public void add(String word) {
+                    this.root = add(this.root, word);
+                }
+
+                private WordNode add(WordNode node, String word) {
+                    if (node == null) {
+                        return new WordNode(word);
+                    }
+                    int comparison = word.compareTo(node.word);
+                    if (comparison < 0) {
+                        node.left = add(node.left, word);
+                    } else if (comparison > 0) {
+                        node.right = add(node.right, word);
+                    }
+                    return node;
+                }
+
+                public boolean contains(String word) {
+                    WordNode current = this.root;
+                    while (current != null) {
+                        int comparison = word.compareTo(current.word);
+                        if (comparison == 0) {
+                            return true;
+                        }
+                        if (comparison < 0) {
+                            current = current.left;
+                        } else {
+                            current = current.right;
+                        }
+                    }
+                    return false;
+                }
+            }
+          WordNode.java: |
+            public class WordNode {
+                String word;
+                WordNode left;
+                WordNode right;
+
+                public WordNode(String word) {
+                    this.word = word;
+                    this.left = null;
+                    this.right = null;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    WordTree glossary = new WordTree();
+                    String[] words = {"loop", "array", "method", "class", "variable"};
+                    for (String word : words) {
+                        glossary.add(word);
+                    }
+                    System.out.println(glossary.contains("class"));
+                    System.out.println(glossary.contains("variable"));
+                    System.out.println(glossary.contains("string"));
+                    System.out.println(new WordTree().contains("loop"));
+                }
+            }
+        hints:
+          - "With a loop: a variable `current` starts at `this.root`. While it isn't `null`, compare the word with `current.word`: equal means found, smaller means `current = current.left;`, bigger means `current = current.right;`."
+          - "Falling off the tree (`current` becomes `null`) means the word isn't there: `return false;` after the loop."
+        tests:
+          - call: |
+              WordTree glossary = new WordTree();
+              String[] words = {"loop", "array", "method", "class", "variable"};
+              for (String word : words) {
+                  glossary.add(word);
+              }
+              System.out.println(glossary.contains("class"));
+              System.out.println(glossary.contains("variable"));
+              System.out.println(glossary.contains("string"));
+              System.out.println(new WordTree().contains("loop"));
+          - call: |
+              WordTree tree = new WordTree();
+              String[] words = {"mango", "fig", "pear", "apple", "grape", "kiwi", "plum", "date", "nut"};
+              for (String word : words) {
+                  tree.add(word);
+              }
+              String[] asked = {"mango", "apple", "kiwi", "nut", "plum", "banana", "zucchini", "lime", "Mango", "dat"};
+              for (String word : asked) {
+                  System.out.println(word + " " + tree.contains(word));
+              }
+            hidden: true
+      - task: |
+          Give `WordTree` the method `printInOrder()`, which prints every word of the tree in alphabetical order, one per line, with an in-order walk: the left subtree, the node, the right subtree. Don't sort anything: the tree's order is enough. An empty tree prints nothing. The check runs:
+
+          ```java fragment
+          WordTree glossary = new WordTree();
+          String[] words = {"loop", "array", "method", "class", "variable", "string"};
+          for (String word : words) {
+              glossary.add(word);
+          }
+          glossary.printInOrder();
+          ```
+
+          and expects:
+
+          ```
+          array
+          class
+          loop
+          method
+          string
+          variable
+          ```
+        seed:
+          WordTree.java: |
+            public class WordTree {
+                private WordNode root;
+
+                public void add(String word) {
+                    this.root = add(this.root, word);
+                }
+
+                private WordNode add(WordNode node, String word) {
+                    if (node == null) {
+                        return new WordNode(word);
+                    }
+                    int comparison = word.compareTo(node.word);
+                    if (comparison < 0) {
+                        node.left = add(node.left, word);
+                    } else if (comparison > 0) {
+                        node.right = add(node.right, word);
+                    }
+                    return node;
+                }
+
+                public void printInOrder() {
+
+                }
+            }
+          WordNode.java: |
+            public class WordNode {
+                String word;
+                WordNode left;
+                WordNode right;
+
+                public WordNode(String word) {
+                    this.word = word;
+                    this.left = null;
+                    this.right = null;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    WordTree glossary = new WordTree();
+                    String[] words = {"loop", "array", "method", "class", "variable", "string"};
+                    for (String word : words) {
+                        glossary.add(word);
+                    }
+                    glossary.printInOrder();
+                }
+            }
+        solution:
+          WordTree.java: |
+            public class WordTree {
+                private WordNode root;
+
+                public void add(String word) {
+                    this.root = add(this.root, word);
+                }
+
+                private WordNode add(WordNode node, String word) {
+                    if (node == null) {
+                        return new WordNode(word);
+                    }
+                    int comparison = word.compareTo(node.word);
+                    if (comparison < 0) {
+                        node.left = add(node.left, word);
+                    } else if (comparison > 0) {
+                        node.right = add(node.right, word);
+                    }
+                    return node;
+                }
+
+                public void printInOrder() {
+                    printInOrder(this.root);
+                }
+
+                private void printInOrder(WordNode node) {
+                    if (node == null) {
+                        return;
+                    }
+                    printInOrder(node.left);
+                    System.out.println(node.word);
+                    printInOrder(node.right);
+                }
+            }
+          WordNode.java: |
+            public class WordNode {
+                String word;
+                WordNode left;
+                WordNode right;
+
+                public WordNode(String word) {
+                    this.word = word;
+                    this.left = null;
+                    this.right = null;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    WordTree glossary = new WordTree();
+                    String[] words = {"loop", "array", "method", "class", "variable", "string"};
+                    for (String word : words) {
+                        glossary.add(word);
+                    }
+                    glossary.printInOrder();
+                }
+            }
+        hints:
+          - "Write a private helper `printInOrder(WordNode node)`, and have the public method call it with `this.root`. The helper's base case is an empty subtree: `if (node == null) { return; }`."
+          - "Otherwise it prints the left subtree with a recursive call, then `node.word`, then the right subtree."
+        forbid:
+          - pattern: \b(sort|sorted|TreeSet|TreeMap)\b
+            message: "Don't sort: an in-order walk of the tree visits the words in order already."
+        tests:
+          - call: |
+              WordTree glossary = new WordTree();
+              String[] words = {"loop", "array", "method", "class", "variable", "string"};
+              for (String word : words) {
+                  glossary.add(word);
+              }
+              glossary.printInOrder();
+          - call: |
+              WordTree empty = new WordTree();
+              empty.printInOrder();
+              WordTree tree = new WordTree();
+              String[] words = {"mango", "fig", "pear", "apple", "grape", "kiwi", "plum", "date", "fig", "nut"};
+              for (String word : words) {
+                  tree.add(word);
+              }
+              tree.printInOrder();
+            hidden: true
+          - call: |
+              WordTree chain = new WordTree();
+              String[] words = {"zebra", "yak", "wolf", "vole"};
+              for (String word : words) {
+                  chain.add(word);
+              }
+              chain.printInOrder();
+            hidden: true
+
+  - id: linked-structures-tree-map-set
+    slug: treemap-and-treeset
+    title: TreeMap and TreeSet
+    text: |
+      Java's `TreeMap` and `TreeSet`, in `java.util`, keep their keys in a binary search tree that rebalances itself (a red-black tree). Their documentation promises that `get`, `put`, `containsKey` and `remove` (`add`, `contains` and `remove` for a TreeSet) take time proportional to log n, the logarithm of the size n (the base-2 logarithm of a million is about 20). A HashMap's documentation promises constant time for `get` and `put` when the hash codes spread the keys well, but a HashMap has no order. A tree map is the one to use when the order matters.
+
+      ### TreeMap
+
+      Module 57 used a TreeMap to go through its keys in order. Its keys are kept sorted by their `compareTo`: numbers from smallest to biggest, Strings in alphabetical order (by character code, so capital letters come before small ones). Printing a TreeMap, or going through `keySet()` or `entrySet()`, goes in that order. Its keys must be comparable: Strings and numbers are, and objects of your own class need to implement `Comparable` (module 38), or the TreeMap needs a Comparator, given to its constructor.
+
+      A sorted map can answer questions a HashMap can't:
+
+      - `firstKey()` and `lastKey()` are the smallest and the biggest key;
+      - `floorKey(key)` is the biggest key that is at most `key`, and `ceilingKey(key)` the smallest that is at least `key`. Both return `null` when there's no such key;
+      - `lowerKey(key)` and `higherKey(key)` are the same, but strictly smaller or bigger.
+
+      A radio station's schedule maps each show's start time to the show. The show on the air at 10:30 is the one with the latest start time at or before 10:30, which is exactly `floorKey`:
+
+      ```java run
+      import java.util.TreeMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              TreeMap<String, String> schedule = new TreeMap<>();
+              schedule.put("09:00", "Morning music");
+              schedule.put("06:00", "News and weather");
+              schedule.put("12:00", "Lunch talk");
+              schedule.put("13:00", "Afternoon music");
+              System.out.println(schedule);
+              System.out.println("First show at " + schedule.firstKey());
+              System.out.println("Last show at " + schedule.lastKey());
+              String start = schedule.floorKey("10:30");
+              System.out.println("At 10:30: " + schedule.get(start));
+              System.out.println("Next start after 10:30: " + schedule.ceilingKey("10:30"));
+              System.out.println(schedule.floorKey("05:00"));
+          }
+      }
+      ```
+
+      ```output
+      {06:00=News and weather, 09:00=Morning music, 12:00=Lunch talk, 13:00=Afternoon music}
+      First show at 06:00
+      Last show at 13:00
+      At 10:30: Morning music
+      Next start after 10:30: 12:00
+      null
+      ```
+
+      The times are Strings, compared character by character. That works because they all have the same form, two digits, a colon and two digits: the first character that differs decides, and it's the most significant one. `"9:00"` would come after `"10:30"`, since `'9'` comes after `'1'`. Dates written as `yyyy-mm-dd`, such as `2024-05-03`, sort the same way: year first, then month, then day, all with a fixed number of digits.
+
+      ### TreeSet
+
+      A `TreeSet` is a set that keeps its values sorted, with the same kind of methods: `first()`, `last()`, `floor(value)`, `ceiling(value)`, `lower(value)` and `higher(value)`. Like any set, it ignores a value it already has.
+
+      ```java run
+      import java.util.TreeSet;
+
+      public class Main {
+          public static void main(String[] args) {
+              TreeSet<Integer> sizes = new TreeSet<>();
+              sizes.add(42);
+              sizes.add(38);
+              sizes.add(45);
+              sizes.add(38);
+              sizes.add(40);
+              System.out.println(sizes + ", " + sizes.size() + " sizes");
+              System.out.println(sizes.first() + " to " + sizes.last());
+              System.out.println(sizes.floor(41) + " " + sizes.ceiling(41));
+              System.out.println(sizes.floor(40) + " " + sizes.lower(40));
+              System.out.println(sizes.ceiling(46));
+          }
+      }
+      ```
+
+      ```output
+      [38, 40, 42, 45], 4 sizes
+      38 to 45
+      40 42
+      40 38
+      null
+      ```
+
+      `floor` and `ceiling` return an Integer object, or `null`. Keep the result in an `Integer` variable (or `var`), not an `int`: putting a `null` into an `int` throws a NullPointerException.
+
+      **Your turn:** count the words of a text and print them in alphabetical order. The program reads lines until the line `end`. Each line has words separated by single spaces. It counts each word in small letters, so `The` and `the` are the same word, and then prints each word and its count, like `the: 3`, in alphabetical order. Use a TreeMap. With this input:
+
+      ```input
+      the cat saw the dog
+      The dog ran
+      end
+      ```
+
+      the program prints:
+
+      ```
+      cat: 1
+      dog: 2
+      ran: 1
+      saw: 1
+      the: 3
+      ```
+    seed: |
+      import java.util.Scanner;
+      import java.util.TreeMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+
+          }
+      }
+    solution: |
+      import java.util.Scanner;
+      import java.util.TreeMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              Scanner scanner = new Scanner(System.in);
+              TreeMap<String, Integer> counts = new TreeMap<>();
+              while (true) {
+                  String line = scanner.nextLine();
+                  if (line.equals("end")) {
+                      break;
+                  }
+                  for (String word : line.split(" ")) {
+                      String small = word.toLowerCase();
+                      counts.put(small, counts.getOrDefault(small, 0) + 1);
+                  }
+              }
+              for (String word : counts.keySet()) {
+                  System.out.println(word + ": " + counts.get(word));
+              }
+          }
+      }
+    hints:
+      - "Split each line with `line.split(\" \")`, and count `word.toLowerCase()` in a `TreeMap<String, Integer>`: `counts.put(word, counts.getOrDefault(word, 0) + 1);`."
+      - "After the loop, `for (String word : counts.keySet())` goes through the words in alphabetical order, since the TreeMap keeps its keys sorted."
+    require:
+      - pattern: new\s+TreeMap\s*<
+        message: "Count the words in a TreeMap, which keeps them in alphabetical order."
+    forbid:
+      - pattern: \b(sort|sorted)\b
+        message: "No sorting needed: the TreeMap keeps its keys in order."
+    tests:
+      - stdin: |
+          the cat saw the dog
+          The dog ran
+          end
+      - stdin: |
+          Zebra apple Mango
+          mango APPLE apple
+          kiwi
+          end
+        hidden: true
+      - stdin: |
+          Hello hello HELLO world
+          end
+        hidden: true
+    more:
+      - task: |
+          A beach's tide board shows, for any time you ask about, the last tide (high or low) at or before that time and the next one at or after it. The first line of the input has the tide times, in `HH:MM` form and in any order, separated by spaces. Each line after it is a time asked about, until the line `end`. For each, the program prints the time, `: previous `, the latest tide at or before it, `, next `, and the earliest tide at or after it. When there's no such tide, it prints `none` in its place. Keep the tide times in a TreeSet and use `floor` and `ceiling`. With this input:
+
+          ```input
+          07:30 06:40 08:15 07:05
+          07:20
+          07:30
+          06:00
+          09:00
+          end
+          ```
+
+          the program prints:
+
+          ```
+          07:20: previous 07:05, next 07:30
+          07:30: previous 07:30, next 07:30
+          06:00: previous none, next 06:40
+          09:00: previous 08:15, next none
+          ```
+        seed: |
+          import java.util.Scanner;
+          import java.util.TreeSet;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+          import java.util.TreeSet;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  TreeSet<String> tides = new TreeSet<>();
+                  for (String time : scanner.nextLine().split(" ")) {
+                      tides.add(time);
+                  }
+                  while (true) {
+                      String time = scanner.nextLine();
+                      if (time.equals("end")) {
+                          break;
+                      }
+                      String previous = tides.floor(time);
+                      String next = tides.ceiling(time);
+                      if (previous == null) {
+                          previous = "none";
+                      }
+                      if (next == null) {
+                          next = "none";
+                      }
+                      System.out.println(time + ": previous " + previous + ", next " + next);
+                  }
+              }
+          }
+        hints:
+          - "Read the first line, split it with `split(\" \")`, and add each time to a `TreeSet<String>`. Times in `HH:MM` form sort correctly as Strings."
+          - "`tides.floor(time)` is the latest tide at or before the time, and `tides.ceiling(time)` the earliest at or after it. Each is `null` when there's none: print `none` then."
+        require:
+          - pattern: new\s+TreeSet\s*<
+            message: "Keep the tide times in a TreeSet."
+          - pattern: \.floor\s*\(
+            message: "Find the previous tide with `floor`."
+          - pattern: \.ceiling\s*\(
+            message: "Find the next tide with `ceiling`."
+        tests:
+          - stdin: |
+              07:30 06:40 08:15 07:05
+              07:20
+              07:30
+              06:00
+              09:00
+              end
+          - stdin: |
+              12:00
+              11:59
+              12:00
+              12:01
+              end
+            hidden: true
+          - stdin: |
+              23:10 05:45 14:20 09:30 14:20 18:05
+              14:19
+              14:21
+              00:00
+              23:59
+              10:00
+              end
+            hidden: true
+      - task: |
+          A gardener keeps a journal with a note for some days of the year. The program reads lines until `end`. Each line is a date in `yyyy-mm-dd` form, a space, and the note, such as `2024-05-03 planted beans`. The lines aren't in date order, and a later line with the same date replaces that date's note. Keep the notes in a TreeMap from date to note. At the end, print every note in date order, as the date, a colon, a space and the note. Then print `from `, the first date, ` to ` and the last date, using `firstKey` and `lastKey`. With no notes at all, print only `no notes`. With this input:
+
+          ```input
+          2024-05-03 planted beans
+          2024-04-20 sowed tomatoes
+          2024-06-11 first strawberry
+          2024-05-03 planted beans and peas
+          end
+          ```
+
+          the program prints:
+
+          ```
+          2024-04-20: sowed tomatoes
+          2024-05-03: planted beans and peas
+          2024-06-11: first strawberry
+          from 2024-04-20 to 2024-06-11
+          ```
+        seed: |
+          import java.util.Scanner;
+          import java.util.TreeMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+          import java.util.TreeMap;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  TreeMap<String, String> journal = new TreeMap<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.equals("end")) {
+                          break;
+                      }
+                      journal.put(line.substring(0, 10), line.substring(11));
+                  }
+                  if (journal.isEmpty()) {
+                      System.out.println("no notes");
+                      return;
+                  }
+                  for (var entry : journal.entrySet()) {
+                      System.out.println(entry.getKey() + ": " + entry.getValue());
+                  }
+                  System.out.println("from " + journal.firstKey() + " to " + journal.lastKey());
+              }
+          }
+        hints:
+          - "A date is the first 10 characters of a line, `line.substring(0, 10)`, and the note is everything after the space, `line.substring(11)`. `put` replaces the note of a date that's already there."
+          - "Check `journal.isEmpty()` before calling `firstKey`: on an empty TreeMap it throws a NoSuchElementException. Go through `journal.entrySet()` with `var entry`, as in module 57."
+        require:
+          - pattern: new\s+TreeMap\s*<
+            message: "Keep the notes in a TreeMap from date to note."
+          - pattern: \.firstKey\s*\(
+            message: "Find the first date with `firstKey()`."
+          - pattern: \.lastKey\s*\(
+            message: "Find the last date with `lastKey()`."
+        tests:
+          - stdin: |
+              2024-05-03 planted beans
+              2024-04-20 sowed tomatoes
+              2024-06-11 first strawberry
+              2024-05-03 planted beans and peas
+              end
+          - stdin: |
+              end
+            hidden: true
+          - stdin: |
+              2025-01-09 ordered seeds
+              end
+            hidden: true
+          - stdin: |
+              2024-10-02 picked the last apples
+              2023-11-30 covered the roses
+              2024-02-29 pruned the plum tree
+              2024-10-01 dug up potatoes
+              end
+            hidden: true

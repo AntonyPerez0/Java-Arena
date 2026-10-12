@@ -674,7 +674,7 @@ A boss drill can have `events` tests, checked and graded exactly as in a lesson 
 
 ### Checking
 
-`npm run content` checks everything above on the JDK. `npm run content:browser` then replays every test with events and every `java window` example in the browser engine and compares the window JSON byte for byte (the frames of a game too, number for number), and the output, with the JDK's (`CONTENT_ONLY=gui` replays only the programs whose place matches).
+`npm run content` checks everything above on the JDK. `npm run content:browser` then replays every test with events and every `java window` example in the browser engine and compares the window JSON byte for byte (the frames of a game too, number for number), and the output, with the JDK's (`CONTENT_ONLY=gui` replays only the programs whose place matches; `CONTENT_SHARD=2/3` replays only the second of three shards, as CI runs them side by side, each program in exactly one shard).
 
 `npm run fx-check` (after `npm run content`) runs every model solution and example that uses JavaFX on **real OpenJFX 21** without a screen, with the same input, arguments, files, clicks and typing, and compares the output, the files written, the window outline (after every event line, and at the end) and the events that couldn't happen with Java Arena's JavaFX (`FX_CHECK_ONLY=gui` checks only the programs whose place matches). CI fails on any difference. This is what lets a lesson say that the same code shows the same window contents with real JavaFX. Besides the fonts and styles above, real JavaFX differs in what Java Arena's JavaFX can't do, so a lesson's program must not depend on these (the check fails, or can't run it):
 

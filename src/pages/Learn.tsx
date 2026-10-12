@@ -1,12 +1,13 @@
 import { useEffect } from "react";
 import { Check, Lock } from "lucide-react";
 import { Link } from "react-router-dom";
-import { COURSE_NAMES, moduleById, modulePath, planByCourse } from "../content";
+import { COURSE_NAMES, moduleById, modulePath, modules, plan, planByCourse } from "../content";
 import { useStore } from "../state/store";
 import { moduleProgress, nextStep } from "../state/derived";
 import { prefetchStep, stepPath } from "../content";
 import { useTitle } from "../lib/title";
 import { loadStepPage } from "./editorPages";
+import ExtraTag from "../components/ExtraTag";
 
 const COURSE_NOTES: Record<string, string> = {
   I: "Parts 1 to 7 of the MOOC: the basics of programming, up to classes, objects and larger programs.",
@@ -19,6 +20,7 @@ export default function Learn() {
   const s = useStore((x) => x);
   const next = nextStep(s);
   const courses = planByCourse();
+  const allLive = modules.length === plan.length;
   const started = Object.keys(s.steps).length > 0;
   // Fetch the lesson the Continue button opens, so it shows at once.
   useEffect(() => (next ? prefetchStep(next.module.id, next.step.slug, loadStepPage) : undefined), [next?.module.id, next?.step.slug]);
@@ -26,7 +28,7 @@ export default function Learn() {
     <div className="learn">
       <div className="page-head">
         <h1>The course</h1>
-        <p className="muted">Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises. The site is being built in batches: modules that aren't written yet are listed so you can see what's coming.</p>
+        <p className="muted">Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises.{allLive ? "" : " The site is being built in batches: modules that aren't written yet are listed so you can see what's coming."}</p>
         {next && (
           <p className="actions">
             <Link className="btn btn-primary" to={stepPath(next.module, next.step)}>
@@ -61,6 +63,7 @@ export default function Learn() {
                         <span className="module-title">
                           <span className="visually-hidden">Module {pm.number}: </span>
                           {pm.title}
+                          <ExtraTag module={pm} />
                         </span>
                         <span className="module-count">
                           <Lock className="icon" aria-hidden="true" /> not written yet
@@ -78,6 +81,7 @@ export default function Learn() {
                         <span className="module-title">
                           <span className="visually-hidden">Module {pm.number}: </span>
                           {m.title}
+                          <ExtraTag module={pm} />
                         </span>
                         <span className="module-count">
                           <span aria-hidden="true">

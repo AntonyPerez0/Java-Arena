@@ -35,6 +35,12 @@ export type TestResult = {
   note?: string;
   /** The crash's own message, as Java printed it. */
   stderr?: string;
+  /**
+   * When the run crashed: the crash's sentence as it is in `note`, a key that is the same for tests that crashed the
+   * same way (the exception and its explanation, not the line, which can differ between runs of the same code), and a
+   * short line that stands for it under a later test (see notesShown).
+   */
+  crash?: { text: string; key: string; short: string };
   /** A test that ran the learner's JUnit tests: what they had to do on this version of the program. */
   junit?: { outcome: "pass" | "fail" };
   /**
@@ -87,19 +93,61 @@ export function describeRun(r: RunResult | undefined, sources: (string | SourceF
   if (!r) return "This test didn't run.";
   if (r.internalError) return `The Java engine couldn't run the program (${r.internalError}). Try again; if it keeps happening, reload the page.`;
   if (r.timedOut) return `Time limit: the program ran for more than ${limitMs / 1000} seconds and was stopped. Look for a loop that never ends. What it printed until then is shown.`;
-  const crash = explainCrash(r.stderr, sources);
-  if (crash && crash.line == null && /^(no main method|main is not static|no main class)$/.test(crash.exception)) return `The program didn't start. ${crash.explanation}`;
-  if (crash) {
-    const file = sources.length > 1 && crash.file ? `${crash.file}, ` : "";
-    const where = crash.line && !crash.placed ? ` (${file}line ${crash.line}${crash.method && crash.method !== "main" ? `, in ${crash.method}` : ""})` : "";
-    return `The program crashed with ${crash.exception}${where}. ${crash.explanation}`;
+  const crash = crashOf(r, sources);
+  if (crash) return crash.text;
+  if (r.truncated) {
+    // A recursive method that prints on each call and never reaches its base case fills 64 KB before the call stack runs out.
+    const self = selfCallingMethod(sources);
+    if (self) return `The program printed more than 64 KB, so it was stopped. Probably a loop, or a method that keeps calling itself without reaching its base case (${self} calls itself), never stops printing.`;
+    return "The program printed more than 64 KB, so it was stopped. Probably a loop that never stops printing.";
   }
-  if (r.truncated) return "The program printed more than 64 KB, so it was stopped. Probably a loop that never stops printing.";
   if (r.exitCode !== 0 && r.exitCode != null) return `The program ended with exit code ${r.exitCode} (System.exit). A program that finishes normally ends with 0.`;
   const handler = handlerException(r.stderr, sources);
   if (handler) return handler;
   if (r.stderr.trim()) return "The program printed an error message.";
   return undefined;
+}
+
+/** The sentence describeRun gives for a run that crashed (or didn't start), with its key and short line (see TestResult.crash). */
+export function crashOf(r: RunResult, sources: (string | SourceFile)[] = ["Main.java"]): { text: string; key: string; short: string } | undefined {
+  const crash = explainCrash(r.stderr, sources);
+  if (!crash) return undefined;
+  const key = `${crash.exception}\n${crash.explanation}`;
+  if (crash.line == null && /^(no main method|main is not static|no main class)$/.test(crash.exception)) {
+    const text = `The program didn't start. ${crash.explanation}`;
+    return { text, key, short: "The program didn't start, for the same reason as in the test above." };
+  }
+  const file = sources.length > 1 && crash.file ? `${crash.file}, ` : "";
+  const at = crash.line && !crash.placed ? `${file}line ${crash.line}` : "";
+  const where = at ? ` (${at}${crash.method && crash.method !== "main" ? `, in ${crash.method}` : ""})` : "";
+  return { text: `The program crashed with ${crash.exception}${where}. ${crash.explanation}`, key, short: `Crashed the same way as the test above (${crash.exception}${at ? `, ${at}` : ""}).` };
+}
+
+/** The name of the first method in the learner's files that calls itself, or null. */
+export function selfCallingMethod(sources: (string | SourceFile)[]): string | null {
+  for (const f of sources) {
+    if (typeof f === "string") continue;
+    // Comments and text in quotes don't count.
+    const code = f.text.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"(?:\\.|[^"\\\n])*"/g, (m) => m.replace(/[^\n]/g, " "));
+    const header = /(?<![\w$.])(?:[\w$<>\[\],.?]+\s+)+?([\w$]+)\s*\([^()]*\)\s*(?:throws\s[^{;]*)?\{/g;
+    for (let m; (m = header.exec(code)); ) {
+      const name = m[1];
+      if (/^(?:if|for|while|switch|catch|synchronized|return|new|else)$/.test(name) || /\b(?:new|return|else)\s/.test(m[0])) continue;
+      // The method's body: from its { to the matching }.
+      let depth = 0;
+      let end = code.length;
+      for (let k = m.index + m[0].length - 1; k < code.length; k++) {
+        if (code[k] === "{") depth++;
+        else if (code[k] === "}" && --depth === 0) {
+          end = k;
+          break;
+        }
+      }
+      const body = code.slice(m.index + m[0].length, end);
+      if (new RegExp(`(?<![\\w$.])(?:this\\s*\\.\\s*)?${name.replace(/\$/g, "\\$")}\\s*\\(`).test(body)) return name;
+    }
+  }
+  return null;
 }
 
 /** How JavaFX prints an exception that escapes an event handler (the program then goes on). */
@@ -231,10 +279,12 @@ export async function grade(ex: Exercise, code: string): Promise<GradeResult> {
     const window: WindowCheck | undefined = t.events && r && !r.internalError ? { ...checkWindow({ events: t.events, outline: t.outline ?? "", window: t.window, hidden: t.hidden }, r.timedOut || typeof windowFile !== "string" ? null : windowFile), ...(r.timedOut ? { stopped: true } : {}) } : undefined;
     const pass = !!r && !r.internalError && !r.timedOut && r.exitCode === 0 && got === t.expect && (!t.writes || !!writes?.every((f) => f.pass)) && (!t.events || !!window?.pass);
     let note = pass ? undefined : (describeRun(r, own, timeLimitFor(libraries)) ?? (writes && writesNote(writes, t.hidden)));
+    // The crash part of the note, so that the same crash under several tests is explained once (notesShown).
+    const crash = !pass && r && !r.internalError && !r.timedOut ? crashOf(r, own) : undefined;
     // A run that ended normally (perhaps after a handler printed an exception) also says what is wrong with its window.
     if (!pass && window && r && !r.timedOut && r.exitCode === 0) note = [note, windowNote(window, t.hidden)].filter(Boolean).join(" ") || undefined;
     const stderr = r?.stderr ? withoutCheckFrames(r.stderr) : "";
-    return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, ...(t.args ? { args: t.args } : {}), call: t.call, files: withoutArenaFiles(t.files), writes, expected: t.expect, got, note, stderr: !pass && stderr ? stderr : undefined, ...(window ? { window } : {}) };
+    return { name: t.name, pass, hidden: t.hidden, stdin: t.stdin, ...(t.args ? { args: t.args } : {}), call: t.call, files: withoutArenaFiles(t.files), writes, expected: t.expect, got, note, ...(crash && note?.includes(crash.text) ? { crash } : {}), stderr: !pass && stderr ? stderr : undefined, ...(window ? { window } : {}) };
   });
   const allPass = tests.every((t) => t.pass) && ruleProblems.length === 0 && styleProblems.length === 0;
   return { ...base, status: allPass ? "pass" : "fail", tests };

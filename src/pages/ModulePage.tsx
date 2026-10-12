@@ -5,6 +5,7 @@ import { COURSE_NAMES, moduleById, prefetchModule, stepPath } from "../content";
 import { useStore } from "../state/store";
 import { challengeDone, moduleProgress } from "../state/derived";
 import MoocCredit from "../components/MoocCredit";
+import ExtraTag from "../components/ExtraTag";
 import NotFound from "./NotFound";
 import { useTitle } from "../lib/title";
 
@@ -25,7 +26,10 @@ export default function ModulePage() {
         <Link to="/learn/">Learn</Link> <ChevronRight className="icon" aria-hidden="true" /> <span>{COURSE_NAMES[m.course]}{m.part != null ? `, part ${m.part}` : ""}</span>
       </nav>
       <div className="page-head">
-        <div className="eyebrow">Module {m.number}</div>
+        <div className="eyebrow">
+          Module {m.number}
+          <ExtraTag module={m} />
+        </div>
         <h1>{m.title}</h1>
         <p className="lead">{m.summary}</p>
         <p className="muted small">

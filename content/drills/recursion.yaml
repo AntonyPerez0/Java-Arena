@@ -1,0 +1,285 @@
+topic: recursion
+drills:
+  - type: predict
+    after: calling-itself
+    pre: |
+      public static void ring(int times) {
+          if (times <= 0) {
+              System.out.println("quiet");
+              return;
+          }
+          System.out.println("ding " + times);
+          ring(times - 2);
+      }
+    body: |
+      ring(5);
+    why: "Each call prints its line and calls itself with 2 less: 5, 3, 1. Then `ring(-1)` is the base case, since -1 is `<= 0`: it prints `quiet` and returns."
+
+  - type: predict
+    after: base-case-and-return
+    pre: |
+      public static int mystery(int n) {
+          if (n < 10) {
+              return n;
+          }
+          return n % 10 + mystery(n / 10);
+      }
+    body: |
+      System.out.println(mystery(4096));
+    why: "`n % 10` is the last digit and `n / 10` the number without it, so the method adds up the digits: 6 + 9 + 0 + 4 = 19. The base case is a single digit, which is its own sum."
+
+  - type: predict
+    after: base-case-and-return
+    pre: |
+      public static String wrap(int n) {
+          if (n == 0) {
+              return "|";
+          }
+          return n + wrap(n - 1) + n;
+      }
+    body: |
+      System.out.println(wrap(3));
+    why: "Each call puts its own number on both sides of the smaller call's string. `wrap(0)` is `|`, `wrap(1)` is `1|1`, `wrap(2)` is `21|12`, and `wrap(3)` is `321|123`."
+
+  - type: predict
+    after: strings-and-arrays
+    pre: |
+      public static int largest(int[] values, int start) {
+          if (start == values.length - 1) {
+              return values[start];
+          }
+          int rest = largest(values, start + 1);
+          if (values[start] > rest) {
+              return values[start];
+          }
+          return rest;
+      }
+    body: |
+      int[] heights = {3, 9, 4, 11, 2};
+      System.out.println(largest(heights, 0) + " " + largest(heights, 4));
+    why: "`largest(heights, start)` is the largest value from index `start` to the end. From index 0, that's 11. From index 4, only the last value, 2, is left: that's the base case."
+
+  - type: predict
+    after: binary-search
+    pre: |
+      public static int find(int[] sorted, int wanted, int low, int high) {
+          System.out.println(low + "-" + high);
+          if (low > high) {
+              return -1;
+          }
+          int middle = (low + high) / 2;
+          if (sorted[middle] == wanted) {
+              return middle;
+          }
+          if (sorted[middle] < wanted) {
+              return find(sorted, wanted, middle + 1, high);
+          }
+          return find(sorted, wanted, low, middle - 1);
+      }
+    body: |
+      int[] sorted = {2, 4, 6, 8, 10, 12, 14};
+      System.out.println(find(sorted, 12, 0, 6));
+    why: "The first call looks at index 3, which holds 8. 12 is larger, so the next call searches from 4 to 6, and its middle, index 5, holds 12. That call returns 5, and the first call returns it unchanged."
+
+  - type: fill
+    after: base-case-and-return
+    prompt: "`halvings(n)` returns how many times `n` can be halved before it gets to 1. Fill in the blank, a number."
+    pre: |
+      public static int halvings(int n) {
+          if (n == 1) {
+              return [[0]];
+          }
+          return 1 + halvings(n / 2);
+      }
+    body: |
+      System.out.println(halvings(64));
+    why: "1 is already 1, so it needs no halvings: the base case returns 0. Then 64 needs 6: 32, 16, 8, 4, 2, 1. With 1 in the blank, every answer would be one too many."
+
+  - type: fill
+    after: strings-and-arrays
+    prompt: "`vowels` counts the vowels of a text. Fill in the blank, an expression: the text the recursive call gets."
+    pre: |
+      public static int vowels(String text) {
+          if (text.isEmpty()) {
+              return 0;
+          }
+          int rest = vowels([[text.substring(1)‖text.substring(1, text.length())]]);
+          if ("aeiou".indexOf(text.charAt(0)) >= 0) {
+              return rest + 1;
+          }
+          return rest;
+      }
+    body: |
+      System.out.println(vowels("recursion"));
+    why: "The call looks at the first character itself and leaves the rest to the recursive call: `text.substring(1)`, one character shorter, which brings it closer to the empty string. `recursion` has 4 vowels: e, u, i and o."
+
+  - type: bug
+    after: strings-and-arrays
+    prompt: "`reverse` should return the text backwards, so the program should print `olleh`. Which line is wrong?"
+    pre: |
+      public static String reverse(String text) {
+          if (text.isEmpty()) {
+              return "";
+          }
+          return text.charAt(0) + reverse(text.substring(1)); // BUG
+      }
+    body: |
+      System.out.println(reverse("hello"));
+    fix: return reverse(text.substring(1)) + text.charAt(0);
+    why: "Putting the first character in front of the reversed rest builds the text in its own order again: it prints `hello`. The first character belongs at the end, after the reversed rest."
+
+  - type: bug
+    after: merge-sort
+    prompt: "The program should print `[1, 2, 5, 7, 9]`, but one value goes missing. The left half is taken correctly: which line is wrong?"
+    pre: |
+      public static int[] mergeSort(int[] values) {
+          if (values.length <= 1) {
+              return values;
+          }
+          int middle = values.length / 2;
+          int[] left = mergeSort(Arrays.copyOfRange(values, 0, middle));
+          int[] right = mergeSort(Arrays.copyOfRange(values, middle + 1, values.length)); // BUG
+          return merge(left, right);
+      }
+
+      public static int[] merge(int[] first, int[] second) {
+          int[] merged = new int[first.length + second.length];
+          int i = 0;
+          int j = 0;
+          for (int k = 0; k < merged.length; k++) {
+              if (j >= second.length || (i < first.length && first[i] <= second[j])) {
+                  merged[k] = first[i];
+                  i++;
+              } else {
+                  merged[k] = second[j];
+                  j++;
+              }
+          }
+          return merged;
+      }
+    body: |
+      int[] values = {7, 2, 9, 1, 5};
+      System.out.println(Arrays.toString(mergeSort(values)));
+    fix: int[] right = mergeSort(Arrays.copyOfRange(values, middle, values.length));
+    why: "`copyOfRange(values, 0, middle)` stops just before `middle`, so the right half must start at `middle`, not after it. Starting at `middle + 1` skips the value at the middle in every split."
+
+  - type: compiles
+    after: base-case-and-return
+    pre: |
+      public static int total(int n) {
+          if (n > 0) {
+              return n + total(n - 1);
+          }
+      }
+    body: |
+      System.out.println(total(3));
+    why: "No. When `n` is 0 or less, the method gets to its end without a `return`, and javac says `missing return statement`. The base case is missing: `return 0;` after the `if` would fix it."
+
+  - type: compiles
+    after: when-it-goes-wrong
+    pre: |
+      public static int forever(int n) {
+          return forever(n + 1);
+      }
+    body: |
+      System.out.println("Not called");
+    why: "Yes. javac doesn't check whether a recursion ever ends. Calling `forever` would end in a StackOverflowError when the program runs, but this program never calls it, and prints `Not called`."
+
+  - type: choice
+    after: when-it-goes-wrong
+    prompt: "What happens when `main` calls `countDown(-1)`?"
+    pre: |
+      public static void countDown(int seconds) {
+          if (seconds == 0) {
+              return;
+          }
+          System.out.println(seconds);
+          countDown(seconds - 1);
+      }
+    body: |
+      System.out.println("Ready");
+    choices:
+      - "It prints nothing, since -1 is below 0"
+      - "It prints `-1` and stops"
+      - "It prints -1, -2, -3 and so on, and ends with a StackOverflowError"
+      - "It doesn't compile"
+    answer: 3
+    why: "The base case is only for exactly 0. From -1 the calls go to -2, -3 and on, away from 0, so they never stop until the call stack is full. `seconds <= 0` would stop them."
+
+  - type: choice
+    after: binary-search
+    prompt: "A recursive binary search looks for a value in a sorted array of 1,000,000 values. About how many calls deep can the recursion get?"
+    choices:
+      - "About 20"
+      - "About 1,000"
+      - "About 500,000"
+      - "About 1,000,000"
+    answer: 1
+    why: "Each call searches a range at most half as long as its caller's, and 2 to the 20th power is more than a million, so after about 20 calls the range is empty. That's why recursive binary search never comes close to filling the call stack."
+
+  - type: choice
+    after: merge-sort
+    prompt: "In merge sort's `merge`, why take the value from `first` when the two values are equal (`first[i] <= second[j]`, not `<`)?"
+    choices:
+      - "It keeps equal values in the order they had, which makes the sort stable"
+      - "With `<`, the result wouldn't be sorted"
+      - "With `<`, `merge` would throw an exception"
+      - "It makes merge sort do half as many comparisons"
+    answer: 1
+    why: "With `<` the array would still be sorted. But `first` holds the values that came earlier, so taking from it on a tie keeps equal values (such as words of the same length) in their original order."
+
+  - type: boss
+    after: strings-and-arrays
+    prompt: |
+      A ruler's marks get longer at each half: the middle mark is the longest, the middle marks of the two halves are one shorter, and so on. Write the method `ruler(int n)`, which prints the marks of a ruler of level `n`, one mark per line, a mark of length `k` being `k` dashes: a ruler of level `n` is a ruler of level `n - 1`, then a mark of length `n`, then a ruler of level `n - 1` again. A ruler of level 0 prints nothing. Use recursion (`"-".repeat(n)` makes the mark). The check runs `ruler(3);` and expects:
+
+      ```
+      -
+      --
+      -
+      ---
+      -
+      --
+      -
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              ruler(3);
+          }
+
+          // Write the method ruler here.
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              ruler(3);
+          }
+
+          public static void ruler(int n) {
+              if (n == 0) {
+                  return;
+              }
+              ruler(n - 1);
+              System.out.println("-".repeat(n));
+              ruler(n - 1);
+          }
+      }
+    hints:
+      - "The base case: a ruler of level 0 has no marks, so the method returns."
+      - "Otherwise there are three parts: `ruler(n - 1);`, then print `\"-\".repeat(n)`, then `ruler(n - 1);` again. A method can call itself more than once."
+    require:
+      - pattern: \bpublic\s+static\s+void\s+ruler\s*\(\s*int\s+\w+\s*\)
+        message: "Write the method as `public static void ruler(int n)`."
+      - pattern: \bruler\s*\(
+        min: 4
+        message: "`ruler` should call itself, for the smaller ruler on each side of the middle mark."
+    tests:
+      - call: ruler(3);
+      - call: |
+          ruler(1);
+          System.out.println("=");
+          ruler(0);
+          System.out.println("=");
+          ruler(4);
+        hidden: true

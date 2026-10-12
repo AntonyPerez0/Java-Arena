@@ -1,0 +1,74 @@
+# The first steps of every check job in .github/workflows/deploy.yml (after actions/checkout):
+# Node with the npm cache, optionally the reference JDK (cached), Chromium (cached, with its
+# system libraries) or only Chromium's system libraries (for fx-check, whose real JavaFX needs
+# their fontconfig and pango but which never starts a browser), npm ci, and the build job's output (the
+# site-build artifact: dist, src/generated, public/lessons, public/images and fidelity/out, which
+# holds the JDK's fidelity results and the content check list) put back where the build left it.
+name: Set up a check job
+description: Node, npm ci, the reference JDK and Chromium (or only its system libraries) if asked, and the build job's output.
+inputs:
+  jdk:
+    description: "'true' to set up the reference JDK (sets JAVA_HOME)"
+    default: "false"
+  chromium:
+    description: "'true' to install Chromium for Playwright, with its system libraries"
+    default: "false"
+  system-deps:
+    description: "'true' to install only the system libraries Chromium needs (no browser download, no Chromium cache), as --with-deps would"
+    default: "false"
+  npm:
+    description: "'false' to skip npm ci (a job that needs no package)"
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+
+    - name: Cache the reference JDK
+      if: inputs.jdk == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/java-arena
+        key: reference-jdk-${{ hashFiles('scripts/get-jdk.sh') }}
+
+    - name: Reference JDK (Temurin 21.0.10+7, the build the engine's class library comes from)
+      if: inputs.jdk == 'true'
+      shell: bash
+      run: |
+        echo "JAVA_HOME=$(bash scripts/get-jdk.sh)" >> "$GITHUB_ENV"
+        "$(bash scripts/get-jdk.sh)/bin/java" -version
+
+    - name: Install dependencies (also copies the Java engine into public/engine)
+      if: inputs.npm == 'true'
+      shell: bash
+      run: npm ci
+
+    # Playwright's browser download, keyed by the locked Playwright version, for the jobs that
+    # start a browser. The system libraries are installed by the next step on every run.
+    - name: Cache Chromium for the browser tests
+      if: inputs.chromium == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+    - name: Install Chromium for the browser tests
+      if: inputs.chromium == 'true'
+      shell: bash
+      run: npx playwright install --with-deps chromium
+
+    # The same system packages --with-deps installs (fonts, fontconfig, pango and the rest), without
+    # downloading Chromium: for fx-check, which runs real JavaFX on the JDK and starts no browser.
+    - name: Install Chromium's system libraries only
+      if: inputs.system-deps == 'true' && inputs.chromium != 'true'
+      shell: bash
+      run: npx playwright install-deps chromium
+
+    - name: Get the build job's output
+      uses: actions/download-artifact@v4
+      with:
+        name: site-build
+        path: .

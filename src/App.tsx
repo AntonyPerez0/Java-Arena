@@ -112,7 +112,7 @@ function Footer() {
         </div>
         <div className="footer-bottom">
           <p>
-            The lessons follow the order and topics of{" "}
+            The course's lessons follow the order and topics of{" "}
             <a href={MOOC_URL} target="_blank" rel="noopener noreferrer">
               Java Programming{ext}
             </a>{" "}
@@ -120,7 +120,7 @@ function Footer() {
             <a href={MOOC_LICENSE_URL} target="_blank" rel="noopener noreferrer license">
               CC BY-NC-SA 4.0{ext}
             </a>
-            . Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.
+            ; the extra modules after the course are Java Arena's own. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.
           </p>
           <p>Your progress stays in this browser. No account, no ads, no tracking.</p>
         </div>

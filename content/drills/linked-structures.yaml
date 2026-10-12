@@ -1,0 +1,510 @@
+topic: linked-structures
+drills:
+  - type: predict
+    after: nodes-and-links
+    classes: |
+      class Bead {
+          String color;
+          Bead next;
+
+          Bead(String color) {
+              this.color = color;
+          }
+      }
+    body: |
+      Bead a = new Bead("red");
+      Bead b = new Bead("blue");
+      Bead c = new Bead("green");
+      a.next = b;
+      b.next = c;
+      a.next = c;
+      String colors = "";
+      Bead current = a;
+      while (current != null) {
+          colors += current.color + " ";
+          current = current.next;
+      }
+      System.out.println(colors.trim());
+    why: "`a.next = c;` replaces the link from red to blue with a link from red to green. Blue still refers to green, but nothing refers to blue any more, so the walk from `a` never reaches it: `red green`."
+
+  - type: predict
+    after: a-linked-list
+    classes: |
+      class Link {
+          int value;
+          Link next;
+
+          Link(int value, Link next) {
+              this.value = value;
+              this.next = next;
+          }
+      }
+    body: |
+      Link head = null;
+      for (int i = 1; i <= 4; i++) {
+          head = new Link(i * 10, head);
+      }
+      System.out.println(head.value + " " + head.next.next.value);
+    why: "Each new node goes in front of the old head, as `addFirst` does, so the chain is 40, 30, 20, 10. `head.value` is 40, and two links on is 20."
+
+  - type: predict
+    after: array-deque
+    body: |
+      var stack = new java.util.ArrayDeque<Integer>();
+      stack.push(1);
+      stack.push(2);
+      stack.push(3);
+      int top = stack.pop();
+      stack.push(top * 10);
+      System.out.println(stack.pop() + stack.pop());
+    why: "The 3 is popped and 30 pushed in its place, so the stack is 30, 2, 1 from the top. The last line pops 30 and then 2. Both are Integers, so `+` adds them: 32."
+
+  - type: predict
+    after: array-deque
+    body: |
+      var deque = new java.util.ArrayDeque<String>();
+      deque.offer("b");
+      deque.push("a");
+      deque.offer("c");
+      deque.push("z");
+      System.out.println(deque.poll() + deque.pollLast() + deque);
+    why: "`push` adds at the front and `offer` at the back, so the deque is `[z, a, b, c]`. `poll` takes `z` from the front and `pollLast` takes `c` from the back, which leaves `[a, b]`: `zc[a, b]`."
+
+  - type: predict
+    after: binary-search-trees
+    classes: |
+      class Node {
+          int value;
+          Node left;
+          Node right;
+
+          Node(int value) {
+              this.value = value;
+          }
+      }
+    pre: |
+      public static Node add(Node node, int value) {
+          if (node == null) {
+              return new Node(value);
+          }
+          if (value < node.value) {
+              node.left = add(node.left, value);
+          } else {
+              node.right = add(node.right, value);
+          }
+          return node;
+      }
+    body: |
+      Node root = null;
+      int[] values = {8, 3, 10, 6, 1, 7};
+      for (int value : values) {
+          root = add(root, value);
+      }
+      System.out.println(root.left.right.value + " " + root.left.right.right.value);
+    why: "8 is the root. 3 goes left of it and 10 right. 6 is smaller than 8 and bigger than 3, so it's the right child of 3. 1 is the left child of 3, and 7 goes left at 8, right at 3 and right at 6. So `root.left.right` is 6, and its right child is 7."
+
+  - type: predict
+    after: treemap-and-treeset
+    body: |
+      var prices = new java.util.TreeMap<Integer, String>();
+      prices.put(20, "scarf");
+      prices.put(5, "pin");
+      prices.put(12, "mug");
+      System.out.println(prices.floorKey(15) + " " + prices.ceilingKey(15) + " " + prices.firstKey());
+    why: "The keys in order are 5, 12 and 20. The biggest key at most 15 is 12, the smallest at least 15 is 20, and the first key is the smallest: `12 20 5`."
+
+  - type: fill
+    after: a-linked-list
+    prompt: "Fill in the blank, one word, so that `addFirst` puts the new value in front of the others and the program prints `1 2 3`."
+    classes: |
+      class Link {
+          int value;
+          Link next;
+
+          Link(int value, Link next) {
+              this.value = value;
+              this.next = next;
+          }
+      }
+    pre: |
+      public static Link addFirst(Link head, int value) {
+          return new Link(value, [[head]]);
+      }
+    body: |
+      Link head = null;
+      head = addFirst(head, 3);
+      head = addFirst(head, 2);
+      head = addFirst(head, 1);
+      System.out.println(head.value + " " + head.next.value + " " + head.next.next.value);
+    why: "The new node's `next` is the old first node, `head`, and the method returns the new node as the new head. On an empty list `head` is `null`, which is just right for the only node."
+
+  - type: fill
+    after: binary-search-trees
+    prompt: "Fill in the blank, an expression, so that `walk` visits the tree in order and prints its values from smallest to biggest."
+    classes: |
+      class Node {
+          int value;
+          Node left;
+          Node right;
+
+          Node(int value) {
+              this.value = value;
+          }
+      }
+    pre: |
+      public static Node add(Node node, int value) {
+          if (node == null) {
+              return new Node(value);
+          }
+          if (value < node.value) {
+              node.left = add(node.left, value);
+          } else {
+              node.right = add(node.right, value);
+          }
+          return node;
+      }
+
+      public static void walk(Node node) {
+          if (node == null) {
+              return;
+          }
+          walk(node.left);
+          System.out.print(node.value + " ");
+          walk([[node.right]]);
+      }
+    body: |
+      Node root = null;
+      int[] values = {8, 3, 10, 6, 1};
+      for (int value : values) {
+          root = add(root, value);
+      }
+      walk(root);
+      System.out.println();
+    why: "An in-order walk visits the left subtree, then the node, then the right subtree: `walk(node.right)`. In a search tree that's smallest first: `1 3 6 8 10`."
+
+  - type: bug
+    after: nodes-and-links
+    prompt: "The loop should visit every bead, the last one too, so that the program prints `3 beads`. Which line is wrong?"
+    classes: |
+      class Bead {
+          String color;
+          Bead next;
+
+          Bead(String color) {
+              this.color = color;
+          }
+      }
+    body: |
+      Bead first = new Bead("red");
+      first.next = new Bead("blue");
+      first.next.next = new Bead("green");
+      int count = 0;
+      Bead current = first;
+      while (current.next != null) { // BUG
+          count++;
+          current = current.next;
+      }
+      System.out.println(count + " beads");
+    fix: "while (current != null) {"
+    why: "`current.next != null` stops at the last bead, before counting it, so the loop counts 2. Testing `current != null` runs one more round, for the last bead, and stops after it. It also works for an empty chain, where `current.next` would crash."
+
+  - type: bug
+    after: array-deque
+    prompt: "A chess app keeps the moves on a stack, so that it can take back the last one. The program should print `Take back Nf3`, and `pop` is how it takes a move back. Which line is wrong?"
+    body: |
+      var history = new java.util.ArrayDeque<String>();
+      String[] moves = {"e4", "e5", "Nf3"};
+      for (String move : moves) {
+          history.offer(move); // BUG
+      }
+      System.out.println("Take back " + history.pop());
+    fix: "history.push(move);"
+    why: "`pop` takes from the front of the deque. `offer` adds at the back, so the first move stays at the front and `pop` returns `e4`. `push` adds at the front, so the last move is on top."
+
+  - type: bug
+    after: binary-search-trees
+    prompt: "`contains` should find 7 in the tree and not find 4, so that the program prints `true false`. `add` follows the search tree rule (smaller values to the left). Which line is wrong?"
+    classes: |
+      class Node {
+          int value;
+          Node left;
+          Node right;
+
+          Node(int value) {
+              this.value = value;
+          }
+      }
+    pre: |
+      public static Node add(Node node, int value) {
+          if (node == null) {
+              return new Node(value);
+          }
+          if (value < node.value) {
+              node.left = add(node.left, value);
+          } else {
+              node.right = add(node.right, value);
+          }
+          return node;
+      }
+
+      public static boolean contains(Node node, int value) {
+          while (node != null) {
+              if (value == node.value) {
+                  return true;
+              }
+              if (value > node.value) { // BUG
+                  node = node.left;
+              } else {
+                  node = node.right;
+              }
+          }
+          return false;
+      }
+    body: |
+      Node root = null;
+      int[] values = {8, 3, 10, 6, 1, 7};
+      for (int value : values) {
+          root = add(root, value);
+      }
+      System.out.println(contains(root, 7) + " " + contains(root, 4));
+    fix: "if (value < node.value) {"
+    why: "Smaller values are in the left subtree, so the search goes left when the value is smaller than the node's. With `>` it goes the wrong way at every node, and falls off the tree before reaching 7."
+
+  - type: compiles
+    after: nodes-and-links
+    classes: |
+      class Stone {
+          int number;
+          Stone next;
+
+          Stone(int number, Stone next) {
+              this.number = number;
+              this.next = next;
+          }
+      }
+    body: |
+      Stone path = new Stone(1, new Stone(2, null));
+      System.out.println(path.next.number);
+    why: "Yes. A class can have a variable of its own type: it holds a reference to another Stone, or `null`, not a Stone inside a Stone. It prints 2."
+
+  - type: compiles
+    after: array-deque
+    body: |
+      var counts = new java.util.ArrayDeque<int>();
+      counts.push(4);
+      System.out.println(counts.peek());
+    why: "No. Like an ArrayList, an ArrayDeque holds objects, so its type parameter can't be a primitive type such as `int`: javac says `unexpected type`. `ArrayDeque<Integer>` works."
+
+  - type: choice
+    after: a-linked-list
+    prompt: "A linked list keeps only `head`, a reference to its first node: no `tail` and no size variable. Which of these takes the same few steps however long the list is?"
+    choices:
+      - "Adding a value at the front"
+      - "Adding a value at the end"
+      - "Finding out how many values it has"
+      - "Reading the last value"
+    answer: 1
+    why: "Adding at the front makes one node and moves `head`. The other three have to follow `next` from the head through every node: to find the last one, or to count them."
+
+  - type: choice
+    after: treemap-and-treeset
+    prompt: What does this print?
+    body: |
+      var sizes = new java.util.TreeSet<Integer>();
+      sizes.add(42);
+      sizes.add(38);
+      sizes.add(45);
+      System.out.println(sizes.floor(41) + " " + sizes.higher(42));
+    choices:
+      - "`38 45`"
+      - "`42 42`"
+      - "`38 42`"
+      - "`42 45`"
+    answer: 1
+    verify: output
+    why: "`floor(41)` is the biggest value at most 41, which is 38. `higher(42)` is the smallest value strictly bigger than 42, which is 45 (`ceiling(42)` would have been 42 itself)."
+
+  - type: boss
+    after: a-linked-list
+    prompt: |
+      A bus company sometimes runs a route backwards. In `BusRoute.java`, write the method `reverse()`, which turns the route around: the last stop becomes the first, and so on. Don't make new nodes or use a collection: turn each node's `next` around, so that it refers to the node that was before it. Afterwards `head` and `tail` must be right, so that `addLast` still works. The check runs:
+
+      ```java fragment
+      BusRoute route = new BusRoute();
+      route.addLast("Harbor");
+      route.addLast("Market");
+      route.addLast("Museum");
+      route.addLast("Station");
+      route.reverse();
+      System.out.println(route);
+      route.addLast("Depot");
+      System.out.println(route);
+      ```
+
+      and expects:
+
+      ```
+      Station -> Museum -> Market -> Harbor
+      Station -> Museum -> Market -> Harbor -> Depot
+      ```
+    seed:
+      BusRoute.java: |
+        public class BusRoute {
+            private StopNode head;
+            private StopNode tail;
+
+            public void addLast(String stop) {
+                StopNode node = new StopNode(stop);
+                if (this.tail == null) {
+                    this.head = node;
+                } else {
+                    this.tail.next = node;
+                }
+                this.tail = node;
+            }
+
+            public void reverse() {
+
+            }
+
+            @Override
+            public String toString() {
+                String result = "";
+                StopNode current = this.head;
+                while (current != null) {
+                    result += current.stop;
+                    if (current.next != null) {
+                        result += " -> ";
+                    }
+                    current = current.next;
+                }
+                return result;
+            }
+        }
+      StopNode.java: |
+        public class StopNode {
+            String stop;
+            StopNode next;
+
+            public StopNode(String stop) {
+                this.stop = stop;
+                this.next = null;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                BusRoute route = new BusRoute();
+                route.addLast("Harbor");
+                route.addLast("Market");
+                route.addLast("Museum");
+                route.addLast("Station");
+                route.reverse();
+                System.out.println(route);
+                route.addLast("Depot");
+                System.out.println(route);
+            }
+        }
+    solution:
+      BusRoute.java: |
+        public class BusRoute {
+            private StopNode head;
+            private StopNode tail;
+
+            public void addLast(String stop) {
+                StopNode node = new StopNode(stop);
+                if (this.tail == null) {
+                    this.head = node;
+                } else {
+                    this.tail.next = node;
+                }
+                this.tail = node;
+            }
+
+            public void reverse() {
+                StopNode previous = null;
+                StopNode current = this.head;
+                this.tail = this.head;
+                while (current != null) {
+                    StopNode following = current.next;
+                    current.next = previous;
+                    previous = current;
+                    current = following;
+                }
+                this.head = previous;
+            }
+
+            @Override
+            public String toString() {
+                String result = "";
+                StopNode current = this.head;
+                while (current != null) {
+                    result += current.stop;
+                    if (current.next != null) {
+                        result += " -> ";
+                    }
+                    current = current.next;
+                }
+                return result;
+            }
+        }
+      StopNode.java: |
+        public class StopNode {
+            String stop;
+            StopNode next;
+
+            public StopNode(String stop) {
+                this.stop = stop;
+                this.next = null;
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                BusRoute route = new BusRoute();
+                route.addLast("Harbor");
+                route.addLast("Market");
+                route.addLast("Museum");
+                route.addLast("Station");
+                route.reverse();
+                System.out.println(route);
+                route.addLast("Depot");
+                System.out.println(route);
+            }
+        }
+    hints:
+      - "Walk the route with two variables, `previous` (starting at `null`) and `current` (starting at `head`). Before changing `current.next`, keep the node after it in a third variable, or you lose the rest of the route."
+      - "In each round: `following = current.next; current.next = previous; previous = current; current = following;`. The old head becomes the tail, and at the end `previous` is the new head."
+    forbid:
+      - pattern: \b(ArrayList|ArrayDeque|LinkedList|Stack)\b
+        message: "Turn the links around in place, without a collection."
+    tests:
+      - call: |
+          BusRoute route = new BusRoute();
+          route.addLast("Harbor");
+          route.addLast("Market");
+          route.addLast("Museum");
+          route.addLast("Station");
+          route.reverse();
+          System.out.println(route);
+          route.addLast("Depot");
+          System.out.println(route);
+      - call: |
+          BusRoute empty = new BusRoute();
+          empty.reverse();
+          System.out.println("[" + empty + "]");
+          empty.addLast("Pier");
+          System.out.println(empty);
+          BusRoute one = new BusRoute();
+          one.addLast("Square");
+          one.reverse();
+          one.addLast("Bridge");
+          System.out.println(one);
+          BusRoute two = new BusRoute();
+          two.addLast("Mill");
+          two.addLast("Farm");
+          two.reverse();
+          two.reverse();
+          two.addLast("Lake");
+          System.out.println(two);
+        hidden: true

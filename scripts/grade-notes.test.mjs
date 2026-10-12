@@ -26,7 +26,9 @@ const engine = {
 };
 // grade.ts is TypeScript that imports other modules: bundle it into one module to import it here.
 const bundle = await build({ entryPoints: [new URL("../src/grader/grade.ts", import.meta.url).pathname], bundle: true, format: "esm", platform: "node", write: false, logLevel: "silent", plugins: [engine] });
-const { describeRun, grade, timeLimitFor } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
+const { crashOf, describeRun, grade, selfCallingMethod, timeLimitFor } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`);
+const notesBundle = await build({ entryPoints: [new URL("../src/grader/notes.ts", import.meta.url).pathname], bundle: true, format: "esm", platform: "node", write: false, logLevel: "silent" });
+const { notesShown } = await import(`data:text/javascript;base64,${Buffer.from(notesBundle.outputFiles[0].text).toString("base64")}`);
 
 const has = (text, ...parts) => {
   for (const p of parts) assert.ok(text?.includes(p), `missing ${JSON.stringify(p)} in: ${text}`);
@@ -188,4 +190,87 @@ test("an exception in an AnimationTimer's handle: the note says the timer's hand
   const note = describeRun(run, sources);
   has(note, "An AnimationTimer's handle threw ConcurrentModificationException (line 10).", "The game loop's handle went through rocks", "JavaFX printed it and went on with the next frame");
   lacks(note, "An event handler", "click or typing", "stopped");
+});
+
+// ------------------------------------------------------------------ output over 64 KB
+
+test("output over 64 KB: a method that calls itself is named as a possible cause, next to a loop; without one, the loop note stays", () => {
+  const recursive = {
+    path: "Main.java",
+    text: [
+      "public class Main {",
+      "    public static void main(String[] args) {",
+      "        // countDown(5) is called below",
+      '        System.out.println("countDown(");',
+      "        countDown(-3);",
+      "    }",
+      "",
+      "    public static void countDown(int seconds) {",
+      "        if (seconds == 0) {",
+      "            return;",
+      "        }",
+      "        System.out.println(seconds);",
+      "        countDown(seconds - 1);",
+      "    }",
+      "}",
+    ].join("\n"),
+  };
+  const looping = {
+    path: "Main.java",
+    text: ["public class Main {", "    public static void main(String[] args) {", "        int i = 0;", "        while (i >= 0) {", "            System.out.println(i);", "            show(i);", "        }", "    }", "", "    static void show(int i) {", '        System.out.println("show(" + i + ")");', "    }", "}"].join("\n"),
+  };
+  const run = { stdout: "-3\n-4\n", stderr: "", exitCode: null, truncated: true };
+  assert.equal(selfCallingMethod([recursive]), "countDown");
+  assert.equal(selfCallingMethod([looping]), null);
+  assert.equal(selfCallingMethod(["Main.java"]), null);
+  has(describeRun(run, [recursive]), "more than 64 KB", "a loop, or a method that keeps calling itself without reaching its base case", "countDown calls itself");
+  const plain = describeRun(run, [looping]);
+  has(plain, "Probably a loop that never stops printing.");
+  lacks(plain, "calls itself");
+  has(describeRun(run), "Probably a loop that never stops printing.");
+});
+
+// ------------------------------------------------------------------ the same crash under several tests
+
+test("the same crash under several failed tests is explained once; a crash on another line of the same recursion counts as the same; other notes stay", () => {
+  const source = {
+    path: "Main.java",
+    text: ["public class Main {", "    public static void main(String[] args) {", "        System.out.println(heights(40));", "    }", "", "    public static int heights(int height) {", "        int half = height / 2;", "        return 1 + heights(half);", "    }", "}"].join("\n"),
+  };
+  // HotSpot's StackOverflowError can stop on another line of the same method from one run to the next.
+  const overflow = (top) => ({ stdout: "", stderr: ["Exception in thread \"main\" java.lang.StackOverflowError", `\tat Main.heights(Main.java:${top})`, ...Array.from({ length: 40 }, () => "\tat Main.heights(Main.java:8)"), ""].join("\n"), exitCode: 1, timedOut: false });
+  const a = crashOf(overflow(8), [source]);
+  const b = crashOf(overflow(7), [source]);
+  assert.ok(a && b);
+  assert.equal(a.key, b.key);
+  assert.notEqual(a.text, b.text);
+  const given = "Main.java is checked as given, so changes to it don't count here.";
+  const tests = [
+    { name: "first", pass: false, hidden: true, note: `${given} ${a.text}`, crash: a },
+    { name: "passes", pass: true },
+    { name: "second", pass: false, note: b.text, crash: b },
+    { name: "third", pass: false, note: `${a.text} The window should show 3 buttons.`, crash: a },
+    { name: "timeout", pass: false, note: "Time limit: the program ran for more than 10 seconds and was stopped." },
+  ];
+  const notes = notesShown(tests);
+  assert.equal(notes[0], `${given} ${a.text}`);
+  assert.equal(notes[1], undefined);
+  assert.equal(notes[2], "Crashed the same way as the test above (StackOverflowError, line 7).");
+  assert.equal(notes[3], "Crashed the same way as the test above (StackOverflowError, line 8). The window should show 3 buttons.");
+  assert.equal(notes[4], tests[4].note);
+  // A different crash keeps its own explanation.
+  const npe = crashOf({ stdout: "", stderr: 'Exception in thread "main" java.lang.NullPointerException\n\tat Main.main(Main.java:3)\n', exitCode: 1, timedOut: false }, [source]);
+  assert.deepEqual(notesShown([{ name: "x", pass: false, note: a.text, crash: a }, { name: "y", pass: false, note: npe.text, crash: npe }]), [a.text, npe.text]);
+});
+
+test("grade() keeps the crash with its note, so that the results list can tell crashes that went the same way", async () => {
+  globalThis.__gradeNotesRun = () => ({ stdout: "", stderr: 'Exception in thread "main" java.lang.ArithmeticException: / by zero\n\tat Main.main(Main.java:3)\n', output: "", exitCode: 1, timedOut: false, files: {} });
+  const code = ["public class Main {", "    public static void main(String[] args) {", "        System.out.println(1 / 0);", "    }", "}"].join("\n");
+  const r = await grade({ id: "x", task: "", seed: code, solution: code, tests: [{ name: "one", expect: "1\n" }, { name: "two", expect: "2\n", hidden: true }] }, code);
+  assert.equal(r.tests.length, 2);
+  assert.ok(r.tests[0].crash && r.tests[0].note.includes(r.tests[0].crash.text));
+  assert.equal(r.tests[0].crash.key, r.tests[1].crash.key);
+  const notes = notesShown(r.tests);
+  assert.equal(notes[0], r.tests[0].note);
+  has(notes[1], "Crashed the same way as the test above (ArithmeticException, line 3).");
 });

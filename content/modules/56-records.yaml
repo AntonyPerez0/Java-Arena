@@ -1,0 +1,1649 @@
+id: records
+summary: An extra module, not part of the MOOC. Records, Java's short way to write a class that only holds values (Java 16 and later). Declaring a record and reading its components, the equals, hashCode and toString Java writes for it, records as HashMap keys and in a HashSet, compact constructors that check or tidy the values, methods and static factories in a record, and when a class is the better choice.
+steps:
+  - id: records-declaring
+    slug: declaring-a-record
+    title: Declaring a record
+    text: |
+      This module is an extra: the MOOC doesn't cover it. Many classes you've written only hold a few values that never change after the object is made: a place on a map, an amount of money, an entry in a timetable. For each, you wrote instance variables, a constructor, getters, a `toString`, and for HashMap keys an `equals` and a `hashCode` too. A **record**, part of Java since Java 16, declares such a class in one line, and Java writes all of those parts for you. Records are common in newer Java code, so they're worth being able to read and write.
+
+      ### A timetable entry as a class
+
+      A station's departure board shows, for each train, its name, where it's going and its platform. As a class in the style of the course, that's:
+
+      ```java fragment
+      public class Departure {
+          private final String train;
+          private final String destination;
+          private final int platform;
+
+          public Departure(String train, String destination, int platform) {
+              this.train = train;
+              this.destination = destination;
+              this.platform = platform;
+          }
+
+          public String getTrain() {
+              return this.train;
+          }
+
+          public String getDestination() {
+              return this.destination;
+          }
+
+          public int getPlatform() {
+              return this.platform;
+          }
+      }
+      ```
+
+      Twenty-odd lines, and there's still no `toString`, `equals` or `hashCode`.
+
+      ### The same as a record
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Departure express = new Departure("IC 27", "Tampere", 8);
+              System.out.println(express.train() + " to " + express.destination() + ", platform " + express.platform());
+              System.out.println(express);
+          }
+      }
+      // ==== Departure.java ====
+      public record Departure(String train, String destination, int platform) {
+      }
+      ```
+
+      ```output
+      IC 27 to Tampere, platform 8
+      Departure[train=IC 27, destination=Tampere, platform=8]
+      ```
+
+      The word `record` takes the place of `class`, and after the name, in parentheses, come the record's **components**: the values each Departure holds, written like a constructor's parameters. From that one line, Java makes a class with:
+
+      - a `private final` instance variable for each component;
+      - a constructor that takes the components in the same order, `new Departure("IC 27", "Tampere", 8)`, and stores them;
+      - an **accessor** method for each component, named exactly like the component: `train()`, `destination()`, `platform()`. There's no `get` in front;
+      - a `toString` that shows the record's name and each component with its value, in brackets: `Departure[train=IC 27, destination=Tampere, platform=8]`;
+      - an `equals` and a `hashCode` that use the components (the next step).
+
+      The braces after the header hold the record's body. It's empty here; step 4 puts methods in it. A public record goes in a file of its name, `Departure.java`, just like a public class.
+
+      ### No getters, no setters
+
+      The accessors are named after the components, so a getter's name doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Departure express = new Departure("IC 27", "Tampere", 8);
+              System.out.println(express.getPlatform());
+          }
+      }
+      // ==== Departure.java ====
+      public record Departure(String train, String destination, int platform) {
+      }
+      ```
+
+      ```javac
+      Main.java:4: error: cannot find symbol
+              System.out.println(express.getPlatform());
+                                        ^
+        symbol:   method getPlatform()
+        location: variable express of type Departure
+      1 error
+      ```
+
+      There are no setters either, and the instance variables are `final`: once a record is made, its values stay as they are, like a String's characters. When a train moves to another platform, the program makes a new Departure (step 4 shows a neat way to do that).
+
+      **Your turn:** a city map app marks places with pins, each at a column `x` and a row `y` of the map. Fill in the blanks: the word that makes `Pin` a record, its second component, the record's name after `new`, and the accessor that reads the bakery's column. The program prints:
+
+      ```
+      Bakery at 3, 5
+      Library at 8, 1
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              Pin bakery = new [[Pin]](3, 5);
+              Pin library = new Pin(8, 1);
+              System.out.println("Bakery at " + bakery.[[x]]() + ", " + bakery.y());
+              System.out.println("Library at " + library.x() + ", " + library.y());
+          }
+      }
+      // ==== Pin.java ====
+      public [[record]] Pin(int x, int [[y]]) {
+      }
+    hints:
+      - "A record is declared like a class, with `record` in place of `class`, and its components in parentheses after the name: `public record Pin(int x, int y)`."
+      - "The accessor of the component `x` is `x()`, with no `get` in front. A record is created with `new` and its name, like any object."
+    tests:
+      - expect: |
+          Bakery at 3, 5
+          Library at 8, 1
+    more:
+      - task: |
+          A weather service keeps temperature readings, each with the station's name and the temperature in degrees Celsius. `Reading` is a record, in `Reading.java`. In `Main.java`, write the method `report(Reading reading)`, which prints one line: the station, a colon, the temperature, the word `degrees` and a comma, and then `below freezing` when it's under 0, `at freezing` when it's exactly 0, and `above freezing` otherwise. Read the values with the record's accessors. The check runs:
+
+          ```java fragment
+          report(new Reading("Oulu", -4.5));
+          report(new Reading("Turku", 0.0));
+          report(new Reading("Helsinki", 3.2));
+          ```
+
+          and expects:
+
+          ```
+          Oulu: -4.5 degrees, below freezing
+          Turku: 0.0 degrees, at freezing
+          Helsinki: 3.2 degrees, above freezing
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    report(new Reading("Oulu", -4.5));
+                    report(new Reading("Turku", 0.0));
+                    report(new Reading("Helsinki", 3.2));
+                }
+
+                public static void report(Reading reading) {
+
+                }
+            }
+          Reading.java: |
+            public record Reading(String station, double celsius) {
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    report(new Reading("Oulu", -4.5));
+                    report(new Reading("Turku", 0.0));
+                    report(new Reading("Helsinki", 3.2));
+                }
+
+                public static void report(Reading reading) {
+                    String feel = "above freezing";
+                    if (reading.celsius() < 0) {
+                        feel = "below freezing";
+                    } else if (reading.celsius() == 0) {
+                        feel = "at freezing";
+                    }
+                    System.out.println(reading.station() + ": " + reading.celsius() + " degrees, " + feel);
+                }
+            }
+          Reading.java: |
+            public record Reading(String station, double celsius) {
+            }
+        hints:
+          - "The accessors are `reading.station()` and `reading.celsius()`. They're methods, so they need the parentheses."
+          - "Choose the words first with an if, else if and else on `reading.celsius()`, then print the line: `reading.station() + \": \" + reading.celsius() + \" degrees, \" + feel`."
+        require:
+          - pattern: \.celsius\s*\(\s*\)
+            message: "Read the temperature with the accessor `celsius()`."
+          - pattern: \.station\s*\(\s*\)
+            message: "Read the station's name with the accessor `station()`."
+        tests:
+          - call: |
+              report(new Reading("Oulu", -4.5));
+              report(new Reading("Turku", 0.0));
+              report(new Reading("Helsinki", 3.2));
+          - call: |
+              report(new Reading("Inari", -31.0));
+              report(new Reading("Vaasa", 0.0));
+              report(new Reading("Pori", 17.25));
+              report(new Reading("Kemi", -0.5));
+            hidden: true
+      - task: |
+          A record can have another record as a component. A map app's `Cafe` holds its name, its `Pin` and its rating. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  Cafe corner = new Cafe("Blue Door", new Pin(2, 7), 4.5);
+                  System.out.println(corner);
+                  System.out.println(corner.pin());
+                  System.out.println(corner.name().length() + corner.pin().y());
+              }
+          }
+          // ==== Pin.java ====
+          public record Pin(int x, int y) {
+          }
+          // ==== Cafe.java ====
+          public record Cafe(String name, Pin pin, double rating) {
+          }
+        hints:
+          - "A record's `toString` writes the record's name, then each component as `name=value` in square brackets. A component that is itself a record is written with its own `toString`."
+          - "A String component is written without quotes. `\"Blue Door\".length()` is 9 (the space counts), and the pin's `y()` is 7, two ints that add up."
+
+  - id: records-equality
+    slug: equals-and-hashcode
+    title: Records as keys
+    text: |
+      In module 32, a class needed its own `equals` and `hashCode` before a HashMap could find its objects as keys. A record has both from the start, written by Java from the components.
+
+      ### Equal when the components are equal
+
+      ```java run
+      import java.util.HashMap;
+
+      public class Main {
+          public static void main(String[] args) {
+              Pin first = new Pin(3, 5);
+              Pin second = new Pin(3, 5);
+              System.out.println(first == second);
+              System.out.println(first.equals(second));
+
+              HashMap<Pin, String> places = new HashMap<>();
+              places.put(new Pin(3, 5), "bakery");
+              places.put(new Pin(8, 1), "library");
+              System.out.println(places.get(new Pin(8, 1)));
+              System.out.println(places.containsKey(new Pin(1, 8)));
+          }
+      }
+      // ==== Pin.java ====
+      public record Pin(int x, int y) {
+      }
+      ```
+
+      ```output
+      false
+      true
+      library
+      false
+      ```
+
+      - `first == second` is still `false`: `new` makes two objects, and `==` asks whether two references point to the very same object (module 32).
+      - `first.equals(second)` is `true`. A record's `equals` is true when the other object is a record of the same type and every component is equal: components of a primitive type such as `int` are compared by their value (doubles with `Double.compare`), and objects such as Strings with their own `equals`.
+      - `places.get(new Pin(8, 1))` finds the library, although the key in the map is another object: the map uses the record's `hashCode` and `equals`, and both look only at the components. `new Pin(1, 8)` has the same numbers the other way round, so it's a different key.
+
+      ### What hashCode gives
+
+      A record's `hashCode` is computed from its components, so equal records always have the same hash code, which is the rule from module 32 that a HashMap needs. Java doesn't promise what the number itself is, though: it may differ from one Java version to another. So don't print it or write code that depends on its value. The same goes for printing a whole HashMap or HashSet of records: it shows them in an order of its own (module 31). Print what you look up, or go through a list.
+
+      ### Records in a HashSet
+
+      A HashSet keeps each value once, by `equals` and `hashCode`, so records work in sets too. A set of pins dropped by friends who meet up, with one pin dropped twice:
+
+      ```java run
+      import java.util.HashSet;
+
+      public class Main {
+          public static void main(String[] args) {
+              HashSet<Pin> dropped = new HashSet<>();
+              System.out.println(dropped.add(new Pin(3, 5)));
+              System.out.println(dropped.add(new Pin(6, 2)));
+              System.out.println(dropped.add(new Pin(3, 5)));
+              System.out.println(dropped.size() + " different places");
+          }
+      }
+      // ==== Pin.java ====
+      public record Pin(int x, int y) {
+      }
+      ```
+
+      ```output
+      true
+      true
+      false
+      2 different places
+      ```
+
+      `add` returns `false` when an equal value is already in the set, and leaves the set as it was.
+
+      **Your turn:** a city's buses take travel passes, each with the holder's name and a pass number. `TravelPass` is a record. What does this program print?
+    predict: |
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              TravelPass mine = new TravelPass("Mira Holm", 4021);
+              TravelPass copy = new TravelPass("Mira Holm", 4021);
+              TravelPass same = mine;
+              TravelPass other = new TravelPass("mira holm", 4021);
+              System.out.println(mine == copy);
+              System.out.println(mine.equals(copy));
+              System.out.println(mine == same);
+              System.out.println(mine.equals(other));
+              ArrayList<TravelPass> lost = new ArrayList<>();
+              lost.add(copy);
+              System.out.println(lost.contains(mine));
+          }
+      }
+      // ==== TravelPass.java ====
+      public record TravelPass(String holder, int number) {
+      }
+    hints:
+      - "`==` is true only for the very same object: `same` is `mine` itself, but `copy` was made with its own `new`. `equals` compares the components."
+      - "The names are compared with String's `equals`, which tells small letters from capitals. A list's `contains` uses `equals` too."
+    more:
+      - task: |
+          A robot vacuum notes the cell of the floor grid it's in once a minute. `Cell` is a record with the column `x` and the row `y`. In `Main.java`, write the method `countVisits(ArrayList<Cell> path)`, which returns a `HashMap<Cell, Integer>` from each cell on the path to how many times it's there. The check runs:
+
+          ```java fragment
+          ArrayList<Cell> path = new ArrayList<>();
+          path.add(new Cell(0, 0));
+          path.add(new Cell(0, 1));
+          path.add(new Cell(0, 0));
+          path.add(new Cell(2, 1));
+          path.add(new Cell(0, 0));
+          HashMap<Cell, Integer> visits = countVisits(path);
+          System.out.println(visits.size() + " different cells");
+          System.out.println(visits.get(new Cell(0, 0)));
+          System.out.println(visits.get(new Cell(2, 1)));
+          System.out.println(visits.getOrDefault(new Cell(1, 0), 0));
+          ```
+
+          and expects:
+
+          ```
+          3 different cells
+          3
+          1
+          0
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Cell> path = new ArrayList<>();
+                    path.add(new Cell(0, 0));
+                    path.add(new Cell(0, 1));
+                    path.add(new Cell(0, 0));
+                    path.add(new Cell(2, 1));
+                    path.add(new Cell(0, 0));
+                    HashMap<Cell, Integer> visits = countVisits(path);
+                    System.out.println(visits.size() + " different cells");
+                    System.out.println(visits.get(new Cell(0, 0)));
+                    System.out.println(visits.get(new Cell(2, 1)));
+                    System.out.println(visits.getOrDefault(new Cell(1, 0), 0));
+                }
+
+                public static HashMap<Cell, Integer> countVisits(ArrayList<Cell> path) {
+                    HashMap<Cell, Integer> visits = new HashMap<>();
+                    return visits;
+                }
+            }
+          Cell.java: |
+            public record Cell(int x, int y) {
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashMap;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Cell> path = new ArrayList<>();
+                    path.add(new Cell(0, 0));
+                    path.add(new Cell(0, 1));
+                    path.add(new Cell(0, 0));
+                    path.add(new Cell(2, 1));
+                    path.add(new Cell(0, 0));
+                    HashMap<Cell, Integer> visits = countVisits(path);
+                    System.out.println(visits.size() + " different cells");
+                    System.out.println(visits.get(new Cell(0, 0)));
+                    System.out.println(visits.get(new Cell(2, 1)));
+                    System.out.println(visits.getOrDefault(new Cell(1, 0), 0));
+                }
+
+                public static HashMap<Cell, Integer> countVisits(ArrayList<Cell> path) {
+                    HashMap<Cell, Integer> visits = new HashMap<>();
+                    for (Cell cell : path) {
+                        visits.put(cell, visits.getOrDefault(cell, 0) + 1);
+                    }
+                    return visits;
+                }
+            }
+          Cell.java: |
+            public record Cell(int x, int y) {
+            }
+        hints:
+          - "Go through the path with a for-each loop. For each cell, put it in the map with one more than it had: `visits.getOrDefault(cell, 0) + 1`."
+          - "Cell is a record, so two `new Cell(0, 0)` objects are the same key: the map adds up their visits without any `equals` or `hashCode` of your own."
+        tests:
+          - call: |
+              ArrayList<Cell> path = new ArrayList<>();
+              path.add(new Cell(0, 0));
+              path.add(new Cell(0, 1));
+              path.add(new Cell(0, 0));
+              path.add(new Cell(2, 1));
+              path.add(new Cell(0, 0));
+              HashMap<Cell, Integer> visits = countVisits(path);
+              System.out.println(visits.size() + " different cells");
+              System.out.println(visits.get(new Cell(0, 0)));
+              System.out.println(visits.get(new Cell(2, 1)));
+              System.out.println(visits.getOrDefault(new Cell(1, 0), 0));
+          - call: |
+              ArrayList<Cell> path = new ArrayList<>();
+              for (int i = 0; i < 4; i++) {
+                  path.add(new Cell(5, i));
+                  path.add(new Cell(i, 5));
+              }
+              HashMap<Cell, Integer> visits = countVisits(path);
+              System.out.println(visits.size() + " different cells");
+              System.out.println(visits.get(new Cell(5, 0)) + " " + visits.get(new Cell(0, 5)) + " " + visits.get(new Cell(5, 3)));
+              System.out.println(visits.getOrDefault(new Cell(5, 5), 0));
+              System.out.println(countVisits(new ArrayList<>()).size());
+            hidden: true
+          - call: |
+              ArrayList<Cell> path = new ArrayList<>();
+              path.add(new Cell(1, 1));
+              path.add(new Cell(1, 1));
+              path.add(new Cell(1, 1));
+              path.add(new Cell(1, 2));
+              HashMap<Cell, Integer> visits = countVisits(path);
+              System.out.println(visits.size() + " " + visits.get(new Cell(1, 1)) + " " + visits.get(new Cell(1, 2)));
+            hidden: true
+      - task: |
+          Volunteers counting birds note each sighting as the bird and the numbered square of the nature reserve where it was seen. When two volunteers note the same bird in the same square, that's one sighting. In `Main.java`, write the method `withoutRepeats(ArrayList<Sighting> sightings)`, which returns a new list with each different sighting once, in the order it first came. Use a `HashSet<Sighting>` to remember which sightings you've already taken. The check runs:
+
+          ```java fragment
+          ArrayList<Sighting> notes = new ArrayList<>();
+          notes.add(new Sighting("heron", 4));
+          notes.add(new Sighting("crane", 4));
+          notes.add(new Sighting("heron", 4));
+          notes.add(new Sighting("heron", 7));
+          notes.add(new Sighting("crane", 4));
+          ArrayList<Sighting> unique = withoutRepeats(notes);
+          System.out.println(unique);
+          System.out.println(notes.size() + " notes, " + unique.size() + " sightings");
+          ```
+
+          and expects:
+
+          ```
+          [Sighting[bird=heron, square=4], Sighting[bird=crane, square=4], Sighting[bird=heron, square=7]]
+          5 notes, 3 sightings
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashSet;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Sighting> notes = new ArrayList<>();
+                    notes.add(new Sighting("heron", 4));
+                    notes.add(new Sighting("crane", 4));
+                    notes.add(new Sighting("heron", 4));
+                    notes.add(new Sighting("heron", 7));
+                    notes.add(new Sighting("crane", 4));
+                    ArrayList<Sighting> unique = withoutRepeats(notes);
+                    System.out.println(unique);
+                    System.out.println(notes.size() + " notes, " + unique.size() + " sightings");
+                }
+
+                public static ArrayList<Sighting> withoutRepeats(ArrayList<Sighting> sightings) {
+                    return sightings;
+                }
+            }
+          Sighting.java: |
+            public record Sighting(String bird, int square) {
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.HashSet;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Sighting> notes = new ArrayList<>();
+                    notes.add(new Sighting("heron", 4));
+                    notes.add(new Sighting("crane", 4));
+                    notes.add(new Sighting("heron", 4));
+                    notes.add(new Sighting("heron", 7));
+                    notes.add(new Sighting("crane", 4));
+                    ArrayList<Sighting> unique = withoutRepeats(notes);
+                    System.out.println(unique);
+                    System.out.println(notes.size() + " notes, " + unique.size() + " sightings");
+                }
+
+                public static ArrayList<Sighting> withoutRepeats(ArrayList<Sighting> sightings) {
+                    HashSet<Sighting> seen = new HashSet<>();
+                    ArrayList<Sighting> unique = new ArrayList<>();
+                    for (Sighting sighting : sightings) {
+                        if (seen.add(sighting)) {
+                            unique.add(sighting);
+                        }
+                    }
+                    return unique;
+                }
+            }
+          Sighting.java: |
+            public record Sighting(String bird, int square) {
+            }
+        hints:
+          - "Make an empty `HashSet<Sighting>` and an empty `ArrayList<Sighting>`. Go through the sightings in order; one that isn't in the set yet goes into both."
+          - "`seen.add(sighting)` returns `true` only when the sighting wasn't in the set yet, so it can be the if's condition. The list keeps the order; the set only answers \"seen before?\"."
+        require:
+          - pattern: HashSet\s*<
+            message: "Remember the sightings you've taken in a `HashSet<Sighting>`."
+        tests:
+          - call: |
+              ArrayList<Sighting> notes = new ArrayList<>();
+              notes.add(new Sighting("heron", 4));
+              notes.add(new Sighting("crane", 4));
+              notes.add(new Sighting("heron", 4));
+              notes.add(new Sighting("heron", 7));
+              notes.add(new Sighting("crane", 4));
+              ArrayList<Sighting> unique = withoutRepeats(notes);
+              System.out.println(unique);
+              System.out.println(notes.size() + " notes, " + unique.size() + " sightings");
+          - call: |
+              ArrayList<Sighting> notes = new ArrayList<>();
+              notes.add(new Sighting("owl", 12));
+              notes.add(new Sighting("owl", 21));
+              notes.add(new Sighting("Owl", 12));
+              notes.add(new Sighting("owl", 12));
+              notes.add(new Sighting("owl", 21));
+              ArrayList<Sighting> unique = withoutRepeats(notes);
+              System.out.println(unique);
+              System.out.println(notes.size() + " notes, " + unique.size() + " sightings");
+              System.out.println(withoutRepeats(new ArrayList<>()));
+            hidden: true
+
+  - id: records-compact-constructors
+    slug: compact-constructors
+    title: Checking values with a compact constructor
+    text: |
+      The constructor Java writes for a record stores whatever it's given. Often some values make no sense: a temperature colder than absolute zero, a percentage of 140, a name with spaces around it. A record can check and tidy its values in a constructor of its own.
+
+      ### A compact constructor
+
+      ```java run crash
+      public class Main {
+          public static void main(String[] args) {
+              Reading oulu = new Reading("  Oulu ", -4.5);
+              System.out.println(oulu);
+              Reading wrong = new Reading("Kemi", -300.0);
+              System.out.println(wrong);
+          }
+      }
+      // ==== Reading.java ====
+      public record Reading(String station, double celsius) {
+          public Reading {
+              if (celsius < -273.15) {
+                  throw new IllegalArgumentException("colder than absolute zero: " + celsius);
+              }
+              station = station.trim();
+          }
+      }
+      ```
+
+      ```output
+      Reading[station=Oulu, celsius=-4.5]
+      ```
+
+      ```crash
+      Exception in thread "main" java.lang.IllegalArgumentException: colder than absolute zero: -300.0
+      	at Reading.<init>(Reading.java:4)
+      	at Main.main(Main.java:5)
+      ```
+
+      `public Reading { ... }` is a **compact constructor**: the record's name with no parameter list at all. Its parameters are the components, `station` and `celsius`, and Java runs the code in the braces first and then stores the parameters in the instance variables by itself. So inside it you can:
+
+      - check a value and throw an exception (module 42) when it's wrong, so that no Reading with an impossible temperature can ever exist;
+      - change a parameter before it's stored: `station = station.trim();` gives the parameter a tidied value, and that's the value the record keeps. That's why `"  Oulu "` comes out as `Oulu`.
+
+      Note that it says `station = ...`, not `this.station = ...`. The parameter is what gets stored at the end; the instance variable itself is `final`, and only Java's own assignment after your code may set it:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(new Reading(" Oulu", -4.5));
+          }
+      }
+      // ==== Reading.java ====
+      public record Reading(String station, double celsius) {
+          public Reading {
+              this.station = station.trim();
+          }
+      }
+      ```
+
+      ```javac
+      Reading.java:3: error: cannot assign a value to final variable station
+              this.station = station.trim();
+                  ^
+      1 error
+      ```
+
+      ### The long form
+
+      The constructor that takes all the components is the record's **canonical constructor**. The compact form is a short way to write it. Here is the same one written in full, with the parameter list repeated and every `this.x = x` assignment written out:
+
+      ```java fragment
+      public Reading(String station, double celsius) {
+          if (celsius < -273.15) {
+              throw new IllegalArgumentException("colder than absolute zero: " + celsius);
+          }
+          this.station = station.trim();
+          this.celsius = celsius;
+      }
+      ```
+
+      Both forms declare the same constructor, so a record can have only one of them. The compact form is what you'll usually see, since its whole point is to leave out what Java can write for you.
+
+      A tidied value matters for equality too: since the records keep `Oulu` either way, `new Reading("  Oulu ", -4.5)` equals `new Reading("Oulu", -4.5)`.
+
+      **Your turn:** an online chess club keeps each player's nickname and rating. Nicknames are typed in carelessly, with spaces around them and capital letters here and there, but `" Rook99 "` and `"rook99"` are the same player. In `Player.java`, give the record `Player` a compact constructor that trims the nickname and turns it into small letters (`toLowerCase()`). The check runs:
+
+      ```java fragment
+      Player typed = new Player("  Rook99 ", 1450);
+      Player stored = new Player("rook99", 1450);
+      System.out.println(typed);
+      System.out.println(typed.equals(stored));
+      System.out.println(new Player("QueenSide", 1720).nickname());
+      ```
+
+      and expects:
+
+      ```
+      Player[nickname=rook99, rating=1450]
+      true
+      queenside
+      ```
+    seed:
+      Player.java: |
+        public record Player(String nickname, int rating) {
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Player typed = new Player("  Rook99 ", 1450);
+                Player stored = new Player("rook99", 1450);
+                System.out.println(typed);
+                System.out.println(typed.equals(stored));
+                System.out.println(new Player("QueenSide", 1720).nickname());
+            }
+        }
+    solution:
+      Player.java: |
+        public record Player(String nickname, int rating) {
+            public Player {
+                nickname = nickname.trim().toLowerCase();
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Player typed = new Player("  Rook99 ", 1450);
+                Player stored = new Player("rook99", 1450);
+                System.out.println(typed);
+                System.out.println(typed.equals(stored));
+                System.out.println(new Player("QueenSide", 1720).nickname());
+            }
+        }
+    hints:
+      - "Inside the record's braces, write `public Player { }`, with no parentheses after the name. That's the compact constructor."
+      - "Give the parameter its tidied value: `nickname = nickname.trim().toLowerCase();`. Write `nickname`, not `this.nickname`; Java stores the parameter after your code runs."
+    require:
+      - pattern: public\s+Player\s*\{
+        message: "Write a compact constructor, `public Player { ... }`, inside the record."
+    tests:
+      - call: |
+          Player typed = new Player("  Rook99 ", 1450);
+          Player stored = new Player("rook99", 1450);
+          System.out.println(typed);
+          System.out.println(typed.equals(stored));
+          System.out.println(new Player("QueenSide", 1720).nickname());
+      - call: |
+          Player a = new Player("KNIGHT_RIDER", 1300);
+          Player b = new Player("\tknight_rider  ", 1300);
+          Player c = new Player("knight_rider", 1310);
+          System.out.println(a + " " + b);
+          System.out.println(a.equals(b) + " " + a.equals(c));
+          System.out.println(new Player(" Pawn Storm ", 980));
+        hidden: true
+    more:
+      - task: |
+          A download manager shows how far each file has come as a percentage. A buggy server sometimes reports values below 0 or above 100. In `Download.java`, give the record `Download(String file, int percent)` a compact constructor that keeps the percentage between 0 and 100: a value below 0 becomes 0, a value above 100 becomes 100, and anything else stays as it is. The check runs:
+
+          ```java fragment
+          System.out.println(new Download("song.mp3", 64));
+          System.out.println(new Download("map.pdf", -3));
+          System.out.println(new Download("film.mkv", 140));
+          ```
+
+          and expects:
+
+          ```
+          Download[file=song.mp3, percent=64]
+          Download[file=map.pdf, percent=0]
+          Download[file=film.mkv, percent=100]
+          ```
+        seed:
+          Download.java: |
+            public record Download(String file, int percent) {
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(new Download("song.mp3", 64));
+                    System.out.println(new Download("map.pdf", -3));
+                    System.out.println(new Download("film.mkv", 140));
+                }
+            }
+        solution:
+          Download.java: |
+            public record Download(String file, int percent) {
+                public Download {
+                    if (percent < 0) {
+                        percent = 0;
+                    }
+                    if (percent > 100) {
+                        percent = 100;
+                    }
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(new Download("song.mp3", 64));
+                    System.out.println(new Download("map.pdf", -3));
+                    System.out.println(new Download("film.mkv", 140));
+                }
+            }
+        hints:
+          - "Write `public Download { ... }` inside the record. In it, `percent` is the parameter, and whatever value it has at the end is what the record keeps."
+          - "Two ifs: `if (percent < 0) { percent = 0; }` and the same for above 100. `Math.max` and `Math.min` would do it in one line too: `percent = Math.max(0, Math.min(100, percent));`."
+        require:
+          - pattern: public\s+Download\s*\{
+            message: "Write a compact constructor, `public Download { ... }`, inside the record."
+        tests:
+          - call: |
+              System.out.println(new Download("song.mp3", 64));
+              System.out.println(new Download("map.pdf", -3));
+              System.out.println(new Download("film.mkv", 140));
+          - call: |
+              Download low = new Download("notes.txt", -250);
+              Download full = new Download("notes.txt", 100);
+              System.out.println(low.percent() + " " + full.percent() + " " + new Download("logo.png", 0).percent());
+              System.out.println(new Download("game.zip", 101).equals(full) + " " + new Download("game.zip", 101).equals(new Download("game.zip", 100)));
+              System.out.println(new Download("photo.jpg", 99));
+            hidden: true
+      - task: |
+          A print dialog takes a range of pages, from the first to the last. People sometimes type the range backwards, 9 to 4, which should print the same pages as 4 to 9. In `PageRange.java`, give the record `PageRange(int first, int last)` a compact constructor that swaps the two numbers when `first` is greater than `last`, so a PageRange is always in order. The check runs:
+
+          ```java fragment
+          PageRange typed = new PageRange(9, 4);
+          System.out.println(typed);
+          System.out.println(typed.equals(new PageRange(4, 9)));
+          System.out.println(new PageRange(2, 2));
+          ```
+
+          and expects:
+
+          ```
+          PageRange[first=4, last=9]
+          true
+          PageRange[first=2, last=2]
+          ```
+        seed:
+          PageRange.java: |
+            public record PageRange(int first, int last) {
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    PageRange typed = new PageRange(9, 4);
+                    System.out.println(typed);
+                    System.out.println(typed.equals(new PageRange(4, 9)));
+                    System.out.println(new PageRange(2, 2));
+                }
+            }
+        solution:
+          PageRange.java: |
+            public record PageRange(int first, int last) {
+                public PageRange {
+                    if (first > last) {
+                        int smaller = last;
+                        last = first;
+                        first = smaller;
+                    }
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    PageRange typed = new PageRange(9, 4);
+                    System.out.println(typed);
+                    System.out.println(typed.equals(new PageRange(4, 9)));
+                    System.out.println(new PageRange(2, 2));
+                }
+            }
+        hints:
+          - "Swapping two variables needs a third one to hold a value for a moment: keep `last` in a helper variable, set `last = first`, then `first` gets the helper's value."
+          - "Do it only `if (first > last)`. A range that's already in order, or one page long, stays as it is."
+        require:
+          - pattern: public\s+PageRange\s*\{
+            message: "Write a compact constructor, `public PageRange { ... }`, inside the record."
+        tests:
+          - call: |
+              PageRange typed = new PageRange(9, 4);
+              System.out.println(typed);
+              System.out.println(typed.equals(new PageRange(4, 9)));
+              System.out.println(new PageRange(2, 2));
+          - call: |
+              PageRange backwards = new PageRange(300, 12);
+              System.out.println(backwards.first() + " to " + backwards.last());
+              System.out.println(new PageRange(1, 50));
+              System.out.println(new PageRange(51, 50).equals(new PageRange(50, 51)) + " " + new PageRange(3, 8).equals(new PageRange(8, 4)));
+            hidden: true
+
+  - id: records-methods
+    slug: methods-and-factories
+    title: Methods and factories
+    text: |
+      A record's body can hold methods, like a class's. They can read the components, and they're how a record does more than hold its values.
+
+      ### Methods that use the components
+
+      A shop keeps prices in whole cents, so that adding them up never meets the rounding errors of `double`. A record for an amount of money:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Money coffee = new Money(350);
+              Money bun = Money.euros(2, 5);
+              Money order = coffee.plus(bun.times(2));
+              System.out.println(coffee + " + 2 x " + bun + " = " + order);
+              System.out.println(order.cents());
+          }
+      }
+      // ==== Money.java ====
+      public record Money(int cents) {
+          public static Money euros(int euros, int cents) {
+              return new Money(euros * 100 + cents);
+          }
+
+          public Money plus(Money other) {
+              return new Money(this.cents + other.cents);
+          }
+
+          public Money times(int count) {
+              return new Money(this.cents * count);
+          }
+
+          @Override
+          public String toString() {
+              int rest = this.cents % 100;
+              String zero = "";
+              if (rest < 10) {
+                  zero = "0";
+              }
+              return this.cents / 100 + "." + zero + rest + " EUR";
+          }
+      }
+      ```
+
+      ```output
+      3.50 EUR + 2 x 2.05 EUR = 7.60 EUR
+      760
+      ```
+
+      - Inside the record, `this.cents` is the instance variable. `other.cents` works too, since `other` is a Money and the code is inside Money; `other.cents()` would be the same value.
+      - `plus` and `times` don't change anything. They return a **new** Money with the result, as String's `toUpperCase` returns a new String. `coffee` is still 3.50 after `plus`.
+      - A record may override `toString` (or `equals` and `hashCode`, though you rarely need to). Here the amount is shown as euros and cents, with a 0 before a cents value under 10.
+      - `euros` is a **static factory**: a static method that makes a record in another way than the constructor, `Money.euros(2, 5)` for 2 euros and 5 cents. Static methods, and static variables too, are allowed in a record.
+
+      ### A record never changes
+
+      A method can't assign a component, since its instance variable is `final`:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Money price = new Money(350);
+              price.add(new Money(205));
+              System.out.println(price);
+          }
+      }
+      // ==== Money.java ====
+      public record Money(int cents) {
+          public void add(Money other) {
+              this.cents = this.cents + other.cents;
+          }
+      }
+      ```
+
+      ```javac
+      Money.java:3: error: cannot assign a value to final variable cents
+              this.cents = this.cents + other.cents;
+                  ^
+      1 error
+      ```
+
+      Nor can a record have instance variables of its own besides its components. Everything a record holds is in its header:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(new Money(350));
+          }
+      }
+      // ==== Money.java ====
+      public record Money(int cents) {
+          private int timesUsed;
+      }
+      ```
+
+      ```javac
+      Money.java:2: error: field declaration must be static
+          private int timesUsed;
+                      ^
+        (consider replacing field with record component)
+      1 error
+      ```
+
+      ### "Changing" one value: with-methods
+
+      To change one component, make a new record with that one value different and the others copied. Such methods are customarily named `with` and the component:
+
+      ```java fragment
+      public Money withCents(int newCents) {
+          return new Money(newCents);
+      }
+      ```
+
+      For a record with one component, that's just the constructor. With several components it saves the caller from copying all the others, as the second task below shows.
+
+      **Your turn:** a hiking app marks waypoints on a map, each at a point `x`, `y` (in kilometers). In `Waypoint.java`, add to the record `Waypoint(double x, double y)` the method `distanceTo(Waypoint other)`, which returns the straight-line distance between this waypoint and the other one: the square root (`Math.sqrt`) of the x difference squared plus the y difference squared. The check runs:
+
+      ```java fragment
+      Waypoint camp = new Waypoint(1.0, 2.0);
+      Waypoint lake = new Waypoint(4.0, 6.0);
+      System.out.println(camp.distanceTo(lake));
+      System.out.println(lake.distanceTo(camp));
+      System.out.println(camp.distanceTo(camp));
+      ```
+
+      and expects:
+
+      ```
+      5.0
+      5.0
+      0.0
+      ```
+    seed:
+      Waypoint.java: |
+        public record Waypoint(double x, double y) {
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Waypoint camp = new Waypoint(1.0, 2.0);
+                Waypoint lake = new Waypoint(4.0, 6.0);
+                System.out.println(camp.distanceTo(lake));
+                System.out.println(lake.distanceTo(camp));
+                System.out.println(camp.distanceTo(camp));
+            }
+        }
+    solution:
+      Waypoint.java: |
+        public record Waypoint(double x, double y) {
+            public double distanceTo(Waypoint other) {
+                double dx = this.x - other.x;
+                double dy = this.y - other.y;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Waypoint camp = new Waypoint(1.0, 2.0);
+                Waypoint lake = new Waypoint(4.0, 6.0);
+                System.out.println(camp.distanceTo(lake));
+                System.out.println(lake.distanceTo(camp));
+                System.out.println(camp.distanceTo(camp));
+            }
+        }
+    hints:
+      - "The header is `public double distanceTo(Waypoint other)`, inside the record's braces. `this.x` and `other.x` are the two x values."
+      - "Keep the differences in variables: `double dx = this.x - other.x;` and the same for y. Then `return Math.sqrt(dx * dx + dy * dy);`. Squaring makes a negative difference positive, so the order doesn't matter."
+    tests:
+      - call: |
+          Waypoint camp = new Waypoint(1.0, 2.0);
+          Waypoint lake = new Waypoint(4.0, 6.0);
+          System.out.println(camp.distanceTo(lake));
+          System.out.println(lake.distanceTo(camp));
+          System.out.println(camp.distanceTo(camp));
+      - call: |
+          Waypoint start = new Waypoint(0.0, 0.0);
+          System.out.println(start.distanceTo(new Waypoint(1.0, 1.0)));
+          System.out.println(new Waypoint(-3.0, 10.0).distanceTo(new Waypoint(2.0, -2.0)));
+          System.out.println(new Waypoint(7.5, 1.0).distanceTo(new Waypoint(7.5, 3.5)));
+        hidden: true
+    more:
+      - task: |
+          A game shows each player as an avatar with a name, a color and a level. Saved avatars never change: a change in the settings makes a new one. In `Avatar.java`, add to the record `Avatar(String name, String color, int level)` two methods:
+
+          - `withColor(String newColor)`, which returns a new Avatar with the same name and level and the new color;
+          - `withLevel(int newLevel)`, which returns a new Avatar with the same name and color and the new level.
+
+          The check runs:
+
+          ```java fragment
+          Avatar saved = new Avatar("Noor", "teal", 3);
+          Avatar repainted = saved.withColor("amber");
+          Avatar promoted = repainted.withLevel(4);
+          System.out.println(saved);
+          System.out.println(repainted);
+          System.out.println(promoted);
+          ```
+
+          and expects:
+
+          ```
+          Avatar[name=Noor, color=teal, level=3]
+          Avatar[name=Noor, color=amber, level=3]
+          Avatar[name=Noor, color=amber, level=4]
+          ```
+        seed:
+          Avatar.java: |
+            public record Avatar(String name, String color, int level) {
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Avatar saved = new Avatar("Noor", "teal", 3);
+                    Avatar repainted = saved.withColor("amber");
+                    Avatar promoted = repainted.withLevel(4);
+                    System.out.println(saved);
+                    System.out.println(repainted);
+                    System.out.println(promoted);
+                }
+            }
+        solution:
+          Avatar.java: |
+            public record Avatar(String name, String color, int level) {
+                public Avatar withColor(String newColor) {
+                    return new Avatar(this.name, newColor, this.level);
+                }
+
+                public Avatar withLevel(int newLevel) {
+                    return new Avatar(this.name, this.color, newLevel);
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Avatar saved = new Avatar("Noor", "teal", 3);
+                    Avatar repainted = saved.withColor("amber");
+                    Avatar promoted = repainted.withLevel(4);
+                    System.out.println(saved);
+                    System.out.println(repainted);
+                    System.out.println(promoted);
+                }
+            }
+        hints:
+          - "Both methods return an Avatar: `public Avatar withColor(String newColor)`. Each returns `new Avatar(...)` with three values, in the order of the header."
+          - "In `withColor`, copy the name and the level from this avatar, and put `newColor` in the middle: `new Avatar(this.name, newColor, this.level)`. The original avatar stays as it was: nothing in a record can change."
+        tests:
+          - call: |
+              Avatar saved = new Avatar("Noor", "teal", 3);
+              Avatar repainted = saved.withColor("amber");
+              Avatar promoted = repainted.withLevel(4);
+              System.out.println(saved);
+              System.out.println(repainted);
+              System.out.println(promoted);
+          - call: |
+              Avatar first = new Avatar("Elias", "plum", 7);
+              Avatar second = first.withLevel(1).withColor("gray");
+              System.out.println(first + " " + second);
+              System.out.println(first.withLevel(7).equals(first) + " " + first.withColor("plum").withLevel(8).equals(first));
+              System.out.println(second.withColor("plum").withLevel(7).equals(first));
+            hidden: true
+      - task: |
+          A timetable stores times of day as minutes after midnight, but shows them as hours and minutes. In `TimeOfDay.java`, add to the record `TimeOfDay(int hour, int minute)`:
+
+          - a static factory `fromMinutes(int minutes)`, which makes the TimeOfDay that many minutes after midnight. It wraps around the day: 1440 minutes (24 hours) is midnight again, and -15 is 23:45;
+          - a static factory `midnight()`, which returns 00:00;
+          - `toMinutes()`, which returns how many minutes after midnight this time is;
+          - `plusMinutes(int minutes)`, which returns the time that many minutes later (or earlier, for a negative number), wrapping around the day too;
+          - `toString()`, which shows the time with two digits each, like `08:05`.
+
+          The check runs:
+
+          ```java fragment
+          TimeOfDay departure = TimeOfDay.fromMinutes(485);
+          TimeOfDay delayed = departure.plusMinutes(70);
+          System.out.println(departure + " becomes " + delayed);
+          System.out.println(delayed.toMinutes() + " " + delayed.hour());
+          System.out.println(new TimeOfDay(23, 50).plusMinutes(25));
+          System.out.println(TimeOfDay.midnight().plusMinutes(-15));
+          ```
+
+          and expects:
+
+          ```
+          08:05 becomes 09:15
+          555 9
+          00:15
+          23:45
+          ```
+        seed:
+          TimeOfDay.java: |
+            public record TimeOfDay(int hour, int minute) {
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TimeOfDay departure = TimeOfDay.fromMinutes(485);
+                    TimeOfDay delayed = departure.plusMinutes(70);
+                    System.out.println(departure + " becomes " + delayed);
+                    System.out.println(delayed.toMinutes() + " " + delayed.hour());
+                    System.out.println(new TimeOfDay(23, 50).plusMinutes(25));
+                    System.out.println(TimeOfDay.midnight().plusMinutes(-15));
+                }
+            }
+        solution:
+          TimeOfDay.java: |
+            public record TimeOfDay(int hour, int minute) {
+                public static TimeOfDay fromMinutes(int minutes) {
+                    int inDay = minutes % 1440;
+                    if (inDay < 0) {
+                        inDay = inDay + 1440;
+                    }
+                    return new TimeOfDay(inDay / 60, inDay % 60);
+                }
+
+                public static TimeOfDay midnight() {
+                    return new TimeOfDay(0, 0);
+                }
+
+                public int toMinutes() {
+                    return this.hour * 60 + this.minute;
+                }
+
+                public TimeOfDay plusMinutes(int minutes) {
+                    return fromMinutes(this.toMinutes() + minutes);
+                }
+
+                @Override
+                public String toString() {
+                    String text = "";
+                    if (this.hour < 10) {
+                        text = "0";
+                    }
+                    text = text + this.hour + ":";
+                    if (this.minute < 10) {
+                        text = text + "0";
+                    }
+                    return text + this.minute;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    TimeOfDay departure = TimeOfDay.fromMinutes(485);
+                    TimeOfDay delayed = departure.plusMinutes(70);
+                    System.out.println(departure + " becomes " + delayed);
+                    System.out.println(delayed.toMinutes() + " " + delayed.hour());
+                    System.out.println(new TimeOfDay(23, 50).plusMinutes(25));
+                    System.out.println(TimeOfDay.midnight().plusMinutes(-15));
+                }
+            }
+        hints:
+          - "In `fromMinutes`, `minutes % 1440` wraps a time past midnight back into the day. For a negative number `%` gives a negative remainder (-15 % 1440 is -15), so add 1440 when it's below 0. Then the hour is `inDay / 60` and the minute `inDay % 60`."
+          - "`toMinutes()` is `this.hour * 60 + this.minute`, and `plusMinutes` can reuse both: `return fromMinutes(this.toMinutes() + minutes);`. In `toString`, put a `\"0\"` in front of an hour or a minute under 10."
+        require:
+          - pattern: static\s+TimeOfDay\s+fromMinutes
+            message: "`fromMinutes` should be a static method of the record: `public static TimeOfDay fromMinutes(int minutes)`."
+        tests:
+          - call: |
+              TimeOfDay departure = TimeOfDay.fromMinutes(485);
+              TimeOfDay delayed = departure.plusMinutes(70);
+              System.out.println(departure + " becomes " + delayed);
+              System.out.println(delayed.toMinutes() + " " + delayed.hour());
+              System.out.println(new TimeOfDay(23, 50).plusMinutes(25));
+              System.out.println(TimeOfDay.midnight().plusMinutes(-15));
+          - call: |
+              System.out.println(TimeOfDay.midnight() + " " + TimeOfDay.fromMinutes(1440) + " " + TimeOfDay.fromMinutes(-1));
+              TimeOfDay late = new TimeOfDay(22, 30);
+              System.out.println(late.plusMinutes(600) + " " + late.plusMinutes(-1350) + " " + late);
+              System.out.println(TimeOfDay.fromMinutes(725).equals(new TimeOfDay(12, 5)) + " " + new TimeOfDay(13, 0).toMinutes());
+              System.out.println(TimeOfDay.fromMinutes(3000).minute() + " " + TimeOfDay.fromMinutes(3000).hour());
+            hidden: true
+
+  - id: records-class-or-record
+    slug: class-or-record
+    title: Class or record?
+    text: |
+      Records are a handy tool, but not for every class. This step shows what a record can't do, and how to choose.
+
+      ### What a record can't do
+
+      - **Change.** Its values are fixed when it's made. Anything whose values change over time, such as a counter, a bank account's balance or a shopping cart that items are added to, needs a class.
+      - **Hide a value or keep one of its own.** Every component has a public accessor, and a record has no instance variables besides its components.
+      - **Inherit.** A record is `final`, so no class can extend it, and a record can't extend a class either. Every record already extends Java's class `Record`:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(new Tram("7A", 22));
+          }
+      }
+      // ==== Vehicle.java ====
+      public class Vehicle {
+      }
+      // ==== Tram.java ====
+      public record Tram(String line, int stops) extends Vehicle {
+      }
+      ```
+
+      ```javac
+      Tram.java:1: error: '{' expected
+      public record Tram(String line, int stops) extends Vehicle {
+                                                ^
+      1 error
+      ```
+
+      javac doesn't even read on to the word `extends`: after a record's header it expects its body. A record can **implement interfaces**, though, as a class does (module 35), and that includes Comparable.
+
+      One more thing to know: a record is only as fixed as its components. A component that's an `ArrayList` can't be swapped for another list, but the list itself can still get new elements, through the accessor. Records work best with components that don't change either: numbers, Strings and other records.
+
+      ### Records and sorting
+
+      Accessors are methods, so they work as method references (module 37) in `Comparator.comparing` (module 38), and a record can implement `Comparable` for its natural order:
+
+      ```java run
+      import java.util.ArrayList;
+      import java.util.Collections;
+      import java.util.Comparator;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<Departure> board = new ArrayList<>();
+              board.add(new Departure("R 14", 1015, 3));
+              board.add(new Departure("IC 27", 940, 8));
+              board.add(new Departure("S 102", 1015, 1));
+
+              Collections.sort(board);
+              System.out.println(board.get(0).train() + " leaves first");
+
+              board.sort(Comparator.comparing(Departure::platform));
+              for (Departure departure : board) {
+                  System.out.println(departure);
+              }
+          }
+      }
+      // ==== Departure.java ====
+      public record Departure(String train, int time, int platform) implements Comparable<Departure> {
+          @Override
+          public int compareTo(Departure other) {
+              return this.time - other.time;
+          }
+      }
+      ```
+
+      ```output
+      IC 27 leaves first
+      Departure[train=S 102, time=1015, platform=1]
+      Departure[train=R 14, time=1015, platform=3]
+      Departure[train=IC 27, time=940, platform=8]
+      ```
+
+      ### Choosing
+
+      A record fits when the object **is** its values: two of them with the same values are interchangeable, as two 5 euro notes are. A point, an amount of money, a date range, a reading, a timetable entry. A class fits when the object has a life of its own: its values change, it keeps things hidden, or two objects with the same values are still different things, as two bank accounts that both hold 0 euros are.
+
+      Many programs use both: a class keeps changing state, and records are the values it holds and hands out.
+
+      **Your turn:** a quilting club's app has the class `Quilt` below, written the long way, with getters and its own `equals`, `hashCode` and `toString`. A finished quilt never changes, so it can be a record. Turn `Quilt` into a record with the components `name` and `squares`, with no `equals` or `hashCode` of your own, and change `Main` to use the accessors. The program must print exactly what it prints now:
+
+      ```
+      true
+      Quilt[name=Starburst, squares=12]
+      21 squares in all
+      LOG CABIN
+      ```
+    seed:
+      Quilt.java: |
+        import java.util.Objects;
+
+        public class Quilt {
+            private final String name;
+            private final int squares;
+
+            public Quilt(String name, int squares) {
+                this.name = name;
+                this.squares = squares;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public int getSquares() {
+                return this.squares;
+            }
+
+            @Override
+            public boolean equals(Object compared) {
+                if (this == compared) {
+                    return true;
+                }
+                if (!(compared instanceof Quilt)) {
+                    return false;
+                }
+                Quilt other = (Quilt) compared;
+                return this.name.equals(other.name) && this.squares == other.squares;
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(this.name, this.squares);
+            }
+
+            @Override
+            public String toString() {
+                return "Quilt[name=" + this.name + ", squares=" + this.squares + "]";
+            }
+        }
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Quilt> quilts = new ArrayList<>();
+                quilts.add(new Quilt("Starburst", 12));
+                quilts.add(new Quilt("Log Cabin", 9));
+                System.out.println(quilts.contains(new Quilt("Log Cabin", 9)));
+                System.out.println(quilts.get(0));
+                int total = 0;
+                for (Quilt quilt : quilts) {
+                    total = total + quilt.getSquares();
+                }
+                System.out.println(total + " squares in all");
+                System.out.println(quilts.get(1).getName().toUpperCase());
+            }
+        }
+    solution:
+      Quilt.java: |
+        public record Quilt(String name, int squares) {
+        }
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Quilt> quilts = new ArrayList<>();
+                quilts.add(new Quilt("Starburst", 12));
+                quilts.add(new Quilt("Log Cabin", 9));
+                System.out.println(quilts.contains(new Quilt("Log Cabin", 9)));
+                System.out.println(quilts.get(0));
+                int total = 0;
+                for (Quilt quilt : quilts) {
+                    total = total + quilt.squares();
+                }
+                System.out.println(total + " squares in all");
+                System.out.println(quilts.get(1).name().toUpperCase());
+            }
+        }
+    hints:
+      - "A record puts its components in parentheses after its name, `record Quilt(...)`. The fields, the constructor, the getters, `equals`, `hashCode` and `toString` all go away, and so does the `import` of Objects."
+      - "The whole class becomes `public record Quilt(String name, int squares) { }`. The record's `toString` already prints `Quilt[name=Starburst, squares=12]`, and its `equals` makes `contains` work. In Main, `getSquares()` becomes `squares()` and `getName()` becomes `name()`."
+    require:
+      - pattern: \brecord\s+Quilt\s*\(
+        message: "Declare Quilt as a record: `public record Quilt(String name, int squares)`."
+    forbid:
+      - pattern: \bboolean\s+equals\s*\(
+        message: "Leave out the hand-written `equals`: the record has one already."
+      - pattern: \bint\s+hashCode\s*\(
+        message: "Leave out the hand-written `hashCode`: the record has one already."
+    tests:
+      - expect: |
+          true
+          Quilt[name=Starburst, squares=12]
+          21 squares in all
+          LOG CABIN
+      - call: |
+          Quilt sample = new Quilt("Pinwheel", 7);
+          System.out.println(sample.name() + " " + sample.squares() + " " + sample);
+          System.out.println(sample.equals(new Quilt("Pinwheel", 7)) + " " + sample.equals(new Quilt("Pinwheel", 8)));
+        hidden: true
+    more:
+      - task: |
+          A cable car's gondola takes riders up a mountain, each with a name and a weight in kilos. A rider's details never change; who is in the gondola changes all day. Write both, choosing a record for one and a class for the other:
+
+          - `Rider`, with the components `name` (a String) and `kilos` (an int);
+          - `Gondola`, with a constructor `Gondola(int maxKilos)` (the most it can carry), and the methods:
+            - `board(Rider rider)`, which lets the rider in and returns `true`, unless the same rider is already in the gondola or the load would go over `maxKilos`; then nobody gets in and it returns `false`;
+            - `totalKilos()`, the weight of everyone in the gondola;
+            - `leave(String name)`, which lets out the rider with that name and returns `true`, or returns `false` when there's no such rider in the gondola.
+
+          The check runs:
+
+          ```java fragment
+          Gondola gondola = new Gondola(300);
+          System.out.println(gondola.board(new Rider("Anni", 70)));
+          System.out.println(gondola.board(new Rider("Anni", 70)));
+          System.out.println(gondola.board(new Rider("Bruno", 95)));
+          System.out.println(gondola.board(new Rider("Carl", 140)));
+          System.out.println(gondola.totalKilos() + " kilos");
+          System.out.println(gondola.leave("Anni") + " " + gondola.leave("Zoe"));
+          System.out.println(gondola.totalKilos() + " kilos");
+          ```
+
+          and expects:
+
+          ```
+          true
+          false
+          true
+          false
+          165 kilos
+          true false
+          95 kilos
+          ```
+        seed:
+          Rider.java: |
+            public class Rider {
+
+            }
+          Gondola.java: |
+            import java.util.ArrayList;
+
+            public class Gondola {
+
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Gondola gondola = new Gondola(300);
+                    System.out.println(gondola.board(new Rider("Anni", 70)));
+                    System.out.println(gondola.board(new Rider("Anni", 70)));
+                    System.out.println(gondola.board(new Rider("Bruno", 95)));
+                    System.out.println(gondola.board(new Rider("Carl", 140)));
+                    System.out.println(gondola.totalKilos() + " kilos");
+                    System.out.println(gondola.leave("Anni") + " " + gondola.leave("Zoe"));
+                    System.out.println(gondola.totalKilos() + " kilos");
+                }
+            }
+        solution:
+          Rider.java: |
+            public record Rider(String name, int kilos) {
+            }
+          Gondola.java: |
+            import java.util.ArrayList;
+
+            public class Gondola {
+                private int maxKilos;
+                private ArrayList<Rider> riders;
+
+                public Gondola(int maxKilos) {
+                    this.maxKilos = maxKilos;
+                    this.riders = new ArrayList<>();
+                }
+
+                public boolean board(Rider rider) {
+                    if (this.riders.contains(rider)) {
+                        return false;
+                    }
+                    if (this.totalKilos() + rider.kilos() > this.maxKilos) {
+                        return false;
+                    }
+                    this.riders.add(rider);
+                    return true;
+                }
+
+                public int totalKilos() {
+                    int total = 0;
+                    for (Rider rider : this.riders) {
+                        total = total + rider.kilos();
+                    }
+                    return total;
+                }
+
+                public boolean leave(String name) {
+                    for (Rider rider : this.riders) {
+                        if (rider.name().equals(name)) {
+                            this.riders.remove(rider);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Gondola gondola = new Gondola(300);
+                    System.out.println(gondola.board(new Rider("Anni", 70)));
+                    System.out.println(gondola.board(new Rider("Anni", 70)));
+                    System.out.println(gondola.board(new Rider("Bruno", 95)));
+                    System.out.println(gondola.board(new Rider("Carl", 140)));
+                    System.out.println(gondola.totalKilos() + " kilos");
+                    System.out.println(gondola.leave("Anni") + " " + gondola.leave("Zoe"));
+                    System.out.println(gondola.totalKilos() + " kilos");
+                }
+            }
+        hints:
+          - Look back at the task's second sentence. Which of the two changes during the day, and which is just a few values that never change? Values that never change fit a record.
+          - "Rider is a record, `public record Rider(String name, int kilos) { }`, and Gondola is a class with an `ArrayList<Rider>` and the most it can carry. In `board`, `contains` finds an equal rider because records have `equals`. In `leave`, look for the rider whose `name()` equals the name, remove them and return `true` right away (returning ends the loop before the list's change can disturb it)."
+        require:
+          - pattern: \brecord\s+Rider\s*\(
+            message: "A rider's details never change, so make Rider a record: `public record Rider(String name, int kilos)`."
+        tests:
+          - call: |
+              Gondola gondola = new Gondola(300);
+              System.out.println(gondola.board(new Rider("Anni", 70)));
+              System.out.println(gondola.board(new Rider("Anni", 70)));
+              System.out.println(gondola.board(new Rider("Bruno", 95)));
+              System.out.println(gondola.board(new Rider("Carl", 140)));
+              System.out.println(gondola.totalKilos() + " kilos");
+              System.out.println(gondola.leave("Anni") + " " + gondola.leave("Zoe"));
+              System.out.println(gondola.totalKilos() + " kilos");
+          - call: |
+              Gondola small = new Gondola(100);
+              System.out.println(small.totalKilos() + " " + small.leave("Ida"));
+              System.out.println(small.board(new Rider("Ida", 100)) + " " + small.board(new Rider("Tom", 1)));
+              System.out.println(small.board(new Rider("Ida", 99)) + " " + small.totalKilos());
+              System.out.println(small.leave("Ida") + " " + small.leave("Ida") + " " + small.totalKilos());
+              System.out.println(small.board(new Rider("Tom", 1)) + " " + small.board(new Rider("Uma", 99)) + " " + small.totalKilos());
+              Rider rider = new Rider("Vic", 80);
+              System.out.println(rider.name() + " " + rider.kilos() + " " + rider);
+            hidden: true
+      - task: |
+          A dentist's office lists the day's appointments by the hour, and appointments in the same hour in alphabetical order of the patients' names. `Appointment` is a record with the components `patient` and `hour`. In `Main.java`, write the method `printSchedule(ArrayList<Appointment> appointments)`, which sorts the given list itself (with `appointments.sort(...)`) using `Comparator.comparing(Appointment::hour)` and `thenComparing` by the patient, and then prints each appointment as the hour, a colon and the patient's name. The check runs:
+
+          ```java fragment
+          ArrayList<Appointment> day = new ArrayList<>();
+          day.add(new Appointment("Otto", 11));
+          day.add(new Appointment("Selma", 9));
+          day.add(new Appointment("Leo", 11));
+          day.add(new Appointment("Eeva", 10));
+          day.add(new Appointment("Aada", 11));
+          printSchedule(day);
+          ```
+
+          and expects:
+
+          ```
+          9: Selma
+          10: Eeva
+          11: Aada
+          11: Leo
+          11: Otto
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Appointment> day = new ArrayList<>();
+                    day.add(new Appointment("Otto", 11));
+                    day.add(new Appointment("Selma", 9));
+                    day.add(new Appointment("Leo", 11));
+                    day.add(new Appointment("Eeva", 10));
+                    day.add(new Appointment("Aada", 11));
+                    printSchedule(day);
+                }
+
+                public static void printSchedule(ArrayList<Appointment> appointments) {
+
+                }
+            }
+          Appointment.java: |
+            public record Appointment(String patient, int hour) {
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Appointment> day = new ArrayList<>();
+                    day.add(new Appointment("Otto", 11));
+                    day.add(new Appointment("Selma", 9));
+                    day.add(new Appointment("Leo", 11));
+                    day.add(new Appointment("Eeva", 10));
+                    day.add(new Appointment("Aada", 11));
+                    printSchedule(day);
+                }
+
+                public static void printSchedule(ArrayList<Appointment> appointments) {
+                    appointments.sort(Comparator.comparing(Appointment::hour).thenComparing(Appointment::patient));
+                    for (Appointment appointment : appointments) {
+                        System.out.println(appointment.hour() + ": " + appointment.patient());
+                    }
+                }
+            }
+          Appointment.java: |
+            public record Appointment(String patient, int hour) {
+            }
+        hints:
+          - "The accessors work as method references: `Comparator.comparing(Appointment::hour)` compares by the hour, and `.thenComparing(Appointment::patient)` decides between appointments in the same hour."
+          - "Sort with `appointments.sort(...)`, then print each appointment in a for-each loop: `appointment.hour() + \": \" + appointment.patient()`."
+        require:
+          - pattern: Appointment::hour
+            message: "Sort by the hour with `Comparator.comparing(Appointment::hour)`."
+          - pattern: thenComparing\s*\(
+            message: "Sort appointments in the same hour by the patient's name with `thenComparing`."
+        tests:
+          - call: |
+              ArrayList<Appointment> day = new ArrayList<>();
+              day.add(new Appointment("Otto", 11));
+              day.add(new Appointment("Selma", 9));
+              day.add(new Appointment("Leo", 11));
+              day.add(new Appointment("Eeva", 10));
+              day.add(new Appointment("Aada", 11));
+              printSchedule(day);
+          - call: |
+              ArrayList<Appointment> day = new ArrayList<>();
+              day.add(new Appointment("Veera", 14));
+              day.add(new Appointment("Ville", 8));
+              day.add(new Appointment("Saga", 14));
+              day.add(new Appointment("Sam", 8));
+              day.add(new Appointment("Mika", 14));
+              printSchedule(day);
+              System.out.println(day.get(0));
+            hidden: true

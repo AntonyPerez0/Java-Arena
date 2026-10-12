@@ -8,6 +8,8 @@
 // program is fetched from the built site, as the grader fetches it.
 // Usage: npm run build && node scripts/content-browser.mjs
 // CONTENT_ONLY=<regular expression> replays only the programs whose place matches (while working on something).
+// CONTENT_SHARD=k/n replays only the k-th of n shards (CI runs the shards side by side): the programs
+// are dealt out in order, each to exactly one shard (scripts/content/shard.mjs). Both can be set.
 // A program whose runs with frames (a game) take more than 3 seconds each is listed as SLOW at the end, without failing.
 import { readFileSync, existsSync } from "node:fs";
 import { launchChromium } from "./browser.mjs";
@@ -17,6 +19,7 @@ import { WINDOW_FILE, withoutArenaFiles } from "../src/grader/javafx.js";
 import { librariesFor } from "../src/grader/libraries.js";
 import { TEST_FRAMES_WARN, framesInEvents, withEventsFile } from "../src/grader/window.ts";
 import { stderrKey } from "./fidelity/suite.mjs";
+import { parseShard, shardOf } from "./content/shard.mjs";
 
 const file = new URL("../fidelity/out/content-checks.json", import.meta.url).pathname;
 if (!existsSync(file)) {
@@ -26,7 +29,9 @@ if (!existsSync(file)) {
 const all = JSON.parse(readFileSync(file, "utf8"));
 const only = process.env.CONTENT_ONLY ? new RegExp(process.env.CONTENT_ONLY, "i") : null;
 const { jdk } = all;
-const checks = only ? all.checks.filter((c) => only.test(c.where)) : all.checks;
+const shard = parseShard(process.env.CONTENT_SHARD);
+const checks = shardOf(only ? all.checks.filter((c) => only.test(c.where)) : all.checks, shard);
+const ofShard = shard ? ` (shard ${shard.index} of ${shard.count}, out of ${all.checks.length})` : "";
 
 const { server, url } = await serve();
 const browser = await launchChromium();
@@ -120,5 +125,5 @@ await browser.close();
 server.close();
 // Not a failure (a busy machine is slower), but worth a look.
 for (const s of slow) console.log(`SLOW ${s}`);
-console.log(`${checks.length - failures} of ${checks.length} lesson programs (${runs} runs) behave the same in the browser engine as on ${jdk}, in ${((Date.now() - t0) / 1000).toFixed(1)}s.`);
+console.log(`${checks.length - failures} of ${checks.length} lesson programs${ofShard} (${runs} runs) behave the same in the browser engine as on ${jdk}, in ${((Date.now() - t0) / 1000).toFixed(1)}s.`);
 process.exit(failures ? 1 : 0);

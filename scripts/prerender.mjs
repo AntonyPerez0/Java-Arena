@@ -92,18 +92,33 @@ const modulePath = (m) => `/learn/${m.id}/`;
 const stepCount = content.modules.reduce((n, m) => n + m.steps.length, 0);
 const challengeCount = content.modules.reduce((n, m) => n + m.steps.reduce((k, s) => k + 1 + s.more.length, 0), 0);
 
+/** The small "Extra" label of an extra module (course: extra), as src/components/ExtraTag.tsx draws it; "" for a module of the course. */
+const EXTRA_TITLE = "An extra module: not part of the University of Helsinki's MOOC";
+const extraTag = (m) => (m.course === "extra" ? ` <span class="extra-tag" title="${EXTRA_TITLE}">Extra</span>` : "");
+/** The course names and notes, as on the app's Learn page (src/pages/Learn.tsx). */
+const COURSES = [
+  ["I", "Java Programming I", "Parts 1 to 7 of the MOOC: the basics of programming, up to classes, objects and larger programs."],
+  ["II", "Java Programming II", "Parts 8 to 14 of the MOOC: hash maps, inheritance, interfaces, streams, exceptions, generics, and graphical programs."],
+  ["extra", "Extra modules", "Newer Java features and topics the MOOC doesn't cover. Optional, for after the course."],
+];
+
 function credit(m) {
-  if (!m.mooc?.length) return `<p>An extra module, not part of the University of Helsinki's course. Lesson text: <a href="${LICENSE}">CC BY-NC-SA 4.0</a>.</p>`;
+  // An extra module never gets a MOOC section line, whatever course.yaml says (the content build refuses one anyway).
+  if (m.course === "extra" || !m.mooc?.length) return `<p>An extra module, not part of the University of Helsinki's course. Lesson text: <a href="${LICENSE}">CC BY-NC-SA 4.0</a>.</p>`;
   const secs = m.mooc.map((s) => `<a href="${MOOC}${s.path}">${esc(s.section)} ${esc(s.title)}</a>`).join(", ");
   return `<p>This module follows ${m.mooc.length > 1 ? "sections" : "section"} ${secs} of <a href="${MOOC}">Java Programming</a> by Arto Hellas, Matti Luukkainen and contributors (Agile Education Research group, University of Helsinki), licensed under <a href="${LICENSE}">CC BY-NC-SA 4.0</a>. The explanations and exercises here are written for Java Arena and shared under the same license. Java Arena is not affiliated with or endorsed by the University of Helsinki.</p>`;
 }
 
 const pages = [];
+// Whether every planned module is written, and how many modules follow the MOOC and how many are extras.
+const allLive = content.modules.length === content.plan.length;
+const extraCount = content.plan.filter((m) => m.course === "extra").length;
+const moocCount = content.plan.length - extraCount;
 const page = (route, p) => pages.push({ route, index: true, type: "website", jsonld: null, ...p });
 
 page("/", {
   title: `${NAME}: learn Java in your browser`,
-  description: `Free, non-commercial Java lessons with the real javac 21 compiler and a Java virtual machine running in your browser. Follows the University of Helsinki's Java Programming MOOC.`,
+  description: `Free, non-commercial Java lessons with the real javac 21 compiler and a Java virtual machine running in your browser. Follows the University of Helsinki's Java Programming MOOC, plus extra modules of its own.`,
   jsonld: {
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -111,26 +126,27 @@ page("/", {
     url: SITE + "/",
   },
   body: `<h1>Learn Java by writing real Java</h1>
-<p>Every exercise is compiled by the real javac 21 compiler and run by a Java virtual machine, both inside your browser, on your own device. The lessons follow the University of Helsinki's Java Programming MOOC, with their own explanations and exercises.</p>
-<p>Java Arena is new: ${content.modules.length} of ${content.plan.length} modules are online so far (${stepCount} steps, ${challengeCount} challenges). The rest of the course is added in batches.</p>
-<ul>${content.modules.map((m) => `<li><a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></li>`).join("")}<li><a href="${link("/learn")}">All modules</a></li></ul>
+<p>Every exercise is compiled by the real javac 21 compiler and run by a Java virtual machine, both inside your browser, on your own device. The lessons of Java Programming I and II follow the University of Helsinki's Java Programming MOOC, with their own explanations and exercises; the extra modules after them are Java Arena's own.</p>
+<p>${allLive ? `All ${content.plan.length} modules are online: ${moocCount} following the MOOC (Java Programming I and II)${extraCount ? ` and ${extraCount} extra ${extraCount === 1 ? "module" : "modules"} of Java Arena's own` : ""}, with ${stepCount} steps and ${challengeCount} challenges.` : `Java Arena is new: ${content.modules.length} of ${content.plan.length} modules are online so far (${stepCount} steps, ${challengeCount} challenges). The rest of the course is added in batches.`}</p>
+<ul>${content.modules.map((m) => `<li><a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a>${extraTag(m)}</li>`).join("")}<li><a href="${link("/learn")}">All modules</a></li></ul>
 <p>Practice: <a href="${link("/deathmatch")}">Deathmatch drills</a>, <a href="${link("/daily")}">the daily challenge</a> and <a href="${link("/placement")}">a placement quiz</a>.</p>`,
 });
 
 page("/learn", {
   title: `All modules | ${NAME}`,
-  description: `The course plan: ${content.plan.length} modules following the University of Helsinki's Java Programming MOOC, parts 1 to 14, plus extras. ${content.modules.length} are online so far.`,
+  description: `The course plan: ${moocCount} modules following the University of Helsinki's Java Programming MOOC, parts 1 to 14${extraCount ? `, plus ${extraCount} extra ${extraCount === 1 ? "module" : "modules"} of Java Arena's own` : ""}. ${allLive ? "All of them are online." : `${content.modules.length} are online so far.`}`,
   body:
-    `<h1>The course</h1><p>Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises. Modules that aren't written yet are listed so you can see what's coming.</p><ol>` +
-    content.plan.map((m) => `<li>${m.live ? `<a href="${link(modulePath(m))}">${esc(m.title)}</a>` : `${esc(m.title)} (not written yet)`}</li>`).join("") +
-    `</ol>`,
+    `<h1>The course</h1><p>Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises.${allLive ? "" : " Modules that aren't written yet are listed so you can see what's coming."}</p>` +
+    COURSES.filter(([c]) => content.plan.some((m) => m.course === c))
+      .map(([c, name, note]) => `<h2>${esc(name)}</h2><p>${esc(note)}</p><ol>` + content.plan.filter((m) => m.course === c).map((m) => `<li value="${m.number}">${m.live ? `<a href="${link(modulePath(m))}">${esc(m.title)}</a>` : `${esc(m.title)} (not written yet)`}${extraTag(m)}</li>`).join("") + `</ol>`)
+      .join(""),
 });
 
 for (const m of content.modules) {
   page(modulePath(m), {
     title: `Module ${m.number}: ${m.title} | ${NAME}`,
     description: summary(m.summary),
-    body: `<nav aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a></nav><h1>${esc(m.title)}</h1><p>${esc(m.summary)}</p><h2>Steps</h2><ol>${m.steps.map((s) => `<li><a href="${link(stepPath(m, s))}">${esc(s.title)}</a></li>`).join("")}</ol><aside class="credit">${credit(m)}</aside>`,
+    body: `<nav aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a></nav><p class="eyebrow">Module ${m.number}${extraTag(m)}</p><h1>${esc(m.title)}</h1><p>${esc(m.summary)}</p><h2>Steps</h2><ol>${m.steps.map((s) => `<li><a href="${link(stepPath(m, s))}">${esc(s.title)}</a></li>`).join("")}</ol><aside class="credit">${credit(m)}</aside>`,
   });
   m.steps.forEach((s, i) => {
     const prev = i > 0 ? `<a href="${link(stepPath(m, m.steps[i - 1]))}">Previous: ${esc(m.steps[i - 1].title)}</a>` : "";
@@ -155,7 +171,7 @@ for (const m of content.modules) {
       preload: lessonFile.get(s.id),
       // The same layout as the app's lesson page, so nothing jumps when the app takes over.
       layout: true,
-      body: `<div class="step-page"><nav class="crumbs" aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a> › <a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a></nav>
+      body: `<div class="step-page"><nav class="crumbs" aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a> › <a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a>${extraTag(m)}</nav>
 <div class="step-grid"><article class="step-text"><div class="step-count">Step ${i + 1} of ${m.steps.length}</div>
 <h1>${esc(s.title)}</h1>
 <div class="md">${md(s.text, 2)}</div>
@@ -193,14 +209,14 @@ page("/placement", {
   title: `Placement quiz: where to start with Java | ${NAME}`,
   description: "Already know some Java? A short quiz, one question per module, shows where to start and which modules you can skip.",
   layout: true,
-  body: `<div class="narrow"><div class="page-head"><h1>Placement quiz</h1><p>Already know some Java? Answer a few quick questions, one for each module written so far. The first one you miss shows where to start, and you can skip the modules before it.</p></div></div>`,
+  body: `<div class="narrow"><div class="page-head"><h1>Placement quiz</h1><p>Already know some Java? Answer a few quick questions, one for each module${allLive ? "" : " written so far"}. The first one you miss shows where to start, and you can skip the modules before it.</p></div></div>`,
 });
 
 page("/settings", { title: `Settings | ${NAME}`, description: "Theme, text size, the Java engine download, and your progress on this device.", body: `<h1>Settings</h1><p>Theme, text size, the Java engine download, and your progress. Everything here is saved in this browser only.</p>` });
 page("/about", {
   title: `About and credits | ${NAME}`,
   description: "What Java Arena is, the University of Helsinki course it follows, how the in-browser Java engine works, privacy and licenses.",
-  body: `<h1>About and credits</h1><p>Java Arena is a free, non-commercial site for learning Java, with real compiling and running in the browser. The modules follow the order and topics of <a href="${MOOC}">Java Programming</a>, a free course by the University of Helsinki licensed under <a href="${LICENSE}">CC BY-NC-SA 4.0</a>. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle.</p>`,
+  body: `<h1>About and credits</h1><p>Java Arena is a free, non-commercial site for learning Java, with real compiling and running in the browser. The modules of Java Programming I and II follow the order and topics of <a href="${MOOC}">Java Programming</a>, a free course by the University of Helsinki licensed under <a href="${LICENSE}">CC BY-NC-SA 4.0</a>; the extra modules after them are Java Arena's own and not part of the MOOC. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle.</p>`,
 });
 
 // ---------------------------------------------------------------- write
@@ -209,7 +225,7 @@ const MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><re
 const BRAND = `<a href="${link("/")}" class="brand" aria-label="Java Arena home">${MARK}<span class="brand-name">Java <b>Arena</b></span></a>`;
 const HEADER = `<header class="topbar">${BRAND}<nav id="main-nav" class="nav" aria-label="Main"><a href="${link("/learn")}">Learn</a><a href="${link("/deathmatch")}">Deathmatch</a><a href="${link("/daily")}">Daily</a><a href="${link("/playground")}">Playground</a><a href="${link("/settings")}">Settings</a><a href="${link("/about")}">About</a></nav><div class="topbar-right"><a href="${link("/learn")}" class="btn btn-primary btn-sm topbar-cta">Start learning</a></div></header>`;
 const REPO = "https://github.com/AntonyPerez0/Java-Arena";
-const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li><li><a href="${link("/playground")}">Playground</a></li></ul></div><div class="footer-col"><h2>Practice</h2><ul><li><a href="${link("/deathmatch")}">Deathmatch</a></li><li><a href="${link("/daily")}">Daily challenge</a></li><li><a href="${link("/placement")}">Placement quiz</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
+const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li><li><a href="${link("/playground")}">Playground</a></li></ul></div><div class="footer-col"><h2>Practice</h2><ul><li><a href="${link("/deathmatch")}">Deathmatch</a></li><li><a href="${link("/daily")}">Daily challenge</a></li><li><a href="${link("/placement")}">Placement quiz</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The course's lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>; the extra modules after the course are Java Arena's own. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
 // The fonts are needed for the first paint: fetch them right away instead of after the CSS.
 const FONTS = fs
   .readdirSync(path.join(DIST, "assets"))

@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, X } from "lucide-react";
-import { moduleById, modules, modulePath, stepPath } from "../content";
+import { moduleById, modules, modulePath, plan, stepPath } from "../content";
 import { useDrills } from "../content/drills";
 import type { PlacementQuestion } from "../content/types";
 import { update, useStore } from "../state/store";
 import { Rep } from "../practice/Reps";
 import { useTitle } from "../lib/title";
+import ExtraTag from "../components/ExtraTag";
 
 type Answer = { ok: boolean; given: string };
 
@@ -86,7 +87,10 @@ export default function Placement() {
         <div className="bar" aria-hidden="true">
           <div style={{ width: `${(i / questions.length) * 100}%` }} />
         </div>
-        <p className="muted small">Topic: {moduleById.get(q.module)?.title}</p>
+        <p className="muted small">
+          Topic: {moduleById.get(q.module)?.title}
+          <ExtraTag module={moduleById.get(q.module)} />
+        </p>
         <Rep key={q.id} drill={q} onAnswer={(given, ok) => record(i, { ok, given })} />
         <div className="actions">
           <button type="button" className="btn btn-ghost" onClick={() => record(i, { ok: false, given: "(skipped)" })}>
@@ -110,10 +114,13 @@ export default function Placement() {
           {r.start ? (
             <>
               Start at <b>{r.start.title}</b>
+              <ExtraTag module={r.start} />
               {r.skip.length ? `, skipping the ${r.skip.length} ${r.skip.length === 1 ? "module" : "modules"} before it.` : "."}
             </>
           ) : (
-            "You know everything the site teaches so far. The next modules come in later updates; until then, Deathmatch has drills for every module."
+            modules.length === plan.length
+              ? "You know everything the site teaches. Deathmatch has drills for every module."
+              : "You know everything the site teaches so far. The next modules come in later updates; until then, Deathmatch has drills for every module."
           )}
         </p>
       </div>
@@ -121,6 +128,7 @@ export default function Placement() {
         {questions.map((q, k) => (
           <li key={q.id} className={answers[k]?.ok ? "ok" : "miss"}>
             <span className="res-icon">{answers[k]?.ok ? <Check className="icon" aria-hidden="true" /> : <X className="icon" aria-hidden="true" />}</span> {moduleById.get(q.module)?.title}
+            <ExtraTag module={moduleById.get(q.module)} />
             <span className="visually-hidden">{answers[k]?.ok ? ": right" : ": missed"}</span>
           </li>
         ))}
@@ -169,7 +177,7 @@ function Intro({ count, loading, children }: { count?: number; loading?: boolean
     <div className="narrow">
       <div className="page-head">
         <h1>Placement quiz</h1>
-        <p>Already know some Java? {loading ? "Answer a few quick questions" : `Answer ${count} quick questions`}, one for each module written so far. The first one you miss shows where to start, and you can skip the modules before it.</p>
+        <p>Already know some Java? {loading ? "Answer a few quick questions" : `Answer ${count} quick questions`}, one for each module{modules.length === plan.length ? "" : " written so far"}. The first one you miss shows where to start, and you can skip the modules before it.</p>
         <p className="muted small">Take your time and don't guess: a wrong answer only means starting a little earlier, while a lucky guess could skip something you need. You can take it again at any time.</p>
       </div>
       {loading ? <p className="muted">Loading the questions…</p> : children}

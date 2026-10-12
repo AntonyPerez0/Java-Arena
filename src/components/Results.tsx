@@ -5,6 +5,7 @@ import { BinaryFile, GivenFileView } from "./AssetImage";
 import { InlineMd } from "./Markdown";
 import InputText from "./InputText";
 import { WindowCompare } from "./WindowView";
+import { notesShown } from "../grader/notes";
 
 /** javac's errors, each with its line and a plain-English explanation, then the full output on request. */
 export function DiagnosticList({ diagnostics, raw, multiFile }: { diagnostics: FriendlyDiagnostic[]; raw: string; multiFile?: boolean }) {
@@ -113,6 +114,8 @@ export function WrittenFiles({ files }: { files?: WrittenFile[] }) {
 
 export default function Results({ result }: { result: GradeResult }) {
   const warnings = result.diagnostics.filter((d) => d.kind === "warning");
+  // The same crash under several tests is explained once, under the first; the others get a short line.
+  const notes = notesShown(result.tests);
   return (
     <div className="results">
       {result.status === "pass" && (
@@ -286,7 +289,7 @@ export default function Results({ result }: { result: GradeResult }) {
                     ))}
                   </div>
                 )}
-                {!t.pass && t.note && <div className="t-note">{t.note}</div>}
+                {!t.pass && notes[i] && <div className="t-note">{notes[i]}</div>}
                 {!t.pass && !t.hidden && t.stderr && (
                   <details className="stderr">
                     <summary>What Java printed about the error</summary>

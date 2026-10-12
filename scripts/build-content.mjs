@@ -1082,6 +1082,18 @@ if (!course?.modules) {
   process.exit(1);
 }
 const planned = new Map(course.modules.map((m, i) => [m.id, { ...m, number: i + 1 }]));
+// An extra module (course: extra) is Java Arena's own, not part of the MOOC: it has no MOOC part or
+// sections (the site would show them as a MOOC section line), and the extras come after the course.
+{
+  let extraSeen = null;
+  for (const m of planned.values()) {
+    if (!["I", "II", "extra"].includes(m.course)) errors.push(`content/course.yaml module ${m.id}: course must be I, II or extra`);
+    if (m.course === "extra") {
+      if (m.part != null || m.mooc != null) errors.push(`content/course.yaml module ${m.id}: an extra module is not part of the MOOC, so it has no part or mooc sections`);
+      extraSeen ??= m.id;
+    } else if (extraSeen) errors.push(`content/course.yaml module ${m.id}: the extra modules come after the course (${extraSeen} is an extra before it)`);
+  }
+}
 
 async function buildStep(file, m, s, i, slugs, ids) {
   const where = `${file} step ${i + 1} (${s?.title ?? "untitled"})`;

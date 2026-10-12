@@ -179,10 +179,20 @@ await test('home page: the app starts, credits in the footer, no errors', async 
   const footer = await page.locator('footer').innerText();
   expect(footer.includes('CC BY-NC-SA 4.0') && footer.includes('not affiliated') && footer.includes('trademark of Oracle'), 'credits in the footer');
   const status = await page.locator('.status-card').innerText();
-  expect(/\d+ of 59 modules are online/.test(status), status);
+  expect(/All 59 modules are online: 54 following the MOOC \(Java Programming I and II\) and 5 extra modules of Java Arena's own/.test(status), status);
+  expect(!/so far|added in batches|Being built/.test(status), 'the finished course is not called unfinished: ' + status);
   await page.click('text=See all modules');
   await page.locator('h1', { hasText: 'The course' }).waitFor();
   expect((await page.evaluate(() => document.activeElement?.tagName)) === 'H1', 'focus moved to the new page heading');
+  // Every planned module is written: neither the course page nor the pre-rendered pages call the course unfinished.
+  const learnHead = await page.locator('.page-head').innerText();
+  expect(!/written yet|being built/.test(learnHead), learnHead);
+  for (const path of ['', 'learn/', 'placement/']) {
+    const html = (await (await fetch(BASE + path)).text()).replace(/<script[\s\S]*?<\/script>/g, '');
+    expect(!/so far|added in batches|written yet|later updates/.test(html), `${path || 'home'}: pre-rendered text calls the course unfinished`);
+  }
+  const learnHtml = await (await fetch(BASE + 'learn/')).text();
+  expect(learnHtml.includes("54 modules following the University of Helsinki's Java Programming MOOC, parts 1 to 14, plus 5 extra modules of Java Arena's own. All of them are online."), 'the /learn description counts the MOOC modules and the extras apart');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
@@ -190,6 +200,96 @@ await test('an unknown address shows "Page not found"', async () => {
   const { ctx, page } = await newPage();
   await page.goto(BASE + 'learn/printing/no-such-step');
   await page.locator('h1', { hasText: 'Page not found' }).waitFor();
+  await ctx.close();
+});
+
+await test('extra modules: an "Extra" label where the module number shows (course page, module page, lesson header, placement quiz, pre-rendered pages), never a MOOC section line, and nothing says they are part of the MOOC', async () => {
+  const course = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
+  const extras = course.plan.filter((m) => m.course === 'extra');
+  const inCourse = course.plan.filter((m) => m.course !== 'extra');
+  expect(extras.length > 0, 'the plan lists extra modules');
+  expect(Math.min(...extras.map((m) => m.number)) > Math.max(...inCourse.map((m) => m.number)), 'the extras come after the course');
+  expect(extras.every((m) => m.part == null && !m.mooc.length), 'an extra module has no MOOC part or sections');
+  const moocSection = /java-programming\.mooc\.fi\/part-/;
+  const notPart = "not part of the University of Helsinki's course";
+  const { ctx, page, errors } = await newPage();
+
+  // The course page: the extras' own section, each with the label (written or not); no module of the course has it.
+  await page.goto(BASE + 'learn/');
+  await page.locator('.module-live').first().waitFor();
+  const section = page.locator('section.phase', { has: page.locator('h2', { hasText: 'Extra modules' }) });
+  expect((await section.innerText()).includes("the MOOC doesn't cover"), 'the extras section says the MOOC does not cover them');
+  expect((await section.locator('li.module').count()) === extras.length, 'every extra module is in the extras section');
+  expect((await section.locator('li.module .extra-tag').count()) === extras.length, 'every extra module has the Extra label');
+  expect((await page.locator('.learn li.module .extra-tag').count()) === extras.length, 'only the extra modules have the Extra label');
+  for (const m of extras) expect((await section.locator('li.module', { hasText: m.title }).locator('.extra-tag').innerText()).trim().toLowerCase() === 'extra', `${m.title}: the label reads Extra`);
+  await shot(page, 'extra-modules-course-page');
+
+  // The pre-rendered course page: the extras under their own heading, each labelled.
+  const learnHtml = await (await fetch(BASE + 'learn/')).text();
+  expect(learnHtml.includes('<h2>Extra modules</h2>'), 'pre-rendered course page: the extras heading');
+  expect((learnHtml.match(/class="extra-tag"/g) ?? []).length === extras.length, 'pre-rendered course page: an Extra label per extra module, none for the course');
+  const homeHtml = await (await fetch(BASE)).text();
+  expect((homeHtml.match(/class="extra-tag"/g) ?? []).length === extras.filter((m) => m.live).length, 'pre-rendered home page: each written extra module in its list is labelled');
+  // Its hero and description sit above that list: they say only the course's lessons follow the MOOC.
+  expect(!homeHtml.includes('The lessons follow the University'), 'pre-rendered home page: no unqualified "The lessons follow" sentence');
+  expect(homeHtml.includes("The lessons of Java Programming I and II follow the University of Helsinki's Java Programming MOOC") && homeHtml.includes("the extra modules after them are Java Arena's own"), 'pre-rendered home page: the hero says only the course follows the MOOC');
+  for (const d of homeHtml.match(/<meta name="description" content="[^"]*"/g) ?? []) expect(!d.endsWith('MOOC."'), `pre-rendered home page: the description is qualified: ${d}`);
+  await page.goto(BASE);
+  const hero = page.locator('.hero-lead');
+  await hero.waitFor();
+  expect((await hero.innerText()).includes("the extra modules after them are Java Arena's own"), `home page: the hero says the extras are Java Arena's own: ${await hero.innerText()}`);
+
+  // A module of the course has no label.
+  await page.goto(BASE + 'learn/printing/');
+  await page.locator('.module-page h1').waitFor();
+  expect((await page.locator('.extra-tag').count()) === 0, 'a module of the course has no Extra label');
+
+  // The written extra modules: the label next to the number, the "Extra modules" crumb, the credit says they are not part of the course, no MOOC section line.
+  const sitemap = await (await fetch(BASE + 'sitemap.xml')).text();
+  const live = extras.filter((m) => m.live);
+  if (!live.length) console.log('       (no extra module is written yet: its module and lesson pages are checked once one is)');
+  for (const m of live) {
+    const mod = course.modules.find((x) => x.id === m.id);
+    const first = mod.steps[0];
+    expect(sitemap.includes(`/learn/${m.id}/</loc>`) && sitemap.includes(`/learn/${m.id}/${first.slug}/</loc>`), `${m.id}: in the sitemap`);
+    await page.goto(BASE + `learn/${m.id}/`);
+    await page.locator('.module-page h1').waitFor();
+    expect((await page.locator('.eyebrow').innerText()).replace(/\s+/g, ' ').trim().toLowerCase() === `module ${m.number} extra`, `${m.id}: the eyebrow is "Module ${m.number}" with the label: ${await page.locator('.eyebrow').innerText()}`);
+    expect((await page.locator('.crumbs').innerText()).includes('Extra modules'), `${m.id}: the crumb names the extra modules`);
+    const credit = await page.locator('aside.credit').innerText();
+    expect(credit.includes("not part of the University of Helsinki's course") && !credit.includes('This module follows'), `${m.id}: credit: ${credit}`);
+    expect((await page.locator('aside.credit a[href*="java-programming.mooc.fi/part-"]').count()) === 0, `${m.id}: no MOOC section link`);
+    await page.goto(BASE + `learn/${m.id}/${first.slug}/`);
+    await page.locator('.step-page h1').waitFor();
+    expect((await page.locator('.crumbs .extra-tag').count()) === 1, `${m.id}: the lesson header has the label`);
+    expect((await page.locator('aside.credit').innerText()).includes(notPart), `${m.id}: the lesson's credit says it is not part of the course`);
+    expect((await page.locator('aside.credit a[href*="java-programming.mooc.fi/part-"]').count()) === 0, `${m.id}: no MOOC section link on the lesson`);
+    for (const path of [`learn/${m.id}/`, `learn/${m.id}/${first.slug}/`]) {
+      const html = await (await fetch(BASE + path)).text();
+      expect(html.includes('class="extra-tag"'), `${path}: pre-rendered with the label`);
+      expect(html.includes('An extra module, not part of') && !html.includes('This module follows'), `${path}: pre-rendered credit`);
+      expect(!moocSection.test(html.replace(/<footer[\s\S]*<\/footer>/, '')), `${path}: no MOOC section link in the pre-rendered page`);
+    }
+  }
+
+  // The placement quiz: a question on an extra module shows the label by its topic, and so does its line in the results.
+  const questions = JSON.parse(readFileSync(new URL('../src/generated/drills.json', import.meta.url), 'utf8')).placement;
+  const isExtra = (id) => extras.some((m) => m.id === id);
+  await page.goto(BASE + 'placement/');
+  await page.click('text=Start the quiz');
+  for (let i = 0; i < questions.length; i++) {
+    await page.locator('#quiz-h', { hasText: `Question ${i + 1} of ${questions.length}` }).waitFor();
+    await page.locator('.rep').waitFor();
+    if (isExtra(questions[i].module)) {
+      const topic = page.locator('p', { hasText: 'Topic:' });
+      expect((await topic.locator('.extra-tag').count()) === 1, `question ${i + 1}: the topic line has the label`);
+    } else expect((await page.locator('.extra-tag').count()) === 0, `question ${i + 1}: no label on a question of the course`);
+    await page.click("text=I don't know this yet");
+  }
+  await page.locator('text=Your starting point').waitFor();
+  expect((await page.locator('.placement-results .extra-tag').count()) === questions.filter((q) => isExtra(q.module)).length, 'the results label the extra modules only');
+  expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
 
@@ -1105,6 +1205,26 @@ await test('part 14.3 and 14.4 mistakes are explained: a name that is no KeyCode
   await setCode(page, 'import java.sql.Connection;\nimport java.sql.DriverManager;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        Connection connection = DriverManager.getConnection("jdbc:h2:./todo", "sa", "");\n        System.out.println(connection);\n    }\n}\n');
   out = await check(page);
   expect(/line 1/i.test(out) && out.includes('package java.sql does not exist') && out.includes('This page has no database') && out.includes('module 54, "Libraries, Maven and databases"'), out);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('extra modules\' mistakes are explained: a record accessor called as getX(), a switch expression without a case for an enum constant, and a recursion without a base case', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'playground/');
+  await lessonReady(page);
+  // A record's accessor is x(), not getX(): the note says so and lists its accessors.
+  await setCode(page, 'public class Main {\n    record Point(int x, int y) {\n    }\n\n    public static void main(String[] args) {\n        Point p = new Point(1, 2);\n        System.out.println(p.getX());\n    }\n}\n');
+  let out = await check(page);
+  expect(/line 7/i.test(out) && out.includes('cannot find symbol') && out.includes("Point is a record, and a record's accessor methods have the components' own names, without get: p.x(), not p.getX(). Its accessors are x() and y()."), out);
+  // A switch expression on an enum without a case for one constant: the note names the constant.
+  await setCode(page, 'public class Main {\n    enum Light { RED, YELLOW, GREEN }\n\n    public static void main(String[] args) {\n        Light light = Light.YELLOW;\n        String action = switch (light) {\n            case RED -> "stop";\n            case GREEN -> "go";\n        };\n        System.out.println(action);\n    }\n}\n');
+  out = await check(page);
+  expect(/line 6/i.test(out) && out.includes('the switch expression does not cover all possible input values') && out.includes('This switch expression on light has no case for YELLOW of the enum Light.'), out);
+  // A recursion without a base case: the browser's JVM runs out of stack too, and the note names the method and the missing base case.
+  await setCode(page, 'public class Main {\n    static int factorial(int n) {\n        return n * factorial(n - 1);\n    }\n\n    public static void main(String[] args) {\n        System.out.println(factorial(5));\n    }\n}\n');
+  out = await check(page);
+  expect(out.includes('StackOverflowError') && out.includes('factorial calls itself on line 3 (Main.java)') && out.includes('factorial has no base case') && out.includes('if (n <= 0) { return ...; }'), out);
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
@@ -3166,6 +3286,90 @@ await test('module 54 DAO challenge: the starter code in its file tabs fails the
   const passed = await check(page);
   expect(passed.includes('All tests passed'), passed);
   await threeShots(page, 'm54-dao-passed', page.locator('.workbench .results').first());
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+// ------------------------------------------------------------------ the extra modules' lessons (modules 55 to 59)
+
+await test('module 55: a recursion challenge whose base case is jumped over crashes with StackOverflowError, explained (the == test that odd numbers skip); the model solution passes', async () => {
+  const found = challengesOf(moduleOf('recursion')).find(({ ex }) => /if \(steps == 0\)/.test(ex.seed ?? '') && /StackOverflowError/.test(ex.task ?? ''));
+  expect(found, 'no module 55 challenge with a base case written as steps == 0');
+  const { ex } = found;
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'recursion', found);
+  const out = await check(page);
+  expect(!out.includes('All tests passed') && out.includes('StackOverflowError'), `the starter code: ${out}`);
+  expect(/moves calls itself on line \d+ \(Main\.java\)/.test(out) && out.includes('has a base case (the if on line') && out.includes('but the calls never reach it') && out.includes('An == test is missed when the value jumps over it'), out);
+  await threeShots(page, 'm55-stack-overflow', page.locator('.workbench .results').first());
+  await setProgram(page, ex.solution);
+  const passed = await check(page);
+  expect(passed.includes('All tests passed'), passed);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 55: the starter code of the no-base-case challenge checks quickly (it prints nothing per call), the overflow is explained once, and the model solution passes', async () => {
+  const found = challengesOf(moduleOf('recursion')).find(({ ex }) => /return 1 \+ heights\(height \/ 2\);/.test(ex.seed ?? '') && !/if \(/.test(ex.seed ?? ''));
+  expect(found, 'no module 55 challenge with heights and no base case');
+  const { ex } = found;
+  const { ctx, page, errors } = await newPage();
+  await openChallenge(page, 'recursion', found);
+  const t0 = Date.now();
+  const out = await check(page);
+  const ms = Date.now() - t0;
+  console.log(`    the starter code's check took ${(ms / 1000).toFixed(1)} s`);
+  // Before, the starter code printed a line on each of about 16,000 calls, and its check took about 10 s on this machine.
+  expect(ms < 6000, `the starter code's check took ${ms} ms`);
+  expect(!out.includes('All tests passed') && out.includes('StackOverflowError'), `the starter code: ${out}`);
+  expect(out.includes('heights has no base case') && out.includes('if (height <= 0) { return ...; }'), out);
+  // Both tests overflow the same way: the long explanation once, then a short line.
+  const notes = await page.locator('.workbench .results .t-note').allInnerTexts();
+  expect(notes.length === 2 && notes[0].includes('heights has no base case') && /^Crashed the same way as the test above \(StackOverflowError, line \d+\)\.$/.test(notes[1]), JSON.stringify(notes));
+  await setProgram(page, ex.solution);
+  const passed = await check(page);
+  expect(passed.includes('All tests passed'), passed);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 57: a java error example (a switch expression without a default) shows what javac prints, and the same code in the editor gets that error from the browser\'s javac, explained', async () => {
+  const mod = moduleOf('switch-and-text');
+  // The build keeps a java error example as a java block followed by its javac block.
+  const example = /```java\n((?:(?!```)[\s\S])*String snack = switch \(button\)(?:(?!```)[\s\S])*)```\s*```javac\n([^`]*does not cover all possible input values[^`]*)```/;
+  const step = mod.steps.find((s) => example.test(s.text));
+  expect(step, 'no module 57 lesson text with the snack switch error');
+  const m = example.exec(step.text);
+  const [code, javac] = [m[1], m[2]];
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + `learn/switch-and-text/${step.slug}/`);
+  await lessonReady(page);
+  const figure = page.locator('article.step-text figure.io-javac', { hasText: 'does not cover all possible input values' });
+  expect((await figure.count()) === 1, 'the javac block of the example');
+  expect((await figure.locator('figcaption').textContent()).trim() === 'What javac prints', 'its label');
+  expect((await figure.locator('pre').innerText()).trim() === javac.trim(), `what the page shows: ${await figure.locator('pre').innerText()}`);
+  await setCode(page, code);
+  const out = await check(page);
+  expect(/didn't compile/i.test(out) && /line 4/i.test(out) && out.includes('the switch expression does not cover all possible input values'), out);
+  expect(out.includes('A switch expression must give a value for every possible value of what it switches on.') && out.includes('This switch expression on button has cases for only some values, and a number has far more possible values than cases can list, so it needs default -> ... at the end'), out);
+  await lessonBothThemes(page, 'a module 57 lesson with a java error example');
+  await lessonOnPhone54(page, 'a module 57 lesson with a java error example');
+  await threeShots(page, 'm57-javac', figure);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('module 59: a lesson with a linked list renders with the Extra label, no MOOC section line, and passes axe in both themes and at 320 px', async () => {
+  const mod = moduleOf('linked-structures');
+  const step = mod.steps.find((s) => /\.next\b/.test(s.text)) ?? mod.steps[1];
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + `learn/linked-structures/${step.slug}/`);
+  await lessonReady(page);
+  expect((await page.locator('.crumbs .extra-tag').count()) === 1, 'the lesson header has the Extra label');
+  expect((await page.locator('a[href*="java-programming.mooc.fi/part-"]').count()) === 0, 'no MOOC section link');
+  expect((await page.locator('aside.credit').innerText()).includes("not part of the University of Helsinki's course"), 'the credit says it is an extra');
+  await lessonBothThemes(page, 'a module 59 lesson');
+  await lessonOnPhone54(page, 'a module 59 lesson');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });

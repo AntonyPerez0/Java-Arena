@@ -27,6 +27,9 @@ export default function About() {
       <p>
         Java Arena's explanations and exercises are written for this site; no exercise templates, tests or images are copied from the MOOC. Because the lessons follow the MOOC's structure, the lesson content is shared under the same license, CC BY-NC-SA 4.0. Java Arena is an independent project: it is not affiliated with, sponsored or endorsed by the University of Helsinki or MOOC.fi, and completing modules here doesn't earn MOOC credits.
       </p>
+      <p>
+        <Link to="/projects/">Projects</Link> are Java Arena's own too: larger programs built over several milestones, each starting from your code of the one before, and each checked on the reference JDK when the site is built, like the lessons.
+      </p>
 
       <h2>How the Java engine works</h2>
       <p>
@@ -41,12 +44,18 @@ export default function About() {
 
       <h2>Privacy</h2>
       <p>No account, no ads, no analytics. Your progress and code are saved in this browser's storage only. The Java engine is kept in the browser's cache so it works offline.</p>
+      <p>
+        To continue on another device, <Link to="/settings/">Settings</Link> makes a transfer link, a QR code or a progress file that carries your progress (and your code if you choose) to the other browser, which shows what would change before anything is imported; Java Arena has no server and doesn't keep a copy.
+      </p>
+      <p>
+        <Link to="/record/">Your record</Link> lists the modules and projects finished in this browser, with their dates, and prints or saves as a PDF. It is made from this browser's progress only, and nobody checks it.
+      </p>
 
       <h2>Licenses</h2>
       <ul>
         <li>Lesson content (the files in <code>content/</code>): CC BY-NC-SA 4.0.</li>
         <li>
-          The site's own code: MIT (<A href={`${REPO_URL}/blob/main/LICENSE`}>LICENSE</A>). It uses React, React Router, CodeMirror, marked and Lucide icons (MIT and ISC licenses) and the Inter and JetBrains Mono fonts (SIL Open Font License); <a href={import.meta.env.BASE_URL + "licenses/npm-packages.txt"}>their license texts</a>.
+          The site's own code: MIT (<A href={`${REPO_URL}/blob/main/LICENSE`}>LICENSE</A>). It uses React, React Router, CodeMirror, marked, Lucide icons and uqr for QR codes (MIT and ISC licenses) and the Inter and JetBrains Mono fonts (SIL Open Font License); <a href={import.meta.env.BASE_URL + "licenses/npm-packages.txt"}>their license texts</a>.
         </li>
         <li>
           The Java engine includes OpenJDK code under GPL 2.0 with the Classpath Exception, and other open-source parts under their own licenses. Details, sources and the written offer: <A href={`${REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md`}>third-party notices</A> and <A href={`${REPO_URL}/blob/main/engine/SOURCES.md`}>engine sources</A>. The license texts are also published with the engine files, for example <a href={import.meta.env.BASE_URL + "engine/licenses/compiler/OpenJDK-LICENSE.txt"}>OpenJDK's license</a> and <a href={import.meta.env.BASE_URL + "engine/licenses/runner/THIRD_PARTY_LICENSES.txt"}>the runner's third-party licenses</a>.

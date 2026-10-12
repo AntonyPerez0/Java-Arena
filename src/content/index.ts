@@ -1,7 +1,7 @@
 // The course index (every page needs it) and each step's lesson, loaded when needed.
 import { useEffect, useState } from "react";
 import raw from "../generated/course.json";
-import type { Challenge, CourseIndex, ModuleSummary, PlannedModule, Step, StepSummary } from "./types";
+import type { Challenge, CourseIndex, ModuleSummary, PlannedModule, Project, ProjectSummary, Step, StepSummary } from "./types";
 
 export const course = raw as unknown as CourseIndex;
 export const modules = course.modules;
@@ -141,6 +141,67 @@ export function planByCourse(): { course: PlannedModule["course"]; parts: { part
     p.modules.push(m);
   }
   return out;
+}
+
+// ---------------------------------------------------------------- projects
+export const projects: ProjectSummary[] = course.projects ?? [];
+export const projectById = new Map(projects.map((p) => [p.id, p]));
+export const projectPath = (p: { id: string }) => `/projects/${p.id}/`;
+/** The planned module a project comes after (the last one whose topics it needs). */
+export const projectAfter = (p: { after: string }) => plan.find((m) => m.id === p.after);
+
+/** The address of a project's file (its intro and milestones). */
+export const projectUrl = (p: ProjectSummary) => `${import.meta.env.BASE_URL}lessons/projects/${p.id}-${p.hash}.json`;
+
+const loadedProjects = new Map<string, Project>();
+const loadingProjects = new Map<string, Promise<Project | null>>();
+
+/** Loads a project's file (cached). Resolves with null for an unknown project. */
+export function loadProject(id: string): Promise<Project | null> {
+  const summary = projectById.get(id);
+  if (!summary) return Promise.resolve(null);
+  const have = loadedProjects.get(id);
+  if (have) return Promise.resolve(have);
+  let p = loadingProjects.get(id);
+  if (!p) {
+    p = fetch(projectUrl(summary))
+      .then((res) => {
+        if (res.status === 404) throw new LessonGone(res.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<Project>;
+      })
+      .then((project) => {
+        loadedProjects.set(id, project);
+        return project;
+      });
+    p.catch(() => loadingProjects.delete(id));
+    loadingProjects.set(id, p);
+  }
+  return p;
+}
+
+/** A project's file: undefined while loading, null for no such project, "error" or "gone" (as useStep). */
+export function useProject(id: string): { project: Project | null | undefined | "error" | "gone"; waited: boolean } {
+  type State = { id: string; project: Project | null | undefined | "error" | "gone"; waited: boolean };
+  const now = () => (projectById.has(id) ? loadedProjects.get(id) : null);
+  const [state, setState] = useState<State>(() => ({ id, project: now(), waited: false }));
+  useEffect(() => {
+    let live = true;
+    const have = now();
+    if (have !== undefined) setState((s) => (s.id === id && s.project === have ? s : { id, project: have, waited: false }));
+    else {
+      setState((s) => (s.id === id && s.project === undefined ? s : { id, project: undefined, waited: true }));
+      loadProject(id).then(
+        (project) => live && setState({ id, project, waited: true }),
+        (e) => live && setState({ id, project: e instanceof LessonGone ? "gone" : "error", waited: true }),
+      );
+    }
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  return state.id === id ? state : { project: now(), waited: false };
 }
 
 export type { ModuleSummary };

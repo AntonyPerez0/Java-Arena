@@ -1,0 +1,1479 @@
+id: calculator
+title: A calculator
+after: sealed-and-patterns
+summary: "A calculator you type into, line by line. Split the text into tokens, build a tree of records that knows times comes before plus, add parentheses, minus signs and variables, and answer bad input with a message that says what's wrong and where."
+intro: |
+  A calculator that reads what you type, such as `rate * (hours - 0.5)`, has a harder job than it looks. The line is only text: the program has to find the numbers and symbols in it, know that `*` comes before `-` unless parentheses say otherwise, remember names, and say clearly what's wrong when the text isn't a calculation. In this project you build that calculator, one line at a time.
+
+  When it's finished, a session looks like this. The calculator reads these lines:
+
+  ```text
+  rate = 12.5
+  hours = 8
+  pay = rate * (hours - 0.5)
+  pay / 3
+  -(2 + 3) * 4
+  pay / (hours - 8)
+  2 + * 3
+  ```
+
+  and answers each one:
+
+  ```text
+  rate = 12.5
+  hours = 8
+  pay = 93.75
+  31.25
+  -20
+  Error: division by zero
+  Error: expected a number at column 5
+  ```
+
+  A line with `=` saves a value under a name. Every other line is calculated and its value printed. A mistake doesn't stop the program: it gets a message, and the next line is read as usual.
+
+  ### How it works
+
+  The calculator works in three stages. The first two are how javac reads your code too:
+
+  1. The **lexer** splits the text into **tokens**: `rate`, `*`, `(`, `hours`, `-`, `0.5`, `)`. Each token knows its column, so a message can point at it.
+  2. The **parser** builds a **tree** from the tokens, as records. In the tree of `2 + 3 * 4`, the multiplication sits under the addition, so it's calculated first.
+  3. The **calculator** evaluates the tree with a switch over record patterns, as in the last challenge of module 58. There the tree was written by hand; here the parser builds it from text.
+
+  ### What you need
+
+  Everything up to module 58: strings and `charAt` (module 16), lists (module 13), classes and objects (modules 17 to 19), hash maps (module 31), exceptions (module 42), recursion (module 55), records (module 56), switch expressions (module 57), and sealed interfaces with record patterns (module 58). The few library methods the project needs beyond these, such as `Character.isDigit`, are explained where they're used.
+
+  ### The milestones
+
+  1. Tokens: the lexer splits a line into numbers and symbols.
+  2. Left to right: the first calculations, one operator after another.
+  3. Multiplication first: a parser that builds a tree with precedence.
+  4. Parentheses and minus signs.
+  5. Variables: saving values under names.
+  6. Clear error messages for bad input.
+
+  Calculations use `double`, so `7 / 2` is 3.5, and a whole number is shown without `.0`.
+seed:
+  Main.java: |
+    import java.util.Scanner;
+
+    public class Main {
+        public static void main(String[] args) {
+            Scanner scanner = new Scanner(System.in);
+            while (scanner.hasNextLine()) {
+                String line = scanner.nextLine();
+                System.out.println(Lexer.tokenize(line));
+            }
+        }
+    }
+  Lexer.java: |
+    import java.util.ArrayList;
+    import java.util.List;
+
+    public class Lexer {
+        public static List<Token> tokenize(String line) {
+            List<Token> tokens = new ArrayList<>();
+            return tokens;
+        }
+    }
+  Token.java: |
+    public sealed interface Token permits NumberToken, SymbolToken {
+    }
+  NumberToken.java: |
+    public record NumberToken(double value, int column) implements Token {
+    }
+  SymbolToken.java: |
+    public record SymbolToken(char symbol, int column) implements Token {
+    }
+milestones:
+  - id: tokens
+    title: "Tokens"
+    task: |
+      A calculator can't work with `12 + 3.5` as one piece of text. Its first job is to split the line into **tokens**: the numbers and the symbols. Each token also keeps its **column**, the place in the line where it starts, counted from 1, so that error messages can point at it in the last milestone.
+
+      The token types are ready. `Token.java` is a sealed interface, and `NumberToken.java` and `SymbolToken.java` are its two records. In `Lexer.java`, write `tokenize(String line)`. It goes through the line one character at a time and returns the tokens in a list, in order:
+
+      - A space is skipped.
+      - A digit or a `.` starts a number, which goes on as long as digits and dots follow. `Double.parseDouble` turns the number's text into a double, and it becomes a `NumberToken` with the column of its first character.
+      - `+`, `-`, `*` and `/` each become a `SymbolToken`.
+      - For any other character, throw an `IllegalArgumentException`. The last milestone gives it a proper message.
+
+      `Character.isDigit(c)` is true when the character `c` is a digit, such as 0 to 9. `main` is ready: it prints the tokens of each line it reads. The check runs:
+
+      ```java fragment
+      System.out.println(Lexer.tokenize("12 + 3.5"));
+      ```
+
+      and expects this (a record's `toString` shows the values of its parts):
+
+      ```
+      [NumberToken[value=12.0, column=1], SymbolToken[symbol=+, column=4], NumberToken[value=3.5, column=6]]
+      ```
+    hints:
+      - "Use an index `i` and a `while (i < line.length())` loop rather than a for loop: a number takes several characters, so each step moves `i` on by as many characters as it used."
+      - "For a number: remember `int start = i;`, move `i` on while it points at a digit or a dot (check `i < line.length()` first), and then `line.substring(start, i)` is the number's text. Its column is `start + 1`."
+      - "`\"+-*/\".indexOf(c) >= 0` is true when `c` is one of the four symbols."
+    require:
+      - pattern: "\\bnew\\s+NumberToken\\s*\\("
+        message: "Put each number in the list as a `new NumberToken(value, column)`."
+      - pattern: "\\bnew\\s+SymbolToken\\s*\\("
+        message: "Put each symbol in the list as a `new SymbolToken(symbol, column)`."
+    tests:
+      - name: "Tokens of a sum"
+        call: |
+          System.out.println(Lexer.tokenize("12 + 3.5"));
+      - name: "Tokens without spaces"
+        call: |
+          System.out.println(Lexer.tokenize("7*8/2-1"));
+      - name: "Extra spaces, decimals and an empty line"
+        call: |
+          System.out.println(Lexer.tokenize("  100 /  4 "));
+          System.out.println(Lexer.tokenize("0.25-.5"));
+          System.out.println(Lexer.tokenize(""));
+        hidden: true
+    solution:
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    System.out.println(Lexer.tokenize(line));
+                }
+            }
+        }
+      Lexer.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Lexer {
+            public static List<Token> tokenize(String line) {
+                List<Token> tokens = new ArrayList<>();
+                int i = 0;
+                while (i < line.length()) {
+                    char c = line.charAt(i);
+                    if (c == ' ') {
+                        i++;
+                    } else if (Character.isDigit(c) || c == '.') {
+                        int start = i;
+                        while (i < line.length() && (Character.isDigit(line.charAt(i)) || line.charAt(i) == '.')) {
+                            i++;
+                        }
+                        double value = Double.parseDouble(line.substring(start, i));
+                        tokens.add(new NumberToken(value, start + 1));
+                    } else if ("+-*/".indexOf(c) >= 0) {
+                        tokens.add(new SymbolToken(c, i + 1));
+                        i++;
+                    } else {
+                        throw new IllegalArgumentException("unexpected character " + c);
+                    }
+                }
+                return tokens;
+            }
+        }
+      Token.java: |
+        public sealed interface Token permits NumberToken, SymbolToken {
+        }
+      NumberToken.java: |
+        public record NumberToken(double value, int column) implements Token {
+        }
+      SymbolToken.java: |
+        public record SymbolToken(char symbol, int column) implements Token {
+        }
+  - id: left-to-right
+    title: "Left to right"
+    task: |
+      Now the calculator calculates. `Calculator.java` is new. Its `format` is ready: it turns a result into text without `.0` on whole numbers, so 15.0 becomes `15` and 3.5 stays `3.5`.
+
+      1. In `Calculator.java`, write a method `apply(char operator, double left, double right)` with a switch expression: it returns `left + right` for `'+'`, `left - right` for `'-'`, and so on for `*` and `/`.
+      2. Write `calculate(String line)`. It splits the line into tokens and works through them **from left to right**: the first number, then an operator and a number, again and again, using `apply` each time. It returns the result as text, made by `format`. For now, `2 + 3 * 4` gives 20, as (2 + 3) * 4 is. The next milestone teaches the calculator that multiplication comes first.
+      3. Change `main`: it creates one `Calculator`, and prints what `calculate` returns for each line it reads. It skips blank lines: `line.trim().isEmpty()` is true for a line with nothing but spaces.
+
+      You may assume for now that every line is a correct calculation of numbers and the four operators. With the input:
+
+      ```text
+      12 + 3.5
+      10 - 4 - 3
+      7 / 2
+      2 * 3 * 4
+      ```
+
+      the program prints:
+
+      ```
+      15.5
+      3
+      3.5
+      24
+      ```
+    files:
+      Calculator.java: |
+        import java.util.List;
+
+        public class Calculator {
+
+            public String calculate(String line) {
+                List<Token> tokens = Lexer.tokenize(line);
+                return "";
+            }
+
+            // 15 becomes "15", 3.5 stays "3.5"
+            public static String format(double value) {
+                if (value == Math.floor(value) && Math.abs(value) < 1e15) {
+                    return String.valueOf((long) value);
+                }
+                return String.valueOf(value);
+            }
+        }
+    hints:
+      - "The numbers are at the indexes 0, 2, 4 and so on, and the operators at 1, 3, 5. Start `double result` with the number at index 0, then loop over the operators with `i += 2` and do `result = apply(symbol, result, the number after it)`."
+      - "A token is a NumberToken or a SymbolToken. `if (tokens.get(i) instanceof NumberToken number)` checks which and gives you `number.value()` in the same step."
+      - "A switch expression on a char: `return switch (operator) { case '+' -> left + right; ... default -> left / right; };`"
+    require:
+      - pattern: "\\bswitch\\s*\\("
+        message: "Choose the calculation in `apply` with a switch expression."
+      - pattern: "\\bapply\\s*\\("
+        min: 2
+        message: "Write the method `apply(char operator, double left, double right)` and use it in `calculate`."
+    tests:
+      - name: "Four calculations"
+        stdin: |
+          12 + 3.5
+          10 - 4 - 3
+          7 / 2
+          2 * 3 * 4
+      - name: "Left to right"
+        stdin: |
+          2 + 3 * 4
+      - name: "A blank line and a long calculation"
+        stdin: |
+          1 / 4
+
+          100 - 0.5 * 2
+          9
+          1 + 2 + 3 + 4 + 5
+        hidden: true
+    solution:
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                Calculator calculator = new Calculator();
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    if (!line.trim().isEmpty()) {
+                        System.out.println(calculator.calculate(line));
+                    }
+                }
+            }
+        }
+      Lexer.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Lexer {
+            public static List<Token> tokenize(String line) {
+                List<Token> tokens = new ArrayList<>();
+                int i = 0;
+                while (i < line.length()) {
+                    char c = line.charAt(i);
+                    if (c == ' ') {
+                        i++;
+                    } else if (Character.isDigit(c) || c == '.') {
+                        int start = i;
+                        while (i < line.length() && (Character.isDigit(line.charAt(i)) || line.charAt(i) == '.')) {
+                            i++;
+                        }
+                        double value = Double.parseDouble(line.substring(start, i));
+                        tokens.add(new NumberToken(value, start + 1));
+                    } else if ("+-*/".indexOf(c) >= 0) {
+                        tokens.add(new SymbolToken(c, i + 1));
+                        i++;
+                    } else {
+                        throw new IllegalArgumentException("unexpected character " + c);
+                    }
+                }
+                return tokens;
+            }
+        }
+      Token.java: |
+        public sealed interface Token permits NumberToken, SymbolToken {
+        }
+      NumberToken.java: |
+        public record NumberToken(double value, int column) implements Token {
+        }
+      SymbolToken.java: |
+        public record SymbolToken(char symbol, int column) implements Token {
+        }
+      Calculator.java: |
+        import java.util.List;
+
+        public class Calculator {
+
+            public String calculate(String line) {
+                List<Token> tokens = Lexer.tokenize(line);
+                double result = numberAt(tokens, 0);
+                int i = 1;
+                while (i + 1 < tokens.size()) {
+                    if (tokens.get(i) instanceof SymbolToken operator) {
+                        result = apply(operator.symbol(), result, numberAt(tokens, i + 1));
+                    }
+                    i += 2;
+                }
+                return format(result);
+            }
+
+            private double numberAt(List<Token> tokens, int index) {
+                if (tokens.get(index) instanceof NumberToken number) {
+                    return number.value();
+                }
+                throw new IllegalArgumentException("expected a number");
+            }
+
+            private double apply(char operator, double left, double right) {
+                return switch (operator) {
+                    case '+' -> left + right;
+                    case '-' -> left - right;
+                    case '*' -> left * right;
+                    default -> left / right;
+                };
+            }
+
+            // 15 becomes "15", 3.5 stays "3.5"
+            public static String format(double value) {
+                if (value == Math.floor(value) && Math.abs(value) < 1e15) {
+                    return String.valueOf((long) value);
+                }
+                return String.valueOf(value);
+            }
+        }
+  - id: precedence
+    title: "Multiplication first"
+    replaces: [Left to right]
+    task: |
+      In math, `2 + 3 * 4` is 14, because `*` and `/` come before `+` and `-`. Going from left to right can't do that. So the calculator first builds a **tree** of the expression, and then calculates the tree.
+
+      Three new files hold the tree: `Expr.java` is a sealed interface, and its records are `Literal(double value)` for a number and `Operation(char operator, Expr left, Expr right)`. The tree of `2 + 3 * 4` is:
+
+      ```java fragment
+      new Operation('+', new Literal(2), new Operation('*', new Literal(3), new Literal(4)))
+      ```
+
+      `Parser.java` is new too. It reads the tokens with `next`, the index of the next token, and has one method per level:
+
+      - `expression()` reads a term. Then, as long as the next token is `+` or `-`, it steps past that operator, reads another term, and joins the two: `result = new Operation(operator, result, term())`.
+      - `term()` does the same one level lower: numbers joined by `*` and `/`.
+      - `number()` and `nextSymbol()` are ready.
+
+      `term()` reads all of `3 * 4` before `expression()` sees the rest, so the multiplication ends up lower in the tree, as one part of the addition.
+
+      Then in `Calculator.java`:
+
+      - Write `eval(Expr expr)`, which returns the value of a tree, with a switch over record patterns. An operation's value is `apply` on its operator and the values of its two parts.
+      - Change `calculate` so that it returns `format(eval(new Parser(tokens).parse()))`. The left-to-right loop isn't needed any more: delete it, and any helper method only it used.
+
+      With the input:
+
+      ```text
+      2 + 3 * 4
+      10 - 6 / 2 - 1
+      8 / 4 / 2
+      ```
+
+      the program prints:
+
+      ```
+      14
+      6
+      1
+      ```
+    files:
+      Expr.java: |
+        public sealed interface Expr permits Literal, Operation {
+        }
+      Literal.java: |
+        public record Literal(double value) implements Expr {
+        }
+      Operation.java: |
+        public record Operation(char operator, Expr left, Expr right) implements Expr {
+        }
+      Parser.java: |
+        import java.util.List;
+
+        public class Parser {
+            private List<Token> tokens;
+            private int next;
+
+            public Parser(List<Token> tokens) {
+                this.tokens = tokens;
+                this.next = 0;
+            }
+
+            public Expr parse() {
+                return expression();
+            }
+
+            // terms joined by + and -
+            private Expr expression() {
+                return term();
+            }
+
+            // numbers joined by * and /
+            private Expr term() {
+                return number();
+            }
+
+            private Expr number() {
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof NumberToken number) {
+                    this.next++;
+                    return new Literal(number.value());
+                }
+                throw new IllegalArgumentException("expected a number");
+            }
+
+            // the symbol of the next token, or a space when the next token isn't a symbol
+            private char nextSymbol() {
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof SymbolToken token) {
+                    return token.symbol();
+                }
+                return ' ';
+            }
+        }
+    hints:
+      - "In `expression()`: `Expr result = term();`, then `while (nextSymbol() == '+' || nextSymbol() == '-')`. Inside, remember `char operator = nextSymbol();`, step past it with `this.next++`, and join `result` with the next term."
+      - "`term()` is `expression()` with `number()` in place of `term()`, and `*` and `/` in place of `+` and `-`."
+      - "In eval: `case Literal(double value) -> value;` and `case Operation(char operator, Expr left, Expr right) -> apply(operator, eval(left), eval(right));`"
+    require:
+      - pattern: "\\bcase\\s+Literal\\s*\\("
+        message: "Give eval a case with a record pattern for a Literal: `case Literal(double value) -> ...`."
+      - pattern: "\\bcase\\s+Operation\\s*\\("
+        message: "Give eval a case with a record pattern for an Operation: `case Operation(char operator, Expr left, Expr right) -> ...`."
+      - pattern: "\\bnew\\s+Operation\\s*\\("
+        min: 2
+        message: "Build the tree in Parser: `expression()` and `term()` each create a `new Operation(...)`."
+    tests:
+      - name: "Times before plus"
+        stdin: |
+          2 + 3 * 4
+          10 - 6 / 2 - 1
+          8 / 4 / 2
+      - name: "The tree of 2 + 3 * 4"
+        call: |
+          System.out.println(new Parser(Lexer.tokenize("2 + 3 * 4")).parse());
+      - name: "Mixed operators"
+        stdin: |
+          1 + 2 * 3 - 4 / 8
+          100 / 10 * 3
+          5 - 2 - 1
+          7
+        hidden: true
+      - name: "The tree of 9 - 3 - 2 * 5"
+        call: |
+          System.out.println(new Parser(Lexer.tokenize("9 - 3 - 2 * 5")).parse());
+        hidden: true
+    solution:
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                Calculator calculator = new Calculator();
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    if (!line.trim().isEmpty()) {
+                        System.out.println(calculator.calculate(line));
+                    }
+                }
+            }
+        }
+      Lexer.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Lexer {
+            public static List<Token> tokenize(String line) {
+                List<Token> tokens = new ArrayList<>();
+                int i = 0;
+                while (i < line.length()) {
+                    char c = line.charAt(i);
+                    if (c == ' ') {
+                        i++;
+                    } else if (Character.isDigit(c) || c == '.') {
+                        int start = i;
+                        while (i < line.length() && (Character.isDigit(line.charAt(i)) || line.charAt(i) == '.')) {
+                            i++;
+                        }
+                        double value = Double.parseDouble(line.substring(start, i));
+                        tokens.add(new NumberToken(value, start + 1));
+                    } else if ("+-*/".indexOf(c) >= 0) {
+                        tokens.add(new SymbolToken(c, i + 1));
+                        i++;
+                    } else {
+                        throw new IllegalArgumentException("unexpected character " + c);
+                    }
+                }
+                return tokens;
+            }
+        }
+      Token.java: |
+        public sealed interface Token permits NumberToken, SymbolToken {
+        }
+      NumberToken.java: |
+        public record NumberToken(double value, int column) implements Token {
+        }
+      SymbolToken.java: |
+        public record SymbolToken(char symbol, int column) implements Token {
+        }
+      Calculator.java: |
+        public class Calculator {
+
+            public String calculate(String line) {
+                Expr expr = new Parser(Lexer.tokenize(line)).parse();
+                return format(eval(expr));
+            }
+
+            private double eval(Expr expr) {
+                return switch (expr) {
+                    case Literal(double value) -> value;
+                    case Operation(char operator, Expr left, Expr right) -> apply(operator, eval(left), eval(right));
+                };
+            }
+
+            private double apply(char operator, double left, double right) {
+                return switch (operator) {
+                    case '+' -> left + right;
+                    case '-' -> left - right;
+                    case '*' -> left * right;
+                    default -> left / right;
+                };
+            }
+
+            // 15 becomes "15", 3.5 stays "3.5"
+            public static String format(double value) {
+                if (value == Math.floor(value) && Math.abs(value) < 1e15) {
+                    return String.valueOf((long) value);
+                }
+                return String.valueOf(value);
+            }
+        }
+      Expr.java: |
+        public sealed interface Expr permits Literal, Operation {
+        }
+      Literal.java: |
+        public record Literal(double value) implements Expr {
+        }
+      Operation.java: |
+        public record Operation(char operator, Expr left, Expr right) implements Expr {
+        }
+      Parser.java: |
+        import java.util.List;
+
+        public class Parser {
+            private List<Token> tokens;
+            private int next;
+
+            public Parser(List<Token> tokens) {
+                this.tokens = tokens;
+                this.next = 0;
+            }
+
+            public Expr parse() {
+                return expression();
+            }
+
+            // terms joined by + and -
+            private Expr expression() {
+                Expr result = term();
+                while (nextSymbol() == '+' || nextSymbol() == '-') {
+                    char operator = nextSymbol();
+                    this.next++;
+                    result = new Operation(operator, result, term());
+                }
+                return result;
+            }
+
+            // numbers joined by * and /
+            private Expr term() {
+                Expr result = number();
+                while (nextSymbol() == '*' || nextSymbol() == '/') {
+                    char operator = nextSymbol();
+                    this.next++;
+                    result = new Operation(operator, result, number());
+                }
+                return result;
+            }
+
+            private Expr number() {
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof NumberToken number) {
+                    this.next++;
+                    return new Literal(number.value());
+                }
+                throw new IllegalArgumentException("expected a number");
+            }
+
+            // the symbol of the next token, or a space when the next token isn't a symbol
+            private char nextSymbol() {
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof SymbolToken token) {
+                    return token.symbol();
+                }
+                return ' ';
+            }
+        }
+  - id: parentheses
+    title: "Parentheses and minus signs"
+    task: |
+      Parentheses say what is calculated first: `(2 + 3) * 4` is 20. And a minus sign can stand in front of a number or a parenthesis: `-5`, `2 - -3`, `-(2 + 3)`.
+
+      - In `Lexer.java`, `(` and `)` become SymbolTokens too.
+      - `Negate.java` is new: the record `Negate(Expr inner)` is a part of the tree with a minus in front. The program doesn't compile when this milestone starts: javac says that Negate isn't allowed to implement Expr. Add it to Expr's `permits` list. Then javac says that the switch in `eval` doesn't cover all possible input values: give it a case for Negate, whose value is minus the value of `inner`.
+      - In `Parser.java`, rename `number()` to `factor()` (term() calls it), and teach it two more things before it looks for a number:
+        - `(`: step past it, read a whole `expression()`, and then a `)` must come: step past that too. The expression inside is the factor's tree. If the `)` is missing, throw an IllegalArgumentException for now.
+        - `-`: step past it and return `new Negate(factor())`, the factor after it with a minus in front.
+
+      The parser now calls itself in a circle: `expression()` calls `term()`, `term()` calls `factor()`, and `factor()` calls `expression()` for the part in parentheses. That's recursion, as in module 55, and a number is its base case.
+
+      With the input:
+
+      ```text
+      (2 + 3) * 4
+      2 * (10 - (3 + 1))
+      (1 + 2) / (4 - 1.5)
+      ```
+
+      the program prints:
+
+      ```
+      20
+      12
+      1.2
+      ```
+    files:
+      Negate.java: |
+        public record Negate(Expr inner) implements Expr {
+        }
+    hints:
+      - "For `(`: `if (nextSymbol() == '(') { this.next++; Expr inside = expression(); ... }`. After the expression, `nextSymbol()` must be `')'`: step past it with `this.next++` and `return inside;`."
+      - "The minus in front: `if (nextSymbol() == '-') { this.next++; return new Negate(factor()); }`. Calling `factor()` again lets `- -3` and `-(2 + 3)` work too."
+      - "In eval: `case Negate(Expr inner) -> -eval(inner);`"
+    require:
+      - pattern: "\\bcase\\s+Negate\\s*\\("
+        message: "Give eval a case with a record pattern for Negate: `case Negate(Expr inner) -> ...`."
+      - pattern: "\\bnew\\s+Negate\\s*\\("
+        message: "In the parser, a minus in front of a factor becomes a `new Negate(...)`."
+    tests:
+      - name: "Parentheses first"
+        stdin: |
+          (2 + 3) * 4
+          2 * (10 - (3 + 1))
+          (1 + 2) / (4 - 1.5)
+      - name: "Minus signs"
+        stdin: |
+          -5 + 2
+          2 - -3
+          -(2 + 3) * 2
+          6 / -4
+      - name: "The tree of -(1 + 2)"
+        call: |
+          System.out.println(new Parser(Lexer.tokenize("-(1 + 2)")).parse());
+      - name: "Deep parentheses"
+        stdin: |
+          ((7))
+          -(-(4)) * (2 + 1) / 3
+          ((1 + 1) * (2 + 2)) - -0.5
+          (10)/(4)
+        hidden: true
+      - name: "Tokens of parentheses"
+        call: |
+          System.out.println(Lexer.tokenize("(1)"));
+          System.out.println(Lexer.tokenize("-(2)*3"));
+        hidden: true
+    solution:
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                Calculator calculator = new Calculator();
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    if (!line.trim().isEmpty()) {
+                        System.out.println(calculator.calculate(line));
+                    }
+                }
+            }
+        }
+      Lexer.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Lexer {
+            public static List<Token> tokenize(String line) {
+                List<Token> tokens = new ArrayList<>();
+                int i = 0;
+                while (i < line.length()) {
+                    char c = line.charAt(i);
+                    if (c == ' ') {
+                        i++;
+                    } else if (Character.isDigit(c) || c == '.') {
+                        int start = i;
+                        while (i < line.length() && (Character.isDigit(line.charAt(i)) || line.charAt(i) == '.')) {
+                            i++;
+                        }
+                        double value = Double.parseDouble(line.substring(start, i));
+                        tokens.add(new NumberToken(value, start + 1));
+                    } else if ("+-*/()".indexOf(c) >= 0) {
+                        tokens.add(new SymbolToken(c, i + 1));
+                        i++;
+                    } else {
+                        throw new IllegalArgumentException("unexpected character " + c);
+                    }
+                }
+                return tokens;
+            }
+        }
+      Token.java: |
+        public sealed interface Token permits NumberToken, SymbolToken {
+        }
+      NumberToken.java: |
+        public record NumberToken(double value, int column) implements Token {
+        }
+      SymbolToken.java: |
+        public record SymbolToken(char symbol, int column) implements Token {
+        }
+      Calculator.java: |
+        public class Calculator {
+
+            public String calculate(String line) {
+                Expr expr = new Parser(Lexer.tokenize(line)).parse();
+                return format(eval(expr));
+            }
+
+            private double eval(Expr expr) {
+                return switch (expr) {
+                    case Literal(double value) -> value;
+                    case Negate(Expr inner) -> -eval(inner);
+                    case Operation(char operator, Expr left, Expr right) -> apply(operator, eval(left), eval(right));
+                };
+            }
+
+            private double apply(char operator, double left, double right) {
+                return switch (operator) {
+                    case '+' -> left + right;
+                    case '-' -> left - right;
+                    case '*' -> left * right;
+                    default -> left / right;
+                };
+            }
+
+            // 15 becomes "15", 3.5 stays "3.5"
+            public static String format(double value) {
+                if (value == Math.floor(value) && Math.abs(value) < 1e15) {
+                    return String.valueOf((long) value);
+                }
+                return String.valueOf(value);
+            }
+        }
+      Expr.java: |
+        public sealed interface Expr permits Literal, Operation, Negate {
+        }
+      Literal.java: |
+        public record Literal(double value) implements Expr {
+        }
+      Operation.java: |
+        public record Operation(char operator, Expr left, Expr right) implements Expr {
+        }
+      Parser.java: |
+        import java.util.List;
+
+        public class Parser {
+            private List<Token> tokens;
+            private int next;
+
+            public Parser(List<Token> tokens) {
+                this.tokens = tokens;
+                this.next = 0;
+            }
+
+            public Expr parse() {
+                return expression();
+            }
+
+            // terms joined by + and -
+            private Expr expression() {
+                Expr result = term();
+                while (nextSymbol() == '+' || nextSymbol() == '-') {
+                    char operator = nextSymbol();
+                    this.next++;
+                    result = new Operation(operator, result, term());
+                }
+                return result;
+            }
+
+            // factors joined by * and /
+            private Expr term() {
+                Expr result = factor();
+                while (nextSymbol() == '*' || nextSymbol() == '/') {
+                    char operator = nextSymbol();
+                    this.next++;
+                    result = new Operation(operator, result, factor());
+                }
+                return result;
+            }
+
+            // a number, an expression in parentheses, or a factor with a minus in front
+            private Expr factor() {
+                if (nextSymbol() == '(') {
+                    this.next++;
+                    Expr inside = expression();
+                    if (nextSymbol() != ')') {
+                        throw new IllegalArgumentException("expected )");
+                    }
+                    this.next++;
+                    return inside;
+                }
+                if (nextSymbol() == '-') {
+                    this.next++;
+                    return new Negate(factor());
+                }
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof NumberToken number) {
+                    this.next++;
+                    return new Literal(number.value());
+                }
+                throw new IllegalArgumentException("expected a number");
+            }
+
+            // the symbol of the next token, or a space when the next token isn't a symbol
+            private char nextSymbol() {
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof SymbolToken token) {
+                    return token.symbol();
+                }
+                return ' ';
+            }
+        }
+      Negate.java: |
+        public record Negate(Expr inner) implements Expr {
+        }
+  - id: variables
+    title: "Variables"
+    task: |
+      A line such as `rate = 12.5` saves a value under a name, and later lines can use the name: `rate * 8`.
+
+      - **Tokens.** `NameToken.java` is new: `NameToken(String name, int column)`. Add it to Token's `permits` list. In `Lexer.java`, a letter starts a name, which goes on as long as letters and digits follow, so `side2` is one name. `Character.isLetter(c)` is true for a letter, and `Character.isLetterOrDigit(c)` for a letter or a digit. `=` becomes a SymbolToken.
+      - **The tree.** `Variable.java` is new: `Variable(String name)`. Add it to Expr's `permits` list. In `factor()`, a NameToken becomes a Variable.
+      - **The values.** Calculator keeps them in a field, a map (a `HashMap<String, Double>`) created in a constructor, so that each line can use what the lines before it saved.
+      - **Saving.** In `calculate`: when the first token is a name and the second is `=`, the tokens after them are an expression. Calculate it, save the value under the name, and return the name, ` = ` and the value, such as `pay = 80`. A name can get a new value, and its expression can use the old one: `x = x * 3`. `tokens.subList(2, tokens.size())` gives the tokens from index 2 on. Any other line is calculated as before.
+      - **Using.** In `eval`, a Variable's value is the one saved under its name. For a name that has no value yet, throw an IllegalArgumentException for now.
+
+      Names are case sensitive: `Total` and `total` are two variables. With the input:
+
+      ```text
+      rate = 12.5
+      hours = 8
+      rate * hours
+      pay = rate * hours - 20
+      pay / 2
+      ```
+
+      the program prints:
+
+      ```
+      rate = 12.5
+      hours = 8
+      100
+      pay = 80
+      40
+      ```
+    files:
+      NameToken.java: |
+        public record NameToken(String name, int column) implements Token {
+        }
+      Variable.java: |
+        public record Variable(String name) implements Expr {
+        }
+    hints:
+      - "To check the first two tokens at once: `tokens.size() >= 2 && tokens.get(0) instanceof NameToken name && tokens.get(1) instanceof SymbolToken equals && equals.symbol() == '='`."
+      - "The parser doesn't need to know about `=`: give it only the tokens after it, `new Parser(tokens.subList(2, tokens.size())).parse()`."
+      - "In eval, `case Variable(String name) -> valueOf(name);` can call a method of your own that checks `this.variables.containsKey(name)` and returns `this.variables.get(name)`."
+    require:
+      - pattern: "\\b(Hash)?Map\\s*<\\s*String\\s*,\\s*Double\\s*>"
+        message: "Keep the values in a map (a `HashMap<String, Double>`), with the names as keys."
+      - pattern: "\\bcase\\s+Variable\\s*\\("
+        message: "Give eval a case with a record pattern for a Variable: `case Variable(String name) -> ...`."
+    tests:
+      - name: "Pay for a shift"
+        stdin: |
+          rate = 12.5
+          hours = 8
+          rate * hours
+          pay = rate * hours - 20
+          pay / 2
+      - name: "A new value"
+        stdin: |
+          x = 2
+          x = x * 3
+          x + 1
+      - name: "Tokens of a name"
+        call: |
+          System.out.println(Lexer.tokenize("side2 = 4"));
+      - name: "An area"
+        stdin: |
+          width = 3
+          height = width + 1.5
+          area = width * height / 2
+          -area + (width)
+        hidden: true
+      - name: "Names in capitals"
+        stdin: |
+          Total = 10
+          total = 1
+          Total - total
+          b2 = -(Total)
+          b2*2
+        hidden: true
+    solution:
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                Calculator calculator = new Calculator();
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    if (!line.trim().isEmpty()) {
+                        System.out.println(calculator.calculate(line));
+                    }
+                }
+            }
+        }
+      Lexer.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Lexer {
+            public static List<Token> tokenize(String line) {
+                List<Token> tokens = new ArrayList<>();
+                int i = 0;
+                while (i < line.length()) {
+                    char c = line.charAt(i);
+                    if (c == ' ') {
+                        i++;
+                    } else if (Character.isDigit(c) || c == '.') {
+                        int start = i;
+                        while (i < line.length() && (Character.isDigit(line.charAt(i)) || line.charAt(i) == '.')) {
+                            i++;
+                        }
+                        double value = Double.parseDouble(line.substring(start, i));
+                        tokens.add(new NumberToken(value, start + 1));
+                    } else if (Character.isLetter(c)) {
+                        int start = i;
+                        while (i < line.length() && Character.isLetterOrDigit(line.charAt(i))) {
+                            i++;
+                        }
+                        tokens.add(new NameToken(line.substring(start, i), start + 1));
+                    } else if ("+-*/()=".indexOf(c) >= 0) {
+                        tokens.add(new SymbolToken(c, i + 1));
+                        i++;
+                    } else {
+                        throw new IllegalArgumentException("unexpected character " + c);
+                    }
+                }
+                return tokens;
+            }
+        }
+      Token.java: |
+        public sealed interface Token permits NumberToken, SymbolToken, NameToken {
+        }
+      NumberToken.java: |
+        public record NumberToken(double value, int column) implements Token {
+        }
+      SymbolToken.java: |
+        public record SymbolToken(char symbol, int column) implements Token {
+        }
+      Calculator.java: |
+        import java.util.HashMap;
+        import java.util.List;
+
+        public class Calculator {
+            private HashMap<String, Double> variables;
+
+            public Calculator() {
+                this.variables = new HashMap<>();
+            }
+
+            public String calculate(String line) {
+                List<Token> tokens = Lexer.tokenize(line);
+                if (tokens.size() >= 2 && tokens.get(0) instanceof NameToken name && tokens.get(1) instanceof SymbolToken equals && equals.symbol() == '=') {
+                    double value = eval(new Parser(tokens.subList(2, tokens.size())).parse());
+                    this.variables.put(name.name(), value);
+                    return name.name() + " = " + format(value);
+                }
+                Expr expr = new Parser(tokens).parse();
+                return format(eval(expr));
+            }
+
+            private double eval(Expr expr) {
+                return switch (expr) {
+                    case Literal(double value) -> value;
+                    case Variable(String name) -> valueOf(name);
+                    case Negate(Expr inner) -> -eval(inner);
+                    case Operation(char operator, Expr left, Expr right) -> apply(operator, eval(left), eval(right));
+                };
+            }
+
+            private double valueOf(String name) {
+                if (!this.variables.containsKey(name)) {
+                    throw new IllegalArgumentException("unknown variable " + name);
+                }
+                return this.variables.get(name);
+            }
+
+            private double apply(char operator, double left, double right) {
+                return switch (operator) {
+                    case '+' -> left + right;
+                    case '-' -> left - right;
+                    case '*' -> left * right;
+                    default -> left / right;
+                };
+            }
+
+            // 15 becomes "15", 3.5 stays "3.5"
+            public static String format(double value) {
+                if (value == Math.floor(value) && Math.abs(value) < 1e15) {
+                    return String.valueOf((long) value);
+                }
+                return String.valueOf(value);
+            }
+        }
+      Expr.java: |
+        public sealed interface Expr permits Literal, Operation, Negate, Variable {
+        }
+      Literal.java: |
+        public record Literal(double value) implements Expr {
+        }
+      Operation.java: |
+        public record Operation(char operator, Expr left, Expr right) implements Expr {
+        }
+      Parser.java: |
+        import java.util.List;
+
+        public class Parser {
+            private List<Token> tokens;
+            private int next;
+
+            public Parser(List<Token> tokens) {
+                this.tokens = tokens;
+                this.next = 0;
+            }
+
+            public Expr parse() {
+                return expression();
+            }
+
+            // terms joined by + and -
+            private Expr expression() {
+                Expr result = term();
+                while (nextSymbol() == '+' || nextSymbol() == '-') {
+                    char operator = nextSymbol();
+                    this.next++;
+                    result = new Operation(operator, result, term());
+                }
+                return result;
+            }
+
+            // factors joined by * and /
+            private Expr term() {
+                Expr result = factor();
+                while (nextSymbol() == '*' || nextSymbol() == '/') {
+                    char operator = nextSymbol();
+                    this.next++;
+                    result = new Operation(operator, result, factor());
+                }
+                return result;
+            }
+
+            // a number, a name, an expression in parentheses, or a factor with a minus in front
+            private Expr factor() {
+                if (nextSymbol() == '(') {
+                    this.next++;
+                    Expr inside = expression();
+                    if (nextSymbol() != ')') {
+                        throw new IllegalArgumentException("expected )");
+                    }
+                    this.next++;
+                    return inside;
+                }
+                if (nextSymbol() == '-') {
+                    this.next++;
+                    return new Negate(factor());
+                }
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof NumberToken number) {
+                    this.next++;
+                    return new Literal(number.value());
+                }
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof NameToken name) {
+                    this.next++;
+                    return new Variable(name.name());
+                }
+                throw new IllegalArgumentException("expected a number");
+            }
+
+            // the symbol of the next token, or a space when the next token isn't a symbol
+            private char nextSymbol() {
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof SymbolToken token) {
+                    return token.symbol();
+                }
+                return ' ';
+            }
+        }
+      Negate.java: |
+        public record Negate(Expr inner) implements Expr {
+        }
+      NameToken.java: |
+        public record NameToken(String name, int column) implements Token {
+        }
+      Variable.java: |
+        public record Variable(String name) implements Expr {
+        }
+  - id: errors
+    title: "Clear error messages"
+    task: |
+      Right now a typing mistake crashes the calculator. A good one says what's wrong and where, and goes on with the next line.
+
+      `CalcException.java` is new: an unchecked exception that carries a message. Throw it instead of IllegalArgumentException, everywhere, with exactly these messages (the numbers and texts in them are examples):
+
+      - `unexpected character # at column 5`: the lexer meets a character that can't be part of any token.
+      - `bad number 1.2.3 at column 1`: `Double.parseDouble` can't read a number's text. It throws a NumberFormatException then: catch it in the lexer.
+      - `expected a number at column 5`: `factor()` finds no number, name, `(` or `-`. When the line has ended, it's `expected a number at the end`. This also holds for `x =`, which is a save with nothing after the `=`.
+      - `expected ) at column 8`, or `expected ) at the end`: a parenthesis isn't closed.
+      - `expected an operator at column 3`: `parse()` has read a whole expression, but there are tokens left, as in `2 3`. Make `parse()` check for that.
+      - `division by zero`: the right side of a `/` is 0.
+      - `unknown variable cost`: a name without a value.
+
+      The column is the column of the token where the problem is. To ask any token for its column, add the method `int column();` to the Token interface: each of the three records already has a method of that name, so they implement it as they are.
+
+      `main` catches CalcException, prints `Error: ` and the message, and goes on with the next line. A line with an error saves nothing. With the input:
+
+      ```text
+      2 + # 3
+      2 + * 3
+      2 +
+      (2 + 3
+      2 3
+      ```
+
+      the program prints:
+
+      ```
+      Error: unexpected character # at column 5
+      Error: expected a number at column 5
+      Error: expected a number at the end
+      Error: expected ) at the end
+      Error: expected an operator at column 3
+      ```
+    files:
+      CalcException.java: |
+        public class CalcException extends RuntimeException {
+
+            public CalcException(String message) {
+                super(message);
+            }
+        }
+    hints:
+      - "A helper in Parser saves writing the same thing three times: `where()` returns `\"at column \" + this.tokens.get(this.next).column()` when there's a next token, and `\"at the end\"` when there isn't."
+      - "Division by zero: in apply's switch, the case for `/` becomes a block, `{ if (right == 0) { throw new CalcException(\"division by zero\"); } yield left / right; }`."
+      - "CalcException extends RuntimeException, so the methods that throw it don't need `throws`. The try and catch go around the line in `main` that calls `calculate`, inside the loop."
+    require:
+      - pattern: "\\bcatch\\s*\\(\\s*CalcException\\b"
+        message: "Catch the CalcException in `main`: `catch (CalcException e)`."
+      - pattern: "\\bnew\\s+CalcException\\s*\\("
+        min: 4
+        message: "Make a CalcException for each kind of mistake: in the lexer, the parser and the calculator."
+      - pattern: "\\bcatch\\s*\\(\\s*NumberFormatException\\b"
+        message: "Catch the NumberFormatException of `Double.parseDouble` in the lexer, and throw a CalcException with the bad number instead."
+    forbid:
+      - pattern: "\\bIllegalArgumentException\\b"
+        message: "Throw a CalcException instead of an IllegalArgumentException."
+      - pattern: "\\bcatch\\s*\\(\\s*(Exception|RuntimeException)\\b"
+        message: "Catch only the exceptions you expect: CalcException in `main`, NumberFormatException in the lexer."
+    tests:
+      - name: "Clear messages"
+        stdin: |
+          2 + # 3
+          2 + * 3
+          2 +
+          (2 + 3
+          2 3
+      - name: "Errors among calculations"
+        stdin: |
+          price = 4
+          price / (2 - 2)
+          cost * 2
+          price * 2
+      - name: "Bad numbers and parentheses"
+        stdin: |
+          1.2.3 + 4
+          (1 + 2 3
+          2 + 3)
+      - name: "Empty sides and strange characters"
+        stdin: |
+          x = 
+          = 5
+          5 % 2
+          x = 1 / 0
+          x
+          4 / 0.5
+        hidden: true
+      - name: "Lone dots and parentheses"
+        stdin: |
+          .
+          3 + .5
+          ((2)
+          )
+          k = 2 * (3
+          k
+        hidden: true
+    solution:
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                Calculator calculator = new Calculator();
+                while (scanner.hasNextLine()) {
+                    String line = scanner.nextLine();
+                    if (!line.trim().isEmpty()) {
+                        try {
+                            System.out.println(calculator.calculate(line));
+                        } catch (CalcException e) {
+                            System.out.println("Error: " + e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
+      Lexer.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Lexer {
+            public static List<Token> tokenize(String line) {
+                List<Token> tokens = new ArrayList<>();
+                int i = 0;
+                while (i < line.length()) {
+                    char c = line.charAt(i);
+                    if (c == ' ') {
+                        i++;
+                    } else if (Character.isDigit(c) || c == '.') {
+                        int start = i;
+                        while (i < line.length() && (Character.isDigit(line.charAt(i)) || line.charAt(i) == '.')) {
+                            i++;
+                        }
+                        String text = line.substring(start, i);
+                        try {
+                            tokens.add(new NumberToken(Double.parseDouble(text), start + 1));
+                        } catch (NumberFormatException e) {
+                            throw new CalcException("bad number " + text + " at column " + (start + 1));
+                        }
+                    } else if (Character.isLetter(c)) {
+                        int start = i;
+                        while (i < line.length() && Character.isLetterOrDigit(line.charAt(i))) {
+                            i++;
+                        }
+                        tokens.add(new NameToken(line.substring(start, i), start + 1));
+                    } else if ("+-*/()=".indexOf(c) >= 0) {
+                        tokens.add(new SymbolToken(c, i + 1));
+                        i++;
+                    } else {
+                        throw new CalcException("unexpected character " + c + " at column " + (i + 1));
+                    }
+                }
+                return tokens;
+            }
+        }
+      Token.java: |
+        public sealed interface Token permits NumberToken, SymbolToken, NameToken {
+            int column();
+        }
+      NumberToken.java: |
+        public record NumberToken(double value, int column) implements Token {
+        }
+      SymbolToken.java: |
+        public record SymbolToken(char symbol, int column) implements Token {
+        }
+      Calculator.java: |
+        import java.util.HashMap;
+        import java.util.List;
+
+        public class Calculator {
+            private HashMap<String, Double> variables;
+
+            public Calculator() {
+                this.variables = new HashMap<>();
+            }
+
+            public String calculate(String line) {
+                List<Token> tokens = Lexer.tokenize(line);
+                if (tokens.size() >= 2 && tokens.get(0) instanceof NameToken name && tokens.get(1) instanceof SymbolToken equals && equals.symbol() == '=') {
+                    double value = eval(new Parser(tokens.subList(2, tokens.size())).parse());
+                    this.variables.put(name.name(), value);
+                    return name.name() + " = " + format(value);
+                }
+                Expr expr = new Parser(tokens).parse();
+                return format(eval(expr));
+            }
+
+            private double eval(Expr expr) {
+                return switch (expr) {
+                    case Literal(double value) -> value;
+                    case Variable(String name) -> valueOf(name);
+                    case Negate(Expr inner) -> -eval(inner);
+                    case Operation(char operator, Expr left, Expr right) -> apply(operator, eval(left), eval(right));
+                };
+            }
+
+            private double valueOf(String name) {
+                if (!this.variables.containsKey(name)) {
+                    throw new CalcException("unknown variable " + name);
+                }
+                return this.variables.get(name);
+            }
+
+            private double apply(char operator, double left, double right) {
+                return switch (operator) {
+                    case '+' -> left + right;
+                    case '-' -> left - right;
+                    case '*' -> left * right;
+                    default -> {
+                        if (right == 0) {
+                            throw new CalcException("division by zero");
+                        }
+                        yield left / right;
+                    }
+                };
+            }
+
+            // 15 becomes "15", 3.5 stays "3.5"
+            public static String format(double value) {
+                if (value == Math.floor(value) && Math.abs(value) < 1e15) {
+                    return String.valueOf((long) value);
+                }
+                return String.valueOf(value);
+            }
+        }
+      Expr.java: |
+        public sealed interface Expr permits Literal, Operation, Negate, Variable {
+        }
+      Literal.java: |
+        public record Literal(double value) implements Expr {
+        }
+      Operation.java: |
+        public record Operation(char operator, Expr left, Expr right) implements Expr {
+        }
+      Parser.java: |
+        import java.util.List;
+
+        public class Parser {
+            private List<Token> tokens;
+            private int next;
+
+            public Parser(List<Token> tokens) {
+                this.tokens = tokens;
+                this.next = 0;
+            }
+
+            public Expr parse() {
+                Expr result = expression();
+                if (this.next < this.tokens.size()) {
+                    throw new CalcException("expected an operator " + where());
+                }
+                return result;
+            }
+
+            // terms joined by + and -
+            private Expr expression() {
+                Expr result = term();
+                while (nextSymbol() == '+' || nextSymbol() == '-') {
+                    char operator = nextSymbol();
+                    this.next++;
+                    result = new Operation(operator, result, term());
+                }
+                return result;
+            }
+
+            // factors joined by * and /
+            private Expr term() {
+                Expr result = factor();
+                while (nextSymbol() == '*' || nextSymbol() == '/') {
+                    char operator = nextSymbol();
+                    this.next++;
+                    result = new Operation(operator, result, factor());
+                }
+                return result;
+            }
+
+            // a number, a name, an expression in parentheses, or a factor with a minus in front
+            private Expr factor() {
+                if (nextSymbol() == '(') {
+                    this.next++;
+                    Expr inside = expression();
+                    if (nextSymbol() != ')') {
+                        throw new CalcException("expected ) " + where());
+                    }
+                    this.next++;
+                    return inside;
+                }
+                if (nextSymbol() == '-') {
+                    this.next++;
+                    return new Negate(factor());
+                }
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof NumberToken number) {
+                    this.next++;
+                    return new Literal(number.value());
+                }
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof NameToken name) {
+                    this.next++;
+                    return new Variable(name.name());
+                }
+                throw new CalcException("expected a number " + where());
+            }
+
+            // the symbol of the next token, or a space when the next token isn't a symbol
+            private char nextSymbol() {
+                if (this.next < this.tokens.size() && this.tokens.get(this.next) instanceof SymbolToken token) {
+                    return token.symbol();
+                }
+                return ' ';
+            }
+
+            // where the next token is, for an error message
+            private String where() {
+                if (this.next < this.tokens.size()) {
+                    return "at column " + this.tokens.get(this.next).column();
+                }
+                return "at the end";
+            }
+        }
+      Negate.java: |
+        public record Negate(Expr inner) implements Expr {
+        }
+      NameToken.java: |
+        public record NameToken(String name, int column) implements Token {
+        }
+      Variable.java: |
+        public record Variable(String name) implements Expr {
+        }
+      CalcException.java: |
+        public class CalcException extends RuntimeException {
+
+            public CalcException(String message) {
+                super(message);
+            }
+        }

@@ -1,0 +1,2329 @@
+id: text-adventure
+title: A text adventure
+after: objects-with-lists
+summary: A small game you play by typing. Walk between the rooms of an old lighthouse, pick up things, unlock a door and light the lamp, with the whole world read from a file and the game saved to one.
+intro: |
+  In this project you build a **text adventure**: a game that describes where you are, reads what you want to do (`go north`, `take key`), and answers in text. The world isn't written into the program. It comes from a file, `world.txt`, so the same program can play any world that file describes.
+
+  When it's finished, this is a whole world: an old lighthouse with five rooms, two things to find, a locked door and a goal.
+
+  ```text
+  room;Shore;Cold waves break on gray pebbles.
+  room;Cottage;A keeper's cottage. The stove is cold.
+  room;Boathouse;An old rowboat lies upside down. It smells of tar.
+  room;Tower;Stone stairs climb into the dark.
+  room;Lamp Room;A great glass lens waits for a flame.
+  exit;Shore;north;Cottage
+  exit;Shore;east;Boathouse
+  exit;Cottage;south;Shore
+  exit;Cottage;east;Tower
+  exit;Boathouse;west;Shore
+  exit;Tower;west;Cottage
+  exit;Tower;up;Lamp Room
+  exit;Lamp Room;down;Tower
+  item;oil;Cottage
+  item;key;Boathouse
+  lock;Cottage;east;key
+  goal;Lamp Room;oil;You fill the lamp with oil and light it. Its beam sweeps across the sea.
+  ```
+
+  A player who types these commands, one per line:
+
+  ```text
+  go north
+  take oil
+  go east
+  go south
+  go east
+  take key
+  go west
+  go north
+  use key
+  go east
+  go up
+  ```
+
+  sees this:
+
+  ```text
+  [Shore]
+  Cold waves break on gray pebbles.
+  Exits: north, east
+  [Cottage]
+  A keeper's cottage. The stove is cold.
+  Exits: south, east
+  You see: oil
+  You take the oil.
+  The way east is locked.
+  [Shore]
+  Cold waves break on gray pebbles.
+  Exits: north, east
+  [Boathouse]
+  An old rowboat lies upside down. It smells of tar.
+  Exits: west
+  You see: key
+  You take the key.
+  [Shore]
+  Cold waves break on gray pebbles.
+  Exits: north, east
+  [Cottage]
+  A keeper's cottage. The stove is cold.
+  Exits: south, east
+  You unlock the way east with the key.
+  [Tower]
+  Stone stairs climb into the dark.
+  Exits: west, up
+  [Lamp Room]
+  A great glass lens waits for a flame.
+  Exits: down
+  You fill the lamp with oil and light it. Its beam sweeps across the sea.
+  You won in 7 moves.
+  ```
+
+  ### What you need
+
+  Modules 16 to 24, especially: string methods such as `split`, `startsWith` and `substring` (module 16), classes with constructors, getters and `toString` (modules 17 and 18), lists of objects (module 19), reading a file with a Scanner, `try` and `catch` (module 20), objects as method parameters and as instance variables, like the player's `Room` and `addExit(Exit exit)` (module 23), and a list as an instance variable created in the constructor, with methods that add to it, go through it, empty it and remove from it (module 24). The last milestone also writes a file, with a class called `PrintWriter`; its task shows you how.
+
+  ### How you build it
+
+  The program has a class for each kind of thing in the game: `Room`, `Exit` and `Player`, with `Main` reading the world and the commands. Each line of `world.txt` starts with its kind (`room`, `exit`, `item`, `lock`, `goal`), and each milestone teaches the program one more kind, together with the commands that go with it:
+
+  1. **Rooms and commands:** rooms from the file, and a loop that reads commands.
+  2. **Exits and moves:** `go north` takes you to the next room.
+  3. **Things to carry:** `take`, `drop` and `inventory`.
+  4. **A locked door:** an exit that opens with the right item, and `use`.
+  5. **A goal:** the game ends when you reach it, and counts your moves.
+  6. **Saving and loading:** `save` writes the game to a file, and `load` reads it back.
+
+  Lines of a kind the program doesn't know yet are skipped, so a world file written for a later milestone still works with an earlier program.
+seed:
+  Main.java: |
+    import java.nio.file.Paths;
+    import java.util.ArrayList;
+    import java.util.Scanner;
+
+    public class Main {
+        public static void main(String[] args) {
+            ArrayList<Room> rooms = new ArrayList<>();
+            try (Scanner file = new Scanner(Paths.get("world.txt"))) {
+                while (file.hasNextLine()) {
+                    String[] parts = file.nextLine().split(";");
+                    if (parts[0].equals("room")) {
+                        // Create a Room from parts[1] and parts[2] and add it to rooms.
+
+                    }
+                }
+            } catch (Exception e) {
+                System.out.println("Error: " + e.getMessage());
+            }
+
+            Scanner scanner = new Scanner(System.in);
+            // Start the player in the first room, print the room, and read commands.
+
+        }
+    }
+  Room.java: |
+    public class Room {
+
+    }
+  Player.java: |
+    public class Player {
+        private Room room;
+
+        public Player(Room room) {
+            this.room = room;
+        }
+
+        public Room getRoom() {
+            return this.room;
+        }
+
+        public void moveTo(Room room) {
+            this.room = room;
+        }
+    }
+milestones:
+  - id: rooms
+    title: Rooms and commands
+    task: |
+      The starting code reads `world.txt` line by line and splits each line at `;`. A line such as `room;Shore;Cold waves break on gray pebbles.` is a room: its name, then its description. `Player.java` is ready: a player is always in one room.
+
+      1. Write the class `Room`, with a constructor `Room(String name, String description)`, a getter `getName()`, and a `toString()` that returns the name in square brackets, a line break (`\n`), and the description:
+
+         ```text
+         [Shore]
+         Cold waves break on gray pebbles.
+         ```
+
+      2. In `main`, create a `Room` from each room line and add it to `rooms`.
+      3. Create a `Player` in the first room of the list and print that room.
+      4. Then read commands, one per line, until the player types `quit`:
+         - `look` prints the room again.
+         - `quit` prints `Goodbye.` and ends the game.
+         - Anything else prints `I don't understand "dance".`, with the command in the quotes.
+
+           Inside quotes, `\"` is a quote character: `"say \"hi\""` prints `say "hi"`.
+
+      With this `world.txt`
+
+      ```text
+      room;Shore;Cold waves break on gray pebbles.
+      room;Cottage;A keeper's cottage. The stove is cold.
+      ```
+
+      and the commands `look`, `dance` and `quit`, the program prints:
+
+      ```
+      [Shore]
+      Cold waves break on gray pebbles.
+      [Shore]
+      Cold waves break on gray pebbles.
+      I don't understand "dance".
+      Goodbye.
+      ```
+    hints:
+      - "`rooms.add(new Room(parts[1], parts[2]));` goes inside the `if` of the room lines. The game starts in `rooms.get(0)`: `Player player = new Player(rooms.get(0));`."
+      - "Read the commands in a `while (scanner.hasNextLine())` loop. Compare each one with `equals`, and leave the loop with `break` after printing `Goodbye.`"
+      - "The line with the quotes: `\"I don't understand \\\"\" + command + \"\\\".\"`"
+    tests:
+      - name: Look around
+        files:
+          world.txt: |
+            room;Shore;Cold waves break on gray pebbles.
+            room;Cottage;A keeper's cottage. The stove is cold.
+        stdin: |
+          look
+          dance
+          quit
+      - name: Another world
+        hidden: true
+        files:
+          world.txt: |
+            room;Greenhouse;Warm air and the smell of wet soil.
+            room;Shed;Rakes and spades hang on the wall.
+            room;Pond;Frogs sit on the lily pads.
+        stdin: |
+          sing
+          look
+          LOOK
+          quit
+      - name: Quit at once
+        hidden: true
+        files:
+          world.txt: |
+            room;Attic;Dust and old trunks.
+        stdin: |
+          quit
+      - name: A room as text
+        hidden: true
+        call: |
+          Room room = new Room("Cellar", "Shelves of jam jars line the walls.");
+          System.out.println(room);
+          System.out.println(room.getName());
+    require:
+      - pattern: String\s+toString\s*\(
+        message: "Give `Room` a `toString()` method that returns the name and the description."
+      - pattern: new\s+Room\s*\(
+        message: "Create a `Room` for each room line with `new Room(...)`."
+    solution:
+      Main.java: |
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Room> rooms = new ArrayList<>();
+                try (Scanner file = new Scanner(Paths.get("world.txt"))) {
+                    while (file.hasNextLine()) {
+                        String[] parts = file.nextLine().split(";");
+                        if (parts[0].equals("room")) {
+                            rooms.add(new Room(parts[1], parts[2]));
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage());
+                }
+
+                Player player = new Player(rooms.get(0));
+                System.out.println(player.getRoom());
+                Scanner scanner = new Scanner(System.in);
+                while (scanner.hasNextLine()) {
+                    String command = scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Goodbye.");
+                        break;
+                    } else if (command.equals("look")) {
+                        System.out.println(player.getRoom());
+                    } else {
+                        System.out.println("I don't understand \"" + command + "\".");
+                    }
+                }
+            }
+        }
+      Room.java: |
+        public class Room {
+            private String name;
+            private String description;
+
+            public Room(String name, String description) {
+                this.name = name;
+                this.description = description;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public String toString() {
+                return "[" + this.name + "]\n" + this.description;
+            }
+        }
+      Player.java: |
+        public class Player {
+            private Room room;
+
+            public Player(Room room) {
+                this.room = room;
+            }
+
+            public Room getRoom() {
+                return this.room;
+            }
+
+            public void moveTo(Room room) {
+                this.room = room;
+            }
+        }
+  - id: exits
+    title: Exits and moves
+    task: |
+      Now the rooms get exits. A line such as `exit;Shore;north;Cottage` means: from the Shore, the way north leads to the Cottage. A world file lists its room lines first, so every room an exit line names already exists when the line is read. A new file, `Exit.java`, has been added to your program.
+
+      1. Write the class `Exit`, with a constructor `Exit(String direction, String target)` and the getters `getDirection()` and `getTarget()`. The target is the name of the room the exit leads to.
+      2. Give `Room` a list of its exits, an `ArrayList<Exit>` created in the constructor, and two methods:
+         - `addExit(Exit exit)` adds an exit to the list.
+         - `getTarget(String direction)` returns the name of the room the exit in that direction leads to, or `""` when the room has no exit that way.
+      3. When a room has exits, its `toString()` ends with one more line that lists their directions in the order they were added: `Exits: north, east`. A room without exits prints as before.
+      4. In `Main`, write a method `findRoom(ArrayList<Room> rooms, String name)` that returns the room of that name, and use it to add an `Exit` to the right room for each exit line.
+      5. A new command, `go` and a direction such as `go north`, moves the player through that exit and prints the new room. When there's no exit that way, it prints `You can't go west from here.` (with the direction the player typed). Only a command that starts with `go ` (with the space) is a move; a bare `go` is a command the game doesn't understand.
+
+      With this `world.txt`
+
+      ```text
+      room;Shore;Cold waves break on gray pebbles.
+      room;Cottage;A keeper's cottage. The stove is cold.
+      room;Boathouse;An old rowboat lies upside down. It smells of tar.
+      exit;Shore;north;Cottage
+      exit;Shore;east;Boathouse
+      exit;Cottage;south;Shore
+      exit;Boathouse;west;Shore
+      ```
+
+      and the commands `go north`, `go west`, `go south` and `quit`, the program prints:
+
+      ```
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Cottage]
+      A keeper's cottage. The stove is cold.
+      Exits: south
+      You can't go west from here.
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      Goodbye.
+      ```
+    files:
+      Exit.java: |
+        public class Exit {
+
+        }
+    hints:
+      - "`command.startsWith(\"go \")` is true for every go command, and `command.substring(3)` is the direction after it. A method `move(Player player, ArrayList<Room> rooms, String direction)` keeps the loop in `main` short."
+      - "In `getTarget`, loop over the exits and return `exit.getTarget()` when `exit.getDirection().equals(direction)`. After the loop, `return \"\";`. The caller checks the result with `isEmpty()`."
+      - "To join the directions with commas, put `\", \"` before every direction except the first: loop with an index and check `i > 0`."
+    tests:
+      - name: Walk north and back
+        files:
+          world.txt: |
+            room;Shore;Cold waves break on gray pebbles.
+            room;Cottage;A keeper's cottage. The stove is cold.
+            room;Boathouse;An old rowboat lies upside down. It smells of tar.
+            exit;Shore;north;Cottage
+            exit;Shore;east;Boathouse
+            exit;Cottage;south;Shore
+            exit;Boathouse;west;Shore
+        stdin: |
+          go north
+          go west
+          go south
+          quit
+      - name: Up and down the tower
+        hidden: true
+        files:
+          world.txt: |
+            room;Hall;A long hall with a red carpet.
+            room;Lamp Room;A great glass lens waits for a flame.
+            room;Library;Books from the floor to the ceiling.
+            room;Garden;Roses climb over an old wall.
+            exit;Hall;up;Lamp Room
+            exit;Hall;west;Library
+            exit;Hall;south;Garden
+            exit;Lamp Room;down;Hall
+            exit;Library;east;Hall
+        stdin: |
+          go up
+          go up
+          look
+          go down
+          go west
+          go east
+          go
+          quit
+      - name: A room without exits
+        hidden: true
+        files:
+          world.txt: |
+            room;Cell;Four stone walls and a narrow window.
+        stdin: |
+          go north
+          quit
+      - name: Exits of a room
+        hidden: true
+        call: |
+          Room hall = new Room("Hall", "Tall windows.");
+          hall.addExit(new Exit("west", "Library"));
+          hall.addExit(new Exit("down", "Cellar"));
+          System.out.println(hall);
+          System.out.println(hall.getTarget("down"));
+          System.out.println("[" + hall.getTarget("east") + "]");
+    require:
+      - pattern: ArrayList<Exit>
+        message: "Keep a room's exits in an `ArrayList<Exit>`."
+      - pattern: findRoom\s*\(
+        min: 2
+        message: "Write a method `findRoom` and use it to find rooms by name."
+    solution:
+      Main.java: |
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Room> rooms = new ArrayList<>();
+                try (Scanner file = new Scanner(Paths.get("world.txt"))) {
+                    while (file.hasNextLine()) {
+                        String[] parts = file.nextLine().split(";");
+                        if (parts[0].equals("room")) {
+                            rooms.add(new Room(parts[1], parts[2]));
+                        } else if (parts[0].equals("exit")) {
+                            findRoom(rooms, parts[1]).addExit(new Exit(parts[2], parts[3]));
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage());
+                }
+
+                Player player = new Player(rooms.get(0));
+                System.out.println(player.getRoom());
+                Scanner scanner = new Scanner(System.in);
+                while (scanner.hasNextLine()) {
+                    String command = scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Goodbye.");
+                        break;
+                    } else if (command.equals("look")) {
+                        System.out.println(player.getRoom());
+                    } else if (command.startsWith("go ")) {
+                        move(player, rooms, command.substring(3));
+                    } else {
+                        System.out.println("I don't understand \"" + command + "\".");
+                    }
+                }
+            }
+
+            public static Room findRoom(ArrayList<Room> rooms, String name) {
+                for (Room room : rooms) {
+                    if (room.getName().equals(name)) {
+                        return room;
+                    }
+                }
+                // Every room name in world.txt belongs to a room line, so this isn't reached.
+                return rooms.get(0);
+            }
+
+            public static void move(Player player, ArrayList<Room> rooms, String direction) {
+                String target = player.getRoom().getTarget(direction);
+                if (target.isEmpty()) {
+                    System.out.println("You can't go " + direction + " from here.");
+                } else {
+                    player.moveTo(findRoom(rooms, target));
+                    System.out.println(player.getRoom());
+                }
+            }
+        }
+      Room.java: |
+        import java.util.ArrayList;
+
+        public class Room {
+            private String name;
+            private String description;
+            private ArrayList<Exit> exits;
+
+            public Room(String name, String description) {
+                this.name = name;
+                this.description = description;
+                this.exits = new ArrayList<>();
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public void addExit(Exit exit) {
+                this.exits.add(exit);
+            }
+
+            public String getTarget(String direction) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        return exit.getTarget();
+                    }
+                }
+                return "";
+            }
+
+            public String toString() {
+                String text = "[" + this.name + "]\n" + this.description;
+                if (!this.exits.isEmpty()) {
+                    text += "\nExits: ";
+                    for (int i = 0; i < this.exits.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.exits.get(i).getDirection();
+                    }
+                }
+                return text;
+            }
+        }
+      Player.java: |
+        public class Player {
+            private Room room;
+
+            public Player(Room room) {
+                this.room = room;
+            }
+
+            public Room getRoom() {
+                return this.room;
+            }
+
+            public void moveTo(Room room) {
+                this.room = room;
+            }
+        }
+      Exit.java: |
+        public class Exit {
+            private String direction;
+            private String target;
+
+            public Exit(String direction, String target) {
+                this.direction = direction;
+                this.target = target;
+            }
+
+            public String getDirection() {
+                return this.direction;
+            }
+
+            public String getTarget() {
+                return this.target;
+            }
+        }
+  - id: items
+    title: Things to carry
+    task: |
+      Time for things to pick up. A line such as `item;oil;Cottage` puts the item `oil` in the room called Cottage. An item is just its name, a `String`.
+
+      1. Give `Room` a list of the items in it, an `ArrayList<String>`, with the methods `addItem(String item)`, `hasItem(String item)` (true when the item is in the room) and `removeItem(String item)`.
+      2. When a room has items, its `toString()` ends with one more line, after the exits: `You see: oil, rope`, in the order they were added. A room without items prints as before.
+      3. Give `Player` a list of the items they carry, with the methods `take(String item)` (adds it), `has(String item)`, `drop(String item)` (removes it) and `inventory()`, which returns `You carry: shell, oil` in the order they were taken, or `You carry nothing.` when the list is empty.
+      4. In `Main`, put each item line's item into its room, and add three commands:
+         - `take oil` moves the oil from the room to the player and prints `You take the oil.` When the room has no oil, it prints `There is no oil here.`
+         - `drop oil` moves it from the player to the end of the room's items and prints `You drop the oil.` When the player doesn't carry it, it prints `You aren't carrying the oil.`
+         - `inventory` prints what `inventory()` returns.
+
+      With this `world.txt`
+
+      ```text
+      room;Shore;Cold waves break on gray pebbles.
+      room;Cottage;A keeper's cottage. The stove is cold.
+      room;Boathouse;An old rowboat lies upside down. It smells of tar.
+      exit;Shore;north;Cottage
+      exit;Shore;east;Boathouse
+      exit;Cottage;south;Shore
+      exit;Boathouse;west;Shore
+      item;shell;Shore
+      item;oil;Cottage
+      item;rope;Cottage
+      ```
+
+      and the commands `inventory`, `take shell`, `take shell`, `go north`, `take oil`, `inventory`, `drop shell`, `look` and `quit`, the program prints:
+
+      ```
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      You see: shell
+      You carry nothing.
+      You take the shell.
+      There is no shell here.
+      [Cottage]
+      A keeper's cottage. The stove is cold.
+      Exits: south
+      You see: oil, rope
+      You take the oil.
+      You carry: shell, oil
+      You drop the shell.
+      [Cottage]
+      A keeper's cottage. The stove is cold.
+      Exits: south
+      You see: rope, shell
+      Goodbye.
+      ```
+    hints:
+      - "The list methods of module 14 do the work: `contains` for `hasItem` and `has`, `remove` with the item's name for `removeItem` and `drop`."
+      - "`take(Player player, String item)` and `drop(Player player, String item)` in `Main` keep the loop short. The room is `player.getRoom()`: check with `hasItem` or `has` first, then move the item."
+      - "`inventory()` joins the names with commas just as the exits are joined in `toString()`."
+    tests:
+      - name: Take and drop
+        files:
+          world.txt: |
+            room;Shore;Cold waves break on gray pebbles.
+            room;Cottage;A keeper's cottage. The stove is cold.
+            room;Boathouse;An old rowboat lies upside down. It smells of tar.
+            exit;Shore;north;Cottage
+            exit;Shore;east;Boathouse
+            exit;Cottage;south;Shore
+            exit;Boathouse;west;Shore
+            item;shell;Shore
+            item;oil;Cottage
+            item;rope;Cottage
+        stdin: |
+          inventory
+          take shell
+          take shell
+          go north
+          take oil
+          inventory
+          drop shell
+          look
+          quit
+      - name: Carry things to another room
+        hidden: true
+        files:
+          world.txt: |
+            room;Kitchen;Copper pans hang over the stove.
+            room;Pantry;Sacks of flour and a smell of apples.
+            exit;Kitchen;east;Pantry
+            exit;Pantry;west;Kitchen
+            item;apple;Pantry
+            item;flour;Pantry
+            item;spoon;Kitchen
+        stdin: |
+          drop spoon
+          take spoon
+          take bread
+          go east
+          take flour
+          take apple
+          look
+          go west
+          drop apple
+          drop spoon
+          inventory
+          look
+          quit
+      - name: A player's items
+        hidden: true
+        call: |
+          Player player = new Player(new Room("Hall", "Quiet."));
+          System.out.println(player.inventory());
+          player.take("map");
+          player.take("coin");
+          System.out.println(player.inventory());
+          System.out.println(player.has("map"));
+          player.drop("map");
+          System.out.println(player.has("map"));
+          System.out.println(player.inventory());
+    require:
+      - pattern: ArrayList<String>
+        min: 2
+        message: "Keep the items of a room and of the player in lists, `ArrayList<String>`."
+    solution:
+      Main.java: |
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Room> rooms = new ArrayList<>();
+                try (Scanner file = new Scanner(Paths.get("world.txt"))) {
+                    while (file.hasNextLine()) {
+                        String[] parts = file.nextLine().split(";");
+                        if (parts[0].equals("room")) {
+                            rooms.add(new Room(parts[1], parts[2]));
+                        } else if (parts[0].equals("exit")) {
+                            findRoom(rooms, parts[1]).addExit(new Exit(parts[2], parts[3]));
+                        } else if (parts[0].equals("item")) {
+                            findRoom(rooms, parts[2]).addItem(parts[1]);
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage());
+                }
+
+                Player player = new Player(rooms.get(0));
+                System.out.println(player.getRoom());
+                Scanner scanner = new Scanner(System.in);
+                while (scanner.hasNextLine()) {
+                    String command = scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Goodbye.");
+                        break;
+                    } else if (command.equals("look")) {
+                        System.out.println(player.getRoom());
+                    } else if (command.startsWith("go ")) {
+                        move(player, rooms, command.substring(3));
+                    } else if (command.startsWith("take ")) {
+                        take(player, command.substring(5));
+                    } else if (command.startsWith("drop ")) {
+                        drop(player, command.substring(5));
+                    } else if (command.equals("inventory")) {
+                        System.out.println(player.inventory());
+                    } else {
+                        System.out.println("I don't understand \"" + command + "\".");
+                    }
+                }
+            }
+
+            public static Room findRoom(ArrayList<Room> rooms, String name) {
+                for (Room room : rooms) {
+                    if (room.getName().equals(name)) {
+                        return room;
+                    }
+                }
+                // Every room name in world.txt belongs to a room line, so this isn't reached.
+                return rooms.get(0);
+            }
+
+            public static void move(Player player, ArrayList<Room> rooms, String direction) {
+                String target = player.getRoom().getTarget(direction);
+                if (target.isEmpty()) {
+                    System.out.println("You can't go " + direction + " from here.");
+                } else {
+                    player.moveTo(findRoom(rooms, target));
+                    System.out.println(player.getRoom());
+                }
+            }
+
+            public static void take(Player player, String item) {
+                Room room = player.getRoom();
+                if (room.hasItem(item)) {
+                    room.removeItem(item);
+                    player.take(item);
+                    System.out.println("You take the " + item + ".");
+                } else {
+                    System.out.println("There is no " + item + " here.");
+                }
+            }
+
+            public static void drop(Player player, String item) {
+                if (player.has(item)) {
+                    player.drop(item);
+                    player.getRoom().addItem(item);
+                    System.out.println("You drop the " + item + ".");
+                } else {
+                    System.out.println("You aren't carrying the " + item + ".");
+                }
+            }
+        }
+      Room.java: |
+        import java.util.ArrayList;
+
+        public class Room {
+            private String name;
+            private String description;
+            private ArrayList<Exit> exits;
+            private ArrayList<String> items;
+
+            public Room(String name, String description) {
+                this.name = name;
+                this.description = description;
+                this.exits = new ArrayList<>();
+                this.items = new ArrayList<>();
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public void addExit(Exit exit) {
+                this.exits.add(exit);
+            }
+
+            public String getTarget(String direction) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        return exit.getTarget();
+                    }
+                }
+                return "";
+            }
+
+            public void addItem(String item) {
+                this.items.add(item);
+            }
+
+            public boolean hasItem(String item) {
+                return this.items.contains(item);
+            }
+
+            public void removeItem(String item) {
+                this.items.remove(item);
+            }
+
+            public String toString() {
+                String text = "[" + this.name + "]\n" + this.description;
+                if (!this.exits.isEmpty()) {
+                    text += "\nExits: ";
+                    for (int i = 0; i < this.exits.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.exits.get(i).getDirection();
+                    }
+                }
+                if (!this.items.isEmpty()) {
+                    text += "\nYou see: ";
+                    for (int i = 0; i < this.items.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.items.get(i);
+                    }
+                }
+                return text;
+            }
+        }
+      Player.java: |
+        import java.util.ArrayList;
+
+        public class Player {
+            private Room room;
+            private ArrayList<String> items;
+
+            public Player(Room room) {
+                this.room = room;
+                this.items = new ArrayList<>();
+            }
+
+            public Room getRoom() {
+                return this.room;
+            }
+
+            public void moveTo(Room room) {
+                this.room = room;
+            }
+
+            public void take(String item) {
+                this.items.add(item);
+            }
+
+            public boolean has(String item) {
+                return this.items.contains(item);
+            }
+
+            public void drop(String item) {
+                this.items.remove(item);
+            }
+
+            public String inventory() {
+                if (this.items.isEmpty()) {
+                    return "You carry nothing.";
+                }
+                String text = "You carry: ";
+                for (int i = 0; i < this.items.size(); i++) {
+                    if (i > 0) {
+                        text += ", ";
+                    }
+                    text += this.items.get(i);
+                }
+                return text;
+            }
+        }
+      Exit.java: |
+        public class Exit {
+            private String direction;
+            private String target;
+
+            public Exit(String direction, String target) {
+                this.direction = direction;
+                this.target = target;
+            }
+
+            public String getDirection() {
+                return this.direction;
+            }
+
+            public String getTarget() {
+                return this.target;
+            }
+        }
+  - id: locks
+    title: A locked door
+    task: |
+      Some ways are locked. A line such as `lock;Cottage;east;key` locks the exit east from the Cottage, and the item `key` opens it. A lock line comes after the exit line it locks.
+
+      1. Give `Exit` a third instance variable, `key`: the item that opens it, or `""` when the exit isn't locked. The constructor stays as it is and sets `key` to `""`. Add the methods `getKey()`, `setKey(String key)` and `isLocked()`, which is true when the key isn't `""`.
+      2. Give `Room` three methods:
+         - `lock(String direction, String key)` sets the key of the exit in that direction.
+         - `isLocked(String direction)` is true when the exit in that direction is locked.
+         - `unlock(String item)` looks for a locked exit whose key is that item. It opens the first one it finds (its key becomes `""`) and returns its direction, or returns `""` when the item opens nothing here.
+      3. In `Main`, lock the exit of each lock line. `go` through a locked exit prints `The way east is locked.` and the player stays.
+      4. A new command, `use key`:
+         - When the player doesn't carry the key, it prints `You aren't carrying the key.`
+         - When the key opens a locked exit of the room, it prints `You unlock the way east with the key.` The player keeps the key.
+         - Otherwise it prints `Nothing happens.`
+
+      With the lighthouse world of the project's introduction, without its goal line, and the commands `go north`, `go east`, `use key`, `go south`, `go east`, `take key`, `use key`, `go west`, `go north`, `use key`, `go east` and `quit`, the program prints:
+
+      ```
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Cottage]
+      A keeper's cottage. The stove is cold.
+      Exits: south, east
+      You see: oil
+      The way east is locked.
+      You aren't carrying the key.
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Boathouse]
+      An old rowboat lies upside down. It smells of tar.
+      Exits: west
+      You see: key
+      You take the key.
+      Nothing happens.
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Cottage]
+      A keeper's cottage. The stove is cold.
+      Exits: south, east
+      You see: oil
+      You unlock the way east with the key.
+      [Tower]
+      Stone stairs climb into the dark.
+      Exits: west, up
+      Goodbye.
+      ```
+    hints:
+      - "`isLocked()` in `Exit` is one line: `return !this.key.isEmpty();`"
+      - "In `move`, check the exit in this order: no exit (`getTarget` returns `\"\"`), then locked (`isLocked(direction)`), and only then move the player."
+      - "In `unlock`, loop over the exits: when `exit.isLocked()` and `exit.getKey().equals(item)`, call `exit.setKey(\"\")` and return `exit.getDirection()`."
+    tests:
+      - name: Find the key and open the door
+        files:
+          world.txt: |
+            room;Shore;Cold waves break on gray pebbles.
+            room;Cottage;A keeper's cottage. The stove is cold.
+            room;Boathouse;An old rowboat lies upside down. It smells of tar.
+            room;Tower;Stone stairs climb into the dark.
+            room;Lamp Room;A great glass lens waits for a flame.
+            exit;Shore;north;Cottage
+            exit;Shore;east;Boathouse
+            exit;Cottage;south;Shore
+            exit;Cottage;east;Tower
+            exit;Boathouse;west;Shore
+            exit;Tower;west;Cottage
+            exit;Tower;up;Lamp Room
+            exit;Lamp Room;down;Tower
+            item;oil;Cottage
+            item;key;Boathouse
+            lock;Cottage;east;key
+        stdin: |
+          go north
+          go east
+          use key
+          go south
+          go east
+          take key
+          use key
+          go west
+          go north
+          use key
+          go east
+          quit
+      - name: Two locks and the wrong item
+        hidden: true
+        files:
+          world.txt: |
+            room;Yard;Chickens peck at the ground.
+            room;Barn;Hay is piled up to the roof.
+            room;Loft;A small window looks over the fields.
+            room;Stable;An empty stall and a saddle.
+            exit;Yard;north;Barn
+            exit;Barn;south;Yard
+            exit;Barn;up;Loft
+            exit;Barn;east;Stable
+            exit;Loft;down;Barn
+            exit;Stable;west;Barn
+            item;ladder;Yard
+            item;bolt;Yard
+            lock;Barn;up;ladder
+            lock;Barn;east;bolt
+        stdin: |
+          take ladder
+          take bolt
+          use ladder
+          go north
+          go up
+          go east
+          use bolt
+          use bolt
+          go east
+          go west
+          go up
+          use ladder
+          go up
+          go down
+          use rope
+          quit
+      - name: Unlocking a room's exit
+        hidden: true
+        call: |
+          Room gate = new Room("Gate", "Iron bars.");
+          gate.addExit(new Exit("north", "Park"));
+          gate.addExit(new Exit("south", "Street"));
+          gate.lock("north", "card");
+          System.out.println(gate.isLocked("north"));
+          System.out.println(gate.isLocked("south"));
+          System.out.println("[" + gate.unlock("coin") + "]");
+          System.out.println(gate.unlock("card"));
+          System.out.println(gate.isLocked("north"));
+          System.out.println("[" + gate.unlock("card") + "]");
+    require:
+      - pattern: isLocked\s*\(
+        message: "Write `isLocked` and use it to keep the player out of a locked exit."
+    solution:
+      Main.java: |
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Room> rooms = new ArrayList<>();
+                try (Scanner file = new Scanner(Paths.get("world.txt"))) {
+                    while (file.hasNextLine()) {
+                        String[] parts = file.nextLine().split(";");
+                        if (parts[0].equals("room")) {
+                            rooms.add(new Room(parts[1], parts[2]));
+                        } else if (parts[0].equals("exit")) {
+                            findRoom(rooms, parts[1]).addExit(new Exit(parts[2], parts[3]));
+                        } else if (parts[0].equals("item")) {
+                            findRoom(rooms, parts[2]).addItem(parts[1]);
+                        } else if (parts[0].equals("lock")) {
+                            findRoom(rooms, parts[1]).lock(parts[2], parts[3]);
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage());
+                }
+
+                Player player = new Player(rooms.get(0));
+                System.out.println(player.getRoom());
+                Scanner scanner = new Scanner(System.in);
+                while (scanner.hasNextLine()) {
+                    String command = scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Goodbye.");
+                        break;
+                    } else if (command.equals("look")) {
+                        System.out.println(player.getRoom());
+                    } else if (command.startsWith("go ")) {
+                        move(player, rooms, command.substring(3));
+                    } else if (command.startsWith("take ")) {
+                        take(player, command.substring(5));
+                    } else if (command.startsWith("drop ")) {
+                        drop(player, command.substring(5));
+                    } else if (command.equals("inventory")) {
+                        System.out.println(player.inventory());
+                    } else if (command.startsWith("use ")) {
+                        use(player, command.substring(4));
+                    } else {
+                        System.out.println("I don't understand \"" + command + "\".");
+                    }
+                }
+            }
+
+            public static Room findRoom(ArrayList<Room> rooms, String name) {
+                for (Room room : rooms) {
+                    if (room.getName().equals(name)) {
+                        return room;
+                    }
+                }
+                // Every room name in world.txt belongs to a room line, so this isn't reached.
+                return rooms.get(0);
+            }
+
+            public static void move(Player player, ArrayList<Room> rooms, String direction) {
+                String target = player.getRoom().getTarget(direction);
+                if (target.isEmpty()) {
+                    System.out.println("You can't go " + direction + " from here.");
+                } else if (player.getRoom().isLocked(direction)) {
+                    System.out.println("The way " + direction + " is locked.");
+                } else {
+                    player.moveTo(findRoom(rooms, target));
+                    System.out.println(player.getRoom());
+                }
+            }
+
+            public static void take(Player player, String item) {
+                Room room = player.getRoom();
+                if (room.hasItem(item)) {
+                    room.removeItem(item);
+                    player.take(item);
+                    System.out.println("You take the " + item + ".");
+                } else {
+                    System.out.println("There is no " + item + " here.");
+                }
+            }
+
+            public static void drop(Player player, String item) {
+                if (player.has(item)) {
+                    player.drop(item);
+                    player.getRoom().addItem(item);
+                    System.out.println("You drop the " + item + ".");
+                } else {
+                    System.out.println("You aren't carrying the " + item + ".");
+                }
+            }
+
+            public static void use(Player player, String item) {
+                if (!player.has(item)) {
+                    System.out.println("You aren't carrying the " + item + ".");
+                    return;
+                }
+                String direction = player.getRoom().unlock(item);
+                if (direction.isEmpty()) {
+                    System.out.println("Nothing happens.");
+                } else {
+                    System.out.println("You unlock the way " + direction + " with the " + item + ".");
+                }
+            }
+        }
+      Room.java: |
+        import java.util.ArrayList;
+
+        public class Room {
+            private String name;
+            private String description;
+            private ArrayList<Exit> exits;
+            private ArrayList<String> items;
+
+            public Room(String name, String description) {
+                this.name = name;
+                this.description = description;
+                this.exits = new ArrayList<>();
+                this.items = new ArrayList<>();
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public void addExit(Exit exit) {
+                this.exits.add(exit);
+            }
+
+            public String getTarget(String direction) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        return exit.getTarget();
+                    }
+                }
+                return "";
+            }
+
+            public void lock(String direction, String key) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        exit.setKey(key);
+                    }
+                }
+            }
+
+            public boolean isLocked(String direction) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        return exit.isLocked();
+                    }
+                }
+                return false;
+            }
+
+            public String unlock(String item) {
+                for (Exit exit : this.exits) {
+                    if (exit.isLocked() && exit.getKey().equals(item)) {
+                        exit.setKey("");
+                        return exit.getDirection();
+                    }
+                }
+                return "";
+            }
+
+            public void addItem(String item) {
+                this.items.add(item);
+            }
+
+            public boolean hasItem(String item) {
+                return this.items.contains(item);
+            }
+
+            public void removeItem(String item) {
+                this.items.remove(item);
+            }
+
+            public String toString() {
+                String text = "[" + this.name + "]\n" + this.description;
+                if (!this.exits.isEmpty()) {
+                    text += "\nExits: ";
+                    for (int i = 0; i < this.exits.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.exits.get(i).getDirection();
+                    }
+                }
+                if (!this.items.isEmpty()) {
+                    text += "\nYou see: ";
+                    for (int i = 0; i < this.items.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.items.get(i);
+                    }
+                }
+                return text;
+            }
+        }
+      Player.java: |
+        import java.util.ArrayList;
+
+        public class Player {
+            private Room room;
+            private ArrayList<String> items;
+
+            public Player(Room room) {
+                this.room = room;
+                this.items = new ArrayList<>();
+            }
+
+            public Room getRoom() {
+                return this.room;
+            }
+
+            public void moveTo(Room room) {
+                this.room = room;
+            }
+
+            public void take(String item) {
+                this.items.add(item);
+            }
+
+            public boolean has(String item) {
+                return this.items.contains(item);
+            }
+
+            public void drop(String item) {
+                this.items.remove(item);
+            }
+
+            public String inventory() {
+                if (this.items.isEmpty()) {
+                    return "You carry nothing.";
+                }
+                String text = "You carry: ";
+                for (int i = 0; i < this.items.size(); i++) {
+                    if (i > 0) {
+                        text += ", ";
+                    }
+                    text += this.items.get(i);
+                }
+                return text;
+            }
+        }
+      Exit.java: |
+        public class Exit {
+            private String direction;
+            private String target;
+            private String key;
+
+            public Exit(String direction, String target) {
+                this.direction = direction;
+                this.target = target;
+                this.key = "";
+            }
+
+            public String getDirection() {
+                return this.direction;
+            }
+
+            public String getTarget() {
+                return this.target;
+            }
+
+            public String getKey() {
+                return this.key;
+            }
+
+            public void setKey(String key) {
+                this.key = key;
+            }
+
+            public boolean isLocked() {
+                return !this.key.isEmpty();
+            }
+        }
+  - id: goal
+    title: A goal
+    task: |
+      A game needs a way to win. A line such as `goal;Lamp Room;oil;You fill the lamp with oil and light it. Its beam sweeps across the sea.` says: the player wins when they're in the Lamp Room and carry the oil. The last part is the text the game prints then. A world has at most one goal line, and a world without one can't be won.
+
+      1. Give `Player` an instance variable `moves` that starts at 0, and a getter `getMoves()`. `moveTo` adds 1 to it, so it counts the moves the player has made. A `go` that fails (no exit, or a locked one) isn't a move.
+      2. In `Main`, keep the goal's room, item and text in three `String` variables made before the `try` (empty strings at first), and set them from the goal line.
+      3. After every command except `quit`, check whether the player is in the goal's room and carries its item. If so, print the goal's text and then `You won in 7 moves.` (with the player's count), and end the game.
+
+      With the whole lighthouse world of the project's introduction, goal line and all, and the commands of the sample run there, the program prints:
+
+      ```
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Cottage]
+      A keeper's cottage. The stove is cold.
+      Exits: south, east
+      You see: oil
+      You take the oil.
+      The way east is locked.
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Boathouse]
+      An old rowboat lies upside down. It smells of tar.
+      Exits: west
+      You see: key
+      You take the key.
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Cottage]
+      A keeper's cottage. The stove is cold.
+      Exits: south, east
+      You unlock the way east with the key.
+      [Tower]
+      Stone stairs climb into the dark.
+      Exits: west, up
+      [Lamp Room]
+      A great glass lens waits for a flame.
+      Exits: down
+      You fill the lamp with oil and light it. Its beam sweeps across the sea.
+      You won in 7 moves.
+      ```
+    hints:
+      - "`this.moves++;` in `moveTo` counts every move, wherever it comes from. `move` in `Main` only calls `moveTo` when the player really goes."
+      - "Put the check after the whole `if`/`else if` chain, at the end of the loop's body: `if (player.getRoom().getName().equals(goalRoom) && player.has(goalItem))`. If your loop goes on to the next command with `continue`, the end of the body is skipped. Put the check at the top of the loop instead, inside the `while` and before `nextLine()`. `quit` has already left the loop with `break`, so it's never checked."
+      - "Without a goal line, `goalRoom` stays `\"\"`, which no room is called, so the game goes on until `quit`."
+    tests:
+      - name: Light the lamp
+        files:
+          world.txt: |
+            room;Shore;Cold waves break on gray pebbles.
+            room;Cottage;A keeper's cottage. The stove is cold.
+            room;Boathouse;An old rowboat lies upside down. It smells of tar.
+            room;Tower;Stone stairs climb into the dark.
+            room;Lamp Room;A great glass lens waits for a flame.
+            exit;Shore;north;Cottage
+            exit;Shore;east;Boathouse
+            exit;Cottage;south;Shore
+            exit;Cottage;east;Tower
+            exit;Boathouse;west;Shore
+            exit;Tower;west;Cottage
+            exit;Tower;up;Lamp Room
+            exit;Lamp Room;down;Tower
+            item;oil;Cottage
+            item;key;Boathouse
+            lock;Cottage;east;key
+            goal;Lamp Room;oil;You fill the lamp with oil and light it. Its beam sweeps across the sea.
+        stdin: |
+          go north
+          take oil
+          go east
+          go south
+          go east
+          take key
+          go west
+          go north
+          use key
+          go east
+          go up
+          quit
+      - name: Arrive first, then fetch the item
+        hidden: true
+        files:
+          world.txt: |
+            room;Gate;A rusty gate stands open.
+            room;Orchard;Rows of old pear trees.
+            room;Well;A stone well with a bucket on a rope.
+            exit;Gate;north;Orchard
+            exit;Orchard;south;Gate
+            exit;Orchard;east;Well
+            exit;Well;west;Orchard
+            item;bucket;Well
+            goal;Orchard;bucket;You water the trees, and the leaves lift.
+        stdin: |
+          go north
+          go west
+          go east
+          take bucket
+          go west
+          look
+          quit
+      - name: Win by taking the item
+        hidden: true
+        files:
+          world.txt: |
+            room;Dock;Ropes and crates everywhere.
+            room;Ship;The deck rocks gently.
+            exit;Dock;east;Ship
+            exit;Ship;west;Dock
+            item;map;Ship
+            goal;Ship;map;With the map in your hands, you can set sail.
+        stdin: |
+          go east
+          go west
+          go east
+          take map
+          inventory
+          quit
+      - name: No goal in this world
+        hidden: true
+        files:
+          world.txt: |
+            room;Hill;Wind bends the grass.
+            room;Valley;A stream runs between the stones.
+            exit;Hill;down;Valley
+            exit;Valley;up;Hill
+            item;stone;Valley
+        stdin: |
+          go down
+          take stone
+          go up
+          quit
+      - name: Counting moves
+        hidden: true
+        call: |
+          Room hall = new Room("Hall", "Quiet.");
+          Player player = new Player(hall);
+          System.out.println(player.getMoves());
+          player.moveTo(new Room("Yard", "Sunny."));
+          player.moveTo(hall);
+          System.out.println(player.getMoves());
+    require:
+      - pattern: getMoves\s*\(
+        message: "Print the count of moves with `getMoves()`."
+    solution:
+      Main.java: |
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Room> rooms = new ArrayList<>();
+                String goalRoom = "";
+                String goalItem = "";
+                String goalText = "";
+                try (Scanner file = new Scanner(Paths.get("world.txt"))) {
+                    while (file.hasNextLine()) {
+                        String[] parts = file.nextLine().split(";");
+                        if (parts[0].equals("room")) {
+                            rooms.add(new Room(parts[1], parts[2]));
+                        } else if (parts[0].equals("exit")) {
+                            findRoom(rooms, parts[1]).addExit(new Exit(parts[2], parts[3]));
+                        } else if (parts[0].equals("item")) {
+                            findRoom(rooms, parts[2]).addItem(parts[1]);
+                        } else if (parts[0].equals("lock")) {
+                            findRoom(rooms, parts[1]).lock(parts[2], parts[3]);
+                        } else if (parts[0].equals("goal")) {
+                            goalRoom = parts[1];
+                            goalItem = parts[2];
+                            goalText = parts[3];
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage());
+                }
+
+                Player player = new Player(rooms.get(0));
+                System.out.println(player.getRoom());
+                Scanner scanner = new Scanner(System.in);
+                while (scanner.hasNextLine()) {
+                    String command = scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Goodbye.");
+                        break;
+                    } else if (command.equals("look")) {
+                        System.out.println(player.getRoom());
+                    } else if (command.startsWith("go ")) {
+                        move(player, rooms, command.substring(3));
+                    } else if (command.startsWith("take ")) {
+                        take(player, command.substring(5));
+                    } else if (command.startsWith("drop ")) {
+                        drop(player, command.substring(5));
+                    } else if (command.equals("inventory")) {
+                        System.out.println(player.inventory());
+                    } else if (command.startsWith("use ")) {
+                        use(player, command.substring(4));
+                    } else {
+                        System.out.println("I don't understand \"" + command + "\".");
+                    }
+
+                    if (player.getRoom().getName().equals(goalRoom) && player.has(goalItem)) {
+                        System.out.println(goalText);
+                        System.out.println("You won in " + player.getMoves() + " moves.");
+                        break;
+                    }
+                }
+            }
+
+            public static Room findRoom(ArrayList<Room> rooms, String name) {
+                for (Room room : rooms) {
+                    if (room.getName().equals(name)) {
+                        return room;
+                    }
+                }
+                // Every room name in world.txt belongs to a room line, so this isn't reached.
+                return rooms.get(0);
+            }
+
+            public static void move(Player player, ArrayList<Room> rooms, String direction) {
+                String target = player.getRoom().getTarget(direction);
+                if (target.isEmpty()) {
+                    System.out.println("You can't go " + direction + " from here.");
+                } else if (player.getRoom().isLocked(direction)) {
+                    System.out.println("The way " + direction + " is locked.");
+                } else {
+                    player.moveTo(findRoom(rooms, target));
+                    System.out.println(player.getRoom());
+                }
+            }
+
+            public static void take(Player player, String item) {
+                Room room = player.getRoom();
+                if (room.hasItem(item)) {
+                    room.removeItem(item);
+                    player.take(item);
+                    System.out.println("You take the " + item + ".");
+                } else {
+                    System.out.println("There is no " + item + " here.");
+                }
+            }
+
+            public static void drop(Player player, String item) {
+                if (player.has(item)) {
+                    player.drop(item);
+                    player.getRoom().addItem(item);
+                    System.out.println("You drop the " + item + ".");
+                } else {
+                    System.out.println("You aren't carrying the " + item + ".");
+                }
+            }
+
+            public static void use(Player player, String item) {
+                if (!player.has(item)) {
+                    System.out.println("You aren't carrying the " + item + ".");
+                    return;
+                }
+                String direction = player.getRoom().unlock(item);
+                if (direction.isEmpty()) {
+                    System.out.println("Nothing happens.");
+                } else {
+                    System.out.println("You unlock the way " + direction + " with the " + item + ".");
+                }
+            }
+        }
+      Room.java: |
+        import java.util.ArrayList;
+
+        public class Room {
+            private String name;
+            private String description;
+            private ArrayList<Exit> exits;
+            private ArrayList<String> items;
+
+            public Room(String name, String description) {
+                this.name = name;
+                this.description = description;
+                this.exits = new ArrayList<>();
+                this.items = new ArrayList<>();
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public void addExit(Exit exit) {
+                this.exits.add(exit);
+            }
+
+            public String getTarget(String direction) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        return exit.getTarget();
+                    }
+                }
+                return "";
+            }
+
+            public void lock(String direction, String key) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        exit.setKey(key);
+                    }
+                }
+            }
+
+            public boolean isLocked(String direction) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        return exit.isLocked();
+                    }
+                }
+                return false;
+            }
+
+            public String unlock(String item) {
+                for (Exit exit : this.exits) {
+                    if (exit.isLocked() && exit.getKey().equals(item)) {
+                        exit.setKey("");
+                        return exit.getDirection();
+                    }
+                }
+                return "";
+            }
+
+            public void addItem(String item) {
+                this.items.add(item);
+            }
+
+            public boolean hasItem(String item) {
+                return this.items.contains(item);
+            }
+
+            public void removeItem(String item) {
+                this.items.remove(item);
+            }
+
+            public String toString() {
+                String text = "[" + this.name + "]\n" + this.description;
+                if (!this.exits.isEmpty()) {
+                    text += "\nExits: ";
+                    for (int i = 0; i < this.exits.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.exits.get(i).getDirection();
+                    }
+                }
+                if (!this.items.isEmpty()) {
+                    text += "\nYou see: ";
+                    for (int i = 0; i < this.items.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.items.get(i);
+                    }
+                }
+                return text;
+            }
+        }
+      Player.java: |
+        import java.util.ArrayList;
+
+        public class Player {
+            private Room room;
+            private ArrayList<String> items;
+            private int moves;
+
+            public Player(Room room) {
+                this.room = room;
+                this.items = new ArrayList<>();
+                this.moves = 0;
+            }
+
+            public Room getRoom() {
+                return this.room;
+            }
+
+            public void moveTo(Room room) {
+                this.room = room;
+                this.moves++;
+            }
+
+            public int getMoves() {
+                return this.moves;
+            }
+
+            public void take(String item) {
+                this.items.add(item);
+            }
+
+            public boolean has(String item) {
+                return this.items.contains(item);
+            }
+
+            public void drop(String item) {
+                this.items.remove(item);
+            }
+
+            public String inventory() {
+                if (this.items.isEmpty()) {
+                    return "You carry nothing.";
+                }
+                String text = "You carry: ";
+                for (int i = 0; i < this.items.size(); i++) {
+                    if (i > 0) {
+                        text += ", ";
+                    }
+                    text += this.items.get(i);
+                }
+                return text;
+            }
+        }
+      Exit.java: |
+        public class Exit {
+            private String direction;
+            private String target;
+            private String key;
+
+            public Exit(String direction, String target) {
+                this.direction = direction;
+                this.target = target;
+                this.key = "";
+            }
+
+            public String getDirection() {
+                return this.direction;
+            }
+
+            public String getTarget() {
+                return this.target;
+            }
+
+            public String getKey() {
+                return this.key;
+            }
+
+            public void setKey(String key) {
+                this.key = key;
+            }
+
+            public boolean isLocked() {
+                return !this.key.isEmpty();
+            }
+        }
+  - id: save-and-load
+    title: Saving and loading
+    task: |
+      Last, the player can stop and come back later. `save` writes the state of the game to a file, `save.txt`, and `load` reads it back. The file uses the same style of lines as `world.txt`:
+
+      ```text
+      at;Boathouse
+      moves;3
+      carry;oil
+      carry;key
+      lock;Cottage;east;key
+      ```
+
+      - `at;Boathouse`: the room the player is in. Always the first line.
+      - `moves;3`: the player's count of moves. Always the second line.
+      - `carry;oil`: one line for each item the player carries, in their order.
+      - Then, for each room in the order of the world file: an `item;...` line for each item in it, as in `world.txt` (`item;rope;Shore`), and a `lock;...` line for each exit of it that is still locked (as above).
+
+      ### Writing a file
+
+      Module 43 covers writing files in depth; here's the part you need. The class `PrintWriter` (`import java.io.PrintWriter;`) writes text into a file, with the same `println` you know from `System.out`. Open it in a `try (...)` as you open a Scanner for a file: the `try` also closes it at the end of the block, and only then is all the text in the file. Creating it makes the file, or empties it when it's already there.
+
+      ```java fragment
+      try (PrintWriter writer = new PrintWriter("save.txt")) {
+          writer.println("at;" + player.getRoom().getName());
+      } catch (Exception e) {
+          System.out.println("Error: " + e.getMessage());
+      }
+      ```
+
+      ### What to do
+
+      1. Give `Player` the methods `getItems()` (returns the list), `clearItems()` and `setMoves(int moves)`. Give `Room` the methods `getItems()`, `getExits()`, `clearItems()` and `openAll()` (every exit's key becomes `""`).
+      2. The command `save` writes `save.txt` as described above and prints `Game saved.`
+      3. The command `load` reads `save.txt`. It first empties the player's and every room's items and opens every exit, then goes through the lines: `at` moves the player there, `moves` sets the count with `setMoves` (the file's `at` line comes first, and moving the player there with `moveTo` adds 1, which this line then overwrites), `carry` gives the player the item, and `item` and `lock` lines work as in `world.txt`. Then it prints `Game loaded.` and the room the player is in. When there's no `save.txt`, it prints `There is no saved game.` and the game goes on as it was.
+
+      With the whole lighthouse world and the commands `go north`, `take oil`, `go south`, `go east`, `take key`, `save` and `quit`, the program writes the file above and prints:
+
+      ```
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Cottage]
+      A keeper's cottage. The stove is cold.
+      Exits: south, east
+      You see: oil
+      You take the oil.
+      [Shore]
+      Cold waves break on gray pebbles.
+      Exits: north, east
+      [Boathouse]
+      An old rowboat lies upside down. It smells of tar.
+      Exits: west
+      You see: key
+      You take the key.
+      Game saved.
+      Goodbye.
+      ```
+    hints:
+      - "Write `save(Player player, ArrayList<Room> rooms)` and `load(Player player, ArrayList<Room> rooms)` in `Main`. Saving is three loops inside the `try`: the player's items, then the rooms, and inside each room its items and its exits (`if (exit.isLocked())`)."
+      - "Loading reads `save.txt` the way `main` reads `world.txt`: split each line at `;` and look at `parts[0]`. Empty the items and open the exits right after the file is opened, inside the `try`, so nothing changes when there's no file."
+      - "`Integer.valueOf(parts[1])` turns the moves into a number. Print `There is no saved game.` in the `catch` block."
+    tests:
+      - name: Save the game
+        files:
+          world.txt: |
+            room;Shore;Cold waves break on gray pebbles.
+            room;Cottage;A keeper's cottage. The stove is cold.
+            room;Boathouse;An old rowboat lies upside down. It smells of tar.
+            room;Tower;Stone stairs climb into the dark.
+            room;Lamp Room;A great glass lens waits for a flame.
+            exit;Shore;north;Cottage
+            exit;Shore;east;Boathouse
+            exit;Cottage;south;Shore
+            exit;Cottage;east;Tower
+            exit;Boathouse;west;Shore
+            exit;Tower;west;Cottage
+            exit;Tower;up;Lamp Room
+            exit;Lamp Room;down;Tower
+            item;oil;Cottage
+            item;key;Boathouse
+            lock;Cottage;east;key
+            goal;Lamp Room;oil;You fill the lamp with oil and light it. Its beam sweeps across the sea.
+        stdin: |
+          go north
+          take oil
+          go south
+          go east
+          take key
+          save
+          quit
+        writes:
+          save.txt: |
+            at;Boathouse
+            moves;3
+            carry;oil
+            carry;key
+            lock;Cottage;east;key
+      - name: Load a saved game
+        files:
+          world.txt: |
+            room;Shore;Cold waves break on gray pebbles.
+            room;Cottage;A keeper's cottage. The stove is cold.
+            room;Boathouse;An old rowboat lies upside down. It smells of tar.
+            room;Tower;Stone stairs climb into the dark.
+            room;Lamp Room;A great glass lens waits for a flame.
+            exit;Shore;north;Cottage
+            exit;Shore;east;Boathouse
+            exit;Cottage;south;Shore
+            exit;Cottage;east;Tower
+            exit;Boathouse;west;Shore
+            exit;Tower;west;Cottage
+            exit;Tower;up;Lamp Room
+            exit;Lamp Room;down;Tower
+            item;oil;Cottage
+            item;key;Boathouse
+            lock;Cottage;east;key
+            goal;Lamp Room;oil;You fill the lamp with oil and light it. Its beam sweeps across the sea.
+          save.txt: |
+            at;Tower
+            moves;4
+            carry;key
+            item;oil;Shore
+        stdin: |
+          load
+          inventory
+          go west
+          go south
+          take oil
+          go north
+          go east
+          go up
+          quit
+      - name: No saved game
+        hidden: true
+        files:
+          world.txt: |
+            room;Shore;Cold waves break on gray pebbles.
+            room;Cottage;A keeper's cottage. The stove is cold.
+            exit;Shore;north;Cottage
+            exit;Cottage;south;Shore
+            item;shell;Shore
+        stdin: |
+          take shell
+          load
+          inventory
+          go north
+          quit
+      - name: Save, change and load again
+        hidden: true
+        files:
+          world.txt: |
+            room;Yard;Chickens peck at the ground.
+            room;Barn;Hay is piled up to the roof.
+            room;Loft;A small window looks over the fields.
+            exit;Yard;north;Barn
+            exit;Barn;south;Yard
+            exit;Barn;up;Loft
+            exit;Loft;down;Barn
+            item;ladder;Yard
+            item;egg;Yard
+            item;hat;Barn
+            lock;Barn;up;ladder
+        stdin: |
+          take ladder
+          go north
+          save
+          use ladder
+          drop ladder
+          take hat
+          go up
+          load
+          go up
+          inventory
+          go south
+          look
+          quit
+        writes:
+          save.txt: |
+            at;Barn
+            moves;1
+            carry;ladder
+            item;egg;Yard
+            item;hat;Barn
+            lock;Barn;up;ladder
+    require:
+      - pattern: new\s+PrintWriter\s*\(
+        message: "Write `save.txt` with a `PrintWriter`."
+    solution:
+      Main.java: |
+        import java.io.PrintWriter;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Room> rooms = new ArrayList<>();
+                String goalRoom = "";
+                String goalItem = "";
+                String goalText = "";
+                try (Scanner file = new Scanner(Paths.get("world.txt"))) {
+                    while (file.hasNextLine()) {
+                        String[] parts = file.nextLine().split(";");
+                        if (parts[0].equals("room")) {
+                            rooms.add(new Room(parts[1], parts[2]));
+                        } else if (parts[0].equals("exit")) {
+                            findRoom(rooms, parts[1]).addExit(new Exit(parts[2], parts[3]));
+                        } else if (parts[0].equals("item")) {
+                            findRoom(rooms, parts[2]).addItem(parts[1]);
+                        } else if (parts[0].equals("lock")) {
+                            findRoom(rooms, parts[1]).lock(parts[2], parts[3]);
+                        } else if (parts[0].equals("goal")) {
+                            goalRoom = parts[1];
+                            goalItem = parts[2];
+                            goalText = parts[3];
+                        }
+                    }
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage());
+                }
+
+                Player player = new Player(rooms.get(0));
+                System.out.println(player.getRoom());
+                Scanner scanner = new Scanner(System.in);
+                while (scanner.hasNextLine()) {
+                    String command = scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Goodbye.");
+                        break;
+                    } else if (command.equals("look")) {
+                        System.out.println(player.getRoom());
+                    } else if (command.startsWith("go ")) {
+                        move(player, rooms, command.substring(3));
+                    } else if (command.startsWith("take ")) {
+                        take(player, command.substring(5));
+                    } else if (command.startsWith("drop ")) {
+                        drop(player, command.substring(5));
+                    } else if (command.equals("inventory")) {
+                        System.out.println(player.inventory());
+                    } else if (command.startsWith("use ")) {
+                        use(player, command.substring(4));
+                    } else if (command.equals("save")) {
+                        save(player, rooms);
+                    } else if (command.equals("load")) {
+                        load(player, rooms);
+                    } else {
+                        System.out.println("I don't understand \"" + command + "\".");
+                    }
+
+                    if (player.getRoom().getName().equals(goalRoom) && player.has(goalItem)) {
+                        System.out.println(goalText);
+                        System.out.println("You won in " + player.getMoves() + " moves.");
+                        break;
+                    }
+                }
+            }
+
+            public static Room findRoom(ArrayList<Room> rooms, String name) {
+                for (Room room : rooms) {
+                    if (room.getName().equals(name)) {
+                        return room;
+                    }
+                }
+                // Every room name in world.txt belongs to a room line, so this isn't reached.
+                return rooms.get(0);
+            }
+
+            public static void move(Player player, ArrayList<Room> rooms, String direction) {
+                String target = player.getRoom().getTarget(direction);
+                if (target.isEmpty()) {
+                    System.out.println("You can't go " + direction + " from here.");
+                } else if (player.getRoom().isLocked(direction)) {
+                    System.out.println("The way " + direction + " is locked.");
+                } else {
+                    player.moveTo(findRoom(rooms, target));
+                    System.out.println(player.getRoom());
+                }
+            }
+
+            public static void take(Player player, String item) {
+                Room room = player.getRoom();
+                if (room.hasItem(item)) {
+                    room.removeItem(item);
+                    player.take(item);
+                    System.out.println("You take the " + item + ".");
+                } else {
+                    System.out.println("There is no " + item + " here.");
+                }
+            }
+
+            public static void drop(Player player, String item) {
+                if (player.has(item)) {
+                    player.drop(item);
+                    player.getRoom().addItem(item);
+                    System.out.println("You drop the " + item + ".");
+                } else {
+                    System.out.println("You aren't carrying the " + item + ".");
+                }
+            }
+
+            public static void use(Player player, String item) {
+                if (!player.has(item)) {
+                    System.out.println("You aren't carrying the " + item + ".");
+                    return;
+                }
+                String direction = player.getRoom().unlock(item);
+                if (direction.isEmpty()) {
+                    System.out.println("Nothing happens.");
+                } else {
+                    System.out.println("You unlock the way " + direction + " with the " + item + ".");
+                }
+            }
+
+            public static void save(Player player, ArrayList<Room> rooms) {
+                try (PrintWriter writer = new PrintWriter("save.txt")) {
+                    writer.println("at;" + player.getRoom().getName());
+                    writer.println("moves;" + player.getMoves());
+                    for (String item : player.getItems()) {
+                        writer.println("carry;" + item);
+                    }
+                    for (Room room : rooms) {
+                        for (String item : room.getItems()) {
+                            writer.println("item;" + item + ";" + room.getName());
+                        }
+                        for (Exit exit : room.getExits()) {
+                            if (exit.isLocked()) {
+                                writer.println("lock;" + room.getName() + ";" + exit.getDirection() + ";" + exit.getKey());
+                            }
+                        }
+                    }
+                    System.out.println("Game saved.");
+                } catch (Exception e) {
+                    System.out.println("Error: " + e.getMessage());
+                }
+            }
+
+            public static void load(Player player, ArrayList<Room> rooms) {
+                try (Scanner file = new Scanner(Paths.get("save.txt"))) {
+                    player.clearItems();
+                    for (Room room : rooms) {
+                        room.clearItems();
+                        room.openAll();
+                    }
+                    while (file.hasNextLine()) {
+                        String[] parts = file.nextLine().split(";");
+                        if (parts[0].equals("at")) {
+                            player.moveTo(findRoom(rooms, parts[1]));
+                        } else if (parts[0].equals("moves")) {
+                            player.setMoves(Integer.valueOf(parts[1]));
+                        } else if (parts[0].equals("carry")) {
+                            player.take(parts[1]);
+                        } else if (parts[0].equals("item")) {
+                            findRoom(rooms, parts[2]).addItem(parts[1]);
+                        } else if (parts[0].equals("lock")) {
+                            findRoom(rooms, parts[1]).lock(parts[2], parts[3]);
+                        }
+                    }
+                    System.out.println("Game loaded.");
+                    System.out.println(player.getRoom());
+                } catch (Exception e) {
+                    System.out.println("There is no saved game.");
+                }
+            }
+        }
+      Room.java: |
+        import java.util.ArrayList;
+
+        public class Room {
+            private String name;
+            private String description;
+            private ArrayList<Exit> exits;
+            private ArrayList<String> items;
+
+            public Room(String name, String description) {
+                this.name = name;
+                this.description = description;
+                this.exits = new ArrayList<>();
+                this.items = new ArrayList<>();
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            public void addExit(Exit exit) {
+                this.exits.add(exit);
+            }
+
+            public ArrayList<Exit> getExits() {
+                return this.exits;
+            }
+
+            public String getTarget(String direction) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        return exit.getTarget();
+                    }
+                }
+                return "";
+            }
+
+            public void lock(String direction, String key) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        exit.setKey(key);
+                    }
+                }
+            }
+
+            public boolean isLocked(String direction) {
+                for (Exit exit : this.exits) {
+                    if (exit.getDirection().equals(direction)) {
+                        return exit.isLocked();
+                    }
+                }
+                return false;
+            }
+
+            public String unlock(String item) {
+                for (Exit exit : this.exits) {
+                    if (exit.isLocked() && exit.getKey().equals(item)) {
+                        exit.setKey("");
+                        return exit.getDirection();
+                    }
+                }
+                return "";
+            }
+
+            public void openAll() {
+                for (Exit exit : this.exits) {
+                    exit.setKey("");
+                }
+            }
+
+            public void addItem(String item) {
+                this.items.add(item);
+            }
+
+            public boolean hasItem(String item) {
+                return this.items.contains(item);
+            }
+
+            public void removeItem(String item) {
+                this.items.remove(item);
+            }
+
+            public ArrayList<String> getItems() {
+                return this.items;
+            }
+
+            public void clearItems() {
+                this.items.clear();
+            }
+
+            public String toString() {
+                String text = "[" + this.name + "]\n" + this.description;
+                if (!this.exits.isEmpty()) {
+                    text += "\nExits: ";
+                    for (int i = 0; i < this.exits.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.exits.get(i).getDirection();
+                    }
+                }
+                if (!this.items.isEmpty()) {
+                    text += "\nYou see: ";
+                    for (int i = 0; i < this.items.size(); i++) {
+                        if (i > 0) {
+                            text += ", ";
+                        }
+                        text += this.items.get(i);
+                    }
+                }
+                return text;
+            }
+        }
+      Player.java: |
+        import java.util.ArrayList;
+
+        public class Player {
+            private Room room;
+            private ArrayList<String> items;
+            private int moves;
+
+            public Player(Room room) {
+                this.room = room;
+                this.items = new ArrayList<>();
+                this.moves = 0;
+            }
+
+            public Room getRoom() {
+                return this.room;
+            }
+
+            public void moveTo(Room room) {
+                this.room = room;
+                this.moves++;
+            }
+
+            public int getMoves() {
+                return this.moves;
+            }
+
+            public void setMoves(int moves) {
+                this.moves = moves;
+            }
+
+            public void take(String item) {
+                this.items.add(item);
+            }
+
+            public boolean has(String item) {
+                return this.items.contains(item);
+            }
+
+            public void drop(String item) {
+                this.items.remove(item);
+            }
+
+            public ArrayList<String> getItems() {
+                return this.items;
+            }
+
+            public void clearItems() {
+                this.items.clear();
+            }
+
+            public String inventory() {
+                if (this.items.isEmpty()) {
+                    return "You carry nothing.";
+                }
+                String text = "You carry: ";
+                for (int i = 0; i < this.items.size(); i++) {
+                    if (i > 0) {
+                        text += ", ";
+                    }
+                    text += this.items.get(i);
+                }
+                return text;
+            }
+        }
+      Exit.java: |
+        public class Exit {
+            private String direction;
+            private String target;
+            private String key;
+
+            public Exit(String direction, String target) {
+                this.direction = direction;
+                this.target = target;
+                this.key = "";
+            }
+
+            public String getDirection() {
+                return this.direction;
+            }
+
+            public String getTarget() {
+                return this.target;
+            }
+
+            public String getKey() {
+                return this.key;
+            }
+
+            public void setKey(String key) {
+                this.key = key;
+            }
+
+            public boolean isLocked() {
+                return !this.key.isEmpty();
+            }
+        }

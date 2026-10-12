@@ -1,0 +1,1442 @@
+id: game-of-life
+title: The Game of Life
+after: multidimensional-arrays
+summary: A grid of cells that live and die by four simple rules. Count each cell's neighbors, work out the next generation, let the board wrap around at its edges, read patterns from a file, and watch a glider travel, one printed generation after another.
+intro: |
+  The **Game of Life** was invented by the mathematician John Horton Conway around 1970. It isn't a game you play: you set up a pattern and watch what happens. The board is a grid of **cells**, and each cell is either alive or dead. Every cell has eight **neighbors**: the cells above, below, to the left, to the right and on the four diagonals. From one **generation** to the next, every cell follows the same rules at the same time:
+
+  - A live cell with 2 or 3 live neighbors stays alive.
+  - A live cell with fewer than 2 live neighbors dies, as if lonely, and one with more than 3 dies, as if overcrowded.
+  - A dead cell with exactly 3 live neighbors comes alive.
+  - Any other dead cell stays dead.
+
+  That's all, and yet some patterns blink, some stay still, some die out, and some travel across the board. In this project you write a program that reads a pattern from a file and prints a few generations of it as text, with `O` for a live cell and `.` for a dead one.
+
+  When it's finished, the program reads three lines: the name of a pattern file, how many generations to show, and `wrap` or `edges` (whether the board wraps around at its edges). With this `glider.txt`, where the lines that start with `!` are comments,
+
+  ```text
+  !Name: Glider
+  !It moves one cell down and one to the right every four generations.
+  .O....
+  ..O...
+  OOO...
+  ......
+  ......
+  ```
+
+  and the input `glider.txt`, `4` and `wrap`, it prints:
+
+  ```text
+  Generation 0: 5 alive
+  .O....
+  ..O...
+  OOO...
+  ......
+  ......
+
+  Generation 1: 5 alive
+  ......
+  O.O...
+  .OO...
+  .O....
+  ......
+
+  Generation 2: 5 alive
+  ......
+  ..O...
+  O.O...
+  .OO...
+  ......
+
+  Generation 3: 5 alive
+  ......
+  .O....
+  ..OO..
+  .OO...
+  ......
+
+  Generation 4: 5 alive
+  ......
+  ..O...
+  ...O..
+  .OOO..
+  ......
+  ```
+
+  After four generations the glider has its first shape again, one row lower and one column further right.
+
+  ### What you need
+
+  Everything up to the end of part 12. Above all two-dimensional arrays, nested loops and the cells around a cell (module 47), and also classes with a constructor and `toString` (modules 17 and 18), StringBuilder (module 39), and reading a file with `Files.readAllLines` and `throws IOException` (module 42).
+
+  ### How you build it
+
+  The program has two classes: `Board`, which keeps the cells in a `boolean[][]` and knows the rules, and `Main`, which reads the pattern and prints the generations. Most of the work is in `Board`, and the checks of the first milestones call its methods directly.
+
+  1. **A grid of cells:** create the board, bring cells to life, and show it as text.
+  2. **Counting neighbors:** how many live cells are around a cell, and whether it lives on.
+  3. **One generation:** the whole board takes one step, every cell at the same time.
+  4. **Wrapping around:** the edges of the board meet, so a glider leaves on one side and comes back on the other.
+  5. **Patterns from a file:** read a board from a text file of `O` and `.`.
+  6. **Generations as text:** `main` puts it all together, and stops early when nothing changes.
+seed:
+  Main.java: |
+    public class Main {
+        public static void main(String[] args) {
+            Board board = new Board(4, 6);
+            board.setAlive(0, 1);
+            board.setAlive(1, 2);
+            board.setAlive(2, 0);
+            board.setAlive(2, 1);
+            board.setAlive(2, 2);
+            System.out.println(board);
+            System.out.println(board.countAlive() + " cells are alive.");
+        }
+    }
+  Board.java: |
+    public class Board {
+        private boolean[][] cells;
+
+    }
+milestones:
+  - id: grid
+    title: A grid of cells
+    task: |
+      `Board.java` has the field for the cells: `cells` is a `boolean[][]`, where `true` means the cell is alive. `Main` already uses some of these methods, so the program compiles once you've written them all. Write in `Board`:
+
+      1. A constructor `Board(int rows, int columns)` that creates a grid of that many rows and columns, with every cell dead.
+      2. `getRows()` and `getColumns()`, which return the number of rows and of columns. The boards always have at least one row and one column.
+      3. `setAlive(int row, int column)`, which makes that cell alive, and `isAlive(int row, int column)`, which returns whether it's alive. Rows and columns are counted from 0, as array indexes are.
+      4. `countAlive()`, which returns how many cells of the board are alive.
+      5. `toString()`, which returns the board one row per line: `O` (the capital letter) for a live cell and `.` for a dead one. Put a line break (`\n`) between the rows, but not after the last one, so `System.out.println(board)` prints no empty line at the end.
+
+      The check runs:
+
+      ```java fragment
+      Board board = new Board(3, 5);
+      board.setAlive(0, 1);
+      board.setAlive(1, 2);
+      board.setAlive(2, 4);
+      System.out.println(board.getRows() + " by " + board.getColumns());
+      System.out.println(board);
+      System.out.println(board.countAlive());
+      System.out.println(board.isAlive(1, 2));
+      System.out.println(board.isAlive(2, 3));
+      ```
+
+      and expects:
+
+      ```
+      3 by 5
+      .O...
+      ..O..
+      ....O
+      3
+      true
+      false
+      ```
+    hints:
+      - "The constructor only has to create the array: a new `boolean` array starts all `false`, so every cell is dead. The getters need no fields of their own: the number of rows is the array's length, and the number of columns is the length of one row. `countAlive` and `toString` both go through every cell with two loops, rows outside and columns inside."
+      - "In code: `this.cells = new boolean[rows][columns];`, then `this.cells.length` and `this.cells[0].length`. In `toString`, append `\"\\n\"` to a StringBuilder before every row except the first one (`if (row > 0)`)."
+    tests:
+      - name: A small board
+        call: |
+          Board board = new Board(3, 5);
+          board.setAlive(0, 1);
+          board.setAlive(1, 2);
+          board.setAlive(2, 4);
+          System.out.println(board.getRows() + " by " + board.getColumns());
+          System.out.println(board);
+          System.out.println(board.countAlive());
+          System.out.println(board.isAlive(1, 2));
+          System.out.println(board.isAlive(2, 3));
+      - name: An empty board
+        hidden: true
+        call: |
+          Board board = new Board(2, 7);
+          System.out.println(board.getRows() + " by " + board.getColumns());
+          System.out.println(board);
+          System.out.println(board.countAlive());
+          System.out.println(board.isAlive(1, 6));
+      - name: The same cell twice, and the corners
+        hidden: true
+        call: |
+          Board board = new Board(4, 4);
+          board.setAlive(3, 3);
+          board.setAlive(3, 3);
+          board.setAlive(0, 0);
+          board.setAlive(0, 3);
+          System.out.println(board);
+          System.out.println(board.countAlive());
+          System.out.println(board.isAlive(0, 3));
+          System.out.println(board.isAlive(3, 0));
+      - name: One column
+        hidden: true
+        call: |
+          Board board = new Board(5, 1);
+          board.setAlive(1, 0);
+          board.setAlive(4, 0);
+          System.out.println(board.getRows() + " by " + board.getColumns());
+          System.out.println(board);
+          System.out.println(board.countAlive());
+    require:
+      - pattern: new\s+boolean\s*\[
+        message: "Create the grid in the constructor with `new boolean[rows][columns]`."
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Board board = new Board(4, 6);
+                board.setAlive(0, 1);
+                board.setAlive(1, 2);
+                board.setAlive(2, 0);
+                board.setAlive(2, 1);
+                board.setAlive(2, 2);
+                System.out.println(board);
+                System.out.println(board.countAlive() + " cells are alive.");
+            }
+        }
+      Board.java: |
+        public class Board {
+            private boolean[][] cells;
+
+            public Board(int rows, int columns) {
+                this.cells = new boolean[rows][columns];
+            }
+
+            public int getRows() {
+                return this.cells.length;
+            }
+
+            public int getColumns() {
+                return this.cells[0].length;
+            }
+
+            public void setAlive(int row, int column) {
+                this.cells[row][column] = true;
+            }
+
+            public boolean isAlive(int row, int column) {
+                return this.cells[row][column];
+            }
+
+            public int countAlive() {
+                int count = 0;
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public String toString() {
+                StringBuilder text = new StringBuilder();
+                for (int row = 0; row < getRows(); row++) {
+                    if (row > 0) {
+                        text.append("\n");
+                    }
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            text.append("O");
+                        } else {
+                            text.append(".");
+                        }
+                    }
+                }
+                return text.toString();
+            }
+        }
+  - id: neighbors
+    title: Counting neighbors
+    task: |
+      Whether a cell lives on depends on its eight neighbors. Add two methods to `Board`:
+
+      1. `countNeighbors(int row, int column)` returns how many of the eight cells around that cell are alive. The cell itself doesn't count. A cell on the edge of the board has fewer neighbors: a place outside the board counts as a dead cell.
+      2. `willLive(int row, int column)` returns whether the cell is alive in the next generation, by the rules of the game:
+         - a live cell stays alive with 2 or 3 live neighbors, and dies otherwise;
+         - a dead cell comes alive with exactly 3 live neighbors, and stays dead otherwise.
+
+      The check runs:
+
+      ```java fragment
+      Board board = new Board(4, 5);
+      board.setAlive(1, 1);
+      board.setAlive(1, 2);
+      board.setAlive(1, 3);
+      board.setAlive(0, 4);
+      System.out.println(board);
+      System.out.println(board.countNeighbors(1, 2));
+      System.out.println(board.countNeighbors(0, 2));
+      System.out.println(board.countNeighbors(0, 0));
+      System.out.println(board.countNeighbors(3, 4));
+      System.out.println(board.willLive(1, 2));
+      System.out.println(board.willLive(1, 1));
+      System.out.println(board.willLive(0, 2));
+      System.out.println(board.willLive(2, 2));
+      ```
+
+      and expects:
+
+      ```
+      ....O
+      .OOO.
+      .....
+      .....
+      2
+      3
+      1
+      0
+      true
+      false
+      true
+      true
+      ```
+    hints:
+      - "Go through the block of 3 by 3 cells with two loops, from `row - 1` to `row + 1` and from `column - 1` to `column + 1`, and skip the cell in the middle with `continue`, as module 47 did for the mines."
+      - "Read `this.cells[r][c]` only when `r` is from 0 to `getRows() - 1` and `c` from 0 to `getColumns() - 1`. Put those checks first in one condition joined with `&&`, then the cell itself."
+      - "In `willLive`, count the neighbors once and keep the number in a variable. Then return `neighbors == 2 || neighbors == 3` for a live cell, and `neighbors == 3` for a dead one."
+    tests:
+      - name: A row of three
+        call: |
+          Board board = new Board(4, 5);
+          board.setAlive(1, 1);
+          board.setAlive(1, 2);
+          board.setAlive(1, 3);
+          board.setAlive(0, 4);
+          System.out.println(board);
+          System.out.println(board.countNeighbors(1, 2));
+          System.out.println(board.countNeighbors(0, 2));
+          System.out.println(board.countNeighbors(0, 0));
+          System.out.println(board.countNeighbors(3, 4));
+          System.out.println(board.willLive(1, 2));
+          System.out.println(board.willLive(1, 1));
+          System.out.println(board.willLive(0, 2));
+          System.out.println(board.willLive(2, 2));
+      - name: A full board
+        hidden: true
+        call: |
+          Board board = new Board(3, 3);
+          for (int row = 0; row < 3; row++) {
+              for (int column = 0; column < 3; column++) {
+                  board.setAlive(row, column);
+              }
+          }
+          System.out.println(board.countNeighbors(1, 1));
+          System.out.println(board.countNeighbors(0, 0));
+          System.out.println(board.countNeighbors(2, 1));
+          System.out.println(board.countNeighbors(1, 2));
+          System.out.println(board.willLive(1, 1));
+          System.out.println(board.willLive(0, 0));
+          System.out.println(board.willLive(0, 1));
+      - name: Two neighbors are not enough to be born
+        hidden: true
+        call: |
+          Board board = new Board(3, 4);
+          board.setAlive(0, 0);
+          board.setAlive(2, 0);
+          board.setAlive(2, 3);
+          System.out.println(board.countNeighbors(1, 0));
+          System.out.println(board.willLive(1, 0));
+          System.out.println(board.countNeighbors(1, 1));
+          System.out.println(board.willLive(1, 1));
+          System.out.println(board.willLive(2, 3));
+          System.out.println(board.countNeighbors(0, 3));
+      - name: Four neighbors are too many
+        hidden: true
+        call: |
+          Board board = new Board(3, 3);
+          board.setAlive(0, 1);
+          board.setAlive(1, 0);
+          board.setAlive(1, 1);
+          board.setAlive(1, 2);
+          board.setAlive(2, 1);
+          System.out.println(board.countNeighbors(1, 1));
+          System.out.println(board.willLive(1, 1));
+          System.out.println(board.willLive(0, 1));
+          System.out.println(board.willLive(0, 0));
+          System.out.println(board.countNeighbors(2, 2));
+      - name: A single row
+        hidden: true
+        call: |
+          Board board = new Board(1, 4);
+          board.setAlive(0, 0);
+          board.setAlive(0, 1);
+          board.setAlive(0, 3);
+          System.out.println(board.countNeighbors(0, 2));
+          System.out.println(board.countNeighbors(0, 0));
+          System.out.println(board.willLive(0, 2));
+    forbid:
+      - pattern: \bcatch\b
+        message: "Check the indexes before reading a cell, instead of catching the exception."
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Board board = new Board(4, 6);
+                board.setAlive(0, 1);
+                board.setAlive(1, 2);
+                board.setAlive(2, 0);
+                board.setAlive(2, 1);
+                board.setAlive(2, 2);
+                System.out.println(board);
+                System.out.println(board.countAlive() + " cells are alive.");
+            }
+        }
+      Board.java: |
+        public class Board {
+            private boolean[][] cells;
+
+            public Board(int rows, int columns) {
+                this.cells = new boolean[rows][columns];
+            }
+
+            public int getRows() {
+                return this.cells.length;
+            }
+
+            public int getColumns() {
+                return this.cells[0].length;
+            }
+
+            public void setAlive(int row, int column) {
+                this.cells[row][column] = true;
+            }
+
+            public boolean isAlive(int row, int column) {
+                return this.cells[row][column];
+            }
+
+            public int countAlive() {
+                int count = 0;
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public int countNeighbors(int row, int column) {
+                int count = 0;
+                for (int r = row - 1; r <= row + 1; r++) {
+                    for (int c = column - 1; c <= column + 1; c++) {
+                        if (r == row && c == column) {
+                            continue;
+                        }
+                        if (r >= 0 && r < getRows() && c >= 0 && c < getColumns() && this.cells[r][c]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public boolean willLive(int row, int column) {
+                int neighbors = countNeighbors(row, column);
+                if (this.cells[row][column]) {
+                    return neighbors == 2 || neighbors == 3;
+                }
+                return neighbors == 3;
+            }
+
+            public String toString() {
+                StringBuilder text = new StringBuilder();
+                for (int row = 0; row < getRows(); row++) {
+                    if (row > 0) {
+                        text.append("\n");
+                    }
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            text.append("O");
+                        } else {
+                            text.append(".");
+                        }
+                    }
+                }
+                return text.toString();
+            }
+        }
+  - id: generation
+    title: One generation
+    task: |
+      Now the whole board takes a step. Every cell changes **at the same time**: the next generation is worked out from the current one alone. So the program can't change the cells one by one in `cells`, because a cell it has already changed would give its neighbors the wrong count. Build the next generation in a new array instead, and put it in place when it's complete.
+
+      1. Add a field `generation`, an `int` that is 0 for a new board.
+      2. Write `step()`, which creates a new `boolean[][]` of the same size, fills it with `willLive` for every cell, and then makes it the board's `cells`. It also adds one to `generation`.
+      3. Write `getGeneration()`, which returns how many steps the board has taken.
+
+      To watch it in your own program, add `board.step();` and another `System.out.println(board);` at the end of `main`. The check runs:
+
+      ```java fragment
+      Board board = new Board(5, 5);
+      board.setAlive(2, 1);
+      board.setAlive(2, 2);
+      board.setAlive(2, 3);
+      board.step();
+      System.out.println(board);
+      System.out.println(board.getGeneration());
+      board.step();
+      System.out.println(board);
+      System.out.println(board.getGeneration());
+      ```
+
+      and expects a **blinker**, a row of three that turns into a column and back:
+
+      ```
+      .....
+      ..O..
+      ..O..
+      ..O..
+      .....
+      1
+      .....
+      .....
+      .OOO.
+      .....
+      .....
+      2
+      ```
+    hints:
+      - "The new array has the same size as the board, `getRows()` by `getColumns()`, and `willLive` already does all the work for each cell. It reads only `cells`, which doesn't change until the loops are done."
+      - "`boolean[][] next = new boolean[getRows()][getColumns()];`, then two loops with `next[row][column] = willLive(row, column);`. After the loops, `this.cells = next;` puts the new generation in place, and `this.generation++;` counts the step."
+    tests:
+      - name: A blinker
+        call: |
+          Board board = new Board(5, 5);
+          board.setAlive(2, 1);
+          board.setAlive(2, 2);
+          board.setAlive(2, 3);
+          board.step();
+          System.out.println(board);
+          System.out.println(board.getGeneration());
+          board.step();
+          System.out.println(board);
+          System.out.println(board.getGeneration());
+      - name: A glider moves
+        hidden: true
+        call: |
+          Board board = new Board(6, 6);
+          board.setAlive(0, 1);
+          board.setAlive(1, 2);
+          board.setAlive(2, 0);
+          board.setAlive(2, 1);
+          board.setAlive(2, 2);
+          for (int i = 0; i < 4; i++) {
+              board.step();
+          }
+          System.out.println(board);
+          System.out.println(board.getGeneration() + " " + board.countAlive());
+      - name: A block stays
+        hidden: true
+        call: |
+          Board board = new Board(4, 5);
+          board.setAlive(1, 1);
+          board.setAlive(1, 2);
+          board.setAlive(2, 1);
+          board.setAlive(2, 2);
+          board.step();
+          board.step();
+          board.step();
+          System.out.println(board);
+          System.out.println(board.getGeneration());
+      - name: A lonely cell dies
+        hidden: true
+        call: |
+          Board board = new Board(3, 3);
+          board.setAlive(1, 1);
+          System.out.println(board.getGeneration());
+          board.step();
+          System.out.println(board);
+          System.out.println(board.getGeneration() + " " + board.countAlive());
+    require:
+      - pattern: new\s+boolean\s*\[
+        min: 2
+        message: "Build the next generation in a new array, `new boolean[getRows()][getColumns()]`, in `step()`."
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Board board = new Board(4, 6);
+                board.setAlive(0, 1);
+                board.setAlive(1, 2);
+                board.setAlive(2, 0);
+                board.setAlive(2, 1);
+                board.setAlive(2, 2);
+                System.out.println(board);
+                System.out.println(board.countAlive() + " cells are alive.");
+            }
+        }
+      Board.java: |
+        public class Board {
+            private boolean[][] cells;
+            private int generation;
+
+            public Board(int rows, int columns) {
+                this.cells = new boolean[rows][columns];
+                this.generation = 0;
+            }
+
+            public int getRows() {
+                return this.cells.length;
+            }
+
+            public int getColumns() {
+                return this.cells[0].length;
+            }
+
+            public void setAlive(int row, int column) {
+                this.cells[row][column] = true;
+            }
+
+            public boolean isAlive(int row, int column) {
+                return this.cells[row][column];
+            }
+
+            public int countAlive() {
+                int count = 0;
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public int countNeighbors(int row, int column) {
+                int count = 0;
+                for (int r = row - 1; r <= row + 1; r++) {
+                    for (int c = column - 1; c <= column + 1; c++) {
+                        if (r == row && c == column) {
+                            continue;
+                        }
+                        if (r >= 0 && r < getRows() && c >= 0 && c < getColumns() && this.cells[r][c]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public boolean willLive(int row, int column) {
+                int neighbors = countNeighbors(row, column);
+                if (this.cells[row][column]) {
+                    return neighbors == 2 || neighbors == 3;
+                }
+                return neighbors == 3;
+            }
+
+            public void step() {
+                boolean[][] next = new boolean[getRows()][getColumns()];
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        next[row][column] = willLive(row, column);
+                    }
+                }
+                this.cells = next;
+                this.generation++;
+            }
+
+            public int getGeneration() {
+                return this.generation;
+            }
+
+            public String toString() {
+                StringBuilder text = new StringBuilder();
+                for (int row = 0; row < getRows(); row++) {
+                    if (row > 0) {
+                        text.append("\n");
+                    }
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            text.append("O");
+                        } else {
+                            text.append(".");
+                        }
+                    }
+                }
+                return text.toString();
+            }
+        }
+  - id: wrapping
+    title: Wrapping around
+    task: |
+      A glider on the board you have now soon reaches an edge, turns into a block and stops. Many Life programs let the edges **wrap around** instead: the row above the top row is the bottom row, and the column to the left of the first column is the last column. The board becomes like the surface of a doughnut, with no edges at all, and a glider that leaves on one side comes back on the other.
+
+      1. Add a field `wrapping`, a `boolean` that is `false` for a new board, and a method `setWrapping(boolean wrapping)` that sets it.
+      2. When `wrapping` is `true`, `countNeighbors` wraps around: on a board of 5 rows, row -1 is row 4 and row 5 is row 0, and the same for the columns. When it's `false`, the method counts as before.
+
+      `willLive` and `step` use `countNeighbors`, so they wrap too, with no change. The check runs:
+
+      ```java fragment
+      Board board = new Board(5, 5);
+      board.setAlive(1, 0);
+      board.setAlive(2, 0);
+      board.setAlive(3, 0);
+      board.setWrapping(true);
+      System.out.println(board.countNeighbors(2, 4));
+      System.out.println(board.countNeighbors(0, 0));
+      board.step();
+      System.out.println(board);
+      ```
+
+      and expects a blinker on the left edge to turn across it:
+
+      ```
+      3
+      1
+      .....
+      .....
+      OO..O
+      .....
+      .....
+      ```
+    hints:
+      - "The remainder `%` wraps a number around: `(r + getRows()) % getRows()` turns -1 into the last row and `getRows()` into 0, and leaves every row in between as it is. Adding `getRows()` first matters, because in Java `-1 % 5` is -1, not 4."
+      - "Work out the row and column to read before the check: when `wrapping` is on, replace `r` and `c` with their wrapped values. A wrapped index is always inside the board, so the check that keeps out the places outside can stay as it is."
+    tests:
+      - name: A blinker on the edge
+        call: |
+          Board board = new Board(5, 5);
+          board.setAlive(1, 0);
+          board.setAlive(2, 0);
+          board.setAlive(3, 0);
+          board.setWrapping(true);
+          System.out.println(board.countNeighbors(2, 4));
+          System.out.println(board.countNeighbors(0, 0));
+          board.step();
+          System.out.println(board);
+      - name: The same blinker without wrapping
+        hidden: true
+        call: |
+          Board board = new Board(5, 5);
+          board.setAlive(1, 0);
+          board.setAlive(2, 0);
+          board.setAlive(3, 0);
+          System.out.println(board.countNeighbors(2, 4));
+          board.step();
+          System.out.println(board);
+      - name: A glider goes all the way around
+        hidden: true
+        call: |
+          Board board = new Board(5, 5);
+          board.setAlive(0, 1);
+          board.setAlive(1, 2);
+          board.setAlive(2, 0);
+          board.setAlive(2, 1);
+          board.setAlive(2, 2);
+          board.setWrapping(true);
+          for (int i = 0; i < 10; i++) {
+              board.step();
+          }
+          System.out.println(board);
+          for (int i = 0; i < 10; i++) {
+              board.step();
+          }
+          System.out.println(board);
+          System.out.println(board.getGeneration() + " " + board.countAlive());
+      - name: Four corners
+        hidden: true
+        call: |
+          Board board = new Board(4, 6);
+          board.setAlive(0, 0);
+          board.setAlive(0, 5);
+          board.setAlive(3, 0);
+          board.setAlive(3, 5);
+          System.out.println(board.countNeighbors(0, 0));
+          board.setWrapping(true);
+          System.out.println(board.countNeighbors(0, 0));
+          System.out.println(board.countNeighbors(3, 5));
+          System.out.println(board.countNeighbors(2, 3));
+          board.setWrapping(false);
+          System.out.println(board.countNeighbors(3, 5));
+    forbid:
+      - pattern: \bcatch\b
+        message: "Work out the wrapped row and column before reading a cell, instead of catching the exception."
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Board board = new Board(4, 6);
+                board.setAlive(0, 1);
+                board.setAlive(1, 2);
+                board.setAlive(2, 0);
+                board.setAlive(2, 1);
+                board.setAlive(2, 2);
+                System.out.println(board);
+                System.out.println(board.countAlive() + " cells are alive.");
+            }
+        }
+      Board.java: |
+        public class Board {
+            private boolean[][] cells;
+            private int generation;
+            private boolean wrapping;
+
+            public Board(int rows, int columns) {
+                this.cells = new boolean[rows][columns];
+                this.generation = 0;
+                this.wrapping = false;
+            }
+
+            public int getRows() {
+                return this.cells.length;
+            }
+
+            public int getColumns() {
+                return this.cells[0].length;
+            }
+
+            public void setAlive(int row, int column) {
+                this.cells[row][column] = true;
+            }
+
+            public boolean isAlive(int row, int column) {
+                return this.cells[row][column];
+            }
+
+            public int countAlive() {
+                int count = 0;
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public int countNeighbors(int row, int column) {
+                int count = 0;
+                for (int r = row - 1; r <= row + 1; r++) {
+                    for (int c = column - 1; c <= column + 1; c++) {
+                        if (r == row && c == column) {
+                            continue;
+                        }
+                        int checkRow = r;
+                        int checkColumn = c;
+                        if (this.wrapping) {
+                            checkRow = (r + getRows()) % getRows();
+                            checkColumn = (c + getColumns()) % getColumns();
+                        }
+                        if (checkRow >= 0 && checkRow < getRows() && checkColumn >= 0 && checkColumn < getColumns() && this.cells[checkRow][checkColumn]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public boolean willLive(int row, int column) {
+                int neighbors = countNeighbors(row, column);
+                if (this.cells[row][column]) {
+                    return neighbors == 2 || neighbors == 3;
+                }
+                return neighbors == 3;
+            }
+
+            public void step() {
+                boolean[][] next = new boolean[getRows()][getColumns()];
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        next[row][column] = willLive(row, column);
+                    }
+                }
+                this.cells = next;
+                this.generation++;
+            }
+
+            public int getGeneration() {
+                return this.generation;
+            }
+
+            public void setWrapping(boolean wrapping) {
+                this.wrapping = wrapping;
+            }
+
+            public String toString() {
+                StringBuilder text = new StringBuilder();
+                for (int row = 0; row < getRows(); row++) {
+                    if (row > 0) {
+                        text.append("\n");
+                    }
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            text.append("O");
+                        } else {
+                            text.append(".");
+                        }
+                    }
+                }
+                return text.toString();
+            }
+        }
+  - id: pattern-file
+    title: Patterns from a file
+    task: |
+      Setting cells one by one is slow. Life patterns are often kept in text files that look like a printed board, and many Life programs read files like this one:
+
+      ```text
+      !Name: Glider
+      !It moves one cell down and one to the right every four generations.
+      .O
+      ..O
+      OOO
+      ......
+      ```
+
+      A line that starts with `!` is a comment. Every other line is a row of the board, from the top: `O` is a live cell, and any other character a dead one. The rows can have different lengths. The board is as wide as the longest row, and a shorter row continues with dead cells. An empty line is a row of dead cells.
+
+      Write a method `public static Board readPattern(String fileName) throws IOException` in `Main` that reads the file and returns its board. The files in the checks have at least one row that isn't empty. When the file can't be read, the method doesn't catch the exception: it leaves it to the caller, which is what `throws IOException` says. The check gives the program the file above as `glider.txt` and runs:
+
+      ```java fragment
+      Board board = readPattern("glider.txt");
+      System.out.println(board.getRows() + " by " + board.getColumns());
+      System.out.println(board);
+      System.out.println(board.countAlive());
+      ```
+
+      and expects:
+
+      ```
+      4 by 6
+      .O....
+      ..O...
+      OOO...
+      ......
+      5
+      ```
+    hints:
+      - "`Files.readAllLines(Paths.get(fileName))` returns the file's lines (module 42). Go through them once to keep the lines that don't start with `!` in an `ArrayList<String>`, and to find the length of the longest one."
+      - "Then create `new Board(rows.size(), longest)`, and for each row go through the characters of its line: `setAlive(row, column)` where `line.charAt(column) == 'O'`. Loop to `line.length()`, not to the width of the board, and a short line leaves the rest of its row dead."
+      - "The method needs `import java.io.IOException;`, `import java.nio.file.Files;` and `import java.nio.file.Paths;` at the top of `Main.java`, and `import java.util.ArrayList;` for the list."
+    tests:
+      - name: A glider from a file
+        files:
+          glider.txt: |
+            !Name: Glider
+            !It moves one cell down and one to the right every four generations.
+            .O
+            ..O
+            OOO
+            ......
+        call: |
+          Board board = readPattern("glider.txt");
+          System.out.println(board.getRows() + " by " + board.getColumns());
+          System.out.println(board);
+          System.out.println(board.countAlive());
+      - name: Two blocks and an empty line
+        hidden: true
+        files:
+          blocks.txt: |
+            !Two blocks
+            OO.
+            OO
+
+            ...OO
+            !They never change.
+            ...OO
+        call: |
+          Board board = readPattern("blocks.txt");
+          System.out.println(board.getRows() + " by " + board.getColumns());
+          System.out.println(board);
+          System.out.println(board.countAlive());
+      - name: Other characters are dead
+        hidden: true
+        files:
+          shapes/beacon.txt: |
+            OO..
+            O-..
+            ..xO
+            ..OO
+        call: |
+          Board board = readPattern("shapes/beacon.txt");
+          System.out.println(board.getRows() + " by " + board.getColumns());
+          System.out.println(board);
+          board.step();
+          System.out.println(board);
+      - name: One live cell
+        hidden: true
+        files:
+          one.txt: |
+            O
+        call: |
+          Board board = readPattern("one.txt");
+          System.out.println(board.getRows() + " by " + board.getColumns());
+          System.out.println(board);
+      - name: A file that isn't there
+        hidden: true
+        call: |
+          try {
+              readPattern("missing.txt");
+              System.out.println("The method returned.");
+          } catch (Exception e) {
+              System.out.println("The method threw an exception.");
+          }
+    forbid:
+      - pattern: \bcatch\b
+        message: "Let `readPattern` throw the IOException (`throws IOException` in its header), instead of catching it."
+    solution:
+      Main.java: |
+        import java.io.IOException;
+        import java.nio.file.Files;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                Board board = new Board(4, 6);
+                board.setAlive(0, 1);
+                board.setAlive(1, 2);
+                board.setAlive(2, 0);
+                board.setAlive(2, 1);
+                board.setAlive(2, 2);
+                System.out.println(board);
+                System.out.println(board.countAlive() + " cells are alive.");
+            }
+
+            public static Board readPattern(String fileName) throws IOException {
+                ArrayList<String> rows = new ArrayList<>();
+                int columns = 0;
+                for (String line : Files.readAllLines(Paths.get(fileName))) {
+                    if (line.startsWith("!")) {
+                        continue;
+                    }
+                    rows.add(line);
+                    if (line.length() > columns) {
+                        columns = line.length();
+                    }
+                }
+
+                Board board = new Board(rows.size(), columns);
+                for (int row = 0; row < rows.size(); row++) {
+                    String line = rows.get(row);
+                    for (int column = 0; column < line.length(); column++) {
+                        if (line.charAt(column) == 'O') {
+                            board.setAlive(row, column);
+                        }
+                    }
+                }
+                return board;
+            }
+        }
+      Board.java: |
+        public class Board {
+            private boolean[][] cells;
+            private int generation;
+            private boolean wrapping;
+
+            public Board(int rows, int columns) {
+                this.cells = new boolean[rows][columns];
+                this.generation = 0;
+                this.wrapping = false;
+            }
+
+            public int getRows() {
+                return this.cells.length;
+            }
+
+            public int getColumns() {
+                return this.cells[0].length;
+            }
+
+            public void setAlive(int row, int column) {
+                this.cells[row][column] = true;
+            }
+
+            public boolean isAlive(int row, int column) {
+                return this.cells[row][column];
+            }
+
+            public int countAlive() {
+                int count = 0;
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public int countNeighbors(int row, int column) {
+                int count = 0;
+                for (int r = row - 1; r <= row + 1; r++) {
+                    for (int c = column - 1; c <= column + 1; c++) {
+                        if (r == row && c == column) {
+                            continue;
+                        }
+                        int checkRow = r;
+                        int checkColumn = c;
+                        if (this.wrapping) {
+                            checkRow = (r + getRows()) % getRows();
+                            checkColumn = (c + getColumns()) % getColumns();
+                        }
+                        if (checkRow >= 0 && checkRow < getRows() && checkColumn >= 0 && checkColumn < getColumns() && this.cells[checkRow][checkColumn]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public boolean willLive(int row, int column) {
+                int neighbors = countNeighbors(row, column);
+                if (this.cells[row][column]) {
+                    return neighbors == 2 || neighbors == 3;
+                }
+                return neighbors == 3;
+            }
+
+            public void step() {
+                boolean[][] next = new boolean[getRows()][getColumns()];
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        next[row][column] = willLive(row, column);
+                    }
+                }
+                this.cells = next;
+                this.generation++;
+            }
+
+            public int getGeneration() {
+                return this.generation;
+            }
+
+            public void setWrapping(boolean wrapping) {
+                this.wrapping = wrapping;
+            }
+
+            public String toString() {
+                StringBuilder text = new StringBuilder();
+                for (int row = 0; row < getRows(); row++) {
+                    if (row > 0) {
+                        text.append("\n");
+                    }
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            text.append("O");
+                        } else {
+                            text.append(".");
+                        }
+                    }
+                }
+                return text.toString();
+            }
+        }
+  - id: generations
+    title: Generations as text
+    task: |
+      Time to put it all together in `main`. Replace the example board in `main` with a program that reads three lines of input:
+
+      1. the name of a pattern file,
+      2. how many generations to show after the first one,
+      3. `wrap` for a board that wraps around at its edges, or `edges` for one that doesn't.
+
+      The program reads the board with `readPattern` and prints generation 0, then takes a step and prints the next generation, until it has shown the number of generations that was asked for. Each generation starts with a line such as `Generation 2: 5 alive` (its number and how many cells are alive), followed by the board. An empty line comes before every generation except the first.
+
+      Two more things:
+
+      - Some patterns stop changing, such as a block, or a board where everything has died. Change `step()` in `Board` to return a `boolean`: `true` when at least one cell changed, and `false` when the new generation is exactly the old one. When a step changes nothing, the program prints the empty line and `Nothing changes after generation 3.` (with the number of the last generation it printed), and stops.
+      - When the file can't be read, the program prints `Could not read nothing.txt.` (with the name that was given) and nothing else.
+
+      With this `blinker.txt`
+
+      ```text
+      !Blinker
+      .....
+      .OOO.
+      .....
+      ```
+
+      and the input `blinker.txt`, `2` and `edges`, the program prints:
+
+      ```
+      Generation 0: 3 alive
+      .....
+      .OOO.
+      .....
+
+      Generation 1: 3 alive
+      ..O..
+      ..O..
+      ..O..
+
+      Generation 2: 3 alive
+      .....
+      .OOO.
+      .....
+      ```
+    hints:
+      - "Read the three lines with `scanner.nextLine()`, and turn the second into a number with `Integer.parseInt`. `board.setWrapping(edges.equals(\"wrap\"))` sets the edges."
+      - "`readPattern` throws an IOException when the file can't be read: call it inside `try`, and in the `catch` print the message and `return` from `main`."
+      - "A loop `while (board.getGeneration() < generations)` takes the steps. In `step()`, compare each new cell with the old one, `next[row][column] != this.cells[row][column]`, and remember in a `boolean` whether any of them differed. After a step that changed nothing, `getGeneration()` is already one more than the generation that was printed last."
+    tests:
+      - name: A blinker for two generations
+        files:
+          blinker.txt: |
+            !Blinker
+            .....
+            .OOO.
+            .....
+        stdin: |
+          blinker.txt
+          2
+          edges
+      - name: A block never changes
+        files:
+          block.txt: |
+            !Block
+            ....
+            .OO.
+            .OO.
+            ....
+        stdin: |
+          block.txt
+          5
+          edges
+      - name: A glider that wraps
+        hidden: true
+        files:
+          glider.txt: |
+            !Name: Glider
+            .O...
+            ..O..
+            OOO..
+            .....
+            .....
+        stdin: |
+          glider.txt
+          6
+          wrap
+      - name: The glider meets the edge
+        hidden: true
+        files:
+          glider.txt: |
+            .O..
+            ..O.
+            OOO.
+            ....
+        stdin: |
+          glider.txt
+          8
+          edges
+      - name: Everything dies
+        hidden: true
+        files:
+          pair.txt: |
+            !Two cells are not enough.
+            ...
+            .OO
+            ...
+        stdin: |
+          pair.txt
+          4
+          wrap
+      - name: Only the first generation
+        hidden: true
+        files:
+          toad.txt: |
+            ......
+            ..OOO.
+            .OOO..
+            ......
+        stdin: |
+          toad.txt
+          0
+          edges
+      - name: A file that can't be read
+        hidden: true
+        stdin: |
+          nothing.txt
+          3
+          wrap
+    require:
+      - pattern: \bboolean\s+step\s*\(
+        message: "Change `step()` to return a `boolean`: `public boolean step()`."
+      - pattern: readPattern\s*\(
+        min: 2
+        message: "Read the board in `main` with your method `readPattern`."
+    solution:
+      Main.java: |
+        import java.io.IOException;
+        import java.nio.file.Files;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                Scanner scanner = new Scanner(System.in);
+                String fileName = scanner.nextLine();
+                int generations = Integer.parseInt(scanner.nextLine());
+                String edges = scanner.nextLine();
+
+                Board board;
+                try {
+                    board = readPattern(fileName);
+                } catch (IOException e) {
+                    System.out.println("Could not read " + fileName + ".");
+                    return;
+                }
+                board.setWrapping(edges.equals("wrap"));
+
+                printGeneration(board);
+                while (board.getGeneration() < generations) {
+                    System.out.println();
+                    if (!board.step()) {
+                        System.out.println("Nothing changes after generation " + (board.getGeneration() - 1) + ".");
+                        return;
+                    }
+                    printGeneration(board);
+                }
+            }
+
+            public static void printGeneration(Board board) {
+                System.out.println("Generation " + board.getGeneration() + ": " + board.countAlive() + " alive");
+                System.out.println(board);
+            }
+
+            public static Board readPattern(String fileName) throws IOException {
+                ArrayList<String> rows = new ArrayList<>();
+                int columns = 0;
+                for (String line : Files.readAllLines(Paths.get(fileName))) {
+                    if (line.startsWith("!")) {
+                        continue;
+                    }
+                    rows.add(line);
+                    if (line.length() > columns) {
+                        columns = line.length();
+                    }
+                }
+
+                Board board = new Board(rows.size(), columns);
+                for (int row = 0; row < rows.size(); row++) {
+                    String line = rows.get(row);
+                    for (int column = 0; column < line.length(); column++) {
+                        if (line.charAt(column) == 'O') {
+                            board.setAlive(row, column);
+                        }
+                    }
+                }
+                return board;
+            }
+        }
+      Board.java: |
+        public class Board {
+            private boolean[][] cells;
+            private int generation;
+            private boolean wrapping;
+
+            public Board(int rows, int columns) {
+                this.cells = new boolean[rows][columns];
+                this.generation = 0;
+                this.wrapping = false;
+            }
+
+            public int getRows() {
+                return this.cells.length;
+            }
+
+            public int getColumns() {
+                return this.cells[0].length;
+            }
+
+            public void setAlive(int row, int column) {
+                this.cells[row][column] = true;
+            }
+
+            public boolean isAlive(int row, int column) {
+                return this.cells[row][column];
+            }
+
+            public int countAlive() {
+                int count = 0;
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public int countNeighbors(int row, int column) {
+                int count = 0;
+                for (int r = row - 1; r <= row + 1; r++) {
+                    for (int c = column - 1; c <= column + 1; c++) {
+                        if (r == row && c == column) {
+                            continue;
+                        }
+                        int checkRow = r;
+                        int checkColumn = c;
+                        if (this.wrapping) {
+                            checkRow = (r + getRows()) % getRows();
+                            checkColumn = (c + getColumns()) % getColumns();
+                        }
+                        if (checkRow >= 0 && checkRow < getRows() && checkColumn >= 0 && checkColumn < getColumns() && this.cells[checkRow][checkColumn]) {
+                            count++;
+                        }
+                    }
+                }
+                return count;
+            }
+
+            public boolean willLive(int row, int column) {
+                int neighbors = countNeighbors(row, column);
+                if (this.cells[row][column]) {
+                    return neighbors == 2 || neighbors == 3;
+                }
+                return neighbors == 3;
+            }
+
+            public boolean step() {
+                boolean[][] next = new boolean[getRows()][getColumns()];
+                boolean changed = false;
+                for (int row = 0; row < getRows(); row++) {
+                    for (int column = 0; column < getColumns(); column++) {
+                        next[row][column] = willLive(row, column);
+                        if (next[row][column] != this.cells[row][column]) {
+                            changed = true;
+                        }
+                    }
+                }
+                this.cells = next;
+                this.generation++;
+                return changed;
+            }
+
+            public int getGeneration() {
+                return this.generation;
+            }
+
+            public void setWrapping(boolean wrapping) {
+                this.wrapping = wrapping;
+            }
+
+            public String toString() {
+                StringBuilder text = new StringBuilder();
+                for (int row = 0; row < getRows(); row++) {
+                    if (row > 0) {
+                        text.append("\n");
+                    }
+                    for (int column = 0; column < getColumns(); column++) {
+                        if (this.cells[row][column]) {
+                            text.append("O");
+                        } else {
+                            text.append(".");
+                        }
+                    }
+                }
+                return text.toString();
+            }
+        }

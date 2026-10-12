@@ -1,0 +1,2343 @@
+id: loan-desk
+title: A loan desk
+after: writing-files
+summary: A lending desk for the tool shelf of a community workshop. Tools and members in maps, loans with due days, refusals as an exception class of your own, the whole shelf saved to and loaded from a CSV file, and a text UI over it all.
+intro: |
+  The workshop on Birch Lane lends its tools to its members: a drill for a weekend, a ladder for a week. In this project you build the program that runs its loan desk. When it's finished, it loads the shelf from a file when it starts, takes commands at the desk, and saves the shelf again when the desk closes.
+
+  Days are plain day numbers (day 1, day 2, ...), so no calendar is needed. A loan lasts 7 days: a tool lent on day 14 is due back on day 21.
+
+  The shelf is kept in `shelf.csv`, one line per tool, member and loan, with the parts separated by commas. `loan,T3,M1,11` means that the tool T3 is out with the member whose card is M1, due back on day 11:
+
+  ```text
+  tool,T1,Cordless drill
+  tool,T2,Hand saw
+  tool,T3,Ladder
+  member,M1,Noor
+  member,M2,Ilse
+  loan,T3,M1,11
+  ```
+
+  A day at the desk. The person at the desk types these commands:
+
+  ```text
+  day 14
+  loans
+  lend T1 M2
+  lend T3 M2
+  return T3
+  late
+  quit
+  ```
+
+  and the program answers:
+
+  ```text
+  It's day 14
+  T3 Ladder: Noor (M1), due day 11
+  Lent: T1 Cordless drill: Ilse (M2), due day 21
+  Sorry: T3 Ladder is out, due back on day 11
+  T3 Ladder is back, 3 days late
+  Nothing is late
+  Saved shelf.csv
+  ```
+
+  The ladder can't be lent to Ilse while Noor still has it, so the desk refuses with a message instead of crashing. After `quit`, `shelf.csv` has the loan of the drill instead of the ladder's.
+
+  The finished program has these classes (and an exception class of its own, LoanException):
+
+  ```classes
+  class TextUi
+  - today: int
+  + start(): void
+
+  class ToolShelf
+  + lend(code: String, card: String, today: int): Loan
+  + giveBack(code: String, today: int): int
+  + save(fileName: String): void
+  + load(fileName: String): void
+  ...
+
+  class Loan
+  - dueDay: int
+  + isLate(today: int): boolean
+
+  class Tool
+  - code: String
+  - name: String
+
+  class Member
+  - card: String
+  - name: String
+
+  TextUi --> ToolShelf
+  ToolShelf --> * Tool
+  ToolShelf --> * Member
+  ToolShelf --> * Loan
+  Loan --> Tool
+  Loan --> Member
+  ```
+
+  ### What you need
+
+  Everything up to the end of part 11: classes and objects (modules 17 to 19), reading files (module 20), a text UI (module 25), hash maps (module 31), interfaces and Comparable (modules 35 and 38), exceptions (module 42) and writing files (module 43).
+
+  ### The milestones
+
+  1. Tools and members, in two hash maps, printed in order.
+  2. Loans with due days, and which ones are late.
+  3. Refusals: an exception class of your own for a loan that can't happen.
+  4. Saving the shelf to a CSV file.
+  5. Loading it back, with a clear message for a damaged line.
+  6. The desk: a text UI over the shelf.
+
+  The checks of the first five milestones call your classes' methods directly; `main` becomes the desk only in the last one.
+seed:
+  Main.java: |
+    public class Main {
+        public static void main(String[] args) {
+            ToolShelf shelf = new ToolShelf();
+            shelf.addTool(new Tool("T2", "Hand saw"));
+            shelf.addTool(new Tool("T1", "Cordless drill"));
+            shelf.addMember(new Member("M1", "Noor"));
+            shelf.printTools();
+            shelf.printMembers();
+        }
+    }
+  Tool.java: |
+    public class Tool {
+        private String code;
+        private String name;
+
+        public Tool(String code, String name) {
+            this.code = code;
+            this.name = name;
+        }
+
+        public String getCode() {
+            return this.code;
+        }
+
+        public String getName() {
+            return this.name;
+        }
+
+        @Override
+        public String toString() {
+            return this.code + " " + this.name;
+        }
+    }
+  Member.java: |
+    public class Member {
+
+    }
+  ToolShelf.java: |
+    public class ToolShelf {
+
+    }
+milestones:
+  - id: tools-and-members
+    title: Tools and members
+    task: |
+      Every tool on the shelf has a code, such as `T1`, and a name. `Tool.java` is ready. Every member has a card, such as `M1`, and a name.
+
+      In `Member.java`, write the class `Member`:
+
+      - a constructor `Member(String card, String name)`
+      - `getCard()` and `getName()`, which return them
+      - `toString()`, which returns the name and the card in parentheses: `Noor (M1)`
+
+      In `ToolShelf.java`, write the class `ToolShelf`. It keeps the tools in a `HashMap<String, Tool>` called `tools`, with the codes as keys, and the members in a `HashMap<String, Member>` called `members`, with the cards as keys. A map finds a tool by its code at once, which the next milestones need.
+
+      - a constructor without parameters, which creates the empty maps
+      - `addTool(Tool tool)` and `addMember(Member member)`, which put them in their maps
+      - `printTools()`, which prints every tool, one per line, in the alphabetical order of their codes
+      - `printMembers()`, which prints every member the same way, in the order of their cards
+
+      A HashMap keeps its keys in an order of its own, so copy the keys into a list and sort it before printing. The check runs:
+
+      ```java fragment
+      ToolShelf shelf = new ToolShelf();
+      shelf.addTool(new Tool("T2", "Hand saw"));
+      shelf.addTool(new Tool("T1", "Cordless drill"));
+      shelf.addMember(new Member("M2", "Ilse"));
+      shelf.addMember(new Member("M1", "Noor"));
+      shelf.printTools();
+      shelf.printMembers();
+      ```
+
+      and expects:
+
+      ```
+      T1 Cordless drill
+      T2 Hand saw
+      Noor (M1)
+      Ilse (M2)
+      ```
+    hints:
+      - "Member looks like Tool: two private String fields, a constructor that sets them, two getters and a `toString` with `@Override` above it."
+      - "To print in order: `ArrayList<String> codes = new ArrayList<>(this.tools.keySet());`, then `Collections.sort(codes);`, then a for-each loop over `codes` that prints `this.tools.get(code)`. ToolShelf needs imports for ArrayList, Collections and HashMap."
+    require:
+      - pattern: \bHashMap\s*<\s*String\s*,\s*Tool\s*>
+        message: "Keep the tools in a `HashMap<String, Tool>`, with the codes as keys."
+      - pattern: \bHashMap\s*<\s*String\s*,\s*Member\s*>
+        message: "Keep the members in a `HashMap<String, Member>`, with the cards as keys."
+    tests:
+      - name: Two tools and two members
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T2", "Hand saw"));
+          shelf.addTool(new Tool("T1", "Cordless drill"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.printTools();
+          shelf.printMembers();
+      - name: A member's getters
+        call: |
+          Member member = new Member("M5", "Ravi");
+          System.out.println(member.getName());
+          System.out.println(member.getCard());
+          System.out.println(member);
+      - name: Five tools in order
+        hidden: true
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T5", "Wheelbarrow"));
+          shelf.addTool(new Tool("T3", "Ladder"));
+          shelf.addTool(new Tool("T4", "Orbital sander"));
+          shelf.addTool(new Tool("T1", "Cordless drill"));
+          shelf.addTool(new Tool("T2", "Hand saw"));
+          shelf.printTools();
+      - name: Three members in order
+        hidden: true
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addMember(new Member("M3", "Tomas"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.printMembers();
+          shelf.printTools();
+          System.out.println("end");
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ToolShelf shelf = new ToolShelf();
+                shelf.addTool(new Tool("T2", "Hand saw"));
+                shelf.addTool(new Tool("T1", "Cordless drill"));
+                shelf.addMember(new Member("M1", "Noor"));
+                shelf.printTools();
+                shelf.printMembers();
+            }
+        }
+      Tool.java: |
+        public class Tool {
+            private String code;
+            private String name;
+
+            public Tool(String code, String name) {
+                this.code = code;
+                this.name = name;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.code + " " + this.name;
+            }
+        }
+      Member.java: |
+        public class Member {
+            private String card;
+            private String name;
+
+            public Member(String card, String name) {
+                this.card = card;
+                this.name = name;
+            }
+
+            public String getCard() {
+                return this.card;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.card + ")";
+            }
+        }
+      ToolShelf.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.HashMap;
+
+        public class ToolShelf {
+            private HashMap<String, Tool> tools;
+            private HashMap<String, Member> members;
+
+            public ToolShelf() {
+                this.tools = new HashMap<>();
+                this.members = new HashMap<>();
+            }
+
+            public void addTool(Tool tool) {
+                this.tools.put(tool.getCode(), tool);
+            }
+
+            public void addMember(Member member) {
+                this.members.put(member.getCard(), member);
+            }
+
+            public void printTools() {
+                ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.tools.get(code));
+                }
+            }
+
+            public void printMembers() {
+                ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                Collections.sort(cards);
+                for (String card : cards) {
+                    System.out.println(this.members.get(card));
+                }
+            }
+        }
+
+  - id: loans
+    title: Loans and due days
+    task: |
+      A loan lasts 7 days: a tool lent on day 4 is due back on day 11, and it's late from day 12 on. A new file, `Loan.java`, holds the class `Loan`. Write it:
+
+      - a constructor `Loan(Tool tool, Member member, int dueDay)`
+      - `getTool()`, `getMember()` and `getDueDay()`
+      - `isLate(int today)`, which returns `true` when `today` is after the due day
+      - `toString()`, which returns the tool, a colon, the member and the due day: `T3 Ladder: Noor (M1), due day 11`
+      - Loan implements `Comparable<Loan>`: its natural order is by due day, and loans with the same due day are in the order of their tools' codes.
+
+      Then add to ToolShelf a third map, a `HashMap<String, Loan>` called `loans`, with the loans by their tools' codes (a tool can be out only once), and these methods:
+
+      - `lend(String toolCode, String card, int today)` creates a loan of that tool to that member, due on `today + 7`, puts it in the map and returns it. For now, it may assume that the tool and the member exist and that the tool is on the shelf.
+      - `giveBack(String toolCode, int today)` removes the tool's loan and returns how many days late it was: 0 when it's back on or before its due day.
+      - `printLoans()` prints every loan in the order of the tools' codes, or `No tools are out` when there are none.
+      - `printLate(int today)` prints the loans that are late on that day, in their natural order (by due day), or `Nothing is late`.
+
+      The check runs:
+
+      ```java fragment
+      ToolShelf shelf = new ToolShelf();
+      shelf.addTool(new Tool("T1", "Cordless drill"));
+      shelf.addTool(new Tool("T2", "Hand saw"));
+      shelf.addTool(new Tool("T3", "Ladder"));
+      shelf.addMember(new Member("M1", "Noor"));
+      shelf.addMember(new Member("M2", "Ilse"));
+      shelf.printLoans();
+      System.out.println(shelf.lend("T3", "M1", 4));
+      shelf.lend("T1", "M2", 6);
+      shelf.printLoans();
+      System.out.println("Late on day 12:");
+      shelf.printLate(12);
+      System.out.println("Late on day 14:");
+      shelf.printLate(14);
+      ```
+
+      and expects:
+
+      ```
+      No tools are out
+      T3 Ladder: Noor (M1), due day 11
+      T1 Cordless drill: Ilse (M2), due day 13
+      T3 Ladder: Noor (M1), due day 11
+      Late on day 12:
+      T3 Ladder: Noor (M1), due day 11
+      Late on day 14:
+      T3 Ladder: Noor (M1), due day 11
+      T1 Cordless drill: Ilse (M2), due day 13
+      ```
+    files:
+      Loan.java: |
+        public class Loan {
+
+        }
+    hints:
+      - "`public class Loan implements Comparable<Loan>` and `public int compareTo(Loan other)`: when the due days differ, return `Integer.compare(this.dueDay, other.dueDay)`; when they're the same, compare the tools' codes with the String method `compareTo`."
+      - "`printLate` goes through `this.loans.values()`, adds each loan whose `isLate(today)` is true to a new `ArrayList<Loan>`, sorts that list with `Collections.sort` and prints it. `printLoans` sorts the map's keys, as `printTools` does."
+    require:
+      - pattern: \bimplements\s+Comparable\s*<\s*Loan\s*>
+        message: "Give Loan a natural order: `public class Loan implements Comparable<Loan>`."
+      - pattern: \bHashMap\s*<\s*String\s*,\s*Loan\s*>
+        message: "Keep the loans in a `HashMap<String, Loan>`, with the tools' codes as keys."
+    tests:
+      - name: Lend and list
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T1", "Cordless drill"));
+          shelf.addTool(new Tool("T2", "Hand saw"));
+          shelf.addTool(new Tool("T3", "Ladder"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.printLoans();
+          System.out.println(shelf.lend("T3", "M1", 4));
+          shelf.lend("T1", "M2", 6);
+          shelf.printLoans();
+          System.out.println("Late on day 12:");
+          shelf.printLate(12);
+          System.out.println("Late on day 14:");
+          shelf.printLate(14);
+      - name: Give back on time and late
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T2", "Hand saw"));
+          shelf.addTool(new Tool("T3", "Ladder"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.lend("T2", "M2", 1);
+          shelf.lend("T3", "M2", 1);
+          shelf.printLate(8);
+          System.out.println(shelf.giveBack("T2", 8));
+          System.out.println(shelf.giveBack("T3", 12));
+          shelf.printLoans();
+      - name: A loan's getters
+        call: |
+          Tool saw = new Tool("T2", "Hand saw");
+          Member ilse = new Member("M2", "Ilse");
+          Loan loan = new Loan(saw, ilse, 9);
+          System.out.println(loan.getTool());
+          System.out.println(loan.getMember());
+          System.out.println(loan.getDueDay());
+          System.out.println(loan.isLate(9));
+          System.out.println(loan.isLate(10));
+      - name: Late loans by due day
+        hidden: true
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T1", "Cordless drill"));
+          shelf.addTool(new Tool("T2", "Hand saw"));
+          shelf.addTool(new Tool("T4", "Orbital sander"));
+          shelf.addTool(new Tool("T5", "Wheelbarrow"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.addMember(new Member("M3", "Tomas"));
+          shelf.lend("T1", "M1", 20);
+          shelf.lend("T5", "M3", 3);
+          shelf.lend("T2", "M3", 3);
+          shelf.lend("T4", "M1", 12);
+          shelf.printLoans();
+          System.out.println("--");
+          shelf.printLate(30);
+          System.out.println("--");
+          shelf.printLate(19);
+          System.out.println("--");
+          shelf.printLate(10);
+      - name: Lent again after a return
+        hidden: true
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T3", "Ladder"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.lend("T3", "M1", 2);
+          System.out.println(shelf.giveBack("T3", 5));
+          System.out.println(shelf.lend("T3", "M2", 5));
+          System.out.println(shelf.giveBack("T3", 13));
+          shelf.printLate(40);
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ToolShelf shelf = new ToolShelf();
+                shelf.addTool(new Tool("T2", "Hand saw"));
+                shelf.addTool(new Tool("T1", "Cordless drill"));
+                shelf.addMember(new Member("M1", "Noor"));
+                shelf.printTools();
+                shelf.printMembers();
+            }
+        }
+      Tool.java: |
+        public class Tool {
+            private String code;
+            private String name;
+
+            public Tool(String code, String name) {
+                this.code = code;
+                this.name = name;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.code + " " + this.name;
+            }
+        }
+      Member.java: |
+        public class Member {
+            private String card;
+            private String name;
+
+            public Member(String card, String name) {
+                this.card = card;
+                this.name = name;
+            }
+
+            public String getCard() {
+                return this.card;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.card + ")";
+            }
+        }
+      ToolShelf.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.HashMap;
+
+        public class ToolShelf {
+            private HashMap<String, Tool> tools;
+            private HashMap<String, Member> members;
+            private HashMap<String, Loan> loans;
+
+            public ToolShelf() {
+                this.tools = new HashMap<>();
+                this.members = new HashMap<>();
+                this.loans = new HashMap<>();
+            }
+
+            public void addTool(Tool tool) {
+                this.tools.put(tool.getCode(), tool);
+            }
+
+            public void addMember(Member member) {
+                this.members.put(member.getCard(), member);
+            }
+
+            public void printTools() {
+                ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.tools.get(code));
+                }
+            }
+
+            public void printMembers() {
+                ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                Collections.sort(cards);
+                for (String card : cards) {
+                    System.out.println(this.members.get(card));
+                }
+            }
+
+            public Loan lend(String toolCode, String card, int today) {
+                Loan loan = new Loan(this.tools.get(toolCode), this.members.get(card), today + 7);
+                this.loans.put(toolCode, loan);
+                return loan;
+            }
+
+            public int giveBack(String toolCode, int today) {
+                Loan loan = this.loans.get(toolCode);
+                this.loans.remove(toolCode);
+                if (loan.isLate(today)) {
+                    return today - loan.getDueDay();
+                }
+                return 0;
+            }
+
+            public void printLoans() {
+                if (this.loans.isEmpty()) {
+                    System.out.println("No tools are out");
+                }
+                ArrayList<String> codes = new ArrayList<>(this.loans.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.loans.get(code));
+                }
+            }
+
+            public void printLate(int today) {
+                ArrayList<Loan> late = new ArrayList<>();
+                for (Loan loan : this.loans.values()) {
+                    if (loan.isLate(today)) {
+                        late.add(loan);
+                    }
+                }
+                if (late.isEmpty()) {
+                    System.out.println("Nothing is late");
+                }
+                Collections.sort(late);
+                for (Loan loan : late) {
+                    System.out.println(loan);
+                }
+            }
+        }
+      Loan.java: |
+        public class Loan implements Comparable<Loan> {
+            private Tool tool;
+            private Member member;
+            private int dueDay;
+
+            public Loan(Tool tool, Member member, int dueDay) {
+                this.tool = tool;
+                this.member = member;
+                this.dueDay = dueDay;
+            }
+
+            public Tool getTool() {
+                return this.tool;
+            }
+
+            public Member getMember() {
+                return this.member;
+            }
+
+            public int getDueDay() {
+                return this.dueDay;
+            }
+
+            public boolean isLate(int today) {
+                return today > this.dueDay;
+            }
+
+            @Override
+            public int compareTo(Loan other) {
+                if (this.dueDay != other.dueDay) {
+                    return Integer.compare(this.dueDay, other.dueDay);
+                }
+                return this.tool.getCode().compareTo(other.tool.getCode());
+            }
+
+            @Override
+            public String toString() {
+                return this.tool + ": " + this.member + ", due day " + this.dueDay;
+            }
+        }
+
+  - id: refusals
+    title: Refusals
+    task: |
+      So far, `lend` trusts what it's given. At a real desk, people mistype codes and ask for tools that are already out. Now the shelf refuses such loans with an exception of its own kind, so the desk can show the reason and go on.
+
+      In the new file `LoanException.java`, make `LoanException` a checked exception: it extends `Exception`, and its constructor takes the message and hands it on with `super(message)`.
+
+      Then add to ToolShelf:
+
+      - `getTool(String code)`, which returns the tool with that code, or throws a LoanException with the message `No tool with the code T9` (with the code it was given)
+      - `getMember(String card)`, the same for members: `No member with the card M7`
+
+      and change `lend` and `giveBack` so that they declare `throws LoanException` and refuse, before anything changes:
+
+      - `lend`: a tool or a member that doesn't exist, with the messages above; a tool that is already out: `T1 Cordless drill is out, due back on day 10`; and a member who already has 2 tools out: `Noor (M1) already has 2 tools`. Check in this order and refuse at the first problem: the tool exists, the member exists, the tool is on the shelf, the member has fewer than 2 tools out. So a tool that is out gets the `is out` message even when the member also has 2 tools.
+      - `giveBack`: a tool that doesn't exist, and a tool that isn't out: `T3 Ladder is not out`
+
+      The check runs:
+
+      ```java fragment
+      ToolShelf shelf = new ToolShelf();
+      shelf.addTool(new Tool("T1", "Cordless drill"));
+      shelf.addTool(new Tool("T2", "Hand saw"));
+      shelf.addTool(new Tool("T3", "Ladder"));
+      shelf.addMember(new Member("M1", "Noor"));
+      shelf.lend("T1", "M1", 3);
+      shelf.lend("T2", "M1", 3);
+      try {
+          shelf.lend("T9", "M1", 5);
+      } catch (LoanException e) {
+          System.out.println(e.getMessage());
+      }
+      try {
+          shelf.lend("T3", "M7", 5);
+      } catch (LoanException e) {
+          System.out.println(e.getMessage());
+      }
+      try {
+          shelf.lend("T1", "M1", 5);
+      } catch (LoanException e) {
+          System.out.println(e.getMessage());
+      }
+      try {
+          shelf.lend("T3", "M1", 5);
+      } catch (LoanException e) {
+          System.out.println(e.getMessage());
+      }
+      ```
+
+      and expects:
+
+      ```
+      No tool with the code T9
+      No member with the card M7
+      T1 Cordless drill is out, due back on day 10
+      Noor (M1) already has 2 tools
+      ```
+    files:
+      LoanException.java: |
+        public class LoanException extends Exception {
+
+        }
+    hints:
+      - "LoanException needs only a constructor: `public LoanException(String message) { super(message); }`. In `getTool`, check `this.tools.containsKey(code)` and throw before calling `get`."
+      - "In `lend`, call `getTool` and `getMember` first: they throw for you. Then check `this.loans.containsKey(toolCode)`, and count the member's loans in `this.loans.values()` by comparing `loan.getMember().getCard()` with the card. Create the loan only after all the checks."
+    require:
+      - pattern: \bclass\s+LoanException\s+extends\s+Exception\b
+        message: "Make LoanException a checked exception: `public class LoanException extends Exception`."
+      - pattern: \bthrow\s+new\s+LoanException\s*\(
+        message: "Refuse with `throw new LoanException(...)`."
+    tests:
+      - name: Refused loans
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T1", "Cordless drill"));
+          shelf.addTool(new Tool("T2", "Hand saw"));
+          shelf.addTool(new Tool("T3", "Ladder"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.lend("T1", "M1", 3);
+          shelf.lend("T2", "M1", 3);
+          try {
+              shelf.lend("T9", "M1", 5);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              shelf.lend("T3", "M7", 5);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              shelf.lend("T1", "M1", 5);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              shelf.lend("T3", "M1", 5);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+      - name: Giving back what isn't out
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T3", "Ladder"));
+          try {
+              shelf.giveBack("T3", 5);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              shelf.giveBack("T8", 5);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+      - name: Finding tools and members
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T4", "Orbital sander"));
+          shelf.addMember(new Member("M3", "Tomas"));
+          System.out.println(shelf.getTool("T4"));
+          System.out.println(shelf.getMember("M3"));
+          try {
+              shelf.getMember("M4");
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+      - name: A return makes room
+        hidden: true
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T1", "Cordless drill"));
+          shelf.addTool(new Tool("T2", "Hand saw"));
+          shelf.addTool(new Tool("T5", "Wheelbarrow"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.addMember(new Member("M3", "Tomas"));
+          shelf.lend("T1", "M2", 1);
+          shelf.lend("T5", "M3", 1);
+          shelf.lend("T2", "M2", 2);
+          try {
+              shelf.lend("T5", "M2", 4);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          System.out.println(shelf.giveBack("T5", 4));
+          try {
+              shelf.lend("T5", "M2", 4);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          System.out.println(shelf.giveBack("T1", 10));
+          System.out.println(shelf.lend("T5", "M2", 10));
+          shelf.printLoans();
+      - name: A refusal changes nothing
+        hidden: true
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T3", "Ladder"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.lend("T3", "M1", 6);
+          try {
+              shelf.lend("T3", "M2", 7);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              shelf.lend("T7", "M9", 7);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          shelf.printLoans();
+          System.out.println(shelf.giveBack("T3", 20));
+          try {
+              shelf.giveBack("T3", 21);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ToolShelf shelf = new ToolShelf();
+                shelf.addTool(new Tool("T2", "Hand saw"));
+                shelf.addTool(new Tool("T1", "Cordless drill"));
+                shelf.addMember(new Member("M1", "Noor"));
+                shelf.printTools();
+                shelf.printMembers();
+            }
+        }
+      Tool.java: |
+        public class Tool {
+            private String code;
+            private String name;
+
+            public Tool(String code, String name) {
+                this.code = code;
+                this.name = name;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.code + " " + this.name;
+            }
+        }
+      Member.java: |
+        public class Member {
+            private String card;
+            private String name;
+
+            public Member(String card, String name) {
+                this.card = card;
+                this.name = name;
+            }
+
+            public String getCard() {
+                return this.card;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.card + ")";
+            }
+        }
+      ToolShelf.java: |
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.HashMap;
+
+        public class ToolShelf {
+            private HashMap<String, Tool> tools;
+            private HashMap<String, Member> members;
+            private HashMap<String, Loan> loans;
+
+            public ToolShelf() {
+                this.tools = new HashMap<>();
+                this.members = new HashMap<>();
+                this.loans = new HashMap<>();
+            }
+
+            public void addTool(Tool tool) {
+                this.tools.put(tool.getCode(), tool);
+            }
+
+            public void addMember(Member member) {
+                this.members.put(member.getCard(), member);
+            }
+
+            public Tool getTool(String code) throws LoanException {
+                if (!this.tools.containsKey(code)) {
+                    throw new LoanException("No tool with the code " + code);
+                }
+                return this.tools.get(code);
+            }
+
+            public Member getMember(String card) throws LoanException {
+                if (!this.members.containsKey(card)) {
+                    throw new LoanException("No member with the card " + card);
+                }
+                return this.members.get(card);
+            }
+
+            public void printTools() {
+                ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.tools.get(code));
+                }
+            }
+
+            public void printMembers() {
+                ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                Collections.sort(cards);
+                for (String card : cards) {
+                    System.out.println(this.members.get(card));
+                }
+            }
+
+            public Loan lend(String toolCode, String card, int today) throws LoanException {
+                Tool tool = this.getTool(toolCode);
+                Member member = this.getMember(card);
+                if (this.loans.containsKey(toolCode)) {
+                    int dueDay = this.loans.get(toolCode).getDueDay();
+                    throw new LoanException(tool + " is out, due back on day " + dueDay);
+                }
+                if (this.countLoans(card) >= 2) {
+                    throw new LoanException(member + " already has 2 tools");
+                }
+                Loan loan = new Loan(tool, member, today + 7);
+                this.loans.put(toolCode, loan);
+                return loan;
+            }
+
+            private int countLoans(String card) {
+                int count = 0;
+                for (Loan loan : this.loans.values()) {
+                    if (loan.getMember().getCard().equals(card)) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+
+            public int giveBack(String toolCode, int today) throws LoanException {
+                Tool tool = this.getTool(toolCode);
+                if (!this.loans.containsKey(toolCode)) {
+                    throw new LoanException(tool + " is not out");
+                }
+                Loan loan = this.loans.get(toolCode);
+                this.loans.remove(toolCode);
+                if (loan.isLate(today)) {
+                    return today - loan.getDueDay();
+                }
+                return 0;
+            }
+
+            public void printLoans() {
+                if (this.loans.isEmpty()) {
+                    System.out.println("No tools are out");
+                }
+                ArrayList<String> codes = new ArrayList<>(this.loans.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.loans.get(code));
+                }
+            }
+
+            public void printLate(int today) {
+                ArrayList<Loan> late = new ArrayList<>();
+                for (Loan loan : this.loans.values()) {
+                    if (loan.isLate(today)) {
+                        late.add(loan);
+                    }
+                }
+                if (late.isEmpty()) {
+                    System.out.println("Nothing is late");
+                }
+                Collections.sort(late);
+                for (Loan loan : late) {
+                    System.out.println(loan);
+                }
+            }
+        }
+      Loan.java: |
+        public class Loan implements Comparable<Loan> {
+            private Tool tool;
+            private Member member;
+            private int dueDay;
+
+            public Loan(Tool tool, Member member, int dueDay) {
+                this.tool = tool;
+                this.member = member;
+                this.dueDay = dueDay;
+            }
+
+            public Tool getTool() {
+                return this.tool;
+            }
+
+            public Member getMember() {
+                return this.member;
+            }
+
+            public int getDueDay() {
+                return this.dueDay;
+            }
+
+            public boolean isLate(int today) {
+                return today > this.dueDay;
+            }
+
+            @Override
+            public int compareTo(Loan other) {
+                if (this.dueDay != other.dueDay) {
+                    return Integer.compare(this.dueDay, other.dueDay);
+                }
+                return this.tool.getCode().compareTo(other.tool.getCode());
+            }
+
+            @Override
+            public String toString() {
+                return this.tool + ": " + this.member + ", due day " + this.dueDay;
+            }
+        }
+      LoanException.java: |
+        public class LoanException extends Exception {
+            public LoanException(String message) {
+                super(message);
+            }
+        }
+
+  - id: saving
+    title: Saving to a CSV file
+    task: |
+      The shelf forgets everything when the program ends. Add to ToolShelf a method `save(String fileName)` that writes the whole shelf into that file in CSV form: one line per tool, member and loan, with the parts separated by commas.
+
+      - first the tools, in the order of their codes: `tool`, the code and the name
+      - then the members, in the order of their cards: `member`, the card and the name
+      - last the loans, in the order of the tools' codes: `loan`, the tool's code, the member's card and the due day
+
+      Write the file with a PrintWriter in try-with-resources, so it's closed when the method ends. `save` declares `throws IOException`: the code that calls it decides what to do when the file can't be written. Names have no commas in them, so a comma always separates two parts.
+
+      The check builds a shelf, lends the hand saw to Ilse on day 4, and calls `save("shelf.csv")`:
+
+      ```java fragment
+      ToolShelf shelf = new ToolShelf();
+      shelf.addTool(new Tool("T2", "Hand saw"));
+      shelf.addTool(new Tool("T1", "Cordless drill"));
+      shelf.addMember(new Member("M2", "Ilse"));
+      shelf.addMember(new Member("M1", "Noor"));
+      shelf.lend("T2", "M2", 4);
+      shelf.save("shelf.csv");
+      ```
+
+      It prints nothing, and `shelf.csv` holds:
+
+      ```text
+      tool,T1,Cordless drill
+      tool,T2,Hand saw
+      member,M1,Noor
+      member,M2,Ilse
+      loan,T2,M2,11
+      ```
+    hints:
+      - "`try (PrintWriter writer = new PrintWriter(fileName)) { ... }`, with imports for `java.io.PrintWriter` and `java.io.IOException`. Inside, three loops over sorted keys, as in `printTools`, `printMembers` and `printLoans`."
+      - "A loan's line: `writer.println(\"loan,\" + code + \",\" + loan.getMember().getCard() + \",\" + loan.getDueDay());`. Use the getters, not `toString`: the file needs the parts, not the text the desk shows."
+    require:
+      - pattern: \bnew\s+PrintWriter\s*\(
+        message: "Write the file with a `PrintWriter`."
+      - pattern: \bvoid\s+save\s*\(\s*String\s+\w+\s*\)\s*throws\s+IOException\b
+        message: "Declare `public void save(String fileName) throws IOException`."
+    tests:
+      - name: Save the shelf
+        writes: [shelf.csv]
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T2", "Hand saw"));
+          shelf.addTool(new Tool("T1", "Cordless drill"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.lend("T2", "M2", 4);
+          shelf.save("shelf.csv");
+      - name: Save under another name
+        hidden: true
+        writes: [backup.csv]
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T5", "Wheelbarrow"));
+          shelf.addTool(new Tool("T3", "Ladder"));
+          shelf.addTool(new Tool("T4", "Orbital sander"));
+          shelf.addMember(new Member("M3", "Tomas"));
+          shelf.addMember(new Member("M1", "Noor"));
+          shelf.lend("T5", "M1", 9);
+          shelf.lend("T3", "M3", 2);
+          shelf.lend("T4", "M3", 2);
+          shelf.giveBack("T3", 6);
+          shelf.save("backup.csv");
+          System.out.println("saved");
+      - name: Save a shelf without loans
+        hidden: true
+        writes: [quiet.csv]
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.addTool(new Tool("T1", "Cordless drill"));
+          shelf.addMember(new Member("M2", "Ilse"));
+          shelf.save("quiet.csv");
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ToolShelf shelf = new ToolShelf();
+                shelf.addTool(new Tool("T2", "Hand saw"));
+                shelf.addTool(new Tool("T1", "Cordless drill"));
+                shelf.addMember(new Member("M1", "Noor"));
+                shelf.printTools();
+                shelf.printMembers();
+            }
+        }
+      Tool.java: |
+        public class Tool {
+            private String code;
+            private String name;
+
+            public Tool(String code, String name) {
+                this.code = code;
+                this.name = name;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.code + " " + this.name;
+            }
+        }
+      Member.java: |
+        public class Member {
+            private String card;
+            private String name;
+
+            public Member(String card, String name) {
+                this.card = card;
+                this.name = name;
+            }
+
+            public String getCard() {
+                return this.card;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.card + ")";
+            }
+        }
+      ToolShelf.java: |
+        import java.io.IOException;
+        import java.io.PrintWriter;
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.HashMap;
+
+        public class ToolShelf {
+            private HashMap<String, Tool> tools;
+            private HashMap<String, Member> members;
+            private HashMap<String, Loan> loans;
+
+            public ToolShelf() {
+                this.tools = new HashMap<>();
+                this.members = new HashMap<>();
+                this.loans = new HashMap<>();
+            }
+
+            public void addTool(Tool tool) {
+                this.tools.put(tool.getCode(), tool);
+            }
+
+            public void addMember(Member member) {
+                this.members.put(member.getCard(), member);
+            }
+
+            public Tool getTool(String code) throws LoanException {
+                if (!this.tools.containsKey(code)) {
+                    throw new LoanException("No tool with the code " + code);
+                }
+                return this.tools.get(code);
+            }
+
+            public Member getMember(String card) throws LoanException {
+                if (!this.members.containsKey(card)) {
+                    throw new LoanException("No member with the card " + card);
+                }
+                return this.members.get(card);
+            }
+
+            public void printTools() {
+                ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.tools.get(code));
+                }
+            }
+
+            public void printMembers() {
+                ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                Collections.sort(cards);
+                for (String card : cards) {
+                    System.out.println(this.members.get(card));
+                }
+            }
+
+            public Loan lend(String toolCode, String card, int today) throws LoanException {
+                Tool tool = this.getTool(toolCode);
+                Member member = this.getMember(card);
+                if (this.loans.containsKey(toolCode)) {
+                    int dueDay = this.loans.get(toolCode).getDueDay();
+                    throw new LoanException(tool + " is out, due back on day " + dueDay);
+                }
+                if (this.countLoans(card) >= 2) {
+                    throw new LoanException(member + " already has 2 tools");
+                }
+                Loan loan = new Loan(tool, member, today + 7);
+                this.loans.put(toolCode, loan);
+                return loan;
+            }
+
+            private int countLoans(String card) {
+                int count = 0;
+                for (Loan loan : this.loans.values()) {
+                    if (loan.getMember().getCard().equals(card)) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+
+            public int giveBack(String toolCode, int today) throws LoanException {
+                Tool tool = this.getTool(toolCode);
+                if (!this.loans.containsKey(toolCode)) {
+                    throw new LoanException(tool + " is not out");
+                }
+                Loan loan = this.loans.get(toolCode);
+                this.loans.remove(toolCode);
+                if (loan.isLate(today)) {
+                    return today - loan.getDueDay();
+                }
+                return 0;
+            }
+
+            public void printLoans() {
+                if (this.loans.isEmpty()) {
+                    System.out.println("No tools are out");
+                }
+                ArrayList<String> codes = new ArrayList<>(this.loans.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.loans.get(code));
+                }
+            }
+
+            public void printLate(int today) {
+                ArrayList<Loan> late = new ArrayList<>();
+                for (Loan loan : this.loans.values()) {
+                    if (loan.isLate(today)) {
+                        late.add(loan);
+                    }
+                }
+                if (late.isEmpty()) {
+                    System.out.println("Nothing is late");
+                }
+                Collections.sort(late);
+                for (Loan loan : late) {
+                    System.out.println(loan);
+                }
+            }
+
+            public void save(String fileName) throws IOException {
+                try (PrintWriter writer = new PrintWriter(fileName)) {
+                    ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                    Collections.sort(codes);
+                    for (String code : codes) {
+                        writer.println("tool," + code + "," + this.tools.get(code).getName());
+                    }
+                    ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                    Collections.sort(cards);
+                    for (String card : cards) {
+                        writer.println("member," + card + "," + this.members.get(card).getName());
+                    }
+                    ArrayList<String> lent = new ArrayList<>(this.loans.keySet());
+                    Collections.sort(lent);
+                    for (String code : lent) {
+                        Loan loan = this.loans.get(code);
+                        writer.println("loan," + code + "," + loan.getMember().getCard() + "," + loan.getDueDay());
+                    }
+                }
+            }
+        }
+      Loan.java: |
+        public class Loan implements Comparable<Loan> {
+            private Tool tool;
+            private Member member;
+            private int dueDay;
+
+            public Loan(Tool tool, Member member, int dueDay) {
+                this.tool = tool;
+                this.member = member;
+                this.dueDay = dueDay;
+            }
+
+            public Tool getTool() {
+                return this.tool;
+            }
+
+            public Member getMember() {
+                return this.member;
+            }
+
+            public int getDueDay() {
+                return this.dueDay;
+            }
+
+            public boolean isLate(int today) {
+                return today > this.dueDay;
+            }
+
+            @Override
+            public int compareTo(Loan other) {
+                if (this.dueDay != other.dueDay) {
+                    return Integer.compare(this.dueDay, other.dueDay);
+                }
+                return this.tool.getCode().compareTo(other.tool.getCode());
+            }
+
+            @Override
+            public String toString() {
+                return this.tool + ": " + this.member + ", due day " + this.dueDay;
+            }
+        }
+      LoanException.java: |
+        public class LoanException extends Exception {
+            public LoanException(String message) {
+                super(message);
+            }
+        }
+
+  - id: loading
+    title: Loading, and damaged lines
+    task: |
+      Now the other direction. Add to ToolShelf a method `load(String fileName)` that reads a file that `save` wrote and adds its tools, members and loans to the shelf. It reads the file with a Scanner, line by line, and splits each line at the commas:
+
+      - `tool,T1,Cordless drill` adds a tool, and `member,M1,Noor` a member.
+      - `loan,T3,M1,11` puts a loan of the tool T3 to the member M1, due on day 11, straight into the loans map (it's a loan that was already made, so `lend`'s rules don't apply). The tool and the member must already be on the shelf: find them with `getTool` and `getMember`, which throw when they aren't.
+      - An empty line is skipped.
+
+      A file can be damaged, for example by someone who edited it by hand. Then `load` throws a LoanException whose message starts with `Line `, the number of the line (the first line is 1, and empty lines count) and a colon:
+
+      - a line that isn't one of the three kinds, or doesn't have their number of parts: `Line 3: Can't read gadget,X1`, with the whole line
+      - a due day that isn't a whole number: `Line 4: Not a day number: soon`
+      - a tool or a member that isn't on the shelf: `Line 5: No tool with the code T9`, with `getTool`'s or `getMember`'s message
+
+      The lines before the damaged one stay loaded. `load` declares `throws IOException, LoanException`: a file that can't be read at all throws an IOException, as Scanner does.
+
+      The check gives the program this `shelf.csv`:
+
+      ```text
+      tool,T1,Cordless drill
+      tool,T3,Ladder
+      member,M1,Noor
+      member,M2,Ilse
+      loan,T3,M1,11
+      loan,T1,M2,15
+      ```
+
+      and runs:
+
+      ```java fragment
+      ToolShelf shelf = new ToolShelf();
+      shelf.load("shelf.csv");
+      shelf.printTools();
+      shelf.printMembers();
+      shelf.printLoans();
+      shelf.printLate(14);
+      ```
+
+      It expects:
+
+      ```
+      T1 Cordless drill
+      T3 Ladder
+      Noor (M1)
+      Ilse (M2)
+      T1 Cordless drill: Ilse (M2), due day 15
+      T3 Ladder: Noor (M1), due day 11
+      T3 Ladder: Noor (M1), due day 11
+      ```
+    hints:
+      - "Count the lines in a variable that grows by one for every line read, before the empty ones are skipped. Read each line in a method of its own, such as `private void readLine(String line) throws LoanException`, and call it in a `try` block: `catch (LoanException e)` throws a new one, `new LoanException(\"Line \" + number + \": \" + e.getMessage())`."
+      - "In that method, `String[] parts = line.split(\",\");`, then check the kind and the length together: `parts[0].equals(\"loan\") && parts.length == 4`. Turn the day into a number with `Integer.parseInt` in a `try` block, and catch its NumberFormatException to throw a LoanException instead."
+    require:
+      - pattern: \bcatch\s*\(\s*NumberFormatException\b
+        message: "Catch the NumberFormatException of a due day that isn't a number, and throw a LoanException instead."
+      - pattern: \bnew\s+Scanner\s*\(\s*Paths\.get\s*\(
+        message: "Read the file with `new Scanner(Paths.get(fileName))`."
+    tests:
+      - name: Load a shelf
+        files:
+          shelf.csv: |
+            tool,T1,Cordless drill
+            tool,T3,Ladder
+            member,M1,Noor
+            member,M2,Ilse
+            loan,T3,M1,11
+            loan,T1,M2,15
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.load("shelf.csv");
+          shelf.printTools();
+          shelf.printMembers();
+          shelf.printLoans();
+          shelf.printLate(14);
+      - name: A line that can't be read
+        files:
+          shelf.csv: |
+            tool,T1,Cordless drill
+            member,M1,Noor
+            gadget,X1
+            tool,T2,Hand saw
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          try {
+              shelf.load("shelf.csv");
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          shelf.printTools();
+      - name: A day that isn't a number
+        hidden: true
+        files:
+          shelf.csv: |
+            tool,T1,Cordless drill
+            tool,T2,Hand saw
+            member,M1,Noor
+            loan,T1,M1,soon
+            loan,T2,M1,9
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          try {
+              shelf.load("shelf.csv");
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          shelf.printLoans();
+      - name: A loan of a stranger
+        hidden: true
+        files:
+          shelf.csv: |
+            tool,T4,Orbital sander
+            member,M1,Noor
+
+            loan,T4,M3,20
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          try {
+              shelf.load("shelf.csv");
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          shelf.printMembers();
+          shelf.printLoans();
+      - name: Wrong numbers of parts
+        hidden: true
+        files:
+          one.csv: |
+            tool,T1
+          two.csv: |
+
+            member,M1,Noor
+
+            loan,T9,M1,4
+          three.csv: |
+            member,M2,Ilse,extra
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          try {
+              shelf.load("one.csv");
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              shelf.load("two.csv");
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          try {
+              shelf.load("three.csv");
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          shelf.printMembers();
+      - name: Load, then save again
+        hidden: true
+        files:
+          shelf.csv: |
+            member,M3,Tomas
+            tool,T5,Wheelbarrow
+            loan,T5,M3,8
+            tool,T2,Hand saw
+        writes: [copy.csv]
+        call: |
+          ToolShelf shelf = new ToolShelf();
+          shelf.load("shelf.csv");
+          shelf.lend("T2", "M3", 3);
+          try {
+              shelf.lend("T5", "M3", 3);
+          } catch (LoanException e) {
+              System.out.println(e.getMessage());
+          }
+          shelf.save("copy.csv");
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                ToolShelf shelf = new ToolShelf();
+                shelf.addTool(new Tool("T2", "Hand saw"));
+                shelf.addTool(new Tool("T1", "Cordless drill"));
+                shelf.addMember(new Member("M1", "Noor"));
+                shelf.printTools();
+                shelf.printMembers();
+            }
+        }
+      Tool.java: |
+        public class Tool {
+            private String code;
+            private String name;
+
+            public Tool(String code, String name) {
+                this.code = code;
+                this.name = name;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.code + " " + this.name;
+            }
+        }
+      Member.java: |
+        public class Member {
+            private String card;
+            private String name;
+
+            public Member(String card, String name) {
+                this.card = card;
+                this.name = name;
+            }
+
+            public String getCard() {
+                return this.card;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.card + ")";
+            }
+        }
+      ToolShelf.java: |
+        import java.io.IOException;
+        import java.io.PrintWriter;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.HashMap;
+        import java.util.Scanner;
+
+        public class ToolShelf {
+            private HashMap<String, Tool> tools;
+            private HashMap<String, Member> members;
+            private HashMap<String, Loan> loans;
+
+            public ToolShelf() {
+                this.tools = new HashMap<>();
+                this.members = new HashMap<>();
+                this.loans = new HashMap<>();
+            }
+
+            public void addTool(Tool tool) {
+                this.tools.put(tool.getCode(), tool);
+            }
+
+            public void addMember(Member member) {
+                this.members.put(member.getCard(), member);
+            }
+
+            public Tool getTool(String code) throws LoanException {
+                if (!this.tools.containsKey(code)) {
+                    throw new LoanException("No tool with the code " + code);
+                }
+                return this.tools.get(code);
+            }
+
+            public Member getMember(String card) throws LoanException {
+                if (!this.members.containsKey(card)) {
+                    throw new LoanException("No member with the card " + card);
+                }
+                return this.members.get(card);
+            }
+
+            public void printTools() {
+                ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.tools.get(code));
+                }
+            }
+
+            public void printMembers() {
+                ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                Collections.sort(cards);
+                for (String card : cards) {
+                    System.out.println(this.members.get(card));
+                }
+            }
+
+            public Loan lend(String toolCode, String card, int today) throws LoanException {
+                Tool tool = this.getTool(toolCode);
+                Member member = this.getMember(card);
+                if (this.loans.containsKey(toolCode)) {
+                    int dueDay = this.loans.get(toolCode).getDueDay();
+                    throw new LoanException(tool + " is out, due back on day " + dueDay);
+                }
+                if (this.countLoans(card) >= 2) {
+                    throw new LoanException(member + " already has 2 tools");
+                }
+                Loan loan = new Loan(tool, member, today + 7);
+                this.loans.put(toolCode, loan);
+                return loan;
+            }
+
+            private int countLoans(String card) {
+                int count = 0;
+                for (Loan loan : this.loans.values()) {
+                    if (loan.getMember().getCard().equals(card)) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+
+            public int giveBack(String toolCode, int today) throws LoanException {
+                Tool tool = this.getTool(toolCode);
+                if (!this.loans.containsKey(toolCode)) {
+                    throw new LoanException(tool + " is not out");
+                }
+                Loan loan = this.loans.get(toolCode);
+                this.loans.remove(toolCode);
+                if (loan.isLate(today)) {
+                    return today - loan.getDueDay();
+                }
+                return 0;
+            }
+
+            public void printLoans() {
+                if (this.loans.isEmpty()) {
+                    System.out.println("No tools are out");
+                }
+                ArrayList<String> codes = new ArrayList<>(this.loans.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.loans.get(code));
+                }
+            }
+
+            public void printLate(int today) {
+                ArrayList<Loan> late = new ArrayList<>();
+                for (Loan loan : this.loans.values()) {
+                    if (loan.isLate(today)) {
+                        late.add(loan);
+                    }
+                }
+                if (late.isEmpty()) {
+                    System.out.println("Nothing is late");
+                }
+                Collections.sort(late);
+                for (Loan loan : late) {
+                    System.out.println(loan);
+                }
+            }
+
+            public void save(String fileName) throws IOException {
+                try (PrintWriter writer = new PrintWriter(fileName)) {
+                    ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                    Collections.sort(codes);
+                    for (String code : codes) {
+                        writer.println("tool," + code + "," + this.tools.get(code).getName());
+                    }
+                    ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                    Collections.sort(cards);
+                    for (String card : cards) {
+                        writer.println("member," + card + "," + this.members.get(card).getName());
+                    }
+                    ArrayList<String> lent = new ArrayList<>(this.loans.keySet());
+                    Collections.sort(lent);
+                    for (String code : lent) {
+                        Loan loan = this.loans.get(code);
+                        writer.println("loan," + code + "," + loan.getMember().getCard() + "," + loan.getDueDay());
+                    }
+                }
+            }
+
+            public void load(String fileName) throws IOException, LoanException {
+                try (Scanner reader = new Scanner(Paths.get(fileName))) {
+                    int number = 0;
+                    while (reader.hasNextLine()) {
+                        String line = reader.nextLine();
+                        number++;
+                        if (line.isEmpty()) {
+                            continue;
+                        }
+                        try {
+                            this.readLine(line);
+                        } catch (LoanException e) {
+                            throw new LoanException("Line " + number + ": " + e.getMessage());
+                        }
+                    }
+                }
+            }
+
+            private void readLine(String line) throws LoanException {
+                String[] parts = line.split(",");
+                if (parts[0].equals("tool") && parts.length == 3) {
+                    this.addTool(new Tool(parts[1], parts[2]));
+                } else if (parts[0].equals("member") && parts.length == 3) {
+                    this.addMember(new Member(parts[1], parts[2]));
+                } else if (parts[0].equals("loan") && parts.length == 4) {
+                    Tool tool = this.getTool(parts[1]);
+                    Member member = this.getMember(parts[2]);
+                    int dueDay = 0;
+                    try {
+                        dueDay = Integer.parseInt(parts[3]);
+                    } catch (NumberFormatException e) {
+                        throw new LoanException("Not a day number: " + parts[3]);
+                    }
+                    this.loans.put(tool.getCode(), new Loan(tool, member, dueDay));
+                } else {
+                    throw new LoanException("Can't read " + line);
+                }
+            }
+        }
+      Loan.java: |
+        public class Loan implements Comparable<Loan> {
+            private Tool tool;
+            private Member member;
+            private int dueDay;
+
+            public Loan(Tool tool, Member member, int dueDay) {
+                this.tool = tool;
+                this.member = member;
+                this.dueDay = dueDay;
+            }
+
+            public Tool getTool() {
+                return this.tool;
+            }
+
+            public Member getMember() {
+                return this.member;
+            }
+
+            public int getDueDay() {
+                return this.dueDay;
+            }
+
+            public boolean isLate(int today) {
+                return today > this.dueDay;
+            }
+
+            @Override
+            public int compareTo(Loan other) {
+                if (this.dueDay != other.dueDay) {
+                    return Integer.compare(this.dueDay, other.dueDay);
+                }
+                return this.tool.getCode().compareTo(other.tool.getCode());
+            }
+
+            @Override
+            public String toString() {
+                return this.tool + ": " + this.member + ", due day " + this.dueDay;
+            }
+        }
+      LoanException.java: |
+        public class LoanException extends Exception {
+            public LoanException(String message) {
+                super(message);
+            }
+        }
+
+  - id: the-desk
+    title: The desk
+    task: |
+      Last, the desk itself. The new file `TextUi.java` holds the class `TextUi`, the program's text UI. Its constructor takes a Scanner and a ToolShelf and keeps them in the fields `scanner` and `shelf`, and the day, kept in the `int` field `today`, starts as day 1. `main` creates the shelf and the TextUi, and calls its `start()`, which:
+
+      1. Loads `shelf.csv`. When there's no such file (an IOException), it prints `No shelf.csv yet, so the shelf starts empty` and goes on. When the file is damaged (a LoanException), it prints `Can't load shelf.csv. ` and the exception's message, and ends at once, without saving: saving would overwrite the lines it couldn't read.
+      2. Reads commands, one per line, until `quit` or the end of the input. The words of a command are separated by spaces.
+      3. Saves the shelf into `shelf.csv` and prints `Saved shelf.csv` (or `Could not save: ` and the message when that fails).
+
+      The commands:
+
+      - `day 14` makes it day 14 and prints `It's day 14`. A day before today prints `The day can't go back: it's day 14`, and a day that isn't a whole number `Not a day number: soon`.
+      - `tools`, `members` and `loans` print the shelf's tools, members and loans; `late` prints the loans that are late today.
+      - `lend T1 M2` lends T1 to M2 today and prints `Lent: ` and the loan.
+      - `return T3` gives T3 back and prints `T3 Ladder is back`, followed by `, 3 days late` when it's late (`, 1 day late` for one day).
+      - When the shelf refuses a loan or a return, the desk prints `Sorry: ` and the exception's message.
+      - Anything else, including a command with the wrong number of words, prints `Unknown command: ` and the line.
+
+      Input isn't echoed. The check gives the program the `shelf.csv` of the introduction:
+
+      ```text
+      tool,T1,Cordless drill
+      tool,T2,Hand saw
+      tool,T3,Ladder
+      member,M1,Noor
+      member,M2,Ilse
+      loan,T3,M1,11
+      ```
+
+      For the input shown, the program prints:
+
+      ```
+      It's day 14
+      T3 Ladder: Noor (M1), due day 11
+      Lent: T1 Cordless drill: Ilse (M2), due day 21
+      Sorry: T3 Ladder is out, due back on day 11
+      T3 Ladder is back, 3 days late
+      Nothing is late
+      Saved shelf.csv
+      ```
+    files:
+      TextUi.java: |
+        import java.util.Scanner;
+
+        public class TextUi {
+
+        }
+    hints:
+      - "`start()` has three parts, one after the other: a `try` block around `load` with two `catch` blocks (the LoanException one ends with `return;`), a `while (this.scanner.hasNextLine())` loop that breaks on `quit`, and a `try` block around `save`."
+      - "Handle one command in a method of its own that declares `throws LoanException`, and call it inside a `try` block in the loop, so one `catch (LoanException e)` prints `Sorry: ` for every command. In it, `String[] parts = command.split(\" \");` and check the first word and `parts.length` together."
+      - "For `return`: `int late = this.shelf.giveBack(parts[1], this.today);`, then print `this.shelf.getTool(parts[1])` with `is back`, adding `, 1 day late` or `, ` and the number with `days late` when `late` is more than 0."
+    require:
+      - pattern: \bcatch\s*\(\s*LoanException\b
+        message: "Catch the shelf's LoanException and print `Sorry: ` with its message."
+      - pattern: \.start\s*\(\s*\)
+        message: "In `main`, create a TextUi and call its `start()`."
+    tests:
+      - name: A day at the desk
+        files:
+          shelf.csv: |
+            tool,T1,Cordless drill
+            tool,T2,Hand saw
+            tool,T3,Ladder
+            member,M1,Noor
+            member,M2,Ilse
+            loan,T3,M1,11
+        stdin: |
+          day 14
+          loans
+          lend T1 M2
+          lend T3 M2
+          return T3
+          late
+          quit
+        writes: [shelf.csv]
+      - name: The first day of the shelf
+        stdin: |
+          tools
+          loans
+          lend T1 M1
+          quit
+        writes: [shelf.csv]
+      - name: A damaged shelf file
+        hidden: true
+        files:
+          shelf.csv: |
+            tool,T1,Cordless drill
+            member,M1,Noor
+            loan,T1,M1,next week
+        stdin: |
+          tools
+          quit
+      - name: Mistakes at the desk
+        hidden: true
+        files:
+          shelf.csv: |
+            tool,T1,Cordless drill
+            tool,T2,Hand saw
+            tool,T4,Orbital sander
+            member,M1,Noor
+            member,M3,Tomas
+            loan,T2,M3,6
+        stdin: |
+          day 5
+          day 3
+          day soon
+          day
+          borrow T1
+          lend T1
+          lend T9 M1
+          lend T1 M8
+          return T4
+          return T2
+          day 10
+          lend T1 M1
+          lend T4 M1
+          lend T2 M1
+          members
+          tools
+          day 19
+          return T1
+          late
+          day 20
+          return T4
+          quit
+          tools
+        writes: [shelf.csv]
+      - name: Input that ends without quit
+        hidden: true
+        files:
+          shelf.csv: |
+            tool,T5,Wheelbarrow
+            member,M2,Ilse
+        stdin: |
+          day 3
+          lend T5 M2
+          late
+          day 11
+          late
+          return T5
+          lend T5 M2
+          late
+        writes: [shelf.csv]
+    solution:
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                ToolShelf shelf = new ToolShelf();
+                TextUi ui = new TextUi(new Scanner(System.in), shelf);
+                ui.start();
+            }
+        }
+      Tool.java: |
+        public class Tool {
+            private String code;
+            private String name;
+
+            public Tool(String code, String name) {
+                this.code = code;
+                this.name = name;
+            }
+
+            public String getCode() {
+                return this.code;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.code + " " + this.name;
+            }
+        }
+      Member.java: |
+        public class Member {
+            private String card;
+            private String name;
+
+            public Member(String card, String name) {
+                this.card = card;
+                this.name = name;
+            }
+
+            public String getCard() {
+                return this.card;
+            }
+
+            public String getName() {
+                return this.name;
+            }
+
+            @Override
+            public String toString() {
+                return this.name + " (" + this.card + ")";
+            }
+        }
+      ToolShelf.java: |
+        import java.io.IOException;
+        import java.io.PrintWriter;
+        import java.nio.file.Paths;
+        import java.util.ArrayList;
+        import java.util.Collections;
+        import java.util.HashMap;
+        import java.util.Scanner;
+
+        public class ToolShelf {
+            private HashMap<String, Tool> tools;
+            private HashMap<String, Member> members;
+            private HashMap<String, Loan> loans;
+
+            public ToolShelf() {
+                this.tools = new HashMap<>();
+                this.members = new HashMap<>();
+                this.loans = new HashMap<>();
+            }
+
+            public void addTool(Tool tool) {
+                this.tools.put(tool.getCode(), tool);
+            }
+
+            public void addMember(Member member) {
+                this.members.put(member.getCard(), member);
+            }
+
+            public Tool getTool(String code) throws LoanException {
+                if (!this.tools.containsKey(code)) {
+                    throw new LoanException("No tool with the code " + code);
+                }
+                return this.tools.get(code);
+            }
+
+            public Member getMember(String card) throws LoanException {
+                if (!this.members.containsKey(card)) {
+                    throw new LoanException("No member with the card " + card);
+                }
+                return this.members.get(card);
+            }
+
+            public void printTools() {
+                ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.tools.get(code));
+                }
+            }
+
+            public void printMembers() {
+                ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                Collections.sort(cards);
+                for (String card : cards) {
+                    System.out.println(this.members.get(card));
+                }
+            }
+
+            public Loan lend(String toolCode, String card, int today) throws LoanException {
+                Tool tool = this.getTool(toolCode);
+                Member member = this.getMember(card);
+                if (this.loans.containsKey(toolCode)) {
+                    int dueDay = this.loans.get(toolCode).getDueDay();
+                    throw new LoanException(tool + " is out, due back on day " + dueDay);
+                }
+                if (this.countLoans(card) >= 2) {
+                    throw new LoanException(member + " already has 2 tools");
+                }
+                Loan loan = new Loan(tool, member, today + 7);
+                this.loans.put(toolCode, loan);
+                return loan;
+            }
+
+            private int countLoans(String card) {
+                int count = 0;
+                for (Loan loan : this.loans.values()) {
+                    if (loan.getMember().getCard().equals(card)) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+
+            public int giveBack(String toolCode, int today) throws LoanException {
+                Tool tool = this.getTool(toolCode);
+                if (!this.loans.containsKey(toolCode)) {
+                    throw new LoanException(tool + " is not out");
+                }
+                Loan loan = this.loans.get(toolCode);
+                this.loans.remove(toolCode);
+                if (loan.isLate(today)) {
+                    return today - loan.getDueDay();
+                }
+                return 0;
+            }
+
+            public void printLoans() {
+                if (this.loans.isEmpty()) {
+                    System.out.println("No tools are out");
+                }
+                ArrayList<String> codes = new ArrayList<>(this.loans.keySet());
+                Collections.sort(codes);
+                for (String code : codes) {
+                    System.out.println(this.loans.get(code));
+                }
+            }
+
+            public void printLate(int today) {
+                ArrayList<Loan> late = new ArrayList<>();
+                for (Loan loan : this.loans.values()) {
+                    if (loan.isLate(today)) {
+                        late.add(loan);
+                    }
+                }
+                if (late.isEmpty()) {
+                    System.out.println("Nothing is late");
+                }
+                Collections.sort(late);
+                for (Loan loan : late) {
+                    System.out.println(loan);
+                }
+            }
+
+            public void save(String fileName) throws IOException {
+                try (PrintWriter writer = new PrintWriter(fileName)) {
+                    ArrayList<String> codes = new ArrayList<>(this.tools.keySet());
+                    Collections.sort(codes);
+                    for (String code : codes) {
+                        writer.println("tool," + code + "," + this.tools.get(code).getName());
+                    }
+                    ArrayList<String> cards = new ArrayList<>(this.members.keySet());
+                    Collections.sort(cards);
+                    for (String card : cards) {
+                        writer.println("member," + card + "," + this.members.get(card).getName());
+                    }
+                    ArrayList<String> lent = new ArrayList<>(this.loans.keySet());
+                    Collections.sort(lent);
+                    for (String code : lent) {
+                        Loan loan = this.loans.get(code);
+                        writer.println("loan," + code + "," + loan.getMember().getCard() + "," + loan.getDueDay());
+                    }
+                }
+            }
+
+            public void load(String fileName) throws IOException, LoanException {
+                try (Scanner reader = new Scanner(Paths.get(fileName))) {
+                    int number = 0;
+                    while (reader.hasNextLine()) {
+                        String line = reader.nextLine();
+                        number++;
+                        if (line.isEmpty()) {
+                            continue;
+                        }
+                        try {
+                            this.readLine(line);
+                        } catch (LoanException e) {
+                            throw new LoanException("Line " + number + ": " + e.getMessage());
+                        }
+                    }
+                }
+            }
+
+            private void readLine(String line) throws LoanException {
+                String[] parts = line.split(",");
+                if (parts[0].equals("tool") && parts.length == 3) {
+                    this.addTool(new Tool(parts[1], parts[2]));
+                } else if (parts[0].equals("member") && parts.length == 3) {
+                    this.addMember(new Member(parts[1], parts[2]));
+                } else if (parts[0].equals("loan") && parts.length == 4) {
+                    Tool tool = this.getTool(parts[1]);
+                    Member member = this.getMember(parts[2]);
+                    int dueDay = 0;
+                    try {
+                        dueDay = Integer.parseInt(parts[3]);
+                    } catch (NumberFormatException e) {
+                        throw new LoanException("Not a day number: " + parts[3]);
+                    }
+                    this.loans.put(tool.getCode(), new Loan(tool, member, dueDay));
+                } else {
+                    throw new LoanException("Can't read " + line);
+                }
+            }
+        }
+      Loan.java: |
+        public class Loan implements Comparable<Loan> {
+            private Tool tool;
+            private Member member;
+            private int dueDay;
+
+            public Loan(Tool tool, Member member, int dueDay) {
+                this.tool = tool;
+                this.member = member;
+                this.dueDay = dueDay;
+            }
+
+            public Tool getTool() {
+                return this.tool;
+            }
+
+            public Member getMember() {
+                return this.member;
+            }
+
+            public int getDueDay() {
+                return this.dueDay;
+            }
+
+            public boolean isLate(int today) {
+                return today > this.dueDay;
+            }
+
+            @Override
+            public int compareTo(Loan other) {
+                if (this.dueDay != other.dueDay) {
+                    return Integer.compare(this.dueDay, other.dueDay);
+                }
+                return this.tool.getCode().compareTo(other.tool.getCode());
+            }
+
+            @Override
+            public String toString() {
+                return this.tool + ": " + this.member + ", due day " + this.dueDay;
+            }
+        }
+      LoanException.java: |
+        public class LoanException extends Exception {
+            public LoanException(String message) {
+                super(message);
+            }
+        }
+      TextUi.java: |
+        import java.io.IOException;
+        import java.util.Scanner;
+
+        public class TextUi {
+            private Scanner scanner;
+            private ToolShelf shelf;
+            private int today;
+
+            public TextUi(Scanner scanner, ToolShelf shelf) {
+                this.scanner = scanner;
+                this.shelf = shelf;
+                this.today = 1;
+            }
+
+            public void start() {
+                try {
+                    this.shelf.load("shelf.csv");
+                } catch (IOException e) {
+                    System.out.println("No shelf.csv yet, so the shelf starts empty");
+                } catch (LoanException e) {
+                    System.out.println("Can't load shelf.csv. " + e.getMessage());
+                    return;
+                }
+                while (this.scanner.hasNextLine()) {
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        break;
+                    }
+                    try {
+                        this.handle(command);
+                    } catch (LoanException e) {
+                        System.out.println("Sorry: " + e.getMessage());
+                    }
+                }
+                try {
+                    this.shelf.save("shelf.csv");
+                    System.out.println("Saved shelf.csv");
+                } catch (IOException e) {
+                    System.out.println("Could not save: " + e.getMessage());
+                }
+            }
+
+            private void handle(String command) throws LoanException {
+                String[] parts = command.split(" ");
+                if (command.equals("tools")) {
+                    this.shelf.printTools();
+                } else if (command.equals("members")) {
+                    this.shelf.printMembers();
+                } else if (command.equals("loans")) {
+                    this.shelf.printLoans();
+                } else if (command.equals("late")) {
+                    this.shelf.printLate(this.today);
+                } else if (parts[0].equals("day") && parts.length == 2) {
+                    this.changeDay(parts[1]);
+                } else if (parts[0].equals("lend") && parts.length == 3) {
+                    Loan loan = this.shelf.lend(parts[1], parts[2], this.today);
+                    System.out.println("Lent: " + loan);
+                } else if (parts[0].equals("return") && parts.length == 2) {
+                    this.giveBack(parts[1]);
+                } else {
+                    System.out.println("Unknown command: " + command);
+                }
+            }
+
+            private void changeDay(String text) {
+                int day = 0;
+                try {
+                    day = Integer.parseInt(text);
+                } catch (NumberFormatException e) {
+                    System.out.println("Not a day number: " + text);
+                    return;
+                }
+                if (day < this.today) {
+                    System.out.println("The day can't go back: it's day " + this.today);
+                    return;
+                }
+                this.today = day;
+                System.out.println("It's day " + this.today);
+            }
+
+            private void giveBack(String code) throws LoanException {
+                int late = this.shelf.giveBack(code, this.today);
+                String text = this.shelf.getTool(code) + " is back";
+                if (late == 1) {
+                    text = text + ", 1 day late";
+                } else if (late > 1) {
+                    text = text + ", " + late + " days late";
+                }
+                System.out.println(text);
+            }
+        }

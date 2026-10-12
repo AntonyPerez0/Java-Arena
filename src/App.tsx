@@ -8,9 +8,12 @@ import Learn from "./pages/Learn";
 import ModulePage from "./pages/ModulePage";
 import Settings from "./pages/Settings";
 import About from "./pages/About";
+import Transfer from "./pages/Transfer";
+import Record from "./pages/Record";
+import Projects from "./pages/Projects";
 import NotFound from "./pages/NotFound";
-import { dailyPage, deathmatchPage, placementPage, playgroundPage, stepPage } from "./pages/editorPages";
-export { loadPlayground, loadPractice, loadStepPage } from "./pages/editorPages";
+import { dailyPage, deathmatchPage, placementPage, playgroundPage, projectPage, stepPage } from "./pages/editorPages";
+export { loadPlayground, loadPractice, loadProjectPage, loadStepPage } from "./pages/editorPages";
 import { patchSettings } from "./state/store";
 import { useAppearance, useResolvedTheme } from "./lib/appearance";
 import { MOOC_LICENSE_URL, MOOC_URL, REPO_URL } from "./lib/site";
@@ -68,6 +71,9 @@ function Footer() {
               </li>
               <li>
                 <Link to="/learn/printing/">Start with module 1</Link>
+              </li>
+              <li>
+                <Link to="/projects/">Projects</Link>
               </li>
               <li>
                 <Link to="/playground/">Playground</Link>
@@ -221,12 +227,16 @@ export default function App() {
           <Route path="/learn" element={<Learn />} />
           <Route path="/learn/:moduleId" element={<ModulePage />} />
           <Route path="/learn/:moduleId/:stepSlug" element={<stepPage.Route />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:projectId" element={<projectPage.Route />} />
           <Route path="/playground" element={<playgroundPage.Route />} />
           <Route path="/deathmatch" element={<deathmatchPage.Route />} />
           <Route path="/daily" element={<dailyPage.Route />} />
           <Route path="/placement" element={<placementPage.Route />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/about" element={<About />} />
+          <Route path="/transfer" element={<Transfer />} />
+          <Route path="/record" element={<Record />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Main>

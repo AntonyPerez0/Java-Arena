@@ -12,7 +12,7 @@ import { WindowFigure } from "./WindowView";
  * What the challenge asks for, set apart from the lesson so it's obvious: the task, then the exact
  * output the program must print, with the input it gets, and the files it must write.
  */
-export default function TaskCard({ ex, task, index, total }: { ex: Exercise; task: string; index: number; total: number }) {
+export default function TaskCard({ ex, task, index, total, label = "Challenge" }: { ex: Exercise; task: string; index: number; total: number; label?: string }) {
   // Tests that run the learner's JUnit tests on versions of the program.
   const junitTests = ex.tests.filter((t) => t.junit);
   const hiddenBuggy = junitTests.filter((t) => t.hidden && t.outcome === "fail").length;
@@ -36,7 +36,7 @@ export default function TaskCard({ ex, task, index, total }: { ex: Exercise; tas
         </h2>
         {total > 1 && (
           <span className="task-count">
-            Challenge {index + 1} of {total}
+            {label} {index + 1} of {total}
           </span>
         )}
       </div>

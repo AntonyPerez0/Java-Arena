@@ -99,6 +99,20 @@ export type StepSummary = {
 };
 export type ModuleSummary = Omit<Module, "steps"> & { steps: StepSummary[]; drills: number };
 
+/**
+ * One milestone of a project: a challenge (`seed` is the code it starts from when built on the
+ * previous milestone's model solution, or the project's seed for milestone 1) with a title. `files`
+ * are the files it adds to the program, with the text they start with; `replaces` names earlier
+ * milestones' tests whose behavior it changes.
+ */
+export type Milestone = Exercise & { id: string; title: string; task: string; files?: Record<string, string>; replaces?: string[] };
+
+/** A project (public/lessons/projects/<id>-<hash>.json): one program built over its milestones. */
+export type Project = { id: string; title: string; summary: string; after: string; intro: string; milestones: Milestone[] };
+
+/** A project as the course index lists it, without its file's contents. */
+export type ProjectSummary = Omit<Project, "intro" | "milestones"> & { hash: string; milestones: { id: string; title: string }[] };
+
 export type CourseIndex = {
   /** The reference JDK the expected outputs came from. */
   jdk: string;
@@ -107,6 +121,8 @@ export type CourseIndex = {
   modules: ModuleSummary[];
   interviewDrills: number;
   placementQuestions: number;
+  /** The projects, in course order. */
+  projects: ProjectSummary[];
   /** The images of content/assets (served under the site's base address), which the Playground offers as sample files. */
   assets: AssetFile[];
 };

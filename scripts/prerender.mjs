@@ -13,6 +13,7 @@ import { windowExample } from "../src/grader/window.ts";
 import { windowFigureHtml } from "../src/components/window-drawing.ts";
 import { readOnlyBlockHtml } from "../src/components/code-blocks.ts";
 import { withoutClassDiagrams } from "./content/class-diagram.mjs";
+import { RECORD_NOTICE } from "../src/lib/record.ts";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const DIST = path.join(ROOT, "dist");
@@ -26,6 +27,8 @@ const LICENSE = "https://creativecommons.org/licenses/by-nc-sa/4.0/";
 const GEN = path.join(ROOT, "src/generated");
 const index = JSON.parse(fs.readFileSync(path.join(GEN, "course.json"), "utf8"));
 const content = { ...index, modules: index.modules.map((m) => JSON.parse(fs.readFileSync(path.join(GEN, "modules", `${m.id}.json`), "utf8"))) };
+// The projects (content/projects), whole, and where each one's file is (its page fetches it).
+const projects = (index.projects ?? []).map((p) => ({ ...JSON.parse(fs.readFileSync(path.join(GEN, "projects", `${p.id}.json`), "utf8")), file: `${BASE}lessons/projects/${p.id}-${p.hash}.json` }));
 // A lesson page fetches its step's lesson file (src/content/index.ts): start that at once, with the page.
 const lessonFile = new Map(index.modules.flatMap((m) => m.steps.map((s) => [s.id, `${BASE}lessons/${m.id}/${s.slug}-${s.hash}.json`])));
 const template = fs.readFileSync(path.join(DIST, "index.html"), "utf8");
@@ -129,14 +132,15 @@ page("/", {
 <p>Every exercise is compiled by the real javac 21 compiler and run by a Java virtual machine, both inside your browser, on your own device. The lessons of Java Programming I and II follow the University of Helsinki's Java Programming MOOC, with their own explanations and exercises; the extra modules after them are Java Arena's own.</p>
 <p>${allLive ? `All ${content.plan.length} modules are online: ${moocCount} following the MOOC (Java Programming I and II)${extraCount ? ` and ${extraCount} extra ${extraCount === 1 ? "module" : "modules"} of Java Arena's own` : ""}, with ${stepCount} steps and ${challengeCount} challenges.` : `Java Arena is new: ${content.modules.length} of ${content.plan.length} modules are online so far (${stepCount} steps, ${challengeCount} challenges). The rest of the course is added in batches.`}</p>
 <ul>${content.modules.map((m) => `<li><a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a>${extraTag(m)}</li>`).join("")}<li><a href="${link("/learn")}">All modules</a></li></ul>
-<p>Practice: <a href="${link("/deathmatch")}">Deathmatch drills</a>, <a href="${link("/daily")}">the daily challenge</a> and <a href="${link("/placement")}">a placement quiz</a>.</p>`,
+<p>Practice: <a href="${link("/deathmatch")}">Deathmatch drills</a>, <a href="${link("/daily")}">the daily challenge</a> and <a href="${link("/placement")}">a placement quiz</a>.</p>
+<p><a href="${link("/projects")}">Projects</a>: larger programs built over several milestones.</p>`,
 });
 
 page("/learn", {
   title: `All modules | ${NAME}`,
   description: `The course plan: ${moocCount} modules following the University of Helsinki's Java Programming MOOC, parts 1 to 14${extraCount ? `, plus ${extraCount} extra ${extraCount === 1 ? "module" : "modules"} of Java Arena's own` : ""}. ${allLive ? "All of them are online." : `${content.modules.length} are online so far.`}`,
   body:
-    `<h1>The course</h1><p>Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises.${allLive ? "" : " Modules that aren't written yet are listed so you can see what's coming."}</p>` +
+    `<h1>The course</h1><p>Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises.${allLive ? "" : " Modules that aren't written yet are listed so you can see what's coming."}</p><p><a href="${link("/projects")}">Projects</a>: larger programs built over several milestones, each after the modules it needs.</p>` +
     COURSES.filter(([c]) => content.plan.some((m) => m.course === c))
       .map(([c, name, note]) => `<h2>${esc(name)}</h2><p>${esc(note)}</p><ol>` + content.plan.filter((m) => m.course === c).map((m) => `<li value="${m.number}">${m.live ? `<a href="${link(modulePath(m))}">${esc(m.title)}</a>` : `${esc(m.title)} (not written yet)`}${extraTag(m)}</li>`).join("") + `</ol>`)
       .join(""),
@@ -185,6 +189,52 @@ ${s.more.map((c, k) => `<section class="task-card"><div class="task-head"><h2 cl
   });
 }
 
+// ---------------------------------------------------------------- projects
+const projectPath = (p) => `/projects/${p.id}/`;
+/** "After module 20: Lists of objects", as src/components/AfterModule.tsx writes it. */
+function afterModule(p) {
+  const m = content.plan.find((x) => x.id === p.after);
+  if (!m) return "";
+  const name = `module ${m.number}: ${esc(m.title)}`;
+  return `After ${m.live ? `<a href="${link(modulePath(m))}">${name}</a>` : name}`;
+}
+page("/projects", {
+  title: `Projects: larger Java programs, one milestone at a time | ${NAME}`,
+  description: "Larger Java programs built over several milestones, each starting from your own code of the one before. Each project comes after the modules it needs.",
+  body: `<nav aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a></nav><h1>Projects</h1><p>Larger programs, built one milestone at a time. Each milestone starts from your own code of the one before it, so at the end you have one whole program that you wrote.</p>${
+    projects.length ? `<ul>${projects.map((p) => `<li><a href="${link(projectPath(p))}">${esc(p.title)}</a> (${afterModule(p)}): ${esc(p.summary)}</li>`).join("")}</ul>` : "<p>No projects yet. They're on their way.</p>"
+  }`,
+});
+for (const p of projects) {
+  page(projectPath(p), {
+    title: `${p.title} · Projects | ${NAME}`,
+    description: summary(p.summary),
+    type: "article",
+    jsonld: {
+      "@context": "https://schema.org",
+      "@type": "LearningResource",
+      name: p.title,
+      description: summary(p.summary),
+      learningResourceType: "Project",
+      interactivityType: "active",
+      isAccessibleForFree: true,
+      inLanguage: "en",
+      programmingLanguage: "Java",
+      license: LICENSE,
+      url: canonical(projectPath(p)),
+    },
+    preload: p.file,
+    // The same layout as the app's project page, so nothing jumps when the app takes over.
+    layout: true,
+    body: `<div class="step-page project-page"><nav class="crumbs" aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a> › <a href="${link("/projects")}">Projects</a></nav>
+<div class="step-grid"><article class="step-text"><div class="step-count"><span class="project-label">Project${p.after && afterModule(p) ? ` · ${afterModule(p)}` : ""}</span></div>
+<h1>${esc(p.title)}</h1>
+<div class="md">${md(p.intro, 2)}</div>
+<h2 class="h3">Milestones</h2><ol class="milestones">${p.milestones.map((m) => `<li class="milestone">${esc(m.title)}</li>`).join("")}</ol></article>
+<section class="step-work" aria-label="Milestone">${p.milestones.map((m, k) => `<section class="task-card"><div class="task-head"><h2 class="task-title">Milestone ${k + 1}: ${esc(m.title)}</h2></div><div class="md task-body">${md(m.task, 3)}</div></section>`).join("\n")}</section></div></div>`,
+  });
+}
+
 page("/playground", {
   title: `Java playground | ${NAME}`,
   description: "Write any Java program and run it with your own input, with the real javac 21 compiler running in your browser. Share programs as links.",
@@ -212,7 +262,25 @@ page("/placement", {
   body: `<div class="narrow"><div class="page-head"><h1>Placement quiz</h1><p>Already know some Java? Answer a few quick questions, one for each module${allLive ? "" : " written so far"}. The first one you miss shows where to start, and you can skip the modules before it.</p></div></div>`,
 });
 
-page("/settings", { title: `Settings | ${NAME}`, description: "Theme, text size, the Java engine download, and your progress on this device.", body: `<h1>Settings</h1><p>Theme, text size, the Java engine download, and your progress. Everything here is saved in this browser only.</p>` });
+page("/settings", { title: `Settings | ${NAME}`, description: "Theme, text size, the Java engine download, and your progress on this device: move it to another device with a transfer link, a QR code or a progress file.", body: `<h1>Settings</h1><p>Theme, text size, the Java engine download, and your progress. Everything here is saved in this browser only; a transfer link, a QR code or a progress file moves your progress to another device.</p>` });
+// Where a transfer link opens (/transfer/#p=...): the link is read in the browser, so the page is
+// the same for every link. Not for search engines (noindex, not in the sitemap), but saved for offline use.
+page("/transfer", {
+  title: `Move your progress | ${NAME}`,
+  description: "Bring your Java Arena progress to this device from a transfer link or a progress file.",
+  index: false,
+  layout: true,
+  body: `<div class="narrow transfer-page"><div class="page-head"><h1>Move your progress</h1><p class="muted">A transfer link from Settings opens this page on the device you're moving to. Your progress comes in only when you choose Merge or Replace.</p></div></div>`,
+});
+// The record page (/record/) is worked out in the browser from its saved progress, so the page is the
+// same for everyone. Not for search engines (noindex, not in the sitemap), but saved for offline use.
+page("/record", {
+  title: `Your record | ${NAME}`,
+  description: "A personal record of the Java Arena modules and projects you finished, from the progress saved in this browser. Print it or save it as a PDF.",
+  index: false,
+  layout: true,
+  body: `<div class="narrow record-page"><div class="page-head record-screen"><h1>Your record</h1><p class="muted">What you finished in Java Arena, from the progress saved in this browser. Print it or save it as a PDF to keep it.</p></div><p class="record-notice">${esc(RECORD_NOTICE)}</p></div>`,
+});
 page("/about", {
   title: `About and credits | ${NAME}`,
   description: "What Java Arena is, the University of Helsinki course it follows, how the in-browser Java engine works, privacy and licenses.",
@@ -225,7 +293,7 @@ const MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><re
 const BRAND = `<a href="${link("/")}" class="brand" aria-label="Java Arena home">${MARK}<span class="brand-name">Java <b>Arena</b></span></a>`;
 const HEADER = `<header class="topbar">${BRAND}<nav id="main-nav" class="nav" aria-label="Main"><a href="${link("/learn")}">Learn</a><a href="${link("/deathmatch")}">Deathmatch</a><a href="${link("/daily")}">Daily</a><a href="${link("/playground")}">Playground</a><a href="${link("/settings")}">Settings</a><a href="${link("/about")}">About</a></nav><div class="topbar-right"><a href="${link("/learn")}" class="btn btn-primary btn-sm topbar-cta">Start learning</a></div></header>`;
 const REPO = "https://github.com/AntonyPerez0/Java-Arena";
-const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li><li><a href="${link("/playground")}">Playground</a></li></ul></div><div class="footer-col"><h2>Practice</h2><ul><li><a href="${link("/deathmatch")}">Deathmatch</a></li><li><a href="${link("/daily")}">Daily challenge</a></li><li><a href="${link("/placement")}">Placement quiz</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The course's lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>; the extra modules after the course are Java Arena's own. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
+const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li><li><a href="${link("/projects")}">Projects</a></li><li><a href="${link("/playground")}">Playground</a></li></ul></div><div class="footer-col"><h2>Practice</h2><ul><li><a href="${link("/deathmatch")}">Deathmatch</a></li><li><a href="${link("/daily")}">Daily challenge</a></li><li><a href="${link("/placement")}">Placement quiz</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The course's lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>; the extra modules after the course are Java Arena's own. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
 // The fonts are needed for the first paint: fetch them right away instead of after the CSS.
 const FONTS = fs
   .readdirSync(path.join(DIST, "assets"))

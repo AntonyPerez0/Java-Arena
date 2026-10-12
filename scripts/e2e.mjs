@@ -3253,6 +3253,8 @@ await test('module 54 lesson: an xml block is shown colored under its file\'s na
   const i = texts.indexOf(fragText);
   expect(i >= 0, `no Java block shows the fragment exactly (${texts.length} Java blocks)`);
   const fragPre = javaPres.nth(i);
+  // The coloring is applied a moment after the text shows: wait for it (a slow runner needs longer).
+  await fragPre.locator('span.tk-kw', { hasText: /^try$/ }).first().waitFor({ timeout: 15000 }).catch(() => {});
   expect((await fragPre.locator('span.tk-kw', { hasText: /^try$/ }).count()) >= 1 && (await fragPre.locator('span.tk-str').count()) >= 1, 'the fragment is colored');
   expect((await fragPre.getAttribute('tabindex')) === '0', 'the fragment takes the keyboard focus to scroll');
   expect((await fragPre.locator('xpath=..').locator('button').count()) === 0, 'the fragment has a button');
@@ -4033,7 +4035,9 @@ await test('moving progress: a progress file downloads with code and loads in an
   await b.page.waitForFunction(() => document.querySelector('.transfer-file-message')?.textContent.startsWith('Merged.'));
   const st = await saved(b.page);
   expect(st.steps['printing-first-program'].challenges[0].code.includes('from phone A') && st.steps['printing-print-and-println'].done, 'merged with code');
-  expect(await b.page.evaluate(() => document.activeElement?.classList.contains('transfer-file-message')), 'focus moves to the message');
+  // The focus moves once the message has rendered: wait for it rather than read it at once.
+  const focused = await b.page.waitForFunction(() => document.activeElement?.classList.contains('transfer-file-message'), null, { timeout: 10000 }).then(() => true, () => false);
+  expect(focused, 'focus moves to the message');
   await b.ctx.close();
 });
 
@@ -4246,6 +4250,8 @@ await test('projects: the Learn and home pages link to them; the list says which
   expect(ms.every((m) => st.projects[p.id].milestones[m.id].done), 'every milestone is done');
   await page.reload();
   await page.locator('#main h1', { hasText: p.title }).waitFor();
+  // The saved progress is read after the page renders: wait for the chip instead of counting at once.
+  await page.locator('.step-count .done-chip').first().waitFor({ timeout: 15000 }).catch(() => {});
   expect((await page.locator('.step-count .done-chip').count()) === 1, 'the project page says done after a reload');
   // The finished project travels in a transfer link (progress only).
   const link = await makeLink(page, false);

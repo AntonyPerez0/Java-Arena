@@ -1,5 +1,5 @@
 // Tests of the notes the grader writes about a run (src/grader/grade.ts): an exception that escaped
-// a JavaFX event handler (the program went on, so the note mustn't say it stopped), a JavaFX main
+// a JavaFX event handler or an AnimationTimer's handle (the program went on, so the note mustn't say it stopped), a JavaFX main
 // class without a usable main, and the time limit of a graded JavaFX or JUnit run. The traces are
 // the reference JDK's, from a program run with Java Arena's JavaFX and a click on each button. The
 // Java engine is replaced by a stand-in that gives a run's result, so grade() runs here without it.
@@ -179,4 +179,13 @@ test("a graded run of a program that uses JUnit gets 30 seconds, and its note sa
   const r = await grade(exercise([{ name: "Test 1", expect: "" }], code), code);
   assert.deepEqual(limits, [30_000]);
   has(r.tests[0].note, "more than 30 seconds");
+});
+
+test("an exception in an AnimationTimer's handle: the note says the timer's handle threw it and JavaFX went on with the next frame", () => {
+  // The reference JDK's trace of a game whose handle removes a rock from the list its for-each loop goes through.
+  const sources = [{ path: "Main.java", text: ["import java.util.List;", "import javafx.animation.AnimationTimer;", "import javafx.scene.shape.Circle;", "", "public class Main {", "    void go(List<Circle> rocks) {", "        new AnimationTimer() {", "            @Override", "            public void handle(long now) {", "                for (Circle rock : rocks) {", "                    rocks.remove(rock);", "                }", "            }", "        }.start();", "    }", "}", ""].join("\n") }];
+  const run = handlerRun("java.util.ConcurrentModificationException", "\tat java.base/java.util.ArrayList$Itr.checkForComodification(ArrayList.java:1095)", "\tat java.base/java.util.ArrayList$Itr.next(ArrayList.java:1049)", "\tat Main$1.handle(Main.java:10)", "\tat arena.fx.Frames.runOne(Frames.java:88)", "\tat arena.fx.Session.frames(Session.java:413)", "\tat arena.fx.Session$Replay.apply(Session.java:387)", "\tat arena.fx.Session$Launch$2.run(Session.java:192)", "\tat arena.fx.Session$FxThread.run(Session.java:264)", "\tat java.base/java.lang.Thread.run(Thread.java:1583)");
+  const note = describeRun(run, sources);
+  has(note, "An AnimationTimer's handle threw ConcurrentModificationException (line 10).", "The game loop's handle went through rocks", "JavaFX printed it and went on with the next frame");
+  lacks(note, "An event handler", "click or typing", "stopped");
 });

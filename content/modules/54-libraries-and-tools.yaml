@@ -1,0 +1,3736 @@
+id: libraries-and-tools
+summary: The tools around a Java program, and the end of the course. Maven, a project's folders and pom.xml, dependencies and where libraries come from; data access objects (DAOs) that keep storing apart from the rest of a program, with an in-memory DAO you write and a text UI that talks only to its interface; a real database with JDBC and H2 on your own computer; packaging a program as a jar; and a look back at the whole course. MOOC sections 14.4 and 14.5.
+steps:
+  - id: libraries-and-tools-build-tools
+    slug: build-tools
+    title: "Build tools: Maven and a project's layout"
+    text: |
+      Every program in this course so far was a few files that Java Arena compiled and ran for you. Real projects are bigger, and they almost never start from nothing: they use **libraries**, code that other people wrote, tested and packaged for anyone to use. You've used two already. JUnit (module 26) is a library for unit tests, and JavaFX (modules 48 to 53) is a library for windows. On this site they were simply there: Java Arena puts JUnit and its practice version of JavaFX on the class path for you.
+
+      On your own computer, someone has to download the right version of each library, put it where javac and java can find it, compile the files in the right order, run the tests and pack the result. A **build tool** does all of that from a description of the project. The MOOC's exercise templates use **Maven**, one of the two build tools most Java projects use (the other is Gradle).
+
+      This module is about the tools that sit around a program. Maven, libraries and databases need your own computer: nothing on this page runs Maven or opens a database. The programs you write here use only the JDK, and the "database" in them is a data access object that keeps its data in memory, in a list or a map. Each step says what you'd do on your own computer.
+
+      ### A Maven project's folders
+
+      Maven expects every project to have the same folders, so anyone who knows Maven finds their way around a new project at once:
+
+      ```text
+      repair-queue/
+          pom.xml
+          src/
+              main/
+                  java/
+                      com/example/repairs/
+                          Main.java
+                          RepairJob.java
+              test/
+                  java/
+                      com/example/repairs/
+                          RepairJobTest.java
+          target/
+      ```
+
+      - `pom.xml` describes the project. It's at the top, in the project's own folder.
+      - `src/main/java` holds the program's own classes, in the folders of their packages (module 41): the class `com.example.repairs.Main` is in `src/main/java/com/example/repairs/Main.java`.
+      - `src/test/java` holds the test classes, in the same packages, so a test can use the classes it tests without imports, package-private parts included. They're compiled and run for the tests, and they aren't part of the finished program.
+      - `target` is where Maven puts what it makes: compiled classes, test reports and the finished jar. Maven creates it, and you can delete it any time: the next build makes it again.
+
+      ### pom.xml
+
+      POM stands for Project Object Model. The file is written in XML, a text format of nested **elements**: `<version>1.0-SNAPSHOT</version>` is an element named `version` whose content is `1.0-SNAPSHOT`, and an element can hold other elements. A small `pom.xml` looks like this:
+
+      ```xml pom.xml
+      <?xml version="1.0" encoding="UTF-8"?>
+      <project xmlns="http://maven.apache.org/POM/4.0.0"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+          <modelVersion>4.0.0</modelVersion>
+
+          <groupId>com.example</groupId>
+          <artifactId>repair-queue</artifactId>
+          <version>1.0-SNAPSHOT</version>
+
+          <properties>
+              <maven.compiler.release>21</maven.compiler.release>
+              <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+          </properties>
+
+          <dependencies>
+              <dependency>
+                  <groupId>junit</groupId>
+                  <artifactId>junit</artifactId>
+                  <version>4.13.2</version>
+                  <scope>test</scope>
+              </dependency>
+          </dependencies>
+      </project>
+      ```
+
+      The first lines are the same in every pom.xml: they say which kind of XML file this is. The rest is about this project:
+
+      - **groupId, artifactId and version** name the project. The groupId is usually a domain name turned around, like a package name (`com.example`); the artifactId is the project's own name (`repair-queue`); the version is its version. `SNAPSHOT` at the end means "still being worked on": a finished release drops it (`1.0`).
+      - **properties** are settings. `maven.compiler.release` is the Java version to compile for, and the source encoding says the files are UTF-8.
+      - **dependencies** lists the libraries the project uses.
+
+      ### A dependency
+
+      Every library is named the same three ways as the project itself. Those three names are a library's **coordinates**, often written on one line with colons between them: `junit:junit:4.13.2`, or `com.h2database:h2:2.2.224` for the database library of step 4. To use a library, you add a `dependency` element with its coordinates inside `dependencies`:
+
+      ```xml
+      <dependency>
+          <groupId>com.h2database</groupId>
+          <artifactId>h2</artifactId>
+          <version>2.2.224</version>
+      </dependency>
+      ```
+
+      A dependency can also have a **scope**. JUnit's above is `<scope>test</scope>`: the library is there when the tests are compiled and run, and not in the program itself, since the program never uses JUnit. A dependency without a scope is there everywhere.
+
+      ### Where libraries come from
+
+      Maven downloads libraries from **Maven Central**, a large public repository of Java libraries. You can search it at [central.sonatype.com](https://central.sonatype.com) or through [mvnrepository.com](https://mvnrepository.com), which the MOOC mentions; each library's page shows the `dependency` element to copy, with its newest version.
+
+      Maven keeps what it downloads on your computer, in a **local repository**: a folder named `.m2/repository` in your home folder. A jar's place there comes from its coordinates. The dots of the groupId become folders, then come a folder for the artifactId and one for the version, and the jar is named after the artifactId and the version. So `com.h2database:h2:2.2.224` is kept as:
+
+      ```text
+      .m2/repository/com/h2database/h2/2.2.224/h2-2.2.224.jar
+      ```
+
+      The next build finds it there and downloads nothing. A library can need libraries of its own: JUnit 4.13.2 needs Hamcrest Core 1.3, so Maven downloads that too, without a line about it in your pom.xml. These are called **transitive dependencies**.
+
+      ### On your own computer
+
+      To build a Maven project on your own computer, install a JDK (version 21, as on this site) and Maven 3.9 or newer, or an editor that comes with Maven, such as IntelliJ IDEA, NetBeans (which the MOOC uses) or VS Code with its Java extensions. These editors open a folder with a pom.xml as a project and run Maven for you from their menus. In a terminal, in the project's folder:
+
+      ```shell
+      mvn compile
+      mvn test
+      mvn package
+      mvn compile exec:java -Dexec.mainClass=com.example.repairs.Main
+      ```
+
+      - `mvn compile` downloads what's missing and compiles `src/main/java` into `target/classes`.
+      - `mvn test` compiles the tests too and runs them, with a report of what passed.
+      - `mvn package` does both and packs the program into a jar in `target` (step 5).
+      - The last line runs the program's `main` with the exec plugin, which Maven downloads the first time.
+
+      The first build takes a while, since Maven downloads its own plugins too; later ones are fast. The MOOC's [section 14.4](https://java-programming.mooc.fi/part-14/4-maven-and-third-party-libraries) shows how its exercise templates use Maven.
+
+      ### And here
+
+      Java Arena runs no Maven. It compiles your files with javac, and JUnit and its practice JavaFX are already on the class path. The folders of packages still work the same way here as on your own computer, and the files of a challenge are what would go in `src/main/java`.
+
+      **Your turn:** a small tool for a project prints where a class's file goes in a Maven project. Fill in the blanks so that `sourcePath` returns the path of a class's file from its full name: `src/main/java`, then the package's folders, then the class's name and `.java`. The program prints:
+
+      ```
+      src/main/java/com/example/repairs/Main.java
+      src/main/java/com/example/repairs/RepairJob.java
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(sourcePath("com.example.repairs.Main"));
+              System.out.println(sourcePath("com.example.repairs.RepairJob"));
+          }
+
+          public static String sourcePath(String className) {
+              return "[[src/main/java]]/" + className.[[replace]](".", "/") + ".java";
+          }
+      }
+    hints:
+      - "The program's own classes go in `src/main/java` (the tests in `src/test/java`). After it comes one folder for each part of the package name."
+      - "The dots of `com.example.repairs.Main` become the slashes of `com/example/repairs/Main`: that's `className.replace(\".\", \"/\")`."
+    tests:
+      - name: Two classes of one package
+      - call: |
+          System.out.println(sourcePath("org.kiln.schedule.Firing"));
+          System.out.println(sourcePath("Main"));
+        hidden: true
+    more:
+      - task: |
+          Library pages often give a dependency as one line of coordinates, `group:artifact:version`, and sometimes a fourth part, the scope: `junit:junit:4.13.2:test`. Write the method `printDependency(String coordinates)`, which prints the `dependency` element for pom.xml, with its parts on lines of their own, indented by 4 spaces:
+
+          - `<dependency>`
+          - the groupId, the artifactId and the version, each in its element
+          - only when the coordinates have a fourth part: the scope in a `scope` element
+          - `</dependency>`
+
+          The program calls it for `com.h2database:h2:2.2.224` and prints:
+
+          ```
+          <dependency>
+              <groupId>com.h2database</groupId>
+              <artifactId>h2</artifactId>
+              <version>2.2.224</version>
+          </dependency>
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  printDependency("com.h2database:h2:2.2.224");
+              }
+
+              public static void printDependency(String coordinates) {
+
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  printDependency("com.h2database:h2:2.2.224");
+              }
+
+              public static void printDependency(String coordinates) {
+                  String[] parts = coordinates.split(":");
+                  System.out.println("<dependency>");
+                  System.out.println("    <groupId>" + parts[0] + "</groupId>");
+                  System.out.println("    <artifactId>" + parts[1] + "</artifactId>");
+                  System.out.println("    <version>" + parts[2] + "</version>");
+                  if (parts.length == 4) {
+                      System.out.println("    <scope>" + parts[3] + "</scope>");
+                  }
+                  System.out.println("</dependency>");
+              }
+          }
+        hints:
+          - "`coordinates.split(\":\")` gives the parts in an array: the groupId at index 0, the artifactId at 1 and the version at 2."
+          - "The array's `length` is 4 when there's a scope. Print its line only then, between the version and `</dependency>`."
+        tests:
+          - name: H2, without a scope
+          - call: printDependency("junit:junit:4.13.2:test");
+            hidden: true
+          - call: |
+              printDependency("org.hamcrest:hamcrest-core:1.3");
+              printDependency("org.openjfx:javafx-controls:21.0.12:compile");
+            hidden: true
+      - task: |
+          In Maven's local repository, a library's jar is in folders named after its coordinates, as the lesson showed. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(jarPath("junit:junit:4.13.2"));
+                  System.out.println(jarPath("org.hamcrest:hamcrest-core:1.3"));
+              }
+
+              public static String jarPath(String coordinates) {
+                  String[] parts = coordinates.split(":");
+                  String group = parts[0].replace(".", "/");
+                  String artifact = parts[1];
+                  String version = parts[2];
+                  return group + "/" + artifact + "/" + version + "/" + artifact + "-" + version + ".jar";
+              }
+          }
+        hints:
+          - "Only the groupId's dots become slashes. The version keeps its dots, and so does the artifactId (it has none here)."
+          - "`junit` has no dots, so its folder is just `junit`, then the artifactId's folder `junit`, then the version's folder, then the jar's name."
+
+  - id: libraries-and-tools-daos
+    slug: data-access-objects
+    title: Data access objects
+    text: |
+      A program that keeps data for longer than one run stores it somewhere: in files (module 43), in a database (step 4), or on a server somewhere else. Where it's stored is a decision that can change. A shop's program might start with a file, move to a database when it grows, and use a list in memory in its tests.
+
+      If code all over the program reads and writes the file itself, each such change means changing all of that code. A **data access object**, a **DAO** for short, puts everything about storing in one class. The rest of the program asks it for the data and hands it new data, and never knows where the data lives. It's the same idea as module 25's split between the user interface and the program's logic, one layer further down.
+
+      ### The interface
+
+      A DAO is usually described by an interface (module 35): the things it can do, with no word about how. A recipe box keeps recipes:
+
+      ```java fragment
+      public interface RecipeDao {
+          List<Recipe> list();
+          int add(String name, int minutes);
+          Recipe findById(int id);
+      }
+      ```
+
+      - `list()` returns every recipe.
+      - `add(name, minutes)` stores a new recipe and returns the **id** it got: a number that names this recipe and no other.
+      - `findById(id)` returns the recipe with that id, or `null` when there's none.
+
+      Why ids? Two recipes can have the same name, and a name can change. A table usually has an id column whose numbers the database hands out, and the rest of the program uses that number to say which one it means: "show recipe 3", "remove recipe 5". The DAO hands out the ids, never the caller.
+
+      ### An implementation that keeps everything in memory
+
+      The simplest DAO keeps its recipes in a list. Its data is gone when the program ends, but everything else works as with a real database, which makes it right for trying a program out and for tests:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              RecipeDao recipes = new InMemoryRecipeDao();
+              int curry = recipes.add("Chickpea curry", 40);
+              recipes.add("Herb flatbread", 20);
+              System.out.println("The curry got id " + curry);
+              System.out.println(recipes.list());
+              System.out.println(recipes.findById(2));
+              System.out.println(recipes.findById(7));
+          }
+      }
+      // ==== RecipeDao.java ====
+      import java.util.List;
+
+      public interface RecipeDao {
+          List<Recipe> list();
+          int add(String name, int minutes);
+          Recipe findById(int id);
+      }
+      // ==== InMemoryRecipeDao.java ====
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class InMemoryRecipeDao implements RecipeDao {
+          private List<Recipe> recipes;
+          private int nextId;
+
+          public InMemoryRecipeDao() {
+              this.recipes = new ArrayList<>();
+              this.nextId = 1;
+          }
+
+          @Override
+          public List<Recipe> list() {
+              return new ArrayList<>(this.recipes);
+          }
+
+          @Override
+          public int add(String name, int minutes) {
+              int id = this.nextId;
+              this.nextId++;
+              this.recipes.add(new Recipe(id, name, minutes));
+              return id;
+          }
+
+          @Override
+          public Recipe findById(int id) {
+              for (Recipe recipe : this.recipes) {
+                  if (recipe.getId() == id) {
+                      return recipe;
+                  }
+              }
+              return null;
+          }
+      }
+      // ==== Recipe.java ====
+      public class Recipe {
+          private int id;
+          private String name;
+          private int minutes;
+
+          public Recipe(int id, String name, int minutes) {
+              this.id = id;
+              this.name = name;
+              this.minutes = minutes;
+          }
+
+          public int getId() {
+              return this.id;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public int getMinutes() {
+              return this.minutes;
+          }
+
+          @Override
+          public String toString() {
+              return "#" + this.id + " " + this.name + ", " + this.minutes + " min";
+          }
+      }
+      ```
+
+      ```output
+      The curry got id 1
+      [#1 Chickpea curry, 40 min, #2 Herb flatbread, 20 min]
+      #2 Herb flatbread, 20 min
+      null
+      ```
+
+      ```classes
+      interface RecipeDao
+      + list(): List<Recipe>
+      + add(name: String, minutes: int): int
+      + findById(id: int): Recipe
+
+      class InMemoryRecipeDao implements RecipeDao
+      - recipes: List<Recipe>
+      - nextId: int
+
+      class Recipe
+      - id: int
+      - name: String
+      - minutes: int
+
+      InMemoryRecipeDao --> * Recipe
+      ```
+
+      - **Ids grow from 1.** `nextId` is the id the next recipe gets. `add` takes it and counts it up, so every recipe gets a new one. A database table with an identity column, like the one in step 4, does the same: H2 doesn't hand out a removed row's id again, even after the program restarts. That matters because an old "recipe 5" written down somewhere must never come to mean another recipe.
+      - **`list()` returns a new list** with the same recipes. If it returned `this.recipes` itself, a caller could `clear()` it, or add a recipe with any id it likes, past the DAO. A database's DAO also builds a new list for every call, so a caller can't tell the difference.
+      - **`main` uses the interface.** The variable's type is `RecipeDao`; only the line with `new` names the class. Swap that one line for another DAO, and the rest of the program stays the same.
+
+      ### Changing and removing
+
+      A DAO usually does two more things:
+
+      ```java fragment
+      boolean update(Recipe recipe);
+      boolean remove(int id);
+      ```
+
+      `update` stores the recipe it's given in place of the one with the same id, and `remove` removes the one with that id. Both return whether there was such a recipe. Together with `add` and the two ways of reading, these are often called **CRUD**: create, read, update and delete, the four things a program does with stored data.
+
+      **Your turn:** a bike repair shop keeps a queue of repair jobs. `RepairJob.java` and the interface `RepairJobDao.java` are ready. Write the class `InMemoryRepairJobDao`, which keeps the jobs in a list:
+
+      - `list()` returns a new list with every job, in the order they were added
+      - `add(bike, problem)` stores a new job that isn't ready yet, with the next id, and returns the id; the first id is 1
+      - `findById(id)` returns the job with that id, or `null`
+
+      Each DAO has ids of its own: a new DAO starts from 1 again. The program prints:
+
+      ```
+      1 and 2
+      [#1 red road bike: flat tire (waiting), #2 green cargo bike: squeaky brakes (waiting)]
+      #2 green cargo bike: squeaky brakes (waiting)
+      null
+      ```
+    seed:
+      InMemoryRepairJobDao.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class InMemoryRepairJobDao implements RepairJobDao {
+
+            @Override
+            public List<RepairJob> list() {
+                return new ArrayList<>();
+            }
+
+            @Override
+            public int add(String bike, String problem) {
+                return 0;
+            }
+
+            @Override
+            public RepairJob findById(int id) {
+                return null;
+            }
+        }
+      RepairJobDao.java: |
+        import java.util.List;
+
+        public interface RepairJobDao {
+            List<RepairJob> list();
+            int add(String bike, String problem);
+            RepairJob findById(int id);
+        }
+      RepairJob.java: |
+        public class RepairJob {
+            private int id;
+            private String bike;
+            private String problem;
+            private boolean ready;
+
+            public RepairJob(int id, String bike, String problem, boolean ready) {
+                this.id = id;
+                this.bike = bike;
+                this.problem = problem;
+                this.ready = ready;
+            }
+
+            public int getId() {
+                return this.id;
+            }
+
+            public String getBike() {
+                return this.bike;
+            }
+
+            public String getProblem() {
+                return this.problem;
+            }
+
+            public boolean isReady() {
+                return this.ready;
+            }
+
+            @Override
+            public String toString() {
+                String state = "waiting";
+                if (this.ready) {
+                    state = "ready";
+                }
+                return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                RepairJobDao queue = new InMemoryRepairJobDao();
+                int first = queue.add("red road bike", "flat tire");
+                int second = queue.add("green cargo bike", "squeaky brakes");
+                System.out.println(first + " and " + second);
+                System.out.println(queue.list());
+                System.out.println(queue.findById(2));
+                System.out.println(queue.findById(5));
+            }
+        }
+    solution:
+      InMemoryRepairJobDao.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class InMemoryRepairJobDao implements RepairJobDao {
+            private List<RepairJob> jobs;
+            private int nextId;
+
+            public InMemoryRepairJobDao() {
+                this.jobs = new ArrayList<>();
+                this.nextId = 1;
+            }
+
+            @Override
+            public List<RepairJob> list() {
+                return new ArrayList<>(this.jobs);
+            }
+
+            @Override
+            public int add(String bike, String problem) {
+                int id = this.nextId;
+                this.nextId++;
+                this.jobs.add(new RepairJob(id, bike, problem, false));
+                return id;
+            }
+
+            @Override
+            public RepairJob findById(int id) {
+                for (RepairJob job : this.jobs) {
+                    if (job.getId() == id) {
+                        return job;
+                    }
+                }
+                return null;
+            }
+        }
+      RepairJobDao.java: |
+        import java.util.List;
+
+        public interface RepairJobDao {
+            List<RepairJob> list();
+            int add(String bike, String problem);
+            RepairJob findById(int id);
+        }
+      RepairJob.java: |
+        public class RepairJob {
+            private int id;
+            private String bike;
+            private String problem;
+            private boolean ready;
+
+            public RepairJob(int id, String bike, String problem, boolean ready) {
+                this.id = id;
+                this.bike = bike;
+                this.problem = problem;
+                this.ready = ready;
+            }
+
+            public int getId() {
+                return this.id;
+            }
+
+            public String getBike() {
+                return this.bike;
+            }
+
+            public String getProblem() {
+                return this.problem;
+            }
+
+            public boolean isReady() {
+                return this.ready;
+            }
+
+            @Override
+            public String toString() {
+                String state = "waiting";
+                if (this.ready) {
+                    state = "ready";
+                }
+                return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                RepairJobDao queue = new InMemoryRepairJobDao();
+                int first = queue.add("red road bike", "flat tire");
+                int second = queue.add("green cargo bike", "squeaky brakes");
+                System.out.println(first + " and " + second);
+                System.out.println(queue.list());
+                System.out.println(queue.findById(2));
+                System.out.println(queue.findById(5));
+            }
+        }
+    hints:
+      - "Follow the recipe box's `InMemoryRecipeDao`: two instance variables, a `List<RepairJob>` and the next id, both set in the constructor. The id variable must not be `static`, since each DAO counts on its own."
+      - "`add` keeps the id in a variable, counts `nextId` up, stores `new RepairJob(id, bike, problem, false)` and returns the id. `list` returns `new ArrayList<>(this.jobs)`."
+    tests:
+      - name: Two jobs
+      - call: |
+          RepairJobDao queue = new InMemoryRepairJobDao();
+          System.out.println(queue.list());
+          queue.add("blue tandem", "loose chain");
+          queue.list().clear();
+          System.out.println(queue.list().size());
+          System.out.println(queue.findById(1));
+        hidden: true
+      - call: |
+          RepairJobDao first = new InMemoryRepairJobDao();
+          first.add("black fixie", "worn saddle");
+          first.add("orange kids bike", "wobbly pedal");
+          RepairJobDao second = new InMemoryRepairJobDao();
+          System.out.println(second.add("silver e-bike", "dead light"));
+          System.out.println(first.add("white racer", "bent fork"));
+          System.out.println(first.findById(3));
+          System.out.println(second.findById(2));
+        hidden: true
+    more:
+      - task: |
+          The repair queue needs to remove jobs: a customer took their bike home unfixed. The interface now has `boolean remove(int id)`, and `list`, `add` and `findById` are done. Write `remove` in `InMemoryRepairJobDao`: it removes the job with that id and returns `true`, or returns `false` when there's no such job.
+
+          Ids are never handed out again: after job 3 is removed, the next new job still gets the next id, not 3. The program prints:
+
+          ```
+          true
+          false
+          new id 4
+          [#1 red road bike: flat tire (waiting), #3 yellow folding bike: bent wheel (waiting), #4 black fixie: worn saddle (waiting)]
+          ```
+        seed:
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    return false;
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean remove(int id);
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new InMemoryRepairJobDao();
+                    queue.add("red road bike", "flat tire");
+                    queue.add("green cargo bike", "squeaky brakes");
+                    queue.add("yellow folding bike", "bent wheel");
+                    System.out.println(queue.remove(2));
+                    System.out.println(queue.remove(2));
+                    int next = queue.add("black fixie", "worn saddle");
+                    System.out.println("new id " + next);
+                    System.out.println(queue.list());
+                }
+            }
+        solution:
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean remove(int id);
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new InMemoryRepairJobDao();
+                    queue.add("red road bike", "flat tire");
+                    queue.add("green cargo bike", "squeaky brakes");
+                    queue.add("yellow folding bike", "bent wheel");
+                    System.out.println(queue.remove(2));
+                    System.out.println(queue.remove(2));
+                    int next = queue.add("black fixie", "worn saddle");
+                    System.out.println("new id " + next);
+                    System.out.println(queue.list());
+                }
+            }
+        hints:
+          - "`findById` already finds the job. If it returns `null`, there's nothing to remove."
+          - "`this.jobs.remove(job)` removes that very object from the list. Don't touch `nextId`: it keeps counting up, so no id comes back."
+        tests:
+          - name: Remove job 2 twice
+          - call: |
+              RepairJobDao queue = new InMemoryRepairJobDao();
+              System.out.println(queue.remove(1));
+              queue.add("blue tandem", "loose chain");
+              queue.add("silver e-bike", "dead light");
+              System.out.println(queue.remove(2));
+              System.out.println(queue.add("white racer", "bent fork"));
+              System.out.println(queue.remove(1));
+              System.out.println(queue.list());
+              System.out.println(queue.findById(1));
+            hidden: true
+      - task: |
+          A mechanic finishes a job, and the queue must show it as ready. The interface now has `boolean update(RepairJob job)`: it stores the job it's given in place of the stored job with the same id, at the same place in the list, and returns `true`; when no stored job has that id, it changes nothing and returns `false`. Write `update` in `InMemoryRepairJobDao`.
+
+          A RepairJob can't be changed once it's made, so the program makes a new one with the same id, bike and problem, and `true` for ready. The program prints:
+
+          ```
+          true
+          false
+          [#1 red road bike: flat tire (ready), #2 green cargo bike: squeaky brakes (waiting)]
+          ```
+        seed:
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new InMemoryRepairJobDao();
+                    queue.add("red road bike", "flat tire");
+                    queue.add("green cargo bike", "squeaky brakes");
+                    RepairJob job = queue.findById(1);
+                    RepairJob fixed = new RepairJob(job.getId(), job.getBike(), job.getProblem(), true);
+                    System.out.println(queue.update(fixed));
+                    System.out.println(queue.update(new RepairJob(9, "old town bike", "rusty chain", true)));
+                    System.out.println(queue.list());
+                }
+            }
+        solution:
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    for (int i = 0; i < this.jobs.size(); i++) {
+                        if (this.jobs.get(i).getId() == job.getId()) {
+                            this.jobs.set(i, job);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new InMemoryRepairJobDao();
+                    queue.add("red road bike", "flat tire");
+                    queue.add("green cargo bike", "squeaky brakes");
+                    RepairJob job = queue.findById(1);
+                    RepairJob fixed = new RepairJob(job.getId(), job.getBike(), job.getProblem(), true);
+                    System.out.println(queue.update(fixed));
+                    System.out.println(queue.update(new RepairJob(9, "old town bike", "rusty chain", true)));
+                    System.out.println(queue.list());
+                }
+            }
+        hints:
+          - "Go through the list by index, with a `for` loop from 0 to `size() - 1`, and compare each stored job's id with `job.getId()`."
+          - "`this.jobs.set(i, job)` puts the new job at index `i`, in place of the old one, so the order stays. Return `true` right after it, and `false` after the loop."
+        tests:
+          - name: Job 1 is ready
+          - call: |
+              RepairJobDao queue = new InMemoryRepairJobDao();
+              queue.add("blue tandem", "loose chain");
+              queue.add("silver e-bike", "dead light");
+              queue.add("white racer", "bent fork");
+              System.out.println(queue.update(new RepairJob(2, "silver e-bike", "dead light and horn", true)));
+              System.out.println(queue.update(new RepairJob(4, "white racer", "bent fork", true)));
+              System.out.println(queue.list());
+              System.out.println(queue.findById(2).isReady());
+              System.out.println(queue.add("black fixie", "worn saddle"));
+            hidden: true
+
+  - id: libraries-and-tools-dao-ui
+    slug: text-ui-over-a-dao
+    title: A text UI over a DAO
+    text: |
+      A DAO stores data; a user interface lets a person work with it. In module 25 a text UI read commands and called the program's logic. Here, the logic it calls is a DAO.
+
+      ### The UI gets its DAO
+
+      The UI class keeps the DAO in an instance variable whose type is the **interface**, and gets it, like the Scanner, through its constructor:
+
+      ```java run
+      import java.util.Scanner;
+
+      public class Main {
+          public static void main(String[] args) {
+              RecipeDao recipes = new InMemoryRecipeDao();
+              RecipeUi ui = new RecipeUi(recipes, new Scanner(System.in));
+              ui.start();
+          }
+      }
+      // ==== RecipeUi.java ====
+      import java.util.List;
+      import java.util.Scanner;
+
+      public class RecipeUi {
+          private RecipeDao recipes;
+          private Scanner scanner;
+
+          public RecipeUi(RecipeDao recipes, Scanner scanner) {
+              this.recipes = recipes;
+              this.scanner = scanner;
+          }
+
+          public void start() {
+              while (true) {
+                  System.out.print("> ");
+                  String command = this.scanner.nextLine();
+                  if (command.equals("quit")) {
+                      System.out.println("Bye");
+                      break;
+                  }
+                  if (command.equals("list")) {
+                      list();
+                  } else if (command.equals("add")) {
+                      add();
+                  } else {
+                      System.out.println("Unknown command: " + command);
+                  }
+              }
+          }
+
+          private void list() {
+              List<Recipe> all = this.recipes.list();
+              if (all.isEmpty()) {
+                  System.out.println("No recipes yet");
+              }
+              for (Recipe recipe : all) {
+                  System.out.println(recipe);
+              }
+          }
+
+          private void add() {
+              String name = this.scanner.nextLine();
+              int minutes = Integer.valueOf(this.scanner.nextLine());
+              int id = this.recipes.add(name, minutes);
+              System.out.println("Saved as recipe " + id);
+          }
+      }
+      // ==== RecipeDao.java ====
+      import java.util.List;
+
+      public interface RecipeDao {
+          List<Recipe> list();
+          int add(String name, int minutes);
+          Recipe findById(int id);
+      }
+      // ==== InMemoryRecipeDao.java ====
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class InMemoryRecipeDao implements RecipeDao {
+          private List<Recipe> recipes;
+          private int nextId;
+
+          public InMemoryRecipeDao() {
+              this.recipes = new ArrayList<>();
+              this.nextId = 1;
+          }
+
+          @Override
+          public List<Recipe> list() {
+              return new ArrayList<>(this.recipes);
+          }
+
+          @Override
+          public int add(String name, int minutes) {
+              int id = this.nextId;
+              this.nextId++;
+              this.recipes.add(new Recipe(id, name, minutes));
+              return id;
+          }
+
+          @Override
+          public Recipe findById(int id) {
+              for (Recipe recipe : this.recipes) {
+                  if (recipe.getId() == id) {
+                      return recipe;
+                  }
+              }
+              return null;
+          }
+      }
+      // ==== Recipe.java ====
+      public class Recipe {
+          private int id;
+          private String name;
+          private int minutes;
+
+          public Recipe(int id, String name, int minutes) {
+              this.id = id;
+              this.name = name;
+              this.minutes = minutes;
+          }
+
+          public int getId() {
+              return this.id;
+          }
+
+          public String getName() {
+              return this.name;
+          }
+
+          public int getMinutes() {
+              return this.minutes;
+          }
+
+          @Override
+          public String toString() {
+              return "#" + this.id + " " + this.name + ", " + this.minutes + " min";
+          }
+      }
+      ```
+
+      ```input
+      list
+      add
+      Chickpea curry
+      40
+      add
+      Herb flatbread
+      20
+      list
+      curry
+      quit
+      ```
+
+      ```output
+      > No recipes yet
+      > Saved as recipe 1
+      > Saved as recipe 2
+      > #1 Chickpea curry, 40 min
+      #2 Herb flatbread, 20 min
+      > Unknown command: curry
+      > Bye
+      ```
+
+      As in module 25, the program prints `> ` before reading each command, and the output doesn't show what was typed. A command that needs more, such as `add`, reads it from the next lines, without prompts of its own.
+
+      ### Who knows what
+
+      - **The UI** reads commands and prints answers. It doesn't know whether the recipes are in a list, a file or a database: it only calls the methods of `RecipeDao`.
+      - **The DAO** stores and finds recipes. It never reads input or prints anything.
+      - **`main`** is the only place that names `InMemoryRecipeDao`. It picks the DAO and the Scanner and hands both to the UI.
+
+      That last point is what makes the split pay off. On your own computer, `main` could create a DAO that uses a database (step 4) and pass that one instead: `RecipeUi` wouldn't change a line. A test can do the opposite: fill a DAO in memory with exactly the recipes it needs, and give the UI a Scanner that reads a String (module 26):
+
+      ```java fragment
+      RecipeDao recipes = new InMemoryRecipeDao();
+      recipes.add("Chickpea curry", 40);
+      RecipeUi ui = new RecipeUi(recipes, new Scanner("list\nquit\n"));
+      ui.start();
+      ```
+
+      Passing an object the parts it needs, instead of letting it create them, is called **dependency injection**. Big frameworks do it automatically, but a constructor parameter is all it takes.
+
+      **Your turn:** write the text UI of the bike repair queue in `QueueUi.java`. The DAO from step 2 is ready in the other files, and `main` creates both. In `start`, before reading each command, print `> ` with `print`. The commands:
+
+      - `list` prints every job on a line of its own, or `The queue is empty` when there are none
+      - `add` reads two more lines, the bike and the problem, adds the job and prints `Added job ` and its id
+      - `quit` prints `Bye` and ends
+      - anything else prints `Unknown command: ` and the command
+
+      `QueueUi` uses only the DAO it's given. For the input shown, the program prints:
+
+      ```
+      > The queue is empty
+      > Added job 1
+      > Added job 2
+      > #1 red road bike: flat tire (waiting)
+      #2 green cargo bike: squeaky brakes (waiting)
+      > Unknown command: pump
+      > Bye
+      ```
+    seed:
+      QueueUi.java: |
+        import java.util.Scanner;
+
+        public class QueueUi {
+            private RepairJobDao queue;
+            private Scanner scanner;
+
+            public QueueUi(RepairJobDao queue, Scanner scanner) {
+                this.queue = queue;
+                this.scanner = scanner;
+            }
+
+            public void start() {
+                // Write the command loop here.
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                RepairJobDao queue = new InMemoryRepairJobDao();
+                QueueUi ui = new QueueUi(queue, new Scanner(System.in));
+                ui.start();
+            }
+        }
+      RepairJobDao.java: |
+        import java.util.List;
+
+        public interface RepairJobDao {
+            List<RepairJob> list();
+            int add(String bike, String problem);
+            RepairJob findById(int id);
+            boolean update(RepairJob job);
+            boolean remove(int id);
+        }
+      InMemoryRepairJobDao.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class InMemoryRepairJobDao implements RepairJobDao {
+            private List<RepairJob> jobs;
+            private int nextId;
+
+            public InMemoryRepairJobDao() {
+                this.jobs = new ArrayList<>();
+                this.nextId = 1;
+            }
+
+            @Override
+            public List<RepairJob> list() {
+                return new ArrayList<>(this.jobs);
+            }
+
+            @Override
+            public int add(String bike, String problem) {
+                int id = this.nextId;
+                this.nextId++;
+                this.jobs.add(new RepairJob(id, bike, problem, false));
+                return id;
+            }
+
+            @Override
+            public RepairJob findById(int id) {
+                for (RepairJob job : this.jobs) {
+                    if (job.getId() == id) {
+                        return job;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public boolean update(RepairJob job) {
+                for (int i = 0; i < this.jobs.size(); i++) {
+                    if (this.jobs.get(i).getId() == job.getId()) {
+                        this.jobs.set(i, job);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public boolean remove(int id) {
+                RepairJob job = findById(id);
+                if (job == null) {
+                    return false;
+                }
+                this.jobs.remove(job);
+                return true;
+            }
+        }
+      RepairJob.java: |
+        public class RepairJob {
+            private int id;
+            private String bike;
+            private String problem;
+            private boolean ready;
+
+            public RepairJob(int id, String bike, String problem, boolean ready) {
+                this.id = id;
+                this.bike = bike;
+                this.problem = problem;
+                this.ready = ready;
+            }
+
+            public int getId() {
+                return this.id;
+            }
+
+            public String getBike() {
+                return this.bike;
+            }
+
+            public String getProblem() {
+                return this.problem;
+            }
+
+            public boolean isReady() {
+                return this.ready;
+            }
+
+            @Override
+            public String toString() {
+                String state = "waiting";
+                if (this.ready) {
+                    state = "ready";
+                }
+                return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+            }
+        }
+    solution:
+      QueueUi.java: |
+        import java.util.List;
+        import java.util.Scanner;
+
+        public class QueueUi {
+            private RepairJobDao queue;
+            private Scanner scanner;
+
+            public QueueUi(RepairJobDao queue, Scanner scanner) {
+                this.queue = queue;
+                this.scanner = scanner;
+            }
+
+            public void start() {
+                // Write the command loop here.
+                while (true) {
+                    System.out.print("> ");
+                    String command = this.scanner.nextLine();
+                    if (command.equals("quit")) {
+                        System.out.println("Bye");
+                        break;
+                    }
+                    if (command.equals("list")) {
+                        list();
+                    } else if (command.equals("add")) {
+                        add();
+                    } else {
+                        System.out.println("Unknown command: " + command);
+                    }
+                }
+            }
+
+            private void list() {
+                List<RepairJob> jobs = this.queue.list();
+                if (jobs.isEmpty()) {
+                    System.out.println("The queue is empty");
+                }
+                for (RepairJob job : jobs) {
+                    System.out.println(job);
+                }
+            }
+
+            private void add() {
+                String bike = this.scanner.nextLine();
+                String problem = this.scanner.nextLine();
+                int id = this.queue.add(bike, problem);
+                System.out.println("Added job " + id);
+            }
+        }
+      Main.java: |
+        import java.util.Scanner;
+
+        public class Main {
+            public static void main(String[] args) {
+                RepairJobDao queue = new InMemoryRepairJobDao();
+                QueueUi ui = new QueueUi(queue, new Scanner(System.in));
+                ui.start();
+            }
+        }
+      RepairJobDao.java: |
+        import java.util.List;
+
+        public interface RepairJobDao {
+            List<RepairJob> list();
+            int add(String bike, String problem);
+            RepairJob findById(int id);
+            boolean update(RepairJob job);
+            boolean remove(int id);
+        }
+      InMemoryRepairJobDao.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class InMemoryRepairJobDao implements RepairJobDao {
+            private List<RepairJob> jobs;
+            private int nextId;
+
+            public InMemoryRepairJobDao() {
+                this.jobs = new ArrayList<>();
+                this.nextId = 1;
+            }
+
+            @Override
+            public List<RepairJob> list() {
+                return new ArrayList<>(this.jobs);
+            }
+
+            @Override
+            public int add(String bike, String problem) {
+                int id = this.nextId;
+                this.nextId++;
+                this.jobs.add(new RepairJob(id, bike, problem, false));
+                return id;
+            }
+
+            @Override
+            public RepairJob findById(int id) {
+                for (RepairJob job : this.jobs) {
+                    if (job.getId() == id) {
+                        return job;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public boolean update(RepairJob job) {
+                for (int i = 0; i < this.jobs.size(); i++) {
+                    if (this.jobs.get(i).getId() == job.getId()) {
+                        this.jobs.set(i, job);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public boolean remove(int id) {
+                RepairJob job = findById(id);
+                if (job == null) {
+                    return false;
+                }
+                this.jobs.remove(job);
+                return true;
+            }
+        }
+      RepairJob.java: |
+        public class RepairJob {
+            private int id;
+            private String bike;
+            private String problem;
+            private boolean ready;
+
+            public RepairJob(int id, String bike, String problem, boolean ready) {
+                this.id = id;
+                this.bike = bike;
+                this.problem = problem;
+                this.ready = ready;
+            }
+
+            public int getId() {
+                return this.id;
+            }
+
+            public String getBike() {
+                return this.bike;
+            }
+
+            public String getProblem() {
+                return this.problem;
+            }
+
+            public boolean isReady() {
+                return this.ready;
+            }
+
+            @Override
+            public String toString() {
+                String state = "waiting";
+                if (this.ready) {
+                    state = "ready";
+                }
+                return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+            }
+        }
+    hints:
+      - "Start from `RecipeUi`: `while (true)`, the prompt with `print`, one `nextLine()` for the command, `quit` with a `break`, and an `if` for each other command. A private method for each command keeps `start` short."
+      - "`list` asks `this.queue.list()` and checks `isEmpty()` first. `add` reads the bike and the problem with two more `nextLine()` calls and prints the id that `this.queue.add` returns."
+    require:
+      - pattern: new\s+InMemoryRepairJobDao
+        max: 1
+        message: "Only `main` creates the DAO. `QueueUi` uses the one it gets through its constructor, `this.queue`."
+    tests:
+      - stdin: |
+          list
+          add
+          red road bike
+          flat tire
+          add
+          green cargo bike
+          squeaky brakes
+          list
+          pump
+          quit
+      - stdin: |
+          quit
+        hidden: true
+      - stdin: |
+          add
+          blue tandem
+          loose chain
+          List
+          list
+          list
+          quit
+        hidden: true
+      - call: |
+          RepairJobDao queue = new InMemoryRepairJobDao();
+          queue.add("silver e-bike", "dead light");
+          queue.add("white racer", "bent fork");
+          queue.remove(1);
+          QueueUi ui = new QueueUi(queue, new Scanner("list\nadd\nblack fixie\nworn saddle\nlist\nquit\n"));
+          ui.start();
+        hidden: true
+    more:
+      - task: |
+          When a bike is fixed, the mechanic marks its job as ready. Add the command `ready` to `QueueUi`: it reads one more line, a job's id. If there's no job with that id, it prints `No job ` and the id. Otherwise it stores the job again as ready, through the DAO's `update`, and prints `Job `, the id and ` is ready`.
+
+          The other commands stay as they are. For the input shown, the program prints:
+
+          ```
+          > Added job 1
+          > Added job 2
+          > Job 2 is ready
+          > No job 7
+          > #1 red road bike: flat tire (waiting)
+          #2 green cargo bike: squeaky brakes (ready)
+          > Bye
+          ```
+        seed:
+          QueueUi.java: |
+            import java.util.List;
+            import java.util.Scanner;
+
+            public class QueueUi {
+                private RepairJobDao queue;
+                private Scanner scanner;
+
+                public QueueUi(RepairJobDao queue, Scanner scanner) {
+                    this.queue = queue;
+                    this.scanner = scanner;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye");
+                            break;
+                        }
+                        if (command.equals("list")) {
+                            list();
+                        } else if (command.equals("add")) {
+                            add();
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+
+                private void list() {
+                    List<RepairJob> jobs = this.queue.list();
+                    if (jobs.isEmpty()) {
+                        System.out.println("The queue is empty");
+                    }
+                    for (RepairJob job : jobs) {
+                        System.out.println(job);
+                    }
+                }
+
+                private void add() {
+                    String bike = this.scanner.nextLine();
+                    String problem = this.scanner.nextLine();
+                    int id = this.queue.add(bike, problem);
+                    System.out.println("Added job " + id);
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new InMemoryRepairJobDao();
+                    QueueUi ui = new QueueUi(queue, new Scanner(System.in));
+                    ui.start();
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    for (int i = 0; i < this.jobs.size(); i++) {
+                        if (this.jobs.get(i).getId() == job.getId()) {
+                            this.jobs.set(i, job);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+        solution:
+          QueueUi.java: |
+            import java.util.List;
+            import java.util.Scanner;
+
+            public class QueueUi {
+                private RepairJobDao queue;
+                private Scanner scanner;
+
+                public QueueUi(RepairJobDao queue, Scanner scanner) {
+                    this.queue = queue;
+                    this.scanner = scanner;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye");
+                            break;
+                        }
+                        if (command.equals("list")) {
+                            list();
+                        } else if (command.equals("add")) {
+                            add();
+                        } else if (command.equals("ready")) {
+                            ready();
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+
+                private void list() {
+                    List<RepairJob> jobs = this.queue.list();
+                    if (jobs.isEmpty()) {
+                        System.out.println("The queue is empty");
+                    }
+                    for (RepairJob job : jobs) {
+                        System.out.println(job);
+                    }
+                }
+
+                private void add() {
+                    String bike = this.scanner.nextLine();
+                    String problem = this.scanner.nextLine();
+                    int id = this.queue.add(bike, problem);
+                    System.out.println("Added job " + id);
+                }
+
+                private void ready() {
+                    int id = Integer.valueOf(this.scanner.nextLine());
+                    RepairJob job = this.queue.findById(id);
+                    if (job == null) {
+                        System.out.println("No job " + id);
+                        return;
+                    }
+                    this.queue.update(new RepairJob(id, job.getBike(), job.getProblem(), true));
+                    System.out.println("Job " + id + " is ready");
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new InMemoryRepairJobDao();
+                    QueueUi ui = new QueueUi(queue, new Scanner(System.in));
+                    ui.start();
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    for (int i = 0; i < this.jobs.size(); i++) {
+                        if (this.jobs.get(i).getId() == job.getId()) {
+                            this.jobs.set(i, job);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+        hints:
+          - "Add an `else if` for `ready` that calls a new private method. It reads the id with `Integer.valueOf(this.scanner.nextLine())` and asks `this.queue.findById(id)`."
+          - "When the job is there, make `new RepairJob(id, job.getBike(), job.getProblem(), true)` and give it to `this.queue.update(...)`: the DAO's stored job changes only through the DAO."
+        tests:
+          - stdin: |
+              add
+              red road bike
+              flat tire
+              add
+              green cargo bike
+              squeaky brakes
+              ready
+              2
+              ready
+              7
+              list
+              quit
+          - stdin: |
+              ready
+              1
+              list
+              quit
+            hidden: true
+          - call: |
+              RepairJobDao queue = new InMemoryRepairJobDao();
+              queue.add("silver e-bike", "dead light");
+              queue.add("white racer", "bent fork");
+              queue.add("blue tandem", "loose chain");
+              QueueUi ui = new QueueUi(queue, new Scanner("ready\n3\nready\n3\nready\n1\nfix\nquit\n"));
+              ui.start();
+              System.out.println(queue.list());
+            hidden: true
+      - task: |
+          Two more commands for `QueueUi`:
+
+          - `remove` reads a job's id from the next line and removes that job through the DAO. It prints `Removed job ` and the id, or `No job ` and the id when there's none.
+          - `next` prints `Next: ` and the first job in the list that isn't ready yet, or `Nothing is waiting` when every job is ready (or there are none).
+
+          The other commands, `ready` too, stay as they are. For the input shown, the program prints:
+
+          ```
+          > Added job 1
+          > Added job 2
+          > Job 1 is ready
+          > Next: #2 green cargo bike: squeaky brakes (waiting)
+          > Removed job 2
+          > No job 2
+          > Nothing is waiting
+          > Bye
+          ```
+        seed:
+          QueueUi.java: |
+            import java.util.List;
+            import java.util.Scanner;
+
+            public class QueueUi {
+                private RepairJobDao queue;
+                private Scanner scanner;
+
+                public QueueUi(RepairJobDao queue, Scanner scanner) {
+                    this.queue = queue;
+                    this.scanner = scanner;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye");
+                            break;
+                        }
+                        if (command.equals("list")) {
+                            list();
+                        } else if (command.equals("add")) {
+                            add();
+                        } else if (command.equals("ready")) {
+                            ready();
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+
+                private void list() {
+                    List<RepairJob> jobs = this.queue.list();
+                    if (jobs.isEmpty()) {
+                        System.out.println("The queue is empty");
+                    }
+                    for (RepairJob job : jobs) {
+                        System.out.println(job);
+                    }
+                }
+
+                private void add() {
+                    String bike = this.scanner.nextLine();
+                    String problem = this.scanner.nextLine();
+                    int id = this.queue.add(bike, problem);
+                    System.out.println("Added job " + id);
+                }
+
+                private void ready() {
+                    int id = Integer.valueOf(this.scanner.nextLine());
+                    RepairJob job = this.queue.findById(id);
+                    if (job == null) {
+                        System.out.println("No job " + id);
+                        return;
+                    }
+                    this.queue.update(new RepairJob(id, job.getBike(), job.getProblem(), true));
+                    System.out.println("Job " + id + " is ready");
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new InMemoryRepairJobDao();
+                    QueueUi ui = new QueueUi(queue, new Scanner(System.in));
+                    ui.start();
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    for (int i = 0; i < this.jobs.size(); i++) {
+                        if (this.jobs.get(i).getId() == job.getId()) {
+                            this.jobs.set(i, job);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+        solution:
+          QueueUi.java: |
+            import java.util.List;
+            import java.util.Scanner;
+
+            public class QueueUi {
+                private RepairJobDao queue;
+                private Scanner scanner;
+
+                public QueueUi(RepairJobDao queue, Scanner scanner) {
+                    this.queue = queue;
+                    this.scanner = scanner;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye");
+                            break;
+                        }
+                        if (command.equals("list")) {
+                            list();
+                        } else if (command.equals("add")) {
+                            add();
+                        } else if (command.equals("ready")) {
+                            ready();
+                        } else if (command.equals("remove")) {
+                            remove();
+                        } else if (command.equals("next")) {
+                            next();
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+
+                private void list() {
+                    List<RepairJob> jobs = this.queue.list();
+                    if (jobs.isEmpty()) {
+                        System.out.println("The queue is empty");
+                    }
+                    for (RepairJob job : jobs) {
+                        System.out.println(job);
+                    }
+                }
+
+                private void add() {
+                    String bike = this.scanner.nextLine();
+                    String problem = this.scanner.nextLine();
+                    int id = this.queue.add(bike, problem);
+                    System.out.println("Added job " + id);
+                }
+
+                private void ready() {
+                    int id = Integer.valueOf(this.scanner.nextLine());
+                    RepairJob job = this.queue.findById(id);
+                    if (job == null) {
+                        System.out.println("No job " + id);
+                        return;
+                    }
+                    this.queue.update(new RepairJob(id, job.getBike(), job.getProblem(), true));
+                    System.out.println("Job " + id + " is ready");
+                }
+
+                private void remove() {
+                    int id = Integer.valueOf(this.scanner.nextLine());
+                    if (this.queue.remove(id)) {
+                        System.out.println("Removed job " + id);
+                    } else {
+                        System.out.println("No job " + id);
+                    }
+                }
+
+                private void next() {
+                    for (RepairJob job : this.queue.list()) {
+                        if (!job.isReady()) {
+                            System.out.println("Next: " + job);
+                            return;
+                        }
+                    }
+                    System.out.println("Nothing is waiting");
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new InMemoryRepairJobDao();
+                    QueueUi ui = new QueueUi(queue, new Scanner(System.in));
+                    ui.start();
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    for (int i = 0; i < this.jobs.size(); i++) {
+                        if (this.jobs.get(i).getId() == job.getId()) {
+                            this.jobs.set(i, job);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+        hints:
+          - "`remove` is like `ready`: read the id, then let the DAO do the work. Its `remove(id)` already returns whether the job was there."
+          - "For `next`, go through `this.queue.list()` with a for-each loop and print the first job whose `isReady()` is false, then `return`. After the loop, nothing was waiting."
+        tests:
+          - stdin: |
+              add
+              red road bike
+              flat tire
+              add
+              green cargo bike
+              squeaky brakes
+              ready
+              1
+              next
+              remove
+              2
+              remove
+              2
+              next
+              quit
+          - stdin: |
+              next
+              remove
+              1
+              quit
+            hidden: true
+          - call: |
+              RepairJobDao queue = new InMemoryRepairJobDao();
+              queue.add("silver e-bike", "dead light");
+              queue.add("white racer", "bent fork");
+              queue.add("blue tandem", "loose chain");
+              queue.update(new RepairJob(1, "silver e-bike", "dead light", true));
+              QueueUi ui = new QueueUi(queue, new Scanner("next\nremove\n2\nnext\nlist\nquit\n"));
+              ui.start();
+            hidden: true
+
+  - id: libraries-and-tools-jdbc
+    slug: databases
+    title: A real database with JDBC
+    text: |
+      The DAO of the last two steps forgets everything when the program ends. A **database** keeps data safe on disk between runs, lets many programs use it at once, and finds rows fast even when there are millions of them. Most databases are used with **SQL**, a language of its own for asking for data (`SELECT`), adding it (`INSERT`), changing it (`UPDATE`) and removing it (`DELETE`).
+
+      Everything in this step runs on your own computer only. Java Arena has no database and no database library, so the Java in this step is code to read, and the challenges at the end use only the JDK.
+
+      ### JDBC and H2
+
+      **JDBC** (Java Database Connectivity) is the part of the JDK that talks to databases: the interfaces `Connection`, `PreparedStatement` and `ResultSet` and the class `DriverManager`, in the package `java.sql`. JDBC is the same for every database. What differs is the **driver**, a library from the database's makers that does the real work for their database.
+
+      **H2** is a small database written in Java. Its driver and the whole database come in one jar, so it needs no installing: add its dependency to pom.xml (step 1), and a program can create a database in a file of its own.
+
+      ```xml
+      <dependency>
+          <groupId>com.h2database</groupId>
+          <artifactId>h2</artifactId>
+          <version>2.2.224</version>
+      </dependency>
+      ```
+
+      ### A DAO that uses a database
+
+      The repair queue's DAO, written with JDBC. It implements the same `RepairJobDao` as the DAO in memory:
+
+      ```java fragment
+      import java.sql.Connection;
+      import java.sql.DriverManager;
+      import java.sql.PreparedStatement;
+      import java.sql.ResultSet;
+      import java.sql.SQLException;
+      import java.util.ArrayList;
+      import java.util.List;
+
+      public class JdbcRepairJobDao implements RepairJobDao {
+          private String url;
+
+          public JdbcRepairJobDao(String url) {
+              this.url = url;
+              String sql = "CREATE TABLE IF NOT EXISTS RepairJob ("
+                      + "id INT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, "
+                      + "bike VARCHAR(100), problem VARCHAR(200), ready BOOLEAN)";
+              try (Connection connection = connect();
+                      PreparedStatement statement = connection.prepareStatement(sql)) {
+                  statement.executeUpdate();
+              } catch (SQLException e) {
+                  throw new IllegalStateException("Couldn't create the table", e);
+              }
+          }
+
+          private Connection connect() throws SQLException {
+              return DriverManager.getConnection(this.url, "sa", "");
+          }
+
+          @Override
+          public List<RepairJob> list() {
+              List<RepairJob> jobs = new ArrayList<>();
+              String sql = "SELECT id, bike, problem, ready FROM RepairJob ORDER BY id";
+              try (Connection connection = connect();
+                      PreparedStatement statement = connection.prepareStatement(sql);
+                      ResultSet rows = statement.executeQuery()) {
+                  while (rows.next()) {
+                      jobs.add(new RepairJob(rows.getInt("id"), rows.getString("bike"),
+                              rows.getString("problem"), rows.getBoolean("ready")));
+                  }
+              } catch (SQLException e) {
+                  throw new IllegalStateException("Couldn't read the jobs", e);
+              }
+              return jobs;
+          }
+
+          @Override
+          public boolean remove(int id) {
+              try (Connection connection = connect();
+                      PreparedStatement statement = connection.prepareStatement("DELETE FROM RepairJob WHERE id = ?")) {
+                  statement.setInt(1, id);
+                  return statement.executeUpdate() > 0;
+              } catch (SQLException e) {
+                  throw new IllegalStateException("Couldn't remove job " + id, e);
+              }
+          }
+
+          // add, findById and update follow the same pattern.
+      }
+      ```
+
+      - **The URL** names the database: `jdbc:h2:./repairs` is an H2 database in the file `repairs.mv.db` in the folder where the program runs, made the first time. `"sa"` and `""` are the user name and the password the database is created with.
+      - **`Connection`** is an open line to the database, from `DriverManager.getConnection`. JDBC finds H2's driver on the class path by itself.
+      - **`PreparedStatement`** is one SQL statement. Each `?` in it is a **parameter**, filled in with `setInt`, `setString` or `setBoolean`, numbered from **1** (not 0, unlike almost everything else in Java). `executeQuery()` runs a `SELECT` and returns its rows; `executeUpdate()` runs the others and returns how many rows they changed, so `remove` returns `true` exactly when a row went away.
+      - **`ResultSet`** walks through the rows. It starts *before* the first row: each `next()` moves it one row on and returns `false` when there are no more, so `while (rows.next())` visits every row once. `getInt("id")` and `getString("bike")` read a column of the current row.
+      - **try-with-resources** (modules 42 and 43) closes the result set, the statement and the connection at the end, in that order, even when an exception is thrown. A connection left open is a connection the database can't give to anyone else.
+      - **`SQLException`** is a checked exception, and `RepairJobDao`'s methods don't declare it, so each method catches it and throws an unchecked one with the cause inside. The rest of the program doesn't change: the UI of step 3 works with this DAO as it is.
+
+      To add a job and get its id, the statement is made with `connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)`, and after `executeUpdate()`, `statement.getGeneratedKeys()` returns a ResultSet whose one row holds the id the database chose.
+
+      ### Never build SQL from strings
+
+      It's tempting to write `"DELETE FROM RepairJob WHERE bike = '" + bike + "'"`. Then the user's text becomes part of the SQL itself. A bike named `O'Neil's tandem` breaks the statement, since its `'` ends the quoted text early. Worse, someone can type text that *is* SQL:
+
+      ```text
+      DELETE FROM RepairJob WHERE bike = 'x' OR 'a'='a'
+      ```
+
+      `'a'='a'` is true for every row, so this removes every job. Getting a program to run SQL of the attacker's choice like this is called **SQL injection**, and it has been behind many real data leaks. With a `?` and `setString`, the text is sent to the database as a value, never as SQL: `x' OR 'a'='a` is then just an odd bike name that no row has. Always use parameters for values that come from outside the program.
+
+      ### On your own computer
+
+      1. Make a Maven project as in step 1, and add H2's dependency to pom.xml.
+      2. Put `RepairJob`, `RepairJobDao`, `JdbcRepairJobDao` (with the missing methods written), `QueueUi` and `Main` in `src/main/java`, each starting with the project's package line.
+      3. In `main`, create `new JdbcRepairJobDao("jdbc:h2:./repairs")` in place of the DAO in memory.
+      4. Run it with `mvn compile exec:java -Dexec.mainClass=...` (your Main's full name), add a few jobs and quit. Run it again: the jobs are still there, in `repairs.mv.db`.
+
+      The MOOC's [section 14.4](https://java-programming.mooc.fi/part-14/4-maven-and-third-party-libraries) has the database exercise, with a template whose pom.xml already has H2's dependency. For SQL itself, the MOOC points to a separate course on databases.
+
+      **Your turn:** this program builds SQL from strings, the way you shouldn't. What does it print? Look at which of the lines would remove more than one bike's job.
+    predict: |
+      public class Main {
+          public static void main(String[] args) {
+              String[] bikes = {"blue tandem", "x' OR 'a'='a"};
+              for (String bike : bikes) {
+                  String sql = "DELETE FROM RepairJob WHERE bike = '" + bike + "'";
+                  System.out.println(sql);
+              }
+          }
+      }
+    hints:
+      - "The bike's text goes between two `'` characters, exactly as it is: the program adds a `'` before it and one after it."
+      - "The second bike's text has `'` characters of its own. Write it in, then add the closing `'` at the end."
+    more:
+      - task: |
+          Each call to a database's DAO is a trip to the database, and a slow program often makes far more of them than anyone expected. Count them without changing the DAO: write the class `CountingRepairJobDao`, which implements `RepairJobDao`, gets another `RepairJobDao` in its constructor and passes every call on to it, returning what it returns. It also counts:
+
+          - `getReads()`: how many times `list` and `findById` were called
+          - `getWrites()`: how many times `add`, `update` and `remove` were called, whether or not they found the job
+
+          It works with any DAO: here an `InMemoryRepairJobDao`, on your own computer a `JdbcRepairJobDao`. The program prints:
+
+          ```
+          [#1 red road bike: flat tire (waiting), #2 green cargo bike: squeaky brakes (ready)]
+          2 reads, 3 writes
+          ```
+        seed:
+          CountingRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class CountingRepairJobDao implements RepairJobDao {
+
+                public CountingRepairJobDao(RepairJobDao inner) {
+
+                }
+
+                public int getReads() {
+                    return 0;
+                }
+
+                public int getWrites() {
+                    return 0;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>();
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    return 0;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    return false;
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    CountingRepairJobDao queue = new CountingRepairJobDao(new InMemoryRepairJobDao());
+                    queue.add("red road bike", "flat tire");
+                    queue.add("green cargo bike", "squeaky brakes");
+                    RepairJob job = queue.findById(2);
+                    queue.update(new RepairJob(2, job.getBike(), job.getProblem(), true));
+                    System.out.println(queue.list());
+                    System.out.println(queue.getReads() + " reads, " + queue.getWrites() + " writes");
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    for (int i = 0; i < this.jobs.size(); i++) {
+                        if (this.jobs.get(i).getId() == job.getId()) {
+                            this.jobs.set(i, job);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+        solution:
+          CountingRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class CountingRepairJobDao implements RepairJobDao {
+                private RepairJobDao inner;
+                private int reads;
+                private int writes;
+
+                public CountingRepairJobDao(RepairJobDao inner) {
+                    this.inner = inner;
+                    this.reads = 0;
+                    this.writes = 0;
+                }
+
+                public int getReads() {
+                    return this.reads;
+                }
+
+                public int getWrites() {
+                    return this.writes;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    this.reads++;
+                    return new ArrayList<>(this.inner.list());
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    this.writes++;
+                    return this.inner.add(bike, problem);
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    this.reads++;
+                    return this.inner.findById(id);
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    this.writes++;
+                    return this.inner.update(job);
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    this.writes++;
+                    return this.inner.remove(id);
+                }
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    CountingRepairJobDao queue = new CountingRepairJobDao(new InMemoryRepairJobDao());
+                    queue.add("red road bike", "flat tire");
+                    queue.add("green cargo bike", "squeaky brakes");
+                    RepairJob job = queue.findById(2);
+                    queue.update(new RepairJob(2, job.getBike(), job.getProblem(), true));
+                    System.out.println(queue.list());
+                    System.out.println(queue.getReads() + " reads, " + queue.getWrites() + " writes");
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          InMemoryRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class InMemoryRepairJobDao implements RepairJobDao {
+                private List<RepairJob> jobs;
+                private int nextId;
+
+                public InMemoryRepairJobDao() {
+                    this.jobs = new ArrayList<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>(this.jobs);
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.add(new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    for (RepairJob job : this.jobs) {
+                        if (job.getId() == id) {
+                            return job;
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    for (int i = 0; i < this.jobs.size(); i++) {
+                        if (this.jobs.get(i).getId() == job.getId()) {
+                            this.jobs.set(i, job);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    RepairJob job = findById(id);
+                    if (job == null) {
+                        return false;
+                    }
+                    this.jobs.remove(job);
+                    return true;
+                }
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+        hints:
+          - "Keep the DAO from the constructor in an instance variable of type `RepairJobDao`, next to two counters. Each method counts first, then returns what the same method of the inner DAO returns: `return this.inner.add(bike, problem);`."
+          - "Don't make a DAO of your own inside the class: the counting DAO stores nothing, so it works around any DAO it's given, one in memory or one with a database."
+        require:
+          - pattern: new\s+InMemoryRepairJobDao
+            max: 1
+            message: "`CountingRepairJobDao` stores nothing itself: it passes each call on to the DAO it gets in its constructor. Only `main` creates an `InMemoryRepairJobDao`."
+        tests:
+          - name: Two adds, a find, an update and a list
+          - call: |
+              CountingRepairJobDao queue = new CountingRepairJobDao(new InMemoryRepairJobDao());
+              System.out.println(queue.remove(4));
+              System.out.println(queue.findById(1));
+              System.out.println(queue.add("blue tandem", "loose chain"));
+              System.out.println(queue.add("silver e-bike", "dead light"));
+              System.out.println(queue.remove(1));
+              System.out.println(queue.update(new RepairJob(7, "white racer", "bent fork", true)));
+              System.out.println(queue.list());
+              System.out.println(queue.list().size());
+              System.out.println(queue.getReads() + " " + queue.getWrites());
+            hidden: true
+          - call: |
+              InMemoryRepairJobDao memory = new InMemoryRepairJobDao();
+              memory.add("black fixie", "worn saddle");
+              CountingRepairJobDao inner = new CountingRepairJobDao(memory);
+              CountingRepairJobDao outer = new CountingRepairJobDao(inner);
+              outer.add("orange kids bike", "wobbly pedal");
+              outer.findById(1);
+              outer.list();
+              System.out.println(outer.getReads() + " " + outer.getWrites());
+              System.out.println(inner.getReads() + " " + inner.getWrites());
+              System.out.println(memory.list());
+            hidden: true
+      - task: |
+          Show that the UI really doesn't care which DAO it gets: write a second DAO that keeps the jobs in memory in a different way, and plug it in. `MapRepairJobDao` implements `RepairJobDao` with a `HashMap<Integer, RepairJob>` from each job's id to the job, and ids that grow from 1 as before.
+
+          A HashMap doesn't keep its keys in any promised order (module 31), so `list()` must sort its new list by id before returning it. `findById`, `update` and `remove` find a job by its key, with no loop. `main` already gives a `MapRepairJobDao` to the `QueueUi` of step 3, which stays as it is. For the input shown, the program prints:
+
+          ```
+          > Added job 1
+          > Added job 2
+          > Job 1 is ready
+          > No job 5
+          > #1 red road bike: flat tire (ready)
+          #2 green cargo bike: squeaky brakes (waiting)
+          > Bye
+          ```
+        seed:
+          MapRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class MapRepairJobDao implements RepairJobDao {
+
+                @Override
+                public List<RepairJob> list() {
+                    return new ArrayList<>();
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    return 0;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    return null;
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    return false;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    return false;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new MapRepairJobDao();
+                    QueueUi ui = new QueueUi(queue, new Scanner(System.in));
+                    ui.start();
+                }
+            }
+          QueueUi.java: |
+            import java.util.List;
+            import java.util.Scanner;
+
+            public class QueueUi {
+                private RepairJobDao queue;
+                private Scanner scanner;
+
+                public QueueUi(RepairJobDao queue, Scanner scanner) {
+                    this.queue = queue;
+                    this.scanner = scanner;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye");
+                            break;
+                        }
+                        if (command.equals("list")) {
+                            list();
+                        } else if (command.equals("add")) {
+                            add();
+                        } else if (command.equals("ready")) {
+                            ready();
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+
+                private void list() {
+                    List<RepairJob> jobs = this.queue.list();
+                    if (jobs.isEmpty()) {
+                        System.out.println("The queue is empty");
+                    }
+                    for (RepairJob job : jobs) {
+                        System.out.println(job);
+                    }
+                }
+
+                private void add() {
+                    String bike = this.scanner.nextLine();
+                    String problem = this.scanner.nextLine();
+                    int id = this.queue.add(bike, problem);
+                    System.out.println("Added job " + id);
+                }
+
+                private void ready() {
+                    int id = Integer.valueOf(this.scanner.nextLine());
+                    RepairJob job = this.queue.findById(id);
+                    if (job == null) {
+                        System.out.println("No job " + id);
+                        return;
+                    }
+                    this.queue.update(new RepairJob(id, job.getBike(), job.getProblem(), true));
+                    System.out.println("Job " + id + " is ready");
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+        solution:
+          MapRepairJobDao.java: |
+            import java.util.ArrayList;
+            import java.util.Comparator;
+            import java.util.HashMap;
+            import java.util.List;
+            import java.util.Map;
+
+            public class MapRepairJobDao implements RepairJobDao {
+                private Map<Integer, RepairJob> jobs;
+                private int nextId;
+
+                public MapRepairJobDao() {
+                    this.jobs = new HashMap<>();
+                    this.nextId = 1;
+                }
+
+                @Override
+                public List<RepairJob> list() {
+                    List<RepairJob> all = new ArrayList<>(this.jobs.values());
+                    all.sort(Comparator.comparing(RepairJob::getId));
+                    return all;
+                }
+
+                @Override
+                public int add(String bike, String problem) {
+                    int id = this.nextId;
+                    this.nextId++;
+                    this.jobs.put(id, new RepairJob(id, bike, problem, false));
+                    return id;
+                }
+
+                @Override
+                public RepairJob findById(int id) {
+                    return this.jobs.get(id);
+                }
+
+                @Override
+                public boolean update(RepairJob job) {
+                    if (!this.jobs.containsKey(job.getId())) {
+                        return false;
+                    }
+                    this.jobs.put(job.getId(), job);
+                    return true;
+                }
+
+                @Override
+                public boolean remove(int id) {
+                    return this.jobs.remove(id) != null;
+                }
+            }
+          Main.java: |
+            import java.util.Scanner;
+
+            public class Main {
+                public static void main(String[] args) {
+                    RepairJobDao queue = new MapRepairJobDao();
+                    QueueUi ui = new QueueUi(queue, new Scanner(System.in));
+                    ui.start();
+                }
+            }
+          QueueUi.java: |
+            import java.util.List;
+            import java.util.Scanner;
+
+            public class QueueUi {
+                private RepairJobDao queue;
+                private Scanner scanner;
+
+                public QueueUi(RepairJobDao queue, Scanner scanner) {
+                    this.queue = queue;
+                    this.scanner = scanner;
+                }
+
+                public void start() {
+                    while (true) {
+                        System.out.print("> ");
+                        String command = this.scanner.nextLine();
+                        if (command.equals("quit")) {
+                            System.out.println("Bye");
+                            break;
+                        }
+                        if (command.equals("list")) {
+                            list();
+                        } else if (command.equals("add")) {
+                            add();
+                        } else if (command.equals("ready")) {
+                            ready();
+                        } else {
+                            System.out.println("Unknown command: " + command);
+                        }
+                    }
+                }
+
+                private void list() {
+                    List<RepairJob> jobs = this.queue.list();
+                    if (jobs.isEmpty()) {
+                        System.out.println("The queue is empty");
+                    }
+                    for (RepairJob job : jobs) {
+                        System.out.println(job);
+                    }
+                }
+
+                private void add() {
+                    String bike = this.scanner.nextLine();
+                    String problem = this.scanner.nextLine();
+                    int id = this.queue.add(bike, problem);
+                    System.out.println("Added job " + id);
+                }
+
+                private void ready() {
+                    int id = Integer.valueOf(this.scanner.nextLine());
+                    RepairJob job = this.queue.findById(id);
+                    if (job == null) {
+                        System.out.println("No job " + id);
+                        return;
+                    }
+                    this.queue.update(new RepairJob(id, job.getBike(), job.getProblem(), true));
+                    System.out.println("Job " + id + " is ready");
+                }
+            }
+          RepairJobDao.java: |
+            import java.util.List;
+
+            public interface RepairJobDao {
+                List<RepairJob> list();
+                int add(String bike, String problem);
+                RepairJob findById(int id);
+                boolean update(RepairJob job);
+                boolean remove(int id);
+            }
+          RepairJob.java: |
+            public class RepairJob {
+                private int id;
+                private String bike;
+                private String problem;
+                private boolean ready;
+
+                public RepairJob(int id, String bike, String problem, boolean ready) {
+                    this.id = id;
+                    this.bike = bike;
+                    this.problem = problem;
+                    this.ready = ready;
+                }
+
+                public int getId() {
+                    return this.id;
+                }
+
+                public String getBike() {
+                    return this.bike;
+                }
+
+                public String getProblem() {
+                    return this.problem;
+                }
+
+                public boolean isReady() {
+                    return this.ready;
+                }
+
+                @Override
+                public String toString() {
+                    String state = "waiting";
+                    if (this.ready) {
+                        state = "ready";
+                    }
+                    return "#" + this.id + " " + this.bike + ": " + this.problem + " (" + state + ")";
+                }
+            }
+        hints:
+          - "Two instance variables: `Map<Integer, RepairJob> jobs = new HashMap<>()` and the next id. `add` puts the new job under its id; `findById` is `this.jobs.get(id)`, which is `null` for a missing key."
+          - "`list` copies the values, `new ArrayList<>(this.jobs.values())`, and sorts the copy with `Comparator.comparing(RepairJob::getId)` (module 38). `update` checks `containsKey` first; a map's `remove(key)` returns the removed value, or `null`."
+        require:
+          - pattern: new\s+HashMap
+            message: "Keep the jobs in a `HashMap<Integer, RepairJob>`, from each job's id to the job."
+        tests:
+          - stdin: |
+              add
+              red road bike
+              flat tire
+              add
+              green cargo bike
+              squeaky brakes
+              ready
+              1
+              ready
+              5
+              list
+              quit
+          - call: |
+              RepairJobDao queue = new MapRepairJobDao();
+              System.out.println(queue.list());
+              for (int i = 1; i <= 12; i++) {
+                  queue.add("bike " + i, "check-up");
+              }
+              for (int i = 1; i <= 10; i++) {
+                  queue.remove(i);
+              }
+              for (int i = 13; i <= 16; i++) {
+                  queue.add("bike " + i, "new tires");
+              }
+              for (RepairJob job : queue.list()) {
+                  System.out.print(job.getId() + " ");
+              }
+              System.out.println();
+              System.out.println(queue.remove(3) + " " + queue.remove(16) + " " + queue.findById(16));
+              System.out.println(queue.update(new RepairJob(3, "bike 3", "check-up", true)));
+              System.out.println(queue.list().size());
+            hidden: true
+          - call: |
+              RepairJobDao queue = new MapRepairJobDao();
+              queue.add("blue tandem", "loose chain");
+              queue.add("silver e-bike", "dead light");
+              queue.list().clear();
+              System.out.println(queue.update(new RepairJob(2, "silver e-bike", "dead light", true)));
+              System.out.println(queue.list());
+            hidden: true
+
+  - id: libraries-and-tools-end
+    slug: packaging-and-the-end
+    title: Packaging, other tools, and the end of the course
+    text: |
+      A finished program should run on computers that have no editor and no Maven, only Java. The last bits of section 14.4 are how to pack a program for that, and a few more tools worth knowing.
+
+      ### A jar
+
+      A **jar** (Java archive) is a zip file of compiled classes, with a small text file inside, the **manifest**, that can name the class whose `main` starts the program. The JDK can make one on its own, with no Maven:
+
+      ```shell
+      javac -d classes src/main/java/com/example/repairs/*.java
+      jar --create --file repairs.jar --main-class com.example.repairs.Main -C classes .
+      java -jar repairs.jar
+      ```
+
+      The first line compiles the classes into the folder `classes`, the second packs that folder into `repairs.jar` with `Main` as its start, and the third runs it on any computer with Java installed.
+
+      In a Maven project, `mvn package` makes `target/repair-queue-1.0-SNAPSHOT.jar` (the artifactId and the version). To name the main class in its manifest, pom.xml gets a `build` section that configures the plugin that makes the jar:
+
+      ```xml
+      <build>
+          <plugins>
+              <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-jar-plugin</artifactId>
+                  <version>3.3.0</version>
+                  <configuration>
+                      <archive>
+                          <manifest>
+                              <mainClass>com.example.repairs.Main</mainClass>
+                          </manifest>
+                      </archive>
+                  </configuration>
+              </plugin>
+          </plugins>
+      </build>
+      ```
+
+      That jar holds only the project's own classes. A program with libraries, such as H2, also needs their jars when it runs: plugins such as the Maven Shade Plugin or the Maven Assembly Plugin make one bigger jar with the libraries inside. And the JDK's `jpackage` tool makes an installer for the system you run it on (Windows, macOS or Linux) that brings its own Java along, so the person installing it doesn't need Java at all. The MOOC's [section 14.4](https://java-programming.mooc.fi/part-14/4-maven-and-third-party-libraries) points to more packaging tools.
+
+      ### Other tools, in a sentence each
+
+      - **Gradle** does what Maven does, with build files written as code instead of XML; Android apps are built with it.
+      - **An IDE** (IntelliJ IDEA, NetBeans, Eclipse, VS Code with Java extensions) compiles as you type, runs and debugs programs step by step, and runs Maven or Gradle for you.
+      - **Git** keeps every version of a project's files, so you can go back to any of them and work on a project together with others.
+      - **JUnit** (module 26) runs a project's tests; with Maven, `mvn test` runs them all.
+      - **JavaFX** on your own computer is a library like any other: the dependency `org.openjfx:javafx-controls`, with the `javafx-maven-plugin` to run it with `mvn javafx:run` (module 48 links to the MOOC's instructions).
+      - **Libraries for almost everything**: reading JSON, talking to web services, writing web servers, making games (the MOOC mentions FXGL, a game library built on JavaFX). Search Maven Central, read the library's guide, and start with its smallest example.
+
+      ### The end of the course
+
+      This was the last section of the MOOC's material, and the last module of the course here. Looking back over the 54 modules:
+
+      - **Parts 1 to 3**: printing, reading input, variables and calculations, decisions, loops, methods and return values, finding bugs, lists, arrays and strings. The tools every program is made of.
+      - **Parts 4 to 7**: classes and objects, constructors, getters and `toString`, objects in lists, files, references and `null`, objects working together, a user interface kept apart from the logic, unit tests, sorting and searching, and planning larger programs.
+      - **Parts 8 to 10**: hash maps, `equals` and `hashCode`, inheritance, abstract classes, interfaces and polymorphism, streams and lambdas, `Comparable` and `Comparator`, StringBuilder, regular expressions and enums.
+      - **Parts 11 and 12**: class diagrams, packages, exceptions, writing files, type parameters, a list and a hash map of your own, random numbers and two-dimensional arrays.
+      - **Parts 13 and 14**: windows with JavaFX, events and views, charts, drawing and images, a game with shapes, keys and a game loop, and, in this module, build tools, libraries, DAOs and databases.
+
+      ### What next
+
+      The best next step is a small project of your own, in a Maven project on your own computer: a tracker for something you collect, a game you'd like to play, a tool that tidies a file you use. You'll get stuck, look things up and get unstuck, and that's most of what programming is. Then, depending on what you liked:
+
+      - **Databases and SQL**, to go further than this module's peek: designing tables and writing queries.
+      - **Data structures and algorithms**: how lists, hash maps and trees work inside, and how fast a program is as its data grows.
+      - **Web programming**: servers written in Java (or another language), and pages that talk to them.
+      - **Newer Java**: records, `switch` expressions, `var`, text blocks and sealed types. This site's course plan lists extra modules on these after this one, beyond the MOOC's material.
+
+      The MOOC ends with its own [conclusion](https://java-programming.mooc.fi/part-14/5-conclusion), a short page to read on its site. Thank you for working through the course here.
+
+      **Your turn:** the challenges of this step are a small review across the course. A pottery studio logs its kiln firings: `Firing.java` is ready. In `Main.java`, write the method `piecesAtLeast(List<Firing> firings, int degrees)`, which returns the names of the pieces fired at `degrees` or more, in the same order, as a new list. Use a stream: `filter`, `map` and `collect` (module 37). The program prints:
+
+      ```
+      [tall vase, tea bowl]
+      []
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Firing> firings = new ArrayList<>();
+                firings.add(new Firing("tall vase", 1240));
+                firings.add(new Firing("bead set", 950));
+                firings.add(new Firing("tea bowl", 1280));
+                System.out.println(piecesAtLeast(firings, 1200));
+                System.out.println(piecesAtLeast(firings, 1300));
+            }
+
+            public static List<String> piecesAtLeast(List<Firing> firings, int degrees) {
+                return new ArrayList<>();
+            }
+        }
+      Firing.java: |
+        public class Firing {
+            private String piece;
+            private int degrees;
+
+            public Firing(String piece, int degrees) {
+                this.piece = piece;
+                this.degrees = degrees;
+            }
+
+            public String getPiece() {
+                return this.piece;
+            }
+
+            public int getDegrees() {
+                return this.degrees;
+            }
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+        import java.util.List;
+        import java.util.stream.Collectors;
+
+        public class Main {
+            public static void main(String[] args) {
+                List<Firing> firings = new ArrayList<>();
+                firings.add(new Firing("tall vase", 1240));
+                firings.add(new Firing("bead set", 950));
+                firings.add(new Firing("tea bowl", 1280));
+                System.out.println(piecesAtLeast(firings, 1200));
+                System.out.println(piecesAtLeast(firings, 1300));
+            }
+
+            public static List<String> piecesAtLeast(List<Firing> firings, int degrees) {
+                return firings.stream()
+                        .filter(firing -> firing.getDegrees() >= degrees)
+                        .map(firing -> firing.getPiece())
+                        .collect(Collectors.toList());
+            }
+        }
+      Firing.java: |
+        public class Firing {
+            private String piece;
+            private int degrees;
+
+            public Firing(String piece, int degrees) {
+                this.piece = piece;
+                this.degrees = degrees;
+            }
+
+            public String getPiece() {
+                return this.piece;
+            }
+
+            public int getDegrees() {
+                return this.degrees;
+            }
+        }
+    hints:
+      - "`firings.stream()` gives a stream of Firing objects. `filter` keeps the ones whose `getDegrees()` is at least `degrees`, and `map` turns each into its `getPiece()`."
+      - "End with `.collect(Collectors.toList())`, and import `java.util.stream.Collectors`."
+    require:
+      - pattern: \.stream\s*\(\s*\)
+        message: "Use a stream: start from `firings.stream()`."
+      - pattern: \.filter\s*\(
+        message: "Keep the hot enough firings with `filter`."
+    tests:
+      - name: Three firings
+      - call: |
+          List<Firing> firings = new ArrayList<>();
+          System.out.println(piecesAtLeast(firings, 1000));
+          firings.add(new Firing("plate", 1000));
+          firings.add(new Firing("mug", 999));
+          firings.add(new Firing("jug", 1100));
+          firings.add(new Firing("plate", 1050));
+          System.out.println(piecesAtLeast(firings, 1000));
+          System.out.println(firings.size());
+        hidden: true
+    more:
+      - task: |
+          An e-scooter app has several ways to charge for a ride, and the interface `Tariff.java` describes them all: `int price(int minutes)` returns a ride's price in cents. `PerMinuteTariff.java` is ready. Write two things:
+
+          - the class `CappedTariff`, which implements `Tariff`: `new CappedTariff(centsPerMinute, cap)` charges `centsPerMinute` for every minute, but never more than `cap` cents for a ride
+          - in `Main.java`, the method `cheapest(List<Tariff> tariffs, int minutes)`, which returns the lowest price any of the tariffs gives for a ride of that many minutes (the list is never empty)
+
+          The program prints:
+
+          ```
+          150
+          600
+          500
+          ```
+        seed:
+          CappedTariff.java: |
+            public class CappedTariff {
+
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Tariff capped = new CappedTariff(30, 600);
+                    System.out.println(capped.price(5));
+                    System.out.println(capped.price(40));
+
+                    List<Tariff> tariffs = new ArrayList<>();
+                    tariffs.add(new PerMinuteTariff(25));
+                    tariffs.add(capped);
+                    System.out.println(cheapest(tariffs, 20));
+                }
+
+                public static int cheapest(List<Tariff> tariffs, int minutes) {
+                    return 0;
+                }
+            }
+          Tariff.java: |
+            public interface Tariff {
+                int price(int minutes);
+            }
+          PerMinuteTariff.java: |
+            public class PerMinuteTariff implements Tariff {
+                private int centsPerMinute;
+
+                public PerMinuteTariff(int centsPerMinute) {
+                    this.centsPerMinute = centsPerMinute;
+                }
+
+                @Override
+                public int price(int minutes) {
+                    return minutes * this.centsPerMinute;
+                }
+            }
+        solution:
+          CappedTariff.java: |
+            public class CappedTariff implements Tariff {
+                private int centsPerMinute;
+                private int cap;
+
+                public CappedTariff(int centsPerMinute, int cap) {
+                    this.centsPerMinute = centsPerMinute;
+                    this.cap = cap;
+                }
+
+                @Override
+                public int price(int minutes) {
+                    return Math.min(minutes * this.centsPerMinute, this.cap);
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+            import java.util.List;
+
+            public class Main {
+                public static void main(String[] args) {
+                    Tariff capped = new CappedTariff(30, 600);
+                    System.out.println(capped.price(5));
+                    System.out.println(capped.price(40));
+
+                    List<Tariff> tariffs = new ArrayList<>();
+                    tariffs.add(new PerMinuteTariff(25));
+                    tariffs.add(capped);
+                    System.out.println(cheapest(tariffs, 20));
+                }
+
+                public static int cheapest(List<Tariff> tariffs, int minutes) {
+                    int lowest = tariffs.get(0).price(minutes);
+                    for (Tariff tariff : tariffs) {
+                        int price = tariff.price(minutes);
+                        if (price < lowest) {
+                            lowest = price;
+                        }
+                    }
+                    return lowest;
+                }
+            }
+          Tariff.java: |
+            public interface Tariff {
+                int price(int minutes);
+            }
+          PerMinuteTariff.java: |
+            public class PerMinuteTariff implements Tariff {
+                private int centsPerMinute;
+
+                public PerMinuteTariff(int centsPerMinute) {
+                    this.centsPerMinute = centsPerMinute;
+                }
+
+                @Override
+                public int price(int minutes) {
+                    return minutes * this.centsPerMinute;
+                }
+            }
+        hints:
+          - "`CappedTariff implements Tariff`, keeps both numbers in instance variables, and its `price` returns the smaller of the full price and the cap: `Math.min(minutes * this.centsPerMinute, this.cap)`."
+          - "`cheapest` starts from the first tariff's price and goes through the list, keeping the lowest price so far. It only calls `price`, so it works for any kind of Tariff."
+        tests:
+          - name: The capped tariff, and the cheapest of two
+          - call: |
+              Tariff capped = new CappedTariff(20, 500);
+              System.out.println(capped.price(0) + " " + capped.price(25) + " " + capped.price(26));
+              List<Tariff> tariffs = new ArrayList<>();
+              tariffs.add(new CappedTariff(40, 1000));
+              tariffs.add(new PerMinuteTariff(15));
+              tariffs.add(new CappedTariff(35, 700));
+              System.out.println(cheapest(tariffs, 10) + " " + cheapest(tariffs, 50) + " " + cheapest(tariffs, 90));
+            hidden: true
+          - call: |
+              List<Tariff> tariffs = new ArrayList<>();
+              tariffs.add(new PerMinuteTariff(10));
+              System.out.println(cheapest(tariffs, 7));
+            hidden: true
+      - task: |
+          A community kitchen plans its volunteer shifts. Read lines such as `Saturday Ada` (a day, a space and a name) until an empty line. Then print, for each day, the day, a colon and the names of that day's volunteers in the order they were read, separated by `, `. Print the days in the order they first came up in the input.
+
+          Keep the names in a `HashMap<String, List<String>>` from each day to its list of names (module 33). A HashMap doesn't keep its keys in the order they came, so keep the days' order in a list of its own. For the input shown, the program prints:
+
+          ```
+          Saturday: Ada, Ben, Dina
+          Monday: Carl
+          ```
+        seed: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+          import java.util.List;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+
+              }
+          }
+        solution: |
+          import java.util.ArrayList;
+          import java.util.HashMap;
+          import java.util.List;
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  HashMap<String, List<String>> shifts = new HashMap<>();
+                  List<String> days = new ArrayList<>();
+                  while (true) {
+                      String line = scanner.nextLine();
+                      if (line.isEmpty()) {
+                          break;
+                      }
+                      String[] parts = line.split(" ");
+                      String day = parts[0];
+                      if (!shifts.containsKey(day)) {
+                          shifts.put(day, new ArrayList<>());
+                          days.add(day);
+                      }
+                      shifts.get(day).add(parts[1]);
+                  }
+                  for (String day : days) {
+                      System.out.println(day + ": " + String.join(", ", shifts.get(day)));
+                  }
+              }
+          }
+        hints:
+          - "When a day comes up for the first time (`!shifts.containsKey(day)`), put a new empty list for it in the map and add the day to the list of days. Then add the name to `shifts.get(day)`."
+          - "At the end, go through the list of days, not the map. `String.join(\", \", names)` joins a list of Strings with `, ` between them."
+        require:
+          - pattern: new\s+HashMap
+            message: "Keep each day's names in a `HashMap<String, List<String>>`."
+        tests:
+          - stdin: |+
+              Saturday Ada
+              Saturday Ben
+              Monday Carl
+              Saturday Dina
+
+          - stdin: "Friday Eve\n\n"
+            hidden: true
+          - stdin: "Tuesday Sam\nWednesday Lee\nThursday Kim\nWednesday Ann\nTuesday Bo\nSunday Max\nWednesday Pat\n\n"
+            hidden: true

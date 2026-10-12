@@ -5,9 +5,13 @@ package arena.fx;
 final class EventLine {
     /** The line as written, without spaces at its ends (problems start with it). */
     final String text;
-    /** click, type, set, enter, close, press, drag or release; null when the line has a problem. */
+    /**
+     * click, type, set, enter, close, press, drag or release; "press key", "release key" or "key"
+     * (the key's KeyCode name is the argument); "frames" (how many is the number); null when the
+     * line has a problem.
+     */
     final String command;
-    /** What the event acts on; null for close. */
+    /** What the event acts on; null for close and for the key and frames lines. */
     final Target target;
     /** The text to type or set. */
     final String argument;

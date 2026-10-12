@@ -42,6 +42,8 @@ public final class Charts {
     // ------------------------------------------------------------------ axes
 
     public static void checkAxes(Axis<?> x, Axis<?> y) {
+        // A chart is being made: from now on the windows' charts are laid out after each event.
+        anyChart = true;
         if (x == null) {
             throw new NullPointerException("Cannot invoke \"javafx.scene.chart.Axis.getSide()\" because \"<parameter1>\" is null");
         }
@@ -405,7 +407,13 @@ public final class Charts {
     }
 
     /** Lays out the charts of the showing windows, after an event: what fails goes to the uncaught exception handler. */
+    /** Whether a chart was ever made (until then there is nothing to lay out, and each frame skips the walk). */
+    private static boolean anyChart;
+
     static void layoutShowing(List<Window> windows) {
+        if (!anyChart) {
+            return;
+        }
         for (Window w : windows) {
             List<Node> nodes = new ArrayList<Node>();
             if (w.getScene() != null) {

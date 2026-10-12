@@ -21,10 +21,15 @@ import {
   eventLines,
   eventProblems,
   eventsFileText,
+  framesInEvents,
   javaNumber,
+  keyName,
+  keyNameProblem,
   mouseNotices,
   parseEventLine,
   parseWindow,
+  TEST_FRAMES_WARN,
+  testWindow,
   windowExample,
   windowNote,
   windowOutline,
@@ -261,9 +266,9 @@ test("checkWindow: problems fail the test, each with its event in plain words; n
   assert.equal(closed.neverShown, false);
   assert.equal(windowNote(closed), "After what the user does here, your window isn't what it should be.");
   // Problems are matched to their lines in order; one that names no line is kept as it is.
-  assert.deepEqual(eventProblems(["close", "jump", "close"], ["close: the main window isn't open", "jump: there's no event called jump (the events are click, type, set, enter and close)", "close: the main window isn't open", "odd"]), [
+  assert.deepEqual(eventProblems(["close", "jump", "close"], ["close: the main window isn't open", "jump: there's no event called jump (the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)", "close: the main window isn't open", "odd"]), [
     { event: "close", words: "Close the window", problem: "the main window isn't open" },
-    { event: "jump", words: "jump", problem: "there's no event called jump (the events are click, type, set, enter and close)" },
+    { event: "jump", words: "jump", problem: "there's no event called jump (the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)" },
     { event: "close", words: "Close the window", problem: "the main window isn't open" },
     { event: "", words: "", problem: "odd" },
   ]);
@@ -778,4 +783,93 @@ test("parseEventLine gives the library's own words for every new line it can't r
   const r = runWithEvents("unreadable-14", PART14, unreadable.join("\n") + "\n");
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(parseWindow(r.json).problems, fromJs);
+});
+
+// ------------------------------------------------------------------ part 14.3: keys, frames and shapes
+
+test("the key and frames lines as parseEventLine reads them, and in plain words", () => {
+  assert.deepEqual(parseEventLine("  press key LEFT "), { line: "press key LEFT", command: "press key", key: "LEFT" });
+  assert.deepEqual(parseEventLine("release key DIGIT1"), { line: "release key DIGIT1", command: "release key", key: "DIGIT1" });
+  assert.deepEqual(parseEventLine("key SPACE"), { line: "key SPACE", command: "key", key: "SPACE" });
+  assert.deepEqual(parseEventLine("frames 030"), { line: "frames 030", command: "frames", number: "30" });
+  // press with a target is still the mouse.
+  assert.equal(parseEventLine("press Canvas 1 at 1 2").command, "press");
+  assert.equal(describeEvent("press key LEFT"), "hold Left");
+  assert.equal(describeEvent("release key LEFT"), "let go of Left");
+  assert.equal(describeEvent("key SPACE"), "press and release Space");
+  assert.equal(describeEvent("key DIGIT1"), "press and release 1");
+  assert.equal(describeEvent("frames 1"), "run 1 frame");
+  assert.equal(describeEvents(["press key LEFT", "frames 30", "release key LEFT", "key SPACE", "frames 5"]), "Hold Left, run 30 frames, let go of Left, press and release Space, then run 5 frames");
+  assert.equal(describeEvents(["press key LEFT", "frames 30"]), "Hold Left, then run 30 frames");
+  // How many frames a test runs (the build warns above TEST_FRAMES_WARN), and the window a test keeps: the count of frames, not the frames.
+  assert.equal(framesInEvents(["press key LEFT", "frames 30", "// frames 5", "frames 200", "frames x", "key SPACE", "frames 71"]), 301);
+  assert.equal(framesInEvents([]), 0);
+  assert.equal(TEST_FRAMES_WARN, 300);
+  const ran = { windows: [], problems: [], frames: { count: 2, list: [[{ k: 1, tx: 100 }], [{ k: 1, tx: 200 }]] } };
+  assert.deepEqual(testWindow(ran), { windows: [], problems: [], frames: { count: 2, list: [] } });
+  assert.equal(windowOutline(testWindow(ran)), windowOutline(ran));
+  assert.deepEqual(ran.frames.list.length, 2);
+  const still = { windows: [], problems: [] };
+  assert.equal(testWindow(still), still);
+  assert.equal(keyName("BACK_SPACE"), "Backspace");
+  // A wrong name names the closest real one; a name KeyCode has in other letters says so.
+  assert.equal(keyNameProblem("Left"), "write the key's name in capital letters, as KeyCode names it: LEFT");
+  assert.equal(parseEventLine("key BACKSPACE").problem, "there's no key called BACKSPACE (did you mean BACK_SPACE? keys are named as in KeyCode, such as LEFT, UP, SPACE, A and DIGIT1)");
+  assert.equal(parseEventLine("press key UPP").problem, "there's no key called UPP (did you mean UP? keys are named as in KeyCode, such as LEFT, UP, SPACE, A and DIGIT1)");
+  assert.equal(parseEventLine("frames -2").problem, "frames takes a whole number from 1 to 3600, such as frames 30");
+  assert.equal(parseEventLine("Frames 2").problem, "write the event in small letters: frames");
+  // A near miss names the event it is one letter off; every word that starts with fram is a frames line.
+  const all = "the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames";
+  for (const line of ["frame 3", "fram 3", "fames 3", "framez 3", "framse 3"]) assert.equal(parseEventLine(line).problem, "write frames, such as frames 30", line);
+  assert.equal(parseEventLine("keys SPACE").problem, `there's no event called keys (did you mean key? ${all})`);
+  assert.equal(parseEventLine("pres key UP").problem, `there's no event called pres (did you mean press? ${all})`);
+  assert.equal(parseEventLine("clik \"Add\"").problem, `there's no event called clik (did you mean click? ${all})`);
+  assert.equal(parseEventLine("ky A").problem, `there's no event called ky (${all})`);
+  assert.equal(parseEventLine("hold key UP").problem, `there's no event called hold (${all})`);
+});
+
+test("the outline of shapes, a pane with a preferred size, moved and turned nodes, and the frames that ran", () => {
+  const w = {
+    windows: [
+      {
+        title: "Asteroids",
+        scene: {
+          width: 600,
+          height: 400,
+          onKeyPressed: true,
+          root: node(1, "Pane", {
+            prefWidth: 600,
+            prefHeight: 400,
+            children: [
+              node(2, "Polygon", { f: 2, translateX: 300.5, translateY: 200, rotate: 90, points: [0, -10, 10, 10, -10, 10], fill: "#000000" }),
+              node(3, "Circle", { centerX: 150, centerY: 100, radius: 20, translateX: 3, fill: "#ff0000", stroke: "#000000", strokeWidth: 2.5 }),
+              node(4, "Rectangle", { x: 10, y: 10, width: 40, height: 20, fill: null, visible: false }),
+              node(5, "Line", { startX: 0, startY: 0, endX: 100, endY: 50, fill: null, stroke: "#000000" }),
+              node(6, "Text", { text: "Points: 30", x: 10, y: 20, fill: "#000000" }),
+              node(7, "Button", { text: "Go", layoutX: 5, layoutY: 6, rotate: 1.5e-7 }),
+            ],
+          }),
+        },
+      },
+    ],
+    problems: [],
+    frames: { count: 120, list: [] },
+  };
+  assert.equal(
+    windowOutline(w),
+    [
+      'Window "Asteroids"',
+      "  Pane 600 x 400",
+      "    Polygon (0, -10) (10, 10) (-10, 10), at (300.5, 200), rotate 90, fill #000000",
+      "    Circle radius 20 at (150, 100), translate (3, 0), fill #ff0000, stroke #000000, width 2.5",
+      "    Rectangle 40 x 20 at (10, 10), no fill (hidden)",
+      "    Line (0, 0) to (100, 50), stroke #000000",
+      '    Text "Points: 30" at (10, 20)',
+      '    Button "Go", layout (5, 6), rotate 1.5E-7',
+      "frames run: 120",
+    ].join("\n"),
+  );
+  // No frames, or none that ran: no line. A window closed after frames: the line follows.
+  assert.ok(!windowOutline({ ...w, frames: undefined }).includes("frames run"));
+  assert.equal(windowOutline({ windows: [], closed: true, problems: [], frames: { count: 3, list: [] } }), "No window is open: the windows were closed.\nframes run: 3");
 });

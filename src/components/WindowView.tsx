@@ -11,13 +11,18 @@
 //   it is let go (or the arrow keys stop); a canvas or image view with mouse handlers takes a
 //   gesture of the mouse or a finger and sends it at once when the finger lifts (press, the drags
 //   every few pixels, release; a tap is `click Canvas 1 at 10 20`), and the keyboard can do the same.
-import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+//   A game (part 14.3) gets a row of keys to hold and Run 30, 60 or 120 frames (GameKeys).
+// A window with frames gets the animation player under it (window-player.ts, through usePlayer).
+import { Fragment, createElement, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { RotateCcw } from "lucide-react";
 import { rerun, timeLimitFor, type CompiledProgram, type FreeRun } from "../grader/grade";
-import { NOT_SHOWN_NOTE, mouseNotices, neverShown, quoteText, windowOutline, type DrawCall, type OutlineLine, type WindowCheck, type WindowState } from "../grader/window";
+import { NOT_SHOWN_NOTE, keyName, mouseNotices, neverShown, quoteText, windowOutline, type DrawCall, type OutlineLine, type WindowCheck, type WindowState } from "../grader/window";
 import { TITLE_BUTTONS_SVG, WIDE_NOTE, drawWindows, drawingLabel, outlineLines, sliderValueText, type Drawn, type DrawnControl, type DrawnWindow } from "./window-drawing";
 import { paintCalls } from "./window-canvas";
 import { useWindowFrames } from "./window-frame";
+import { hasFrames } from "./window-frames";
+import { attachPlayer } from "./window-player";
+import { RUN_FRAMES, hasKeyHandlers, heldAfter, keyCodeOf, nodeKeyHandlers, offeredKeys, runLines } from "./game-keys";
 
 // ------------------------------------------------------------------ drawing with React
 
@@ -409,9 +414,17 @@ function LiveControl({ d, live }: { d: Drawn; live: Live }) {
   return <input type={c.kind === "password" ? "password" : "text"} {...field} />;
 }
 
+/** Attributes as React takes them: stroke-width is strokeWidth (aria- and data- attributes keep their dashes). */
+function reactAttrs(attrs: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!attrs) return attrs;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(attrs)) out[/^(aria|data)-/.test(k) ? k : k.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())] = v;
+  return out;
+}
+
 function toReact(d: Drawn, live?: Live): ReactNode {
   if (d.control && live) return <LiveControl key={d.key} d={d} live={live} />;
-  const props = { key: d.key, className: d.cls, style: d.style, ...d.attrs };
+  const props = { key: d.key, className: d.cls, style: d.style, ...reactAttrs(d.attrs) };
   if (d.canvas) return createElement(d.tag, props, <CanvasPicture canvas={d.canvas} />);
   if (d.markup != null) return createElement(d.tag, { ...props, dangerouslySetInnerHTML: { __html: d.markup } });
   if (d.tag === "img") return createElement("img", props);
@@ -439,12 +452,14 @@ function WindowFrame({ w, live }: { w: DrawnWindow; live?: Live }) {
  * then says so under it (and fades its right edge) through useWindowFrames. The same markup as
  * windowDrawingHtml.
  */
-function Frame({ label, focusable, deps, children }: { label: string; focusable: boolean; deps: unknown[]; children: ReactNode }) {
+function Frame({ label, focusable, deps, anim, children }: { label: string; focusable: boolean; deps: unknown[]; anim?: RefObject<HTMLDivElement>; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useWindowFrames(ref, deps);
   return (
     <div className="fx-frame" ref={ref}>
       <div className="fx-scroll" {...(focusable ? { tabIndex: 0, role: "group", "aria-label": label } : {})}>
+        {/* The animation's frames are drawn here (window-player.ts), never by React. */}
+        {anim && <div className="fx-desktop fx-anim" ref={anim} />}
         {children}
       </div>
       <p className="fx-wide-note">{WIDE_NOTE}</p>
@@ -455,20 +470,43 @@ function Frame({ label, focusable, deps, children }: { label: string; focusable:
 /**
  * A window JSON drawn, not usable: in a frame that scrolls sideways when the windows are wider than
  * the column. The drawing is hidden from screen readers (the window as text has it all). No window
- * showing: the outline's sentence instead.
+ * showing: the outline's sentence instead. A window with frames gets the player, which plays once
+ * by itself when it first comes into view; with `autoplay` false (the window panel's window from an
+ * earlier run, out of date or after a failed run) it shows the window after the last event and
+ * never plays by itself.
  */
-export function WindowDrawing({ window: w, label }: { window: WindowState | null | undefined; label?: string }) {
+export function WindowDrawing({ window: w, label, autoplay = true }: { window: WindowState | null | undefined; label?: string; autoplay?: boolean }) {
   const drawn = useMemo(() => drawWindows(w), [w]);
+  const player = usePlayer(drawn.length ? w : null, 1, autoplay);
   if (!drawn.length) return <p className="fx-none">{windowOutline(w)}</p>;
   return (
-    <Frame label={label ?? drawingLabel(w)} focusable deps={[drawn]}>
-      <div className="fx-desktop" aria-hidden="true">
-        {drawn.map((d) => (
-          <WindowFrame key={d.key} w={d} />
-        ))}
-      </div>
-    </Frame>
+    <>
+      <Frame label={label ?? drawingLabel(w)} focusable deps={[drawn]} anim={player.on ? player.anim : undefined}>
+        <div className="fx-desktop" aria-hidden="true">
+          {drawn.map((d) => (
+            <WindowFrame key={d.key} w={d} />
+          ))}
+        </div>
+      </Frame>
+      {player.on && <div className="fx-player-box" ref={player.controls} />}
+    </>
   );
+}
+
+/**
+ * The animation player of a window with frames (window-player.ts), from frame `from`: the anim
+ * layer goes in the window's Frame, the controls in their own box under it. `on`: the window has
+ * frames to play (a test's stored window has only their count).
+ */
+function usePlayer(w: WindowState | null | undefined, from: number, autoplay: boolean, visible?: number) {
+  const anim = useRef<HTMLDivElement>(null);
+  const controls = useRef<HTMLDivElement>(null);
+  const on = hasFrames(w);
+  useEffect(() => {
+    if (!on || !w || !anim.current || !controls.current) return;
+    return attachPlayer({ controls: controls.current, anim: anim.current, window: w, from, autoplay, visible });
+  }, [on, w, from, autoplay, visible]);
+  return { on, anim, controls };
 }
 
 /**
@@ -701,8 +739,110 @@ const SLOW_SHARE = 0.4;
 /** The warning about a run made slow by the events so far (see SLOW_SHARE). */
 function slowNote(ms: number, limit: number): string {
   const secs = (n: number) => `${Math.round(n / 1000)} seconds`;
-  return `Your program took ${secs(ms)} to run again with everything you did in the window, and each click, slider move or stroke you draw makes the next run longer. A run is stopped after ${secs(limit)}: Start over forgets what you did, so the runs are quick again.`;
+  return `Your program took ${secs(ms)} to run again with everything you did in the window, and each click, key, frame, slider move or stroke you draw makes the next run longer. A run is stopped after ${secs(limit)}: Start over forgets what you did, so the runs are quick again.`;
 }
+
+/** Arrows drawn next to the arrow keys' names (hidden from screen readers, which say the name). */
+const KEY_GLYPHS: Record<string, string> = { LEFT: "\u2190", RIGHT: "\u2192", UP: "\u2191", DOWN: "\u2193" };
+
+/**
+ * The key row of a game in a free run: each key a toggle, held or not; Run 30, 60 or 120 frames
+ * sends, for each key whose held state changed since the last run, press key X or release key X,
+ * then the frames line; a Tap (in a small menu) sends key X, a press and release with no frames
+ * between. While the row has the focus, a key of a real keyboard holds or lets go of that key
+ * (Space and Enter on a key of the row press that button, as buttons do). A program with timers but
+ * no key handlers gets only the Run buttons.
+ */
+function GameKeys({ code, events, keys: withKeys, nodeOnly, replaying, send }: { code: string; events: string[]; keys: boolean; nodeOnly: boolean; replaying: boolean; send: (lines: string[]) => void }) {
+  const keys = useMemo(() => (withKeys ? offeredKeys(code, events) : []), [withKeys, code, events]);
+  const held = useMemo(() => heldAfter(events), [events]);
+  const [want, setWant] = useState<Set<string>>(() => new Set(held));
+  // Start over (or new code): nothing is held any more.
+  useEffect(() => {
+    if (!events.length) setWant(new Set());
+  }, [events]);
+  const hint = useId();
+  const toggle = (k: string) =>
+    setWant((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.key === "Tab") return;
+    // Space and Enter on one of the row's buttons press it.
+    if (e.target !== e.currentTarget && (e.key === " " || e.key === "Enter")) return;
+    const k = keyCodeOf(e.key, e.code);
+    if (!k || !keys.includes(k)) return;
+    e.preventDefault();
+    if (!e.repeat) toggle(k);
+  };
+  const changed = keys.some((k) => want.has(k) !== held.has(k));
+  return (
+    <div className="fx-game">
+      {keys.length > 0 && (
+        <>
+          <div className="fx-key-row" role="group" aria-label="Keys to hold" aria-describedby={hint} tabIndex={0} onKeyDown={onKeyDown}>
+            {keys.map((k) => (
+              <button key={k} type="button" className={"btn fx-key" + (want.has(k) ? " fx-key-held" : "")} aria-pressed={want.has(k)} onClick={() => toggle(k)}>
+                {KEY_GLYPHS[k] && <span aria-hidden="true">{KEY_GLYPHS[k]}</span>}
+                <span className="fx-key-name">{keyName(k)}</span>
+                {/* Only a held key says so: "up" read like the Up key's own name. A space keeps the button's height. */}
+                <span className="fx-key-state" aria-hidden="true">
+                  {want.has(k) ? "held" : "\u00a0"}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p id={hint} className="fx-note">
+            Press a key to hold it, again to let go. With a keyboard, while the keys have the focus, press the key itself.
+            {changed ? " Your changes are sent with the next frames you run." : ""}
+          </p>
+          {nodeOnly && (
+            <p className="fx-note">
+              Your key handlers are on a node, not on the scene. In Java Arena keys go only to the scene&apos;s handlers, so a node&apos;s own never run: put them on the scene (<code>scene.setOnKeyPressed</code>).
+            </p>
+          )}
+        </>
+      )}
+      <div className="fx-run-row">
+        {RUN_FRAMES.map((n) => (
+          <button key={n} type="button" className="btn btn-sm fx-run-frames" aria-disabled={replaying || undefined} onClick={() => send(runLines(keys, want, held, n))}>
+            Run {n} frames
+          </button>
+        ))}
+      </div>
+      {keys.length > 0 && (
+        <details className="fx-tap">
+          <summary>Tap a key</summary>
+          <div className="fx-tap-keys">
+            <p className="fx-note">A press and a release with no frames between, for a program that reacts to a single press.</p>
+            {keys.map((k) => (
+              <button key={k} type="button" className="btn btn-sm fx-tap-key" aria-disabled={replaying || held.has(k) || undefined} title={held.has(k) ? tapHeldTitle(k, want.has(k)) : undefined} onClick={() => !held.has(k) && send([`key ${k}`])}>
+                Tap {keyName(k)}
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
+      <p className="fx-note fx-game-note">
+        {keys.length > 0
+          ? "The game doesn't run live here: choose the keys to hold, run some frames, and the page shows them as an animation."
+          : "The animation doesn't run live here: run some frames, and the page shows them as an animation."}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Why a key's Tap can't be used: the key is held (the runs so far pressed it). Letting go of it in
+ * the row isn't enough: the release is sent with the next frames.
+ */
+const tapHeldTitle = (k: string, stillWanted: boolean) =>
+  stillWanted
+    ? `${keyName(k)} is held: let go of it and run some frames first (the release is sent with the next frames you run).`
+    : `${keyName(k)} is still held until you run frames: the release is sent with the next frames you run.`;
 
 /** The note over a drawing that isn't the latest run's window. */
 const STALE_NOTE: Record<Exclude<WindowFailure, false>, string> = {
@@ -1005,6 +1145,37 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
     void replay([]);
   };
 
+  // A game: the animation of the frames the latest run ran, playing by itself only the frames that
+  // run added (the frames before were played after the runs before); the key row and Run buttons.
+  const framesSeen = useRef({ count: 0, from: new WeakMap<WindowState, number>() });
+  const playFrom = (() => {
+    const w = session.window;
+    if (!w) return 1;
+    const seen = framesSeen.current;
+    let f = seen.from.get(w);
+    if (f == null) {
+      const count = w.frames?.count ?? 0;
+      f = count > seen.count ? seen.count + 1 : count + 1;
+      seen.count = count;
+      seen.from.set(w, f);
+    }
+    return f;
+  })();
+  // The frames a learner ran play as soon as any of the window is on screen (see attachPlayer).
+  const player = usePlayer(usable && drawn.length ? session.window : null, playFrom, true, 0);
+  const sceneKeys = hasKeyHandlers(session.window);
+  // Key handlers only on a node: the row is still offered, with a line saying they don't run here.
+  const nodeKeysOnly = !sceneKeys && nodeKeyHandlers(session.window);
+  const keyHandlers = sceneKeys || nodeKeysOnly;
+  const game = usable && (keyHandlers || /\bAnimationTimer\b/.test(session.code) || (session.window?.frames?.count ?? 0) > 0);
+  const runKeys = (lines: string[]) => {
+    if (latest.current.replaying) {
+      tell("Your program is still running: wait for it to finish, then try again.");
+      return;
+    }
+    send(lines);
+  };
+
   const hasControls = [...controls.values()].some((c) => !c.disabled);
   // Canvases and image views the learner can draw on or click: a line under the window says how.
   const allPointers = [...controls.values()].filter((c) => c.kind === "canvas" || c.kind === "image");
@@ -1032,14 +1203,19 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
           </button>
         )}
       </div>
-      <p className="fx-note">Java Arena draws your window and runs your program again from the start each time you click, type, move a slider or use the mouse, with everything you did before.</p>
+      <p className="fx-note">
+        {game
+          ? "Java Arena draws your window and runs your program again from the start each time you run frames, tap a key, click, type, move a slider or use the mouse, with everything you did before."
+          : "Java Arena draws your window and runs your program again from the start each time you click, type, move a slider or use the mouse, with everything you did before."}
+      </p>
       {session.failed && session.window && <p className="fx-stale-note">{STALE_NOTE[session.failed]}</p>}
       {stale === "code" && <p className="fx-stale-note">Out of date: your code changed since this run. Run it again to use the window.</p>}
       {!usable || !drawn.length ? (
-        // No window yet (the first run left none): the outline's "No window is open." and why.
-        <WindowDrawing window={session.window} label={stale && session.window ? `${drawingLabel(session.window)}, out of date` : undefined} />
+        // No window yet (the first run left none): the outline's "No window is open." and why. A
+        // window out of date or kept from before a failed run shows its end and never plays.
+        <WindowDrawing window={session.window} autoplay={false} label={stale && session.window ? `${drawingLabel(session.window)}, out of date` : undefined} />
       ) : (
-        <Frame label={drawingLabel(session.window)} focusable={!hasControls} deps={[drawn]}>
+        <Frame label={drawingLabel(session.window)} focusable={!hasControls} deps={[drawn]} anim={player.on ? player.anim : undefined}>
           <div className="fx-desktop">
             {drawn.map((d) => (
               <WindowFrame key={d.key} w={d} live={live} />
@@ -1047,6 +1223,8 @@ export function WindowPanel({ session, replaying, replay, codeChanged }: { sessi
           </div>
         </Frame>
       )}
+      {player.on && <div className="fx-player-box" ref={player.controls} />}
+      {game && <GameKeys code={session.code} events={session.events} keys={keyHandlers} nodeOnly={nodeKeysOnly} replaying={replaying} send={runKeys} />}
       {usable && pointers.length > 0 && <p className="fx-note fx-draw-note">{pointerNote(pointers)}</p>}
       {usable && hasPointers && (
         <p id={keysHelp} className={surfaceFocused ? "fx-note fx-keys-note" : "visually-hidden"}>

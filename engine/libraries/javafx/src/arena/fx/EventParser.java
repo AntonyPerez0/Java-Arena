@@ -13,7 +13,12 @@ import java.util.List;
  * enter TextField 1           close
  * set Slider 1 25             click Canvas 1 at 10 20
  * press Canvas 1 at 10 20     drag Canvas 1 to 30 40       release Canvas 1 at 30 40
+ * press key LEFT              release key LEFT             key SPACE
+ * frames 30
  * </pre>
+ *
+ * A key is named as KeyCode names it (LEFT, A, DIGIT1, SPACE); frames takes a whole number from 1
+ * to Frames.KEPT.
  *
  * A number (a slider's value, a point's x and y) is written as digits, with a minus sign and a
  * decimal point if needed (25, -3, 2.5).
@@ -67,6 +72,9 @@ final class EventParser {
         return events;
     }
 
+    /** The events' names, in the order a near miss is matched (as src/grader/window.ts's COMMANDS). */
+    private static final String[] COMMAND_NAMES = { "click", "type", "set", "enter", "close", "press", "drag", "release", "key", "frames" };
+
     private static boolean isCommand(String word) {
         switch (word) {
             case "click":
@@ -77,10 +85,47 @@ final class EventParser {
             case "press":
             case "drag":
             case "release":
+            case "key":
+            case "frames":
                 return true;
             default:
                 return false;
         }
+    }
+
+    /** press key LEFT, release key LEFT, key SPACE: the KeyCode name after them, checked. */
+    private static EventLine keyEvent(String line, String command, List<Token> tokens, int at) throws Bad {
+        String example = command + " " + (command.equals("key") ? "SPACE" : "LEFT");
+        if (at >= tokens.size()) {
+            throw new Bad(command + " needs the name of a key, such as " + example);
+        }
+        Token name = tokens.get(at);
+        if (name.quoted) {
+            throw new Bad("write the key's name without quotes, such as " + example);
+        }
+        String problem = Keys.nameProblem(name.text);
+        if (problem != null) {
+            throw new Bad(problem);
+        }
+        if (at + 1 < tokens.size()) {
+            throw new Bad("there's something extra at the end of the line");
+        }
+        return EventLine.of(line, command, null, name.text);
+    }
+
+    /** frames 30: a whole number of frames from 1 to Frames.KEPT. */
+    private static EventLine framesEvent(String line, List<Token> tokens) throws Bad {
+        if (tokens.size() < 2) {
+            throw new Bad("frames needs how many frames to run, such as frames 30");
+        }
+        Token n = tokens.get(1);
+        if (n.quoted || !digits(n.text) || number(n.text) < 1 || number(n.text) > Frames.KEPT) {
+            throw new Bad("frames takes a whole number from 1 to " + Frames.KEPT + ", such as frames 30");
+        }
+        if (tokens.size() > 2) {
+            throw new Bad("there's something extra at the end of the line");
+        }
+        return EventLine.number(line, "frames", null, String.valueOf(number(n.text)));
     }
 
     private static boolean mouse(String command) {
@@ -115,12 +160,37 @@ final class EventParser {
                 throw new Bad("write the event in small letters: " + lower);
             }
             String name = first.quoted ? "\"" + command + "\"" : command;
+            if (lower.startsWith("fram") || Keys.distance(lower, "frames") == 1) {
+                throw new Bad("write frames, such as frames 30");
+            }
+            // A near miss (keys, pres, clik): one letter off one event's name.
+            String near = null;
+            if (lower.length() >= 3) {
+                for (String c : COMMAND_NAMES) {
+                    if (Keys.distance(lower, c) == 1) {
+                        near = c;
+                        break;
+                    }
+                }
+            }
+            if (near != null) {
+                throw new Bad("there's no event called " + name + " (did you mean " + near + "? the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)");
+            }
             for (Token t : tokens) {
                 if (!t.quoted && (t.text.equals("at") || t.text.equals("to"))) {
                     throw new Bad("there's no event called " + name + " (the mouse events are press, drag, release and click, such as press Canvas 1 at 10 20)");
                 }
             }
-            throw new Bad("there's no event called " + name + " (the events are click, type, set, enter and close)");
+            throw new Bad("there's no event called " + name + " (the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)");
+        }
+        if (command.equals("key")) {
+            return keyEvent(line, "key", tokens, 1);
+        }
+        if (command.equals("frames")) {
+            return framesEvent(line, tokens);
+        }
+        if ((command.equals("press") || command.equals("release")) && tokens.size() > 1 && !tokens.get(1).quoted && tokens.get(1).text.equals("key")) {
+            return keyEvent(line, command + " key", tokens, 2);
         }
         if (command.equals("close")) {
             if (tokens.size() > 1) {

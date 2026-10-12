@@ -1,6 +1,7 @@
 // Tests of the plain-English explanations of part 11 mistakes (src/engine/friendly.ts): exceptions,
 // packages and files; of part 12: type parameters, lists and hash maps of your own, Random and
-// two-dimensional arrays; and of part 13: JavaFX, with Java Arena's practice version of it. Each diagnostic is javac's own (the same on the JDK and in the browser, as the
+// two-dimensional arrays; of parts 13 and 14: JavaFX, with Java Arena's practice version of it (charts, images, and
+// 14.3's game: shapes, keys, AnimationTimer, Point2D, collisions); and of 14.4: databases and libraries. Each diagnostic is javac's own (the same on the JDK and in the browser, as the
 // fidelity suite checks), rebuilt here from its code, place and message. Run: npm run test:unit
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -747,17 +748,17 @@ test("a JavaFX class without its import gets the exact import line, and a star i
 });
 
 test("a JavaFX class, package or method that the practice version doesn't have says so, without denying real JavaFX has it", () => {
-  const files = fxProgram(['CheckBox box = new CheckBox("Ready");', "Buton add = null;", 'Button button = new Button("Add");', "button.setOnKeyPressed(e -> button.setText(\"x\"));", "button.setOnAcion(e -> button.setText(\"y\"));", "button.setMinWidth(100);"], {
-    imports: ["import javafx.application.Application;", "import javafx.scene.control.*;", "import javafx.scene.shape.Rectangle;", "import javafx.scene.contol.Label;", "import javafx.scene.layout.Button;", "import javafx.stage.Stage;"],
+  const files = fxProgram(['CheckBox box = new CheckBox("Ready");', "Buton add = null;", 'Button button = new Button("Add");', "button.setOnMouseMoved(e -> button.setText(\"x\"));", "button.setOnAcion(e -> button.setText(\"y\"));", "button.setMinWidth(100);"], {
+    imports: ["import javafx.application.Application;", "import javafx.scene.control.*;", "import javafx.scene.effect.DropShadow;", "import javafx.scene.contol.Label;", "import javafx.scene.layout.Button;", "import javafx.stage.Stage;"],
   });
   const checkBox = fxExplain(files, "CheckBox box", "CheckBox", NOT_FOUND, "cannot find symbol\n  symbol:   class CheckBox\n  location: class Main");
   has(checkBox, "CheckBox is part of real JavaFX (javafx.scene.control.CheckBox), but Java Arena's practice version of JavaFX doesn't have it: it has only the classes and methods its lessons use.", "Its controls are Label, Button, TextField, PasswordField, TextArea and Slider.");
   has(fxExplain(files, "Buton", "Buton", NOT_FOUND, "cannot find symbol\n  symbol:   class Buton\n  location: class Main"), "Did you mean Button?");
-  has(fxExplain(files, "shape", "Rectangle", "compiler.err.doesnt.exist", "package javafx.scene.shape does not exist"), "Rectangle (javafx.scene.shape.Rectangle) is part of real JavaFX, but Java Arena's practice version of JavaFX doesn't have the package javafx.scene.shape", "use a Canvas and its GraphicsContext");
+  has(fxExplain(files, "effect", "DropShadow", "compiler.err.doesnt.exist", "package javafx.scene.effect does not exist"), "DropShadow (javafx.scene.effect.DropShadow) is part of real JavaFX, but Java Arena's practice version of JavaFX doesn't have the package javafx.scene.effect", "turned with setRotate", "a Canvas and its GraphicsContext");
   has(fxExplain(files, "contol", "Label", "compiler.err.doesnt.exist", "package javafx.scene.contol does not exist"), "Did you mean javafx.scene.control?", "import javafx.scene.control.Label;");
   has(fxExplain(files, "layout.Button", "Button", NOT_FOUND, "cannot find symbol\n  symbol:   class Button\n  location: package javafx.scene.layout"), "Button isn't in javafx.scene.layout: it's in javafx.scene.control. Write import javafx.scene.control.Button;");
-  const keys = fxExplain(files, "setOnKeyPressed", ".setOnKeyPressed", NOT_FOUND_CALL, 'cannot find symbol\n  symbol:   method setOnKeyPressed((e)->butt[...]("x"))\n  location: variable button of type Button');
-  has(keys, "Java Arena's practice version of JavaFX has no setOnKeyPressed: of the events, it has setOnAction", "setOnMouseClicked", "are part of real JavaFX but not of this version", "To react to a click, use button.setOnAction(e -> ...).");
+  const keys = fxExplain(files, "setOnMouseMoved", ".setOnMouseMoved", NOT_FOUND_CALL, 'cannot find symbol\n  symbol:   method setOnMouseMoved((e)->butt[...]("x"))\n  location: variable button of type Button');
+  has(keys, "Java Arena's practice version of JavaFX has no setOnMouseMoved: of the events, it has setOnAction", "setOnMouseClicked", "are part of real JavaFX but not of this version", "To react to a click, use button.setOnAction(e -> ...).");
   has(fxExplain(files, "setOnAcion", ".setOnAcion", NOT_FOUND_CALL, 'cannot find symbol\n  symbol:   method setOnAcion((e)->butt[...]("y"))\n  location: variable button of type Button'), "Did you mean setOnAction?");
   has(fxExplain(files, "setMinWidth", ".setMinWidth", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method setMinWidth(int)\n  location: variable button of type Button"), "Java Arena's practice version of JavaFX has no method setMinWidth(...) in Button: it has only the classes and methods its lessons use", "setOnAction");
   // A program that doesn't use JavaFX: CheckBox may be anything.
@@ -840,6 +841,18 @@ test("a Node from getChildren() used as the Button it holds: Java goes by the ty
   has(setText, "first is a Node, and Node has no method setText(...)", "Java goes by the variable's type, Node", "getChildren().get(...) gives a Node", "if (first instanceof Label) { Label label = (Label) first; label.setText(...); }");
   has(fxExplain(files, "Button again", "(0)", "compiler.err.prob.found.req", "incompatible types: Node cannot be converted to Button"), "getChildren().get(...) gives a Node", "(Button) box.getChildren().get(0)");
   has(fxExplain(files, "for (Button b", "()) {", "compiler.err.prob.found.req", "incompatible types: Node cannot be converted to Button"), "for (Node node : box.getChildren()) { if (node instanceof Button) { Button button = (Button) node; ... } }");
+});
+
+test("a shape's own method through a Shape or Node variable: Java goes by the type, so keep the shape or cast; a Canvas's setFill is its GraphicsContext's", () => {
+  const imports = [...FX_IMPORTS, "import javafx.scene.Node;", "import javafx.scene.layout.Pane;", "import javafx.scene.paint.Color;", "import javafx.scene.shape.Circle;", "import javafx.scene.shape.Shape;", "import javafx.scene.canvas.Canvas;"];
+  const files = fxProgram(["Shape s = new Circle(10);", "s.setRadius(5);", "Pane pane = new Pane(s);", "Node n = pane.getChildren().get(0);", "n.setFill(Color.RED);", "Canvas canvas = new Canvas(100, 100);", "canvas.setFill(Color.RED);"], { imports });
+  const radius = fxExplain(files, "s.setRadius", ".setRadius", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method setRadius(int)\n  location: variable s of type Shape");
+  has(radius, "s is a Shape, and Shape has no method setRadius(...)", "Circle has it, but Java goes by the variable's type, Shape", "Circle circle = new Circle(...)", "if (s instanceof Circle) { Circle circle = (Circle) s; circle.setRadius(...); }");
+  const fill = fxExplain(files, "n.setFill", ".setFill", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method setFill(Color)\n  location: variable n of type Node");
+  has(fill, "n is a Node, and Node has no method setFill(...)", "Polygon, Circle, Rectangle, Line and Text have it, but Java goes by the variable's type, Node", "getChildren().get(...) gives a Node", "Polygon polygon = new Polygon(...)");
+  lacks(fill, "Shape shape = new Shape");
+  const canvas = fxExplain(files, "canvas.setFill", ".setFill", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method setFill(Color)\n  location: variable canvas of type Canvas");
+  has(canvas, "canvas is a Canvas, and Canvas has no method setFill(...): setFill is a method of GraphicsContext, the canvas's drawing tools", "GraphicsContext gc = canvas.getGraphicsContext2D(); gc.setFill(...);");
 });
 
 /** What JavaFX's launch prints when start (or init, stop, the constructor) throws: the wrapper, then the cause. */
@@ -1384,4 +1397,351 @@ test("part 14 crashes: a series or a point added twice, null series, points and 
   // A pane's own duplicate keeps its explanation.
   const pane = startCrash(lines, "java.lang.IllegalArgumentException: Children: duplicate children added: parent = HBox@6344e235", ["javafx.scene.Parent$Children.check(Parent.java:83)"], 10);
   has(pane.explanation, "The program added a node to an HBox that already holds it");
+});
+
+// ------------------------------------------------------------------ part 14.3 and 14.4: a game, then libraries and databases
+
+/** The imports of a part 14.3 game, then `extra` ones. */
+const GAME_IMPORTS = ["import javafx.application.Application;", "import javafx.scene.Scene;", "import javafx.stage.Stage;"];
+
+test("part 14.3: shape, pane, Point2D, timer and key classes without their imports get their import lines; the errors that follow from them in a timer say so", () => {
+  const files = fxProgram(
+    [
+      "Pane pane = new Pane();",
+      "Polygon ship = new Polygon(-5, -5, 10, 0, -5, 5);",
+      "Circle rock = new Circle(450, 200, 25);",
+      "Rectangle wall = new Rectangle(10, 10, 20, 380);",
+      "Line border = new Line(0, 0, 600, 0);",
+      'Text points = new Text(10, 20, "Points: 0");',
+      "Point2D speed = new Point2D(0, 0);",
+      "scene.setOnKeyPressed((KeyEvent event) -> {",
+      "    if (event.getCode() == KeyCode.LEFT) {",
+      "    }",
+      "});",
+      "new AnimationTimer() {",
+      "    @Override",
+      "    public void handle(long now) {",
+      "        if (Shape.intersect(ship, rock).getBoundsInLocal().getWidth() != -1) {",
+      "            stop();",
+      "        }",
+      "    }",
+      "}.start();",
+    ],
+    { imports: GAME_IMPORTS },
+  );
+  for (const [name, pkg, text] of [["Pane", "javafx.scene.layout", "Pane pane"], ["Polygon", "javafx.scene.shape", "Polygon ship"], ["Circle", "javafx.scene.shape", "Circle rock"], ["Rectangle", "javafx.scene.shape", "Rectangle wall"], ["Line", "javafx.scene.shape", "Line border"], ["Text", "javafx.scene.text", "Text points"], ["Point2D", "javafx.geometry", "Point2D speed"], ["KeyEvent", "javafx.scene.input", "KeyEvent event"], ["AnimationTimer", "javafx.animation", "new AnimationTimer"]])
+    has(fxExplain(files, text, name, NOT_FOUND, `cannot find symbol\n  symbol:   class ${name}\n  location: class Main`), `To use ${name}, import it at the top of the file: import ${pkg}.${name};`);
+  has(fxExplain(files, "KeyCode.LEFT", "KeyCode", NOT_FOUND, "cannot find symbol\n  symbol:   variable KeyCode\n  location: class Main"), "import javafx.scene.input.KeyCode;");
+  // Inside the anonymous class of a class Java doesn't know, javac names no location.
+  has(fxExplain(files, "Shape.intersect", "Shape", "compiler.err.cant.resolve", "cannot find symbol\n  symbol: variable Shape"), "To use Shape, import it at the top of the file: import javafx.scene.shape.Shape;");
+  has(fxExplain(files, "stop();", "stop", "compiler.err.cant.resolve", "cannot find symbol\n  symbol: method stop()"), "stop is a method of AnimationTimer, and this code is inside new AnimationTimer() { ... }", "it needs import javafx.animation.AnimationTimer; at the top of the file");
+  has(explain(files, "Main.java", lineOf(files, "public void handle(long now)") - 1, "@Override", "compiler.err.method.does.not.override.superclass", "method does not override or implement a method from a supertype"), "This method is inside new AnimationTimer() { ... }, and Java doesn't know AnimationTimer here", "can't tell what handle replaces", "Add the import, and this error goes away.");
+  // With the import, @Override on handle(long) has nothing to say: the next rule (the general one) speaks.
+  const imported = fxProgram(["new AnimationTimer() {", "    @Override", "    public void handle(long now) {", "    }", "}.start();"], { imports: [...GAME_IMPORTS, "import javafx.animation.AnimationTimer;"] });
+  lacks(explain(imported, "Main.java", lineOf(imported, "public void handle(long now)") - 1, "@Override", "compiler.err.method.does.not.override.superclass", "method does not override or implement a method from a supertype"), "import javafx.animation");
+});
+
+const HANDLE_MISSING = "compiler.err.does.not.override.abstract";
+const OVERRIDES_NOTHING = ["compiler.err.method.does.not.override.superclass", "method does not override or implement a method from a supertype"];
+
+test("part 14.3: an AnimationTimer without handle(long): another name, int or no parameter, a misspelling without @Override, nothing, new AnimationTimer(), and a class that extends it (fidelity 74)", () => {
+  const files = fxProgram(
+    [
+      "new AnimationTimer() {",
+      "    public void run(long now) {",
+      "    }",
+      "}.start();",
+      "new AnimationTimer() {",
+      "    @Override",
+      "    public void handle(int now) {",
+      "    }",
+      "}.start();",
+      "new AnimationTimer() {",
+      "    @Override",
+      "    public void handle() {",
+      "    }",
+      "}.start();",
+      "new AnimationTimer() {",
+      "    public void handel(long now) {",
+      "    }",
+      "}.start();",
+      "new AnimationTimer() {",
+      "}.start();",
+      "AnimationTimer timer = new AnimationTimer();",
+    ],
+    { imports: [...GAME_IMPORTS, "import javafx.animation.AnimationTimer;"], extra: ["}", "", "class Spinner extends AnimationTimer {", "    @Override", "    public void handle(double now) {", "    }"] },
+  );
+  const lines = files[0].text.split("\n");
+  const timerAt = (k) => lines.findIndex((l, i) => l.includes("new AnimationTimer() {") && lines.slice(0, i + 1).filter((x) => x.includes("new AnimationTimer() {")).length === k) + 1;
+  const missing = (k) => explain(files, "Main.java", timerAt(k), "{", HANDLE_MISSING, `<anonymous Main$${k}> is not abstract and does not override abstract method handle(long) in AnimationTimer`);
+  const must = "A new AnimationTimer() { ... } must write handle(long now), the method JavaFX calls once per frame";
+  has(missing(1), must, "It has run(long now) instead, but JavaFX calls only handle: rename it, public void handle(long now) { ... }.");
+  has(missing(2), "Its handle takes (int now) instead, so to Java it's another method, and the timer still has no handle(long).");
+  has(missing(3), "Its handle takes no parameter instead", "even when it doesn't use now");
+  has(missing(4), "It has handel(long now) instead: the name must be handle, spelled exactly so, or JavaFX never calls it.", "Write @Override above it");
+  has(missing(5), "It has none yet: add it inside the braces, as in new AnimationTimer() { @Override public void handle(long now) { ... } }.start();");
+  // @Override is on the line above the method.
+  const at = (text) => lineOf(files, text) - 1;
+  has(explain(files, "Main.java", at("public void handle(int now)"), "@Override", ...OVERRIDES_NOTHING), "@Override says that handle replaces AnimationTimer's handle, but AnimationTimer's takes exactly one parameter, a long", "and this one takes (int now). Write it as public void handle(long now) { ... }");
+  has(explain(files, "Main.java", at("public void handle()"), "@Override", ...OVERRIDES_NOTHING), "and this one takes none", "even when it doesn't use now");
+  has(explain(files, "Main.java", at("public void handle(double now)"), "@Override", ...OVERRIDES_NOTHING), "and this one takes (double now)");
+  has(fxExplain(files, "AnimationTimer timer", "AnimationTimer()", "compiler.err.abstract.cant.be.instantiated", "AnimationTimer is abstract; cannot be instantiated"), "AnimationTimer is abstract: its handle(long now), which JavaFX calls once per frame, has no body there", "new AnimationTimer() { @Override public void handle(long now) { ... } }.start();");
+  has(explain(files, "Main.java", lineOf(files, "class Spinner"), "class", HANDLE_MISSING, "Spinner is not abstract and does not override abstract method handle(long) in AnimationTimer"), "Spinner extends AnimationTimer, so it must write handle(long now)", "Its handle takes (double now) instead");
+  // A misspelled handle with @Override: Java says so at the method.
+  const typo = fxProgram(["new AnimationTimer() {", "    @Override", "    public void handel(long now) {", "    }", "}.start();"], { imports: [...GAME_IMPORTS, "import javafx.animation.AnimationTimer;"] });
+  has(explain(typo, "Main.java", lineOf(typo, "handel") - 1, "@Override", ...OVERRIDES_NOTHING), "@Override says that handel replaces a method of AnimationTimer, and the one a timer writes is handle(long now), which JavaFX calls once per frame", "Did you mean handle?");
+  const typoTimer = explain(typo, "Main.java", lineOf(typo, "new AnimationTimer() {"), "{", HANDLE_MISSING, "<anonymous Main$1> is not abstract and does not override abstract method handle(long) in AnimationTimer");
+  has(typoTimer, "It has handel(long now) instead", "The @Override above it already makes Java check that the method really replaces one");
+  lacks(typoTimer, "Write @Override above it");
+  // Shape is abstract too.
+  const shape = fxProgram(["Shape rock = new Shape();"], { imports: [...GAME_IMPORTS, "import javafx.scene.shape.Shape;"] });
+  has(fxExplain(shape, "new Shape", "new", "compiler.err.abstract.cant.be.instantiated", "Shape is abstract; cannot be instantiated"), "Create one of its kinds, a Polygon, a Circle, a Rectangle, a Line or a Text", "Shape rock = new Circle(30);");
+  // A class of the program's own called AnimationTimer keeps the general explanations.
+  const own = program({ "Main.java": ["abstract class AnimationTimer {", "    abstract void handle(long now);", "}", "", "class Loop extends AnimationTimer {", "}"] });
+  lacks(explain(own, "Main.java", 5, "class", HANDLE_MISSING, "Loop is not abstract and does not override abstract method handle(long) in AnimationTimer"), "JavaFX");
+});
+
+test("part 14.3: Point2D's x and y read and changed as variables, a setter it doesn't have, + on points, and new Point2D() (fidelity 75)", () => {
+  const files = fxProgram(["speed.x = speed.x + 0.05;", "speed.y += 0.1;", "speed.x++;", "speed.setX(1);", "ship.setTranslateX(ship.getTranslateX() + speed.x);", "speed = speed + new Point2D(1, 1);", "Point2D start = new Point2D();", "System.out.println(speed.getX);"], {
+    imports: [...GAME_IMPORTS, "import javafx.geometry.Point2D;"],
+    header: "public class Main extends Application {\n    private Point2D speed = new Point2D(0, 0);",
+  });
+  const access = (text, at, xy) => fxExplain(files, text, at, "compiler.err.report.access", `${xy} has private access in Point2D`);
+  has(access("speed.x = speed.x", ".x", "x"), "A Point2D's x and y are private, and a Point2D never changes once it's created", "speed = new Point2D(speed.getX() + 0.05, speed.getY());");
+  has(access("speed.y += 0.1", ".y", "y"), "speed = speed.add(0, 0.1);");
+  has(access("speed.x++", ".x", "x"), "speed = speed.add(1, 0);");
+  const read = explain(files, "Main.java", lineOf(files, "getTranslateX() + speed.x"), "x);", "compiler.err.report.access", "x has private access in Point2D");
+  assert.equal(read, "A Point2D's x and y are private: read them with its methods, speed.getX() and speed.getY().");
+  has(fxExplain(files, "speed.setX(1)", ".setX", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method setX(int)\n  location: variable speed of type Point2D"), "speed is a Point2D, and a Point2D has no setX(...).", "A Point2D never changes once it's created", "speed = new Point2D(newX, speed.getY());", "A call such as speed.add(1, 0); on a line of its own changes nothing");
+  has(fxExplain(files, "speed = speed + new", "+", "compiler.err.operator.cant.be.applied.1", "bad operand types for binary operator '+'\n  first type:  Point2D\n  second type: Point2D"), "Java's + works on numbers, and a Point2D is an object", "write speed.add(new Point2D(1, 1)).");
+  has(fxExplain(files, "Point2D start", "new", "compiler.err.cant.apply.symbol", "constructor Point2D in class Point2D cannot be applied to given types;\n  required: double,double\n  found:    no arguments\n  reason: actual and formal argument lists differ in length"), "new Point2D(...) takes both, as in new Point2D(0, 0) (Point2D.ZERO is that point)");
+  has(fxExplain(files, "speed.getX)", ".getX", NOT_FOUND, "cannot find symbol\n  symbol:   variable getX\n  location: variable speed of type Point2D"), "getX is a method of Point2D, so it needs parentheses: speed.getX().");
+  // A private x of the program's own class keeps its own explanation.
+  const own = program({ "Main.java": ["class Point2D {", "    private int x;", "}", "", "public class Main {", "    int read(Point2D p) {", "        return p.x;", "    }", "}"] });
+  lacks(explain(own, "Main.java", 7, ".x", "compiler.err.report.access", "x has private access in Point2D"), "never changes");
+});
+
+test("part 14.3: compound assignments on points, x and y scaled, receivers that aren't variables, Point2D's class used as a point, and normalise", () => {
+  const files = fxProgram(
+    [
+      "speed += other;",
+      "speed *= 2;",
+      "speed -= other;",
+      "speed /= k + 1;",
+      "speed /= k;",
+      "factor *= speed;",
+      "speed = speed + other;",
+      "speed.x *= 2;",
+      "speed.y /= 2;",
+      "speed.x *= a + b;",
+      "speed.x %= 3;",
+      "getMovement().x += 1;",
+      "points[0].x += 1;",
+      "Point2D.x = 5;",
+      "Point2D.setX(1);",
+      "ship.speed.setX(1);",
+      "this.speed.setX(1);",
+      "points[0].setX(1);",
+      "list.get(0).setX(1);",
+      "new Point2D(1, 2).setX(3);",
+      "speed.normalise();",
+      "Point2D dir = speed.normalized();",
+    ],
+    { imports: [...GAME_IMPORTS, "import javafx.geometry.Point2D;"], header: "public class Main extends Application {\n    private Point2D speed = new Point2D(0, 0);" },
+  );
+  const bad = (text, at, op, first, second) => fxExplain(files, text, at, "compiler.err.operator.cant.be.applied.1", `bad operand types for binary operator '${op}'\n  first type:  ${first}\n  second type: ${second}`);
+  has(bad("speed += other", "+", "+", "Point2D", "Point2D"), "Java's += works on numbers", "so keep it in the variable: write speed = speed.add(other);");
+  has(bad("speed *= 2", "*", "*", "Point2D", "int"), "write speed = speed.multiply(2);");
+  has(bad("speed -= other", "-", "-", "Point2D", "Point2D"), "write speed = speed.subtract(other);");
+  has(bad("speed /= k + 1", "/", "/", "Point2D", "int"), "write speed = speed.multiply(1.0 / (k + 1));");
+  has(bad("speed /= k;", "/", "/", "Point2D", "int"), "write speed = speed.multiply(1.0 / k);");
+  // The number on the left: a Point2D can't be kept in it, so no code.
+  const factor = bad("factor *= speed", "*", "*", "double", "Point2D");
+  has(factor, "Each gives a new Point2D.");
+  lacks(factor, "write");
+  has(bad("speed = speed + other", "+", "+", "Point2D", "Point2D"), "write speed.add(other).");
+  const access = (text, at, xy) => fxExplain(files, text, at, "compiler.err.report.access", `${xy} has private access in Point2D`);
+  has(access("speed.x *= 2", ".x", "x"), "speed = new Point2D(speed.getX() * 2, speed.getY());");
+  has(access("speed.y /= 2", ".y", "y"), "speed = new Point2D(speed.getX(), speed.getY() / 2);");
+  has(access("speed.x *= a + b", ".x", "x"), "speed = new Point2D(speed.getX() * (a + b), speed.getY());");
+  has(access("speed.x %= 3", ".x", "x"), "speed = new Point2D(speed.getX() % 3, speed.getY());");
+  for (const text of ["speed.x *= 2", "speed.y /= 2", "speed.x *= a + b"]) lacks(access(text, text.slice(5, 7), text[6]), "new x", "new y");
+  // A Point2D that a call gives: no variable to keep the new one in.
+  const call = access("getMovement().x", ".x", "x");
+  has(call, "This Point2D comes from a method call, not from a variable", "through a setter");
+  lacks(call, "getMovement() =");
+  has(access("points[0].x", ".x", "x"), "points[0] = points[0].add(1, 0);");
+  // The class itself: x and y belong to each Point2D.
+  const cls = access("Point2D.x = 5", ".x", "x");
+  has(cls, "x and y are private, and each Point2D object has its own: they don't belong to the class");
+  lacks(cls, "Point2D = new");
+  const setX = (text, at, location) => fxExplain(files, text, at, NOT_FOUND_CALL, `cannot find symbol\n  symbol:   method setX(int)\n  location: ${location}`);
+  const staticSetX = setX("Point2D.setX(1)", ".setX", "class Point2D");
+  has(staticSetX, "isn't a static method of Point2D, and Point2D has no setX at all");
+  lacks(staticSetX, "Point2D = new");
+  has(setX("ship.speed.setX(1)", ".setX", "variable speed of type Point2D"), "ship.speed = new Point2D(newX, ship.speed.getY());");
+  has(setX("this.speed.setX(1)", ".setX", "variable speed of type Point2D"), "this.speed = new Point2D(newX, this.speed.getY());");
+  has(setX("points[0].setX(1)", ".setX", "class Point2D"), "points[0] = new Point2D(newX, points[0].getY());");
+  const got = setX("list.get(0).setX(1)", ".setX", "class Point2D");
+  has(got, "This Point2D comes from a method call", "list.set(0, list.get(0).add(1, 0));");
+  lacks(got, "list.get(0) =");
+  const created = setX("new Point2D(1, 2).setX(3)", ".setX", "class Point2D");
+  has(created, "new Point2D(1, 2) is a Point2D", "This Point2D comes from new");
+  lacks(created, "new Point2D(1, 2) =");
+  const normalise = (text, method) => fxExplain(files, text, `.${method}`, NOT_FOUND_CALL, `cannot find symbol\n  symbol:   method ${method}()\n  location: variable speed of type Point2D`);
+  has(normalise("speed.normalise()", "normalise"), "It's spelled normalize: speed.normalize() gives a new Point2D of length 1 pointing the same way, so keep it, as in speed = speed.normalize();");
+  const dir = normalise("speed.normalized()", "normalized");
+  has(dir, "It's spelled normalize", "Point2D direction = speed.normalize();");
+  lacks(dir, "speed = speed.normalize()", "add(1, 0)");
+});
+
+test("part 14.3: names that aren't KeyCode constants get the closest real one; a KeyCode compared with text or given text (fidelity 76)", () => {
+  const files = fxProgram(
+    [
+      "scene.setOnKeyPressed(event -> {",
+      "    pressed.put(event.getText(), Boolean.TRUE);",
+      "    if (event.getCode() == KeyCode.LEFT_ARROW || event.getCode() == KeyCode.SPACEBAR) {",
+      "    }",
+      "    if (event.getCode() == KeyCode.ESC || event.getCode() == KeyCode.a || event.getCode() == KeyCode.Up || event.getCode() == KeyCode.NUM1) {",
+      "    }",
+      '    if (event.getCode() == "RIGHT") {',
+      "    }",
+      "    if (event.getText() == KeyCode.A) {",
+      "    }",
+      "    switch (event.getCode()) {",
+      '        case "DOWN":',
+      "            break;",
+      "    }",
+      "});",
+      'scene.setOnKeyReleased(event -> pressed.put("LEFT", Boolean.FALSE));',
+    ],
+    { imports: [...GAME_IMPORTS, "import javafx.scene.input.KeyCode;"] },
+  );
+  const constant = (name) => fxExplain(files, `KeyCode.${name}`, name, NOT_FOUND, `cannot find symbol\n  symbol:   variable ${name}\n  location: class KeyCode`);
+  const names = "KeyCode names the keys as JavaFX does: LEFT, RIGHT, UP and DOWN for the arrow keys, SPACE, ENTER, ESCAPE, SHIFT and CONTROL, A to Z for the letters, and DIGIT0 to DIGIT9";
+  has(constant("LEFT_ARROW"), "KeyCode has no constant LEFT_ARROW. Did you mean KeyCode.LEFT (the key called Left)?", names);
+  has(constant("SPACEBAR"), "Did you mean KeyCode.SPACE (the key called Space)?");
+  has(constant("ESC"), "Did you mean KeyCode.ESCAPE (the key called Esc)?");
+  has(constant("a"), "Its constants are written in capital letters: KeyCode.A (the key called A).");
+  has(constant("Up"), "Its constants are written in capital letters: KeyCode.UP (the key called Up).");
+  has(constant("NUM1"), "Did you mean KeyCode.DIGIT1 (the key 1 above the letters)?");
+  // A name nothing is close to: only the names.
+  const far = fxExplain(fxProgram(["KeyCode k = KeyCode.FIRE;"], { imports: [...GAME_IMPORTS, "import javafx.scene.input.KeyCode;"] }), "KeyCode.FIRE", "FIRE", NOT_FOUND, "cannot find symbol\n  symbol:   variable FIRE\n  location: class KeyCode");
+  has(far, "KeyCode has no constant FIRE.", names);
+  lacks(far, "Did you mean");
+  has(fxExplain(files, '== "RIGHT"', "==", "compiler.err.incomparable.types", "incomparable types: KeyCode and String"), 'event.getCode() is a KeyCode, and "RIGHT" is a String: a KeyCode is a constant of an enum, not text', "Compare it with the constant itself: event.getCode() == KeyCode.RIGHT.");
+  has(fxExplain(files, "getText() == KeyCode.A", "==", "compiler.err.incomparable.types", "incomparable types: String and KeyCode"), 'event.getText() gives the key\'s text as a String (such as "a")', "event.getCode() == KeyCode.A.");
+  const textToKey = "incompatible types: String cannot be converted to KeyCode";
+  has(fxExplain(files, 'case "DOWN"', '"DOWN"', "compiler.err.prob.found.req", textToKey), "This switch is on a KeyCode, so each case is one of KeyCode's constants, written by its name alone, without quotes: case DOWN:");
+  has(fxExplain(files, 'pressed.put("LEFT"', '"LEFT"', "compiler.err.prob.found.req", textToKey), '"LEFT" is text, a String, and here Java needs a KeyCode', "Write the constant itself: KeyCode.LEFT.");
+  has(fxExplain(files, "pressed.put(event.getText()", "(), Boolean", "compiler.err.prob.found.req", textToKey), "event.getText() gives the key's text as a String", "Use event.getCode(), which gives the key's KeyCode");
+  // KeyCode.valueOf with a name that isn't one: the closest real one.
+  const lines = ["import javafx.application.Application;", "import javafx.scene.input.KeyCode;", "import javafx.stage.Stage;", "", "public class Main extends Application {", "    public void start(Stage stage) {", '        KeyCode code = KeyCode.valueOf("LEFT_ARROW");', "    }", "}"];
+  const crash = explainCrash(fxWrapped("Exception in Application start method", "java.lang.IllegalArgumentException: No enum constant javafx.scene.input.KeyCode.LEFT_ARROW", "\tat java.base/java.lang.Enum.valueOf(Enum.java:293)\n\tat javafx.scene.input.KeyCode.valueOf(KeyCode.java:9)\n\tat Main.start(Main.java:7)\n"), program({ "Main.java": lines }));
+  has(crash.explanation, 'KeyCode has no constant named "LEFT_ARROW": the name must match exactly, capital letters included. Did you mean LEFT?');
+  // A name close to no constant, in any case: the names, not capitals.
+  const valueOf = (name) => explainCrash(fxWrapped("Exception in Application start method", `java.lang.IllegalArgumentException: No enum constant javafx.scene.input.KeyCode.${name}`, "\tat java.base/java.lang.Enum.valueOf(Enum.java:293)\n\tat javafx.scene.input.KeyCode.valueOf(KeyCode.java:9)\n\tat Main.start(Main.java:7)\n"), program({ "Main.java": lines })).explanation;
+  for (const name of ["Fire", "JUMP"]) {
+    has(valueOf(name), `KeyCode has no constant named "${name}"`, names);
+    lacks(valueOf(name), "toUpperCase", "Did you mean");
+  }
+  // Swapped letters and KEY around the name find the key; a word near a key that isn't it doesn't.
+  const named = (name) => fxExplain(fxProgram([`KeyCode k = KeyCode.${name};`], { imports: [...GAME_IMPORTS, "import javafx.scene.input.KeyCode;"] }), `KeyCode.${name}`, name, NOT_FOUND, `cannot find symbol\n  symbol:   variable ${name}\n  location: class KeyCode`);
+  for (const [name, code] of [["RIGTH", "RIGHT"], ["SHFIT", "SHIFT"], ["SAPCE", "SPACE"], ["ENTRE", "ENTER"], ["W_KEY", "W"], ["SPACE_KEY", "SPACE"], ["UP_KEY", "UP"]]) has(named(name), `Did you mean KeyCode.${code} `);
+  for (const name of ["SHOOT", "QUIT"]) lacks(named(name), "Did you mean");
+  lacks(named("ACCEL"), "CANCEL");
+});
+
+test("part 14.3: collisions: what Shape.intersect gives compared with a number or used as a boolean, a Bounds method on the shape, ship.intersect(rock), a Bounds compared with a number, getWidth without parentheses, intersects (fidelity 77)", () => {
+  const files = fxProgram(
+    [
+      "if (Shape.intersect(ship, rock) != 0) {",
+      "}",
+      "if (Shape.intersect(ship, rock)) {",
+      "}",
+      "Shape overlap = Shape.intersect(ship, rock);",
+      "boolean hit = overlap.getWidth() != -1;",
+      "if (ship.intersect(rock)) {",
+      "}",
+      "if (overlap.getBoundsInLocal() != -1) {",
+      "}",
+      "if (overlap.getBoundsInLocal().getWidth != -1) {",
+      "}",
+      "if (ship.intersects(rock)) {",
+      "}",
+    ],
+    { imports: [...GAME_IMPORTS, "import javafx.scene.shape.Circle;", "import javafx.scene.shape.Polygon;", "import javafx.scene.shape.Shape;"], header: "public class Main extends Application {\n    Polygon ship = new Polygon(0, 0, 10, 0, 5, 5);\n    Circle rock = new Circle(5);" },
+  );
+  const is = "Shape.intersect(a, b) doesn't say true or false: it gives a new Shape, the area that a and b have in common, and that shape is empty when they don't overlap (it is never null).";
+  const check = "Shape.intersect(ship, rock).getBoundsInLocal().getWidth() != -1";
+  has(fxExplain(files, "rock) != 0", "!=", "compiler.err.operator.cant.be.applied.1", "bad operand types for binary operator '!='\n  first type:  Shape\n  second type: int"), is, check);
+  has(fxExplain(files, "if (Shape.intersect(ship, rock)) {", "intersect", "compiler.err.prob.found.req", "incompatible types: Shape cannot be converted to boolean"), is);
+  has(fxExplain(files, "overlap.getWidth()", ".getWidth", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method getWidth()\n  location: variable overlap of type Shape"), is, "getWidth() is a method of those bounds, so it comes after getBoundsInLocal()");
+  has(fxExplain(files, "ship.intersect(rock)", ".intersect", "compiler.err.cant.apply.symbol", "method intersect in class Shape cannot be applied to given types;\n  required: Shape,Shape\n  found:    Circle\n  reason: actual and formal argument lists differ in length"), "intersect is a static method of Shape", "Write Shape.intersect(ship, rock) instead of ship.intersect(rock).");
+  has(fxExplain(files, "getBoundsInLocal() != -1", "!=", "compiler.err.operator.cant.be.applied.1", "bad operand types for binary operator '!='\n  first type:  Bounds\n  second type: int"), "getBoundsInLocal() gives the bounds of a node, a Bounds: the box around it, not a number.", "getBoundsInLocal().getWidth()");
+  has(fxExplain(files, ".getWidth != -1", ".getWidth", NOT_FOUND, "cannot find symbol\n  symbol:   variable getWidth\n  location: class Bounds"), "getWidth is a method of Bounds, so it needs parentheses: overlap.getBoundsInLocal().getWidth().");
+  has(fxExplain(files, "ship.intersects", ".intersects", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method intersects(Circle)\n  location: variable ship of type Polygon"), "To check whether two shapes overlap, use Shape.intersect", is, "A node's intersects(...) of real JavaFX takes a Bounds");
+  // A Shape compared with a number elsewhere, with no intersect near: no note about intersect.
+  const other = fxProgram(["Shape s = new Circle(5);", "if (s != 0) {", "}"], { imports: [...GAME_IMPORTS, "import javafx.scene.shape.Circle;", "import javafx.scene.shape.Shape;"] });
+  lacks(fxExplain(other, "s != 0", "!=", "compiler.err.operator.cant.be.applied.1", "bad operand types for binary operator '!='\n  first type:  Shape\n  second type: int"), "intersect");
+});
+
+test("part 14.3 crashes: a list changed while handle goes through it names removeIf, an alive flag and a copy; elsewhere the general note stays", () => {
+  const lines = ["import java.util.List;", "import javafx.animation.AnimationTimer;", "", "public class Main {", "    void go(List<Circle> rocks) {", "        new AnimationTimer() {", "            public void handle(long now) {", "                for (Circle rock : rocks) {", "                    rocks.remove(rock);", "                }", "            }", "        }.start();", "    }", "}"];
+  const trace = (frames) => `Exception in thread "main" java.util.ConcurrentModificationException\n\tat java.base/java.util.ArrayList$Itr.checkForComodification(ArrayList.java:1095)\n\tat java.base/java.util.ArrayList$Itr.next(ArrayList.java:1049)\n\tat Main$1.handle(Main.java:8)\n${frames}`;
+  const game = explainCrash(trace("\tat arena.fx.Frames.runOne(Frames.java:88)\n\tat arena.fx.Session.frames(Session.java:413)\n\tat arena.fx.Session$FxThread.run(Session.java:264)\n"), program({ "Main.java": lines }), { handler: true });
+  has(game.explanation, "The game loop's handle went through rocks with a for-each loop and, inside it, removed or added an element of that same list", "rocks.removeIf(rock -> !rock.isAlive())", "remove the hit ones with removeIf itself", "for (... rock : new ArrayList<>(rocks))");
+  const plain = explainCrash(trace("\tat Main.go(Main.java:12)\n"), program({ "Main.java": lines }));
+  has(plain.explanation, "The program added to or removed from a list while a for-each loop was going through it.");
+});
+
+test("part 14.3: Timeline, the transitions and javafx.util.Duration are part of real JavaFX, not of the practice version (fidelity 78)", () => {
+  const files = fxProgram(["TranslateTransition move = new TranslateTransition(Duration.seconds(2), ball);", "PathTransition path = null;"], { imports: [...GAME_IMPORTS, "import javafx.animation.Timeline;", "import javafx.util.Duration;"] });
+  has(fxExplain(files, "animation.Timeline", ".Timeline", NOT_FOUND, "cannot find symbol\n  symbol:   class Timeline\n  location: package javafx.animation"), "Timeline is part of real JavaFX (javafx.animation.Timeline), but Java Arena's practice version of JavaFX doesn't have it", "it has AnimationTimer, a game loop whose handle runs once per frame; Timeline, TranslateTransition and the other animations are part of real JavaFX but not of this version.");
+  has(fxExplain(files, "javafx.util", "javafx.util", "compiler.err.doesnt.exist", "package javafx.util does not exist"), "Duration (javafx.util.Duration) is part of real JavaFX", "Duration is the length of time a Timeline or a transition takes");
+  has(fxExplain(files, "PathTransition path", "PathTransition", NOT_FOUND, "cannot find symbol\n  symbol:   class PathTransition\n  location: class Main"), "PathTransition is part of real JavaFX (javafx.animation.PathTransition)");
+  // Duration imported from javafx.util is JavaFX's, not java.time's.
+  const duration = fxExplain(files, "Duration.seconds", "Duration", NOT_FOUND, "cannot find symbol\n  symbol:   variable Duration\n  location: class Main");
+  has(duration, "Duration is part of real JavaFX (javafx.util.Duration)");
+  lacks(duration, "java.time");
+});
+
+test("part 14.4: java.sql and H2 (no database here), a library's package (Maven), JUnit 5, and the classes they would have given (fidelity 79; java.sql only in the browser)", () => {
+  const files = program({
+    "Main.java": ["import java.sql.Connection;", "import java.sql.*;", "import org.h2.jdbcx.JdbcDataSource;", "import org.apache.commons.lang3.StringUtils;", "import org.junit.jupiter.api.Test;", "", "public class Main {", "    public static void main(String[] args) throws Exception {", '        Connection c = DriverManager.getConnection("jdbc:h2:./todo");', "        PreparedStatement s = null;", '        String t = StringUtils.capitalize("a");', "        JdbcDataSource source = null;", "    }", "", "    @Test", "    public void adds() {", "    }", "}"],
+  });
+  const noDb = "This page has no database: the Java that runs here has only Java's basic classes (java.base), not java.sql, and there's no database or database driver (such as H2's) to connect to.";
+  const m54 = 'module 54, "Libraries, Maven and databases", shows how to run it there';
+  has(explain(files, "Main.java", 1, ".Connection", "compiler.err.doesnt.exist", "package java.sql does not exist"), "Connection (java.sql.Connection) is part of Java's classes for databases, JDBC.", noDb, m54, "keep the data in a data access object of your own");
+  has(explain(files, "Main.java", 2, "import", "compiler.err.doesnt.exist", "package java.sql does not exist"), "The package java.sql is part of Java's classes for databases, JDBC.", noDb);
+  has(explain(files, "Main.java", 9, "DriverManager", NOT_FOUND, "cannot find symbol\n  symbol:   variable DriverManager\n  location: class Main"), "DriverManager is part of java.sql, Java's classes for databases (JDBC), as in import java.sql.DriverManager;.", noDb);
+  has(explain(files, "Main.java", 10, "PreparedStatement", NOT_FOUND, "cannot find symbol\n  symbol:   class PreparedStatement\n  location: class Main"), "PreparedStatement is part of java.sql", noDb);
+  has(explain(files, "Main.java", 3, ".jdbcx", "compiler.err.doesnt.exist", "package org.h2.jdbcx does not exist"), "org.h2 is H2, a database written in Java, a library that a project gets through Maven", noDb);
+  has(explain(files, "Main.java", 4, ".StringUtils", "compiler.err.doesnt.exist", "package org.apache.commons.lang3 does not exist"), "There is no package org.apache.commons.lang3 here. It isn't part of Java, so it's probably a library: on your own computer, a project gets one through Maven, as a dependency in its pom.xml", "JUnit 4 and Java Arena's practice version of JavaFX, and no other libraries");
+  has(explain(files, "Main.java", 5, ".Test", "compiler.err.doesnt.exist", "package org.junit.jupiter.api does not exist"), "org.junit.jupiter.api is JUnit 5, and this page has JUnit 4", "import org.junit.Test;");
+  has(explain(files, "Main.java", 11, "StringUtils", NOT_FOUND, "cannot find symbol\n  symbol:   variable StringUtils\n  location: class Main"), "StringUtils is the class the file imports from org.apache.commons.lang3, and that package isn't here", "probably a library");
+  has(explain(files, "Main.java", 12, "JdbcDataSource", NOT_FOUND, "cannot find symbol\n  symbol:   class JdbcDataSource\n  location: class Main"), "JdbcDataSource is the class the file imports from org.h2.jdbcx", noDb);
+  has(explain(files, "Main.java", 15, "Test", NOT_FOUND, "cannot find symbol\n  symbol:   class Test\n  location: class Main"), "Test is the class the file imports from org.junit.jupiter.api", "import org.junit.Test; instead");
+  // A misspelled JUnit 4 package: its real names, not a library.
+  for (const pkg of ["org.Junit", "org.junit.asserts", "org.junit.Assert"]) {
+    const typo = explain(program({ "Main.java": [`import ${pkg}.Test;`, "public class Main {", "}"] }), "Main.java", 1, ".Test", "compiler.err.doesnt.exist", `package ${pkg} does not exist`);
+    has(typo, `There is no package ${pkg}: this page has JUnit 4`, "org.junit (Test, Before, After and Assert), org.junit.runner and org.junit.rules", "import static org.junit.Assert.assertEquals;");
+    lacks(typo, "Maven");
+  }
+  const misspelt = program({ "Main.java": ["import org.Junit.Test;", "public class Main {", "    @Test", "    public void adds() {", "    }", "}"] });
+  has(explain(misspelt, "Main.java", 3, "Test", NOT_FOUND, "cannot find symbol\n  symbol:   class Test\n  location: class Main"), "This page has JUnit 4, so org.Junit is probably a misspelling");
+  // The rest of JUnit 5 is JUnit 5 too.
+  const platform = explain(program({ "Main.java": ["import org.junit.platform.suite.api.Suite;", "public class Main {", "}"] }), "Main.java", 1, ".Suite", "compiler.err.doesnt.exist", "package org.junit.platform.suite.api does not exist");
+  has(platform, "org.junit.platform.suite.api is part of JUnit 5, and this page has JUnit 4");
+  lacks(platform, "spelling");
+  // Connection alone, in a program with no sign of JDBC, may be a class of its own not written yet.
+  lacks(explain(program({ "Main.java": ["public class Main {", "    Connection link;", "}"] }), "Main.java", 2, "Connection", NOT_FOUND, "cannot find symbol\n  symbol:   class Connection\n  location: class Main"), "database");
+  // A program with packages of its own under com.: a missing one of them is still about its folders.
+  const own = program({ "com/shop/Main.java": ["package com.shop;", "", "import com.shop.model.Item;", "", "public class Main {", "}"], "com/shop/domain/Item.java": ["package com.shop.domain;", "", "public class Item {", "}"] });
+  lacks(explain(own, "com/shop/Main.java", 3, ".Item", "compiler.err.doesnt.exist", "package com.shop.model does not exist"), "Maven");
+  // A misspelled package of Java's own keeps the general note.
+  has(explain(program({ "Main.java": ["import java.utils.List;", "public class Main {", "}"] }), "Main.java", 1, ".List", "compiler.err.doesnt.exist", "package java.utils does not exist"), "Check the spelling of the import");
+  // On your own computer without H2 on the class path.
+  const driver = explainCrash('Exception in thread "main" java.sql.SQLException: No suitable driver found for jdbc:h2:./todo\n\tat java.sql/java.sql.DriverManager.getConnection(DriverManager.java:708)\n\tat java.sql/java.sql.DriverManager.getConnection(DriverManager.java:230)\n\tat Main.main(Main.java:9)\n', files);
+  has(driver.explanation, "DriverManager.getConnection found no database driver for the address jdbc:h2:./todo", "com.h2database:h2, a dependency in the project's pom.xml", "Java Arena's page has no database at all.");
 });

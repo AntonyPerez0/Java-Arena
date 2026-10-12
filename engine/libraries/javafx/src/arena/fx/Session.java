@@ -16,6 +16,7 @@ import java.util.List;
 import javafx.application.Application;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.layout.Region;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
@@ -54,9 +55,13 @@ public final class Session {
     private static boolean finished;
     private static volatile Thread fxThread;
     private static final ArrayDeque<Runnable> LATER = new ArrayDeque<Runnable>();
+    /** The replay of this session's events. */
+    private static Replay currentReplay;
 
     /** Every window shown in this session, in the order each was first shown. */
     private static final ArrayList<Window> SHOWN = new ArrayList<Window>();
+    /** The same windows, the one shown last at the end. */
+    private static final ArrayList<Window> SHOWN_LAST = new ArrayList<Window>();
     private static Window primary;
     private static boolean lastWindowClosed;
     private static final IdentityHashMap<Scene, Window> SCENE_WINDOWS = new IdentityHashMap<Scene, Window>();
@@ -130,6 +135,7 @@ public final class Session {
             }
             final List<EventLine> events = EventParser.parse(readEvents());
             final Replay replay = new Replay();
+            currentReplay = replay;
             FxThread fx = new FxThread();
             fxThread = fx.thread;
             fx.thread.start();
@@ -178,6 +184,7 @@ public final class Session {
                         }
                         drain();
                         replay.settle();
+                        int step = 0;
                         for (EventLine event : events) {
                             if (replay.ended) {
                                 break;
@@ -185,6 +192,10 @@ public final class Session {
                             replay.apply(event);
                             drain();
                             replay.settle();
+                            step++;
+                            if (STEP_WINDOWS && !replay.ended) {
+                                writeWindow(replay, ".arena/window-step-" + step + ".json");
+                            }
                         }
                         writeWindow(replay);
                     }
@@ -311,12 +322,32 @@ public final class Session {
         }
     }
 
+    /**
+     * Only for npm run fx-check, which sets the system property arena.fx.stepWindows on the
+     * reference JDK: the window after each event line (while the session goes on) is also written,
+     * as .arena/window-step-N.json for the N-th line, so the check compares the window after every
+     * line with real JavaFX's. Never set on the site.
+     */
+    private static final boolean STEP_WINDOWS = stepWindows();
+
+    private static boolean stepWindows() {
+        try {
+            return System.getProperty("arena.fx.stepWindows") != null;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     private static void writeWindow(Replay replay) {
+        writeWindow(replay, WINDOW_FILE);
+    }
+
+    private static void writeWindow(Replay replay, String name) {
         boolean closed = replay.closed || exitRequested();
         byte[] json = WindowJson.write(closed ? new ArrayList<Window>() : showingWindows(), closed, replay.problems).getBytes(StandardCharsets.US_ASCII);
         File folder = new File(EVENTS_FILE).getParentFile();
         folder.mkdirs();
-        try (OutputStream out = new FileOutputStream(new File(WINDOW_FILE))) {
+        try (OutputStream out = new FileOutputStream(new File(name))) {
             out.write(json);
         } catch (IOException e) {
             // The page then shows no window: there is nothing better to do here.
@@ -352,7 +383,13 @@ public final class Session {
             String problem = event.problem;
             if (problem == null) {
                 try {
-                    problem = Targets.apply(event, showingWindows(), primary, mouse);
+                    if (event.command.equals("frames")) {
+                        problem = frames(Integer.parseInt(event.number));
+                    } else if (event.target == null && !event.command.equals("close")) {
+                        problem = Keys.apply(event);
+                    } else {
+                        problem = Targets.apply(event, showingWindows(), primary, mouse);
+                    }
                 } catch (Throwable t) {
                     uncaught(t);
                 }
@@ -361,6 +398,27 @@ public final class Session {
                 problems.add(event.text + ": " + problem);
             }
         }
+    }
+
+    /**
+     * Runs n frames, as JavaFX's pulses would: in each, the started timers (Frames.runOne), then the
+     * frame is recorded as it would be drawn, then the runLater tasks queued meanwhile run and the
+     * windows are laid out. Frames stop early when the session ends.
+     */
+    private static String frames(int n) {
+        if (showingWindows().isEmpty()) {
+            return "no window is open";
+        }
+        for (int i = 0; i < n; i++) {
+            Frames.runOne();
+            Frames.record(showingWindows());
+            drain();
+            currentReplay.settle();
+            if (currentReplay.ended) {
+                break;
+            }
+        }
+        return null;
     }
 
     // ------------------------------------------------------------------ Platform
@@ -454,11 +512,37 @@ public final class Session {
     // ------------------------------------------------------------------ windows and scenes
 
     public static void shown(Window window) {
+        Scene scene = window.getScene();
         synchronized (LOCK) {
             if (!SHOWN.contains(window)) {
                 SHOWN.add(window);
             }
+            SHOWN_LAST.remove(window);
+            SHOWN_LAST.add(window);
             lastWindowClosed = false;
+            // As JavaFX sizes a scene made without a size when its window shows: the root pane's
+            // preferred size (known here only when both were set).
+            if (scene != null && !SCENE_SIZES.containsKey(scene) && scene.getRoot() instanceof Region) {
+                Region root = (Region) scene.getRoot();
+                if (root.getPrefWidth() >= 0 && root.getPrefHeight() >= 0) {
+                    SCENE_SIZES.put(scene, new double[] { root.getPrefWidth(), root.getPrefHeight() });
+                }
+            }
+        }
+    }
+
+    /**
+     * The window key events go to: the one shown last that still shows (JavaFX gives a window
+     * the focus when it shows), or null.
+     */
+    static Window focusedWindow() {
+        synchronized (LOCK) {
+            for (int i = SHOWN_LAST.size() - 1; i >= 0; i--) {
+                if (SHOWN_LAST.get(i).isShowing()) {
+                    return SHOWN_LAST.get(i);
+                }
+            }
+            return null;
         }
     }
 
@@ -509,8 +593,8 @@ public final class Session {
         }
     }
 
-    /** { width, height } given to the scene's constructor, or null. */
-    static double[] sceneSize(Scene scene) {
+    /** { width, height } given to the scene's constructor (or taken from its root pane as its window first showed), or null. */
+    public static double[] sceneSize(Scene scene) {
         synchronized (LOCK) {
             return SCENE_SIZES.get(scene);
         }

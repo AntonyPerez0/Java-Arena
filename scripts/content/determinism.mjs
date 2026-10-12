@@ -12,7 +12,8 @@
  * identity hash too (Label@1b6d3586), which a pattern can't see: the JDK-versus-browser check of
  * every lesson program (scripts/content-browser.mjs) finds a program that prints one (and the
  * text of a MouseEvent, an Image, a GraphicsContext or a PixelReader has one too). A program that
- * reads an image from the internet (new Image("https://...")) is rejected as well.
+ * reads an image from the internet (new Image("https://...")) is rejected as well, and so is an
+ * AnimationTimer whose handle(long now) reads now (a made-up clock here, the system's in JavaFX).
  */
 export function nondeterminism(files) {
   const code = files.map((f) => f.text.replace(/"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, " ")).join("\n");
@@ -38,11 +39,37 @@ export function nondeterminism(files) {
   ]
     .filter(([re]) => re.test(code))
     .map(([, what]) => what);
-  const messages = found.length ? [`uses ${found.join(", ")}, but a program with a window must show the same window on every run (give a Random a seed, new Random(42), and shuffle with one: Collections.shuffle(list, new Random(42)))`] : [];
+  const messages = found.length ? [`uses ${found.join(", ")}, but a program with a window must show the same window on every run: the page runs it again from the start for every new click, key or frames line, and a game must play the same each time (give a Random a seed, new Random(42), and shuffle with one: Collections.shuffle(list, new Random(42)))`] : [];
+  // The now that AnimationTimer's handle gets is a made-up clock here and the system's clock in real
+  // JavaFX: a window that depends on it isn't the same here and there.
+  const now = timerNowUses(code);
+  if (now.length)
+    messages.push(`uses the now value that AnimationTimer's handle(long ${now[0]}) gets, but in Java Arena it's a made-up clock (each frame 1/60 of a second later) and in real JavaFX the computer's clock, so the game wouldn't be the same on every run or on real JavaFX: count the frames in a field instead (frame++ in handle), and move things by a fixed step each frame`);
   // An image from the internet depends on the network: real JavaFX downloads it, and Java Arena's
   // JavaFX reads only files in the program's folder (giving an error image). Comments don't count; strings do.
   const withStrings = files.map((f) => f.text.replace(/"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) => (m.startsWith("/") ? " " : m))).join("\n");
   if (/\bnew\s+(?:javafx\s*\.\s*scene\s*\.\s*image\s*\.\s*)?(?:Image|ImageView)\s*\(\s*"\s*(?:https?|ftp|jar):/i.test(withStrings))
     messages.push('reads an image from the internet (new Image("https:...")), which depends on the network: give the program an image file of content/assets instead (files: { landscape.png: { asset: landscape.png } } in a test, an asset block before an example) and read it with new Image("file:landscape.png")');
   return messages;
+}
+
+/**
+ * The names of the parameters of every handle(long now) method whose body reads them: an
+ * AnimationTimer's clock. `code` has its comments and strings blanked out already.
+ */
+export function timerNowUses(code) {
+  const used = [];
+  for (const m of code.matchAll(/\bvoid\s+handle\s*\(\s*(?:final\s+)?long\s+([A-Za-z_$][\w$]*)\s*\)\s*(?:throws\s[^{]*)?\{/g)) {
+    // The method's body, to its closing brace.
+    let depth = 1;
+    let end = m.index + m[0].length;
+    while (end < code.length && depth > 0) {
+      if (code[end] === "{") depth++;
+      else if (code[end] === "}") depth--;
+      end++;
+    }
+    const body = code.slice(m.index + m[0].length, end - 1);
+    if (new RegExp(`(?<![\\w$.])${m[1].replace(/\$/g, "\\$")}(?![\\w$])`).test(body)) used.push(m[1]);
+  }
+  return used;
 }

@@ -26,6 +26,7 @@ import javafx.css.StyleOrigin;
 import javafx.css.StyleableProperty;
 import javafx.event.ActionEvent;
 import javafx.event.EventType;
+import javafx.geometry.Bounds;
 import javafx.geometry.Point2D;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -48,6 +49,8 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
@@ -59,7 +62,15 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.Paint;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Line;
+import javafx.scene.shape.Path;
+import javafx.scene.shape.Polygon;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.shape.Shape;
 import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
@@ -78,9 +89,12 @@ import javafx.stage.Window;
  * queued before it (Platform.runLater) have run, as Java Arena applies them: click calls fire(),
  * type calls appendText once per character, set calls setText (Slider.adjustValue for set Slider N
  * value, what letting the thumb go there does), enter fires an ActionEvent at the text field (what
- * pressing Enter does), close closes the primary stage, and press, drag, release and click at a
- * point hand real MouseEvents to the scene as the toolkit does (see mouse); before the first event
- * and after each one it lays the showing windows out, as JavaFX's next pulse would. Then it writes OUT and
+ * pressing Enter does), close closes the primary stage, press, drag, release and click at a
+ * point hand real MouseEvents to the scene as the toolkit does (see mouse), press key, release key
+ * and key hand it real KeyEvents (see key), and frames runs the started AnimationTimers frame by
+ * frame, with the toolkit's own timer paused (see runFrame); before the first event
+ * and after each one it lays the showing windows out, as JavaFX's next pulse would, and writes the window
+ * after each event line as OUT.step-N (see writeStep). Then it writes OUT and
  * calls Platform.exit(), so stop() runs and launch returns. When the session ends earlier
  * (Platform.exit(), or the last window closed), OUT says the windows were closed; when the
  * constructor, init or start fails, there is no OUT, as with Java Arena's JavaFX.
@@ -89,8 +103,9 @@ import javafx.stage.Window;
  * src/grader/window.ts (the same reading as the library's): one event per line, fields separated
  * by spaces, each field its UTF-16 code units as four hexadecimal digits ("=" for an empty text,
  * "-" for none): {@code P line problem} for a line that can't be read, or {@code E line command
- * kind type value text number x y} where kind is none, number, id, text or index, number is the
- * number of set Slider 1 25 and x and y the point of a mouse event, each as written.
+ * kind type value text number x y key} where kind is none, number, id, text or index, number is the
+ * number of set Slider 1 25 or of frames 30, x and y the point of a mouse event, and key the
+ * KeyCode name of press key, release key and key, each as written.
  *
  * <p>The window JSON follows engine/libraries/javafx/src/arena/fx/WindowJson.java, from the real
  * scene graph, but without the sizes of windows and scenes (the outline leaves them out, and real
@@ -106,6 +121,9 @@ import javafx.stage.Window;
  * doesn't tell what was drawn on a canvas, so a canvas has no calls here ("calls":[]) but a
  * snapshot of what it shows ("snapshot", with "snapshotWidth" and "snapshotHeight"), which
  * fx-check compares with Java Arena's recorded calls drawn again on real JavaFX (CanvasReplay).
+ * Part 14.3's shapes are read from the real ones too (geometry, fill, stroke, a Text's text and
+ * font, a Path's box), with every node's translate and rotate, its layout where no layout pane
+ * moves it (see transforms), the key handlers, and the count of frames run.
  */
 public final class RealFxDriver {
     private static final Object LOCK = new Object();
@@ -114,6 +132,8 @@ public final class RealFxDriver {
 
     /** The stages shown in this session, in the order each was first shown (kept on the FX thread). */
     private static final List<Stage> FIRST_SHOWN = new ArrayList<Stage>();
+    /** The stages shown in this session, the one shown last at the end (kept on the FX thread): key events go to the last that still shows. */
+    private static final List<Stage> SHOWN_LAST = new ArrayList<Stage>();
     private static volatile boolean everShown;
     /** Whether the window JSON was written (under LOCK). */
     private static boolean dumped;
@@ -139,8 +159,12 @@ public final class RealFxDriver {
                         if (!FIRST_SHOWN.contains(w)) {
                             FIRST_SHOWN.add((Stage) w);
                         }
+                        SHOWN_LAST.remove(w);
+                        SHOWN_LAST.add((Stage) w);
                     }
                 }
+                // On the JavaFX Application Thread, before start returns: no pulse has run a timer yet.
+                pauseTimers();
             }
         });
         Runtime.getRuntime().addShutdownHook(new Thread(RealFxDriver::atExit, "fx-check at exit"));
@@ -167,6 +191,8 @@ public final class RealFxDriver {
         /** The point of a mouse event (press, drag, release, click ... at), as written; null otherwise. */
         String x;
         String y;
+        /** The key of press key, release key and key, as written (a KeyCode name); null otherwise. */
+        String key;
     }
 
     private static void readEvents(String file) {
@@ -188,6 +214,7 @@ public final class RealFxDriver {
                 e.number = field(f[7]);
                 e.x = field(f[8]);
                 e.y = field(f[9]);
+                e.key = field(f[10]);
             }
             EVENTS.add(e);
         }
@@ -216,6 +243,15 @@ public final class RealFxDriver {
     private static void watch() {
         Thread launcher = null;
         while (true) {
+            if (launcher != null && !timersPaused) {
+                try {
+                    if (((AtomicBoolean) staticField("com.sun.javafx.application.PlatformImpl", "initialized")).get()) {
+                        pauseTimers();
+                    }
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
             if (launcher == null) {
                 launcher = thread("JavaFX-Launcher");
             }
@@ -304,6 +340,35 @@ public final class RealFxDriver {
             later();
             return;
         }
+        if (keyRelease != null) {
+            // The second half of key X: the release, after the tasks the press queued.
+            KeyCode code = keyRelease;
+            keyRelease = null;
+            HELD.remove(code);
+            String hint = keyHint != null ? keyHint : nodeHint(keyScene, KeyEvent.KEY_RELEASED);
+            fireKey(keyScene, KeyEvent.KEY_RELEASED, code);
+            if (hint != null) {
+                PROBLEMS.add(keyLine + ": " + hint);
+            }
+            keyScene = null;
+            keyHint = null;
+            layoutShowing();
+            later();
+            return;
+        }
+        if (framesLeft > 0) {
+            // One frame of a frames line; the tasks it queued run before the next step, then the layout.
+            framesLeft--;
+            runFrame();
+            later();
+            return;
+        }
+        if (next > stepped) {
+            // The event line next (from 1) is over, with the tasks it queued and the layout after it:
+            // the window now, as Java Arena's JavaFX writes it after each line for fx-check.
+            stepped = next;
+            writeStep(next);
+        }
         if (next < EVENTS.size()) {
             Event e = EVENTS.get(next++);
             String problem = e.problem;
@@ -339,6 +404,81 @@ public final class RealFxDriver {
                 w.getScene().getRoot().layout();
             } catch (Throwable t) {
                 uncaught(t);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ the game loop (as arena.fx.Frames)
+
+    /** Frame k (from 1) gets now = START + k * STEP, as in Java Arena's JavaFX. */
+    private static final long START = 1_000_000_000L;
+    private static final long STEP = 16_666_667L;
+    private static volatile boolean timersPaused;
+    /** How many frames have run (FX thread). */
+    private static int frameCount;
+    /** The frames of the frames line being applied that are still to run (FX thread). */
+    private static int framesLeft;
+
+    private static Object primaryTimer() throws ReflectiveOperationException {
+        Object toolkit = Class.forName("com.sun.javafx.tk.Toolkit").getMethod("getToolkit").invoke(null);
+        return toolkit.getClass().getMethod("getPrimaryTimer").invoke(toolkit);
+    }
+
+    /**
+     * Pauses the toolkit's primary timer (AbstractPrimaryTimer.pause(), JavaFX's own method): its
+     * main loop then skips every pulse's animation step (MainLoop.run returns at once while it is
+     * paused), so started AnimationTimers never run with real time. The scene's own pulses (CSS,
+     * layout, rendering) go on. Called as soon as the toolkit is up (from the watcher) and again
+     * when a window shows (on the JavaFX Application Thread, before start returns).
+     */
+    private static synchronized void pauseTimers() {
+        try {
+            Object timer = primaryTimer();
+            timer.getClass().getMethod("pause").invoke(timer);
+            timersPaused = true;
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * One frame, as Java Arena's Frames.runOne: every timer started when the frame begins, in start
+     * order, gets handle(now). The started timers are the primary timer's own list
+     * (AbstractPrimaryTimer.animationTimers, the first animationTimersLength of them, in the order
+     * they were started: start() appends, stop() removes), read by reflection and called through
+     * their TimerReceiver, as the timer's pulse calls them. What a handle throws goes to the
+     * uncaught exception handler, and the timers after it skip this frame: the primary timer's own
+     * pulse (AbstractPrimaryTimer.timePulseImpl) loops over its timers with only a try/finally, so
+     * an exception leaves the loop, and Java Arena's Frames.runOne does the same. (timePulseImpl
+     * itself isn't called, since it would also step the toolkit's own animations, such as a text
+     * field's caret, with the made-up time.)
+     */
+    private static void runFrame() {
+        frameCount++;
+        long now = START + frameCount * STEP;
+        Object[] receivers;
+        Method handle;
+        try {
+            pauseTimers();
+            Object timer = primaryTimer();
+            Class<?> c = Class.forName("com.sun.scenario.animation.AbstractPrimaryTimer");
+            Field list = c.getDeclaredField("animationTimers");
+            Field length = c.getDeclaredField("animationTimersLength");
+            list.setAccessible(true);
+            length.setAccessible(true);
+            receivers = Arrays.copyOf((Object[]) list.get(timer), length.getInt(timer));
+            handle = Class.forName("com.sun.scenario.animation.shared.TimerReceiver").getMethod("handle", long.class);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+        for (Object r : receivers) {
+            try {
+                handle.invoke(r, now);
+            } catch (InvocationTargetException e) {
+                uncaught(e.getCause());
+                return;
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
             }
         }
     }
@@ -432,6 +572,40 @@ public final class RealFxDriver {
         return list;
     }
 
+    /** The last event line whose window was written by writeStep (FX thread). */
+    private static int stepped;
+    /** While writeStep writes: canvases are written without their snapshot (FX thread). */
+    private static boolean writingStep;
+
+    /**
+     * The window after the n-th event line (counted from 1, as Java Arena's JavaFX counts them),
+     * written next to OUT as OUT.step-n, as Java Arena's JavaFX writes .arena/window-step-n.json
+     * when fx-check asks for it. Written only while the session goes on, as there. A canvas is
+     * written without its snapshot: its drawing is compared only after the last line.
+     */
+    private static void writeStep(int n) {
+        String json;
+        synchronized (LOCK) {
+            List<Stage> windows = showing();
+            for (Stage s : windows) {
+                if (s.getScene() != null) {
+                    s.getScene().getRoot().applyCss();
+                }
+            }
+            writingStep = true;
+            try {
+                json = new Json().write(windows, false, PROBLEMS);
+            } finally {
+                writingStep = false;
+            }
+        }
+        try {
+            Files.write(new File(out.getPath() + ".step-" + n).toPath(), json.getBytes(StandardCharsets.US_ASCII));
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     private static void dump(boolean closed) {
         String json;
         synchronized (LOCK) {
@@ -439,6 +613,12 @@ public final class RealFxDriver {
                 return;
             }
             dumped = true;
+            if (keyRelease != null && keyHint != null) {
+                // The session ended between the press and the release of key X: the release never
+                // comes, but the press's problem stays, as in Java Arena.
+                PROBLEMS.add(keyLine + ": " + keyHint);
+                keyHint = null;
+            }
             List<Stage> windows = closed ? new ArrayList<Stage>() : showing();
             // Styles apply in the next pulse; apply them now, so the windows don't depend on when that is.
             for (Stage s : windows) {
@@ -469,6 +649,13 @@ public final class RealFxDriver {
         }
         if (windows.isEmpty()) {
             return "no window is open";
+        }
+        if (event.command.equals("frames")) {
+            framesLeft = Integer.parseInt(event.number);
+            return null;
+        }
+        if (event.key != null) {
+            return key(event);
         }
         List<Node> nodes = nodes(windows);
         Node node = null;
@@ -607,6 +794,150 @@ public final class RealFxDriver {
     private static String plain(double v) {
         String s = Double.toString(v);
         return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;
+    }
+
+    // ------------------------------------------------------------------ the keyboard (as arena.fx.Keys)
+
+    /** The keys held down (pressed and not yet released), FX thread. */
+    private static final java.util.Set<KeyCode> HELD = new java.util.HashSet<KeyCode>();
+    /** The key of a key X line whose release comes in the next step, after the tasks its press queued; and the scene it goes to. */
+    private static KeyCode keyRelease;
+    private static Scene keyScene;
+
+    /**
+     * The text a key makes, as Java Arena's JavaFX gives it (arena.fx.Keys): what OpenJFX 21's
+     * headless platform (Monocle, a US keyboard, Shift up) gives the key, checked with its Robot
+     * when the library was written. A desktop can differ for Enter and the punctuation keys (see
+     * engine/libraries/README.md); letters, digits, Space and the arrows are the same everywhere.
+     */
+    private static final String[] TEXTS = {
+        "ENTER", "\n", "TAB", "\t", "SPACE", " ", "COMMA", ",", "MINUS", "-", "PERIOD", ".", "SLASH", "/", "SEMICOLON", ";", "EQUALS", "=",
+        "BACK_SLASH", "\\", "MULTIPLY", "*", "DIVIDE", "/", "BACK_QUOTE", "`", "QUOTE", "'", "BRACELEFT", "[", "BRACERIGHT", "]",
+    };
+
+    private static String keyText(KeyCode code) {
+        String name = code.name();
+        if (code.isLetterKey()) {
+            return name.toLowerCase(java.util.Locale.ROOT);
+        }
+        if (name.startsWith("DIGIT") && name.length() == 6) {
+            return name.substring(5);
+        }
+        for (int i = 0; i < TEXTS.length; i += 2) {
+            if (TEXTS[i].equals(name)) {
+                return TEXTS[i + 1];
+            }
+        }
+        return "";
+    }
+
+    /**
+     * The window key events go to: the one shown last that still shows, the library's rule (Monocle's
+     * headless platform says every showing window is focused, so real JavaFX can't choose here).
+     */
+    private static Stage focused() {
+        for (int i = SHOWN_LAST.size() - 1; i >= 0; i--) {
+            if (SHOWN_LAST.get(i).isShowing()) {
+                return SHOWN_LAST.get(i);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * press key, release key and key, with the checks of Java Arena's event lines (the same
+     * problems in the same words), then real KeyEvents made with JavaFX's own constructor, handed
+     * to the scene as the toolkit hands it a key event (Scene.processKeyEvent), so real JavaFX
+     * sends each to the focus owner when there is one, else to the scene: KEY_PRESSED, then
+     * KEY_TYPED for a key that makes a character; for key X the KEY_RELEASED comes in the next
+     * step, after the tasks the press queued.
+     */
+    private static String key(Event event) {
+        KeyCode code = KeyCode.valueOf(event.key);
+        Stage window = focused();
+        if (window == null) {
+            return "no window is open";
+        }
+        Scene scene = window.getScene();
+        if (scene == null) {
+            return "the window has no scene, so no key goes to it";
+        }
+        boolean held = HELD.contains(code);
+        String name = code.name();
+        if (event.command.equals("release key")) {
+            if (!held) {
+                return name + " isn't held down: press key " + name + " comes first";
+            }
+            HELD.remove(code);
+            String hint = nodeHint(scene, KeyEvent.KEY_RELEASED);
+            fireKey(scene, KeyEvent.KEY_RELEASED, code);
+            return hint;
+        }
+        if (held) {
+            return name + " is already held down (press key " + name + " came before): release key " + name + " first";
+        }
+        HELD.add(code);
+        String hint = nodeHint(scene, KeyEvent.KEY_PRESSED);
+        fireKey(scene, KeyEvent.KEY_PRESSED, code);
+        if (!keyText(code).isEmpty()) {
+            hint = hint != null ? hint : nodeHint(scene, KeyEvent.KEY_TYPED);
+            fireKey(scene, KeyEvent.KEY_TYPED, code);
+        }
+        if (event.command.equals("key")) {
+            keyRelease = code;
+            keyScene = scene;
+            keyLine = event.line;
+            keyHint = hint;
+            return null;
+        }
+        return hint;
+    }
+
+    /** The line of a key X whose release is still to come, and its problem so far (the release can add one). */
+    private static String keyLine;
+    private static String keyHint;
+    private static final java.util.Set<EventType<KeyEvent>> HINTED = new java.util.HashSet<EventType<KeyEvent>>();
+
+    /**
+     * The problem Java Arena's JavaFX gives (arena.fx.Keys) when the node that has the focus (on
+     * real JavaFX, the scene's focus owner; in Java Arena, the node requestFocus() was called on
+     * last), or a pane around it, has its own handler for this type: real JavaFX runs it first, and
+     * Java Arena only the scene's. Once per type of key event in a session.
+     */
+    private static String nodeHint(Scene scene, EventType<KeyEvent> type) {
+        Node focus = scene.getFocusOwner();
+        if (focus == null || HINTED.contains(type)) {
+            return null;
+        }
+        String setter = type == KeyEvent.KEY_PRESSED ? "setOnKeyPressed" : type == KeyEvent.KEY_RELEASED ? "setOnKeyReleased" : "setOnKeyTyped";
+        for (Node n = focus; n != null; n = n.getParent()) {
+            Object handler = type == KeyEvent.KEY_PRESSED ? n.getOnKeyPressed() : type == KeyEvent.KEY_RELEASED ? n.getOnKeyReleased() : n.getOnKeyTyped();
+            if (handler != null) {
+                HINTED.add(type);
+                String where = n == focus ? "a node with its own " + setter : "a node inside a pane with its own " + setter;
+                return "the program called requestFocus() on " + where + ", which real JavaFX would run first; in Java Arena keys go only to the scene's handlers (put it on the scene: scene." + setter + ")";
+            }
+        }
+        return null;
+    }
+
+    private static Method processKeyEvent;
+
+    private static void fireKey(Scene scene, EventType<KeyEvent> type, KeyCode code) {
+        String text = keyText(code);
+        KeyEvent e = type == KeyEvent.KEY_TYPED ? new KeyEvent(type, text, "", KeyCode.UNDEFINED, false, false, false, false)
+                : new KeyEvent(type, KeyEvent.CHAR_UNDEFINED, text, code, false, false, false, false);
+        try {
+            if (processKeyEvent == null) {
+                processKeyEvent = Scene.class.getDeclaredMethod("processKeyEvent", KeyEvent.class);
+                processKeyEvent.setAccessible(true);
+            }
+            processKeyEvent.invoke(scene, e);
+        } catch (InvocationTargetException ex) {
+            uncaught(ex.getCause());
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     // ------------------------------------------------------------------ the mouse
@@ -770,7 +1101,7 @@ public final class RealFxDriver {
     // ------------------------------------------------------------------ outline order and names (as arena.fx.Outline)
 
     /** The node classes of Java Arena's JavaFX, by simple name. */
-    private static final List<String> TYPES = Arrays.asList("Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea", "Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart");
+    private static final List<String> TYPES = Arrays.asList("Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea", "Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart", "Shape", "Polygon", "Circle", "Rectangle", "Line", "Text", "Path");
     /** The axis classes of Java Arena's JavaFX, by simple name. */
     private static final List<String> AXES = Arrays.asList("Axis", "ValueAxis", "NumberAxis", "CategoryAxis");
 
@@ -829,6 +1160,14 @@ public final class RealFxDriver {
                 return "bar chart";
             case "ScatterChart":
                 return "scatter chart";
+            case "Shape":
+            case "Polygon":
+            case "Circle":
+            case "Rectangle":
+            case "Line":
+            case "Text":
+            case "Path":
+                return type.toLowerCase(java.util.Locale.ROOT);
             default:
                 return type;
         }
@@ -971,8 +1310,18 @@ public final class RealFxDriver {
                 if (scene == null) {
                     sb.append("null");
                 } else {
-                    sb.append("{\"root\":");
-                    node(scene.getRoot(), false);
+                    sb.append('{');
+                    if (scene.getOnKeyPressed() != null) {
+                        sb.append("\"onKeyPressed\":true,");
+                    }
+                    if (scene.getOnKeyReleased() != null) {
+                        sb.append("\"onKeyReleased\":true,");
+                    }
+                    if (scene.getOnKeyTyped() != null) {
+                        sb.append("\"onKeyTyped\":true,");
+                    }
+                    sb.append("\"root\":");
+                    node(scene.getRoot(), false, null);
                     sb.append('}');
                 }
                 sb.append('}');
@@ -988,11 +1337,16 @@ public final class RealFxDriver {
                 }
                 string(problems.get(i));
             }
-            sb.append("]}");
+            sb.append(']');
+            if (frameCount > 0) {
+                // The outline needs only the count; the frames themselves are the page's animation.
+                sb.append(",\"frames\":{\"count\":").append(frameCount).append(",\"list\":[]}");
+            }
+            sb.append('}');
             return sb.toString();
         }
 
-        private void node(Node node, boolean inGrid) {
+        private void node(Node node, boolean inGrid, Node parent) {
             sb.append("{\"n\":").append(++count);
             key("type");
             string(typeName(node));
@@ -1016,6 +1370,9 @@ public final class RealFxDriver {
             if (hasText(node)) {
                 key("text");
                 string(textOf(node));
+            } else if (node instanceof Text) {
+                key("text");
+                string(((Text) node).getText());
             }
             if (node instanceof TextInputControl) {
                 String prompt = ((TextInputControl) node).getPromptText();
@@ -1039,7 +1396,8 @@ public final class RealFxDriver {
                 key("wrapText").append("true");
             }
             Font font = node instanceof Labeled ? set(((Labeled) node).fontProperty(), ((Labeled) node).getFont(), Font.getDefault())
-                    : node instanceof TextInputControl ? set(((TextInputControl) node).fontProperty(), ((TextInputControl) node).getFont(), Font.getDefault()) : Font.getDefault();
+                    : node instanceof TextInputControl ? set(((TextInputControl) node).fontProperty(), ((TextInputControl) node).getFont(), Font.getDefault())
+                    : node instanceof Text ? set(((Text) node).fontProperty(), ((Text) node).getFont(), Font.getDefault()) : Font.getDefault();
             if (font == null) {
                 key("font").append("null");
             } else if (!font.equals(Font.getDefault())) {
@@ -1054,6 +1412,7 @@ public final class RealFxDriver {
                 key("style");
                 string(style);
             }
+            transforms(node, parent);
             if (node instanceof Region) {
                 Region r = (Region) node;
                 double pw = set(r.prefWidthProperty(), r.getPrefWidth(), Region.USE_COMPUTED_SIZE);
@@ -1112,8 +1471,12 @@ public final class RealFxDriver {
             if ((node instanceof ButtonBase && ((ButtonBase) node).getOnAction() != null) || (node instanceof TextField && ((TextField) node).getOnAction() != null)) {
                 key("onAction").append("true");
             }
+            keyHandlers(node);
             if (node instanceof Canvas) {
                 canvas((Canvas) node);
+            } else if (node instanceof Shape) {
+                mouseHandlers(node);
+                shape((Shape) node);
             } else if (node instanceof ImageView) {
                 mouseHandlers(node);
                 imageView((ImageView) node);
@@ -1139,11 +1502,165 @@ public final class RealFxDriver {
                     if (i > 0) {
                         sb.append(',');
                     }
-                    node(children.get(i), node instanceof GridPane);
+                    node(children.get(i), node instanceof GridPane, node);
                 }
                 sb.append(']');
             }
             sb.append('}');
+        }
+
+        /**
+         * "translateX", "translateY", "rotate" (each when it isn't 0, on any node) and "layoutX",
+         * "layoutY" (when they aren't 0). Real VBox, HBox, StackPane, BorderPane, GridPane and
+         * FlowPane relocate their children (which sets layoutX and layoutY), and Java Arena's
+         * JavaFX, which doesn't lay windows out, never does: so the layout is written only for a
+         * window's root and for the children of a plain Pane (the class Pane, or a program's own
+         * class that extends it, as typeName names it), which resizes its children but never
+         * moves them. They never touch translate or rotate.
+         */
+        private void transforms(Node node, Node parent) {
+            nonZero("translateX", node.getTranslateX());
+            nonZero("translateY", node.getTranslateY());
+            if (parent == null || typeName(parent).equals("Pane")) {
+                nonZero("layoutX", node.getLayoutX());
+                nonZero("layoutY", node.getLayoutY());
+            }
+            nonZero("rotate", node.getRotate());
+        }
+
+        private void nonZero(String name, double value) {
+            if (value != 0 || Double.isNaN(value)) {
+                key(name);
+                number(value);
+            }
+        }
+
+        /** A node's own key handlers (Java Arena's JavaFX keeps them but sends key events only to the scene). */
+        private void keyHandlers(Node node) {
+            if (node.getOnKeyPressed() != null) {
+                key("onKeyPressed").append("true");
+            }
+            if (node.getOnKeyReleased() != null) {
+                key("onKeyReleased").append("true");
+            }
+            if (node.getOnKeyTyped() != null) {
+                key("onKeyTyped").append("true");
+            }
+        }
+
+        /**
+         * A shape as WindowJson writes it: its geometry ("points"; "centerX", "centerY", "radius";
+         * "x", "y", "width", "height"; "startX", "startY", "endX", "endY"; a Text's "x", "y"; a
+         * Path's "area", its bounds in its own coordinates or null when empty), then "fill" (null
+         * for none), "stroke" (when it has one) and "strokeWidth" (when it isn't 1). A value that
+         * JavaFX's own style sheet gave counts as the default, as for the other nodes.
+         */
+        private void shape(Shape shape) {
+            if (shape instanceof Polygon) {
+                key("points").append('[');
+                List<Double> points = ((Polygon) shape).getPoints();
+                for (int i = 0; i < points.size(); i++) {
+                    if (i > 0) {
+                        sb.append(',');
+                    }
+                    Double p = points.get(i);
+                    if (p == null) {
+                        sb.append("null");
+                    } else {
+                        number(p);
+                    }
+                }
+                sb.append(']');
+            } else if (shape instanceof Circle) {
+                Circle c = (Circle) shape;
+                key("centerX");
+                number(c.getCenterX());
+                key("centerY");
+                number(c.getCenterY());
+                key("radius");
+                number(c.getRadius());
+            } else if (shape instanceof Rectangle) {
+                Rectangle r = (Rectangle) shape;
+                key("x");
+                number(r.getX());
+                key("y");
+                number(r.getY());
+                key("width");
+                number(r.getWidth());
+                key("height");
+                number(r.getHeight());
+            } else if (shape instanceof Line) {
+                Line l = (Line) shape;
+                key("startX");
+                number(l.getStartX());
+                key("startY");
+                number(l.getStartY());
+                key("endX");
+                number(l.getEndX());
+                key("endY");
+                number(l.getEndY());
+            } else if (shape instanceof Text) {
+                Text t = (Text) shape;
+                key("x");
+                number(t.getX());
+                key("y");
+                number(t.getY());
+            } else if (shape instanceof Path) {
+                Bounds b = shape.getBoundsInLocal();
+                key("area");
+                if (b.isEmpty()) {
+                    sb.append("null");
+                } else {
+                    sb.append('[');
+                    number(b.getMinX());
+                    sb.append(',');
+                    number(b.getMinY());
+                    sb.append(',');
+                    number(b.getMaxX());
+                    sb.append(',');
+                    number(b.getMaxY());
+                    sb.append(']');
+                }
+            }
+            boolean line = shape instanceof Line;
+            key("fill");
+            paint(set(shape.fillProperty(), shape.getFill(), line ? null : Color.BLACK));
+            Paint stroke = set(shape.strokeProperty(), shape.getStroke(), line ? Color.BLACK : null);
+            if (stroke != null) {
+                key("stroke");
+                paint(stroke);
+            }
+            double width = set(shape.strokeWidthProperty(), shape.getStrokeWidth(), 1.0);
+            if (width != 1) {
+                key("strokeWidth");
+                number(width);
+            }
+        }
+
+        /** A color as WindowJson writes it: "#rrggbb", with "aa" when it isn't opaque; null for none. */
+        private void paint(Paint paint) {
+            if (paint == null) {
+                sb.append("null");
+                return;
+            }
+            if (!(paint instanceof Color)) {
+                string(paint.toString());
+                return;
+            }
+            Color c = (Color) paint;
+            int a = (int) Math.round(c.getOpacity() * 255.0);
+            StringBuilder s = new StringBuilder("\"#");
+            hex(s, (int) Math.round(c.getRed() * 255.0));
+            hex(s, (int) Math.round(c.getGreen() * 255.0));
+            hex(s, (int) Math.round(c.getBlue() * 255.0));
+            if (a != 255) {
+                hex(s, a);
+            }
+            sb.append(s).append('"');
+        }
+
+        private void hex(StringBuilder s, int b) {
+            s.append(Character.forDigit((b >> 4) & 15, 16)).append(Character.forDigit(b & 15, 16));
         }
 
         private void mouseHandlers(Node node) {
@@ -1175,7 +1692,7 @@ public final class RealFxDriver {
             number(canvas.getHeight());
             mouseHandlers(canvas);
             key("calls").append("[]");
-            if (canvas.getWidth() < 1 || canvas.getHeight() < 1) {
+            if (writingStep || canvas.getWidth() < 1 || canvas.getHeight() < 1) {
                 return;
             }
             SnapshotParameters params = new SnapshotParameters();
@@ -1360,7 +1877,8 @@ public final class RealFxDriver {
         private void region(String name, Node child) {
             if (child != null) {
                 key(name);
-                node(child, false);
+                // A BorderPane relocates its regions, so their layout isn't written (see transforms).
+                node(child, false, child.getParent());
             }
         }
 

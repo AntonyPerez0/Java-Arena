@@ -10,6 +10,7 @@
 // and per node, which leaves out what a learner can't see or choose freely: the node numbers, the
 // sizes of windows and scenes, and whether a button has a handler.
 import { EVENTS_FILE } from "./javafx.js";
+import { KEY_CODES, KEY_NAMES } from "./keycodes.js";
 
 // ------------------------------------------------------------------ the window JSON
 
@@ -24,6 +25,8 @@ export type WindowNumber = number | string;
 export type WindowNode = {
   n: number;
   type: string;
+  /** The node's number in the animation's frames (`frames`), when frames ran and showed it. */
+  f?: number;
   /** A GridPane's child: its cell (always) and spans (above 1). */
   column?: number;
   row?: number;
@@ -85,6 +88,36 @@ export type WindowNode = {
   xAxis?: ChartAxis;
   yAxis?: ChartAxis;
   series?: ChartSeries[] | null;
+  /** Where the node is moved and turned: each only when it isn't 0. */
+  translateX?: WindowNumber;
+  translateY?: WindowNumber;
+  layoutX?: WindowNumber;
+  layoutY?: WindowNumber;
+  rotate?: WindowNumber;
+  /** Key handlers set on the node itself, which never run in Java Arena (key events go to the scene). */
+  onKeyPressed?: boolean;
+  onKeyReleased?: boolean;
+  onKeyTyped?: boolean;
+  /** A Polygon's points, x and y one after the other. */
+  points?: (WindowNumber | null)[];
+  /** A Circle. */
+  centerX?: WindowNumber;
+  centerY?: WindowNumber;
+  radius?: WindowNumber;
+  /** A Rectangle's corner (with width and height), or a Text's baseline start. */
+  x?: WindowNumber;
+  y?: WindowNumber;
+  /** A Line. */
+  startX?: WindowNumber;
+  startY?: WindowNumber;
+  endX?: WindowNumber;
+  endY?: WindowNumber;
+  /** A Path from Shape.intersect: the box of its area [minX, minY, maxX, maxY], or null when empty. */
+  area?: WindowNumber[] | null;
+  /** A shape's fill (#rrggbb or #rrggbbaa; null for none), its stroke when it has one, and the stroke's width when it isn't 1. */
+  fill?: string | null;
+  stroke?: string | null;
+  strokeWidth?: WindowNumber;
   /** A pane's children (a GridPane's by row, then column); a BorderPane has top, left, center, right and bottom instead. */
   children?: WindowNode[];
   top?: WindowNode;
@@ -136,7 +169,20 @@ export type ChartValue = number | string | null;
 /** A series: its name and its points as [x, y] (null for a point or a series that is null). */
 export type ChartSeries = { name: string | null; data: ([ChartValue, ChartValue] | null)[] | null } | null;
 
-export type WindowScene = { width?: WindowNumber; height?: WindowNumber; root: WindowNode };
+/** A scene: its size (given, or its root pane's preferred size), whether it has key handlers, and its root. */
+export type WindowScene = { width?: WindowNumber; height?: WindowNumber; onKeyPressed?: boolean; onKeyReleased?: boolean; onKeyTyped?: boolean; root: WindowNode };
+
+/**
+ * One change in a frame of the animation: `k` is the node's number in the frames (a node's "f" in
+ * the window), `type` comes the first time a frame shows it, with everything else; after that only
+ * what changed since the frame before. Numbers are in hundredths. `tx`, `ty`, `lx`, `ly` and `r`
+ * are the translate, layout and rotate; the other keys are the window JSON's own (points, centerX,
+ * fill, text, children...). A change {"roots": [...]} gives the root of each showing window.
+ */
+export type FrameChange = { k?: number; roots?: number[]; type?: string; [key: string]: unknown };
+
+/** The frames that ran: how many, and the first FRAMES_KEPT of them, each a list of changes. */
+export type WindowFrames = { count: number; list: FrameChange[][] };
 
 /** A showing window (a Stage). `width` and `height` only when setWidth and setHeight set them. */
 export type WindowStage = { title: string | null; width?: WindowNumber; height?: WindowNumber; scene: WindowScene | null };
@@ -146,7 +192,10 @@ export type WindowStage = { title: string | null; width?: WindowNumber; height?:
  * ended by closing them (`close`, Platform.exit() or closing the last window; `windows` is then
  * empty), and the events that couldn't happen, each as "the event line: why" in plain English.
  */
-export type WindowState = { windows: WindowStage[]; closed?: boolean; problems: string[] };
+export type WindowState = { windows: WindowStage[]; closed?: boolean; problems: string[]; frames?: WindowFrames };
+
+/** The frames the window JSON keeps, at most (one minute at 60 frames a second); after that only the count goes on. */
+export const FRAMES_KEPT = 3600;
 
 /** The window JSON a run left, or null when there is none or it can't be read. */
 export function parseWindow(text: string | null | undefined): WindowState | null {
@@ -289,7 +338,66 @@ function newKindHead(node: WindowNode): { head: string; settings: string[]; flag
     if (node.createSymbols === false) flags.push("no symbols");
     return { head: node.title == null ? "without a title" : quoteText(node.title), settings: [], flags };
   }
+  if (SHAPES.includes(node.type) && "fill" in node) return shapeHead(node);
+  if (node.type === "Pane" && node.prefWidth != null && node.prefHeight != null) return { head: `${javaNumber(node.prefWidth)} x ${javaNumber(node.prefHeight)}`, settings: [], flags: [] };
   return null;
+}
+
+/** The shapes, whose lines the outline writes with javaNumber. */
+const SHAPES = ["Polygon", "Circle", "Rectangle", "Line", "Text", "Path"];
+
+/** A point as the outline writes it: (10, 20). */
+const point = (x: WindowNumber | null | undefined, y: WindowNumber | null | undefined) => `(${x == null ? "null" : javaNumber(x)}, ${y == null ? "null" : javaNumber(y)})`;
+
+/** A node's translate, layout and rotate as outline settings, each when it isn't 0; `at` names the translate "at" (a Polygon, whose points have no place of their own). */
+function transformSettings(node: WindowNode, at = false): string[] {
+  const out: string[] = [];
+  if (node.translateX != null || node.translateY != null) out.push(`${at ? "at" : "translate"} ${point(node.translateX ?? 0, node.translateY ?? 0)}`);
+  if (node.layoutX != null || node.layoutY != null) out.push(`layout ${point(node.layoutX ?? 0, node.layoutY ?? 0)}`);
+  if (node.rotate != null) out.push(`rotate ${javaNumber(node.rotate)}`);
+  return out;
+}
+
+/**
+ * A shape's line after its class: Polygon (0, -10) (10, 10) (-10, 10); Circle radius 20 at (150, 100);
+ * Rectangle 40 x 20 at (10, 10); Line (0, 0) to (100, 50); Text "Points: 30" at (10, 20); Path. Then
+ * its translate, layout and rotate, its fill (always, but for a Line, which has none unless set, and a
+ * Text, when it isn't black), and its stroke when it has one (with its width when it isn't 1).
+ */
+function shapeHead(node: WindowNode): { head: string; settings: string[]; flags: string[] } {
+  let head = "";
+  switch (node.type) {
+    case "Polygon": {
+      const pts = node.points ?? [];
+      const pairs: string[] = [];
+      for (let i = 0; i + 1 < pts.length; i += 2) pairs.push(point(pts[i], pts[i + 1]));
+      head = pairs.length ? pairs.join(" ") : "(no points)";
+      break;
+    }
+    case "Circle":
+      head = `radius ${javaNumber(node.radius ?? 0)} at ${point(node.centerX ?? 0, node.centerY ?? 0)}`;
+      break;
+    case "Rectangle":
+      head = `${javaNumber(node.width ?? 0)} x ${javaNumber(node.height ?? 0)} at ${point(node.x ?? 0, node.y ?? 0)}`;
+      break;
+    case "Line":
+      head = `${point(node.startX ?? 0, node.startY ?? 0)} to ${point(node.endX ?? 0, node.endY ?? 0)}`;
+      break;
+    case "Text":
+      head = `${quoteText(typeof node.text === "string" ? node.text : "")} at ${point(node.x ?? 0, node.y ?? 0)}`;
+      break;
+    case "Path":
+      head = node.area == null ? "(no area)" : `area ${point(node.area[0], node.area[1])} to ${point(node.area[2], node.area[3])}`;
+      break;
+  }
+  const settings = transformSettings(node, node.type === "Polygon");
+  const fill = node.fill ?? null;
+  if (node.type === "Line") {
+    if (fill != null) settings.push(`fill ${fill}`);
+  } else if (node.type !== "Text" || fill !== "#000000") settings.push(fill == null ? "no fill" : `fill ${fill}`);
+  if (node.stroke != null) settings.push(`stroke ${node.stroke}${node.strokeWidth != null ? `, width ${javaNumber(node.strokeWidth)}` : ""}`);
+  else if (node.strokeWidth != null) settings.push(`stroke width ${javaNumber(node.strokeWidth)}`);
+  return { head, settings, flags: [] };
 }
 
 /** One node's line, without its indentation: [region: ][(column, row)[ span CxR] ]Type[ #id][ "text"][ settings][ (flags)]. */
@@ -302,9 +410,12 @@ export function nodeLine(node: WindowNode, region?: string): string {
   head += node.type;
   if (node.id != null) head += ` #${node.id}`;
   const kind = newKindHead(node);
+  const shape = kind != null && SHAPES.includes(node.type);
   if (kind) head += " " + kind.head;
   const hasText = "text" in node || kind != null;
-  if ("text" in node) head += " " + (node.text == null ? "null" : quoteText(node.text));
+  // A Text's text is in its head (Text "Points: 30" at (10, 20)).
+  if ("text" in node && !shape) head += " " + (node.text == null ? "null" : quoteText(node.text));
+  const pane = kind != null && node.type === "Pane";
   const settings: string[] = kind ? [...kind.settings] : [];
   if (node.promptText != null) settings.push(`prompt ${quoteText(node.promptText)}`);
   if (node.font !== undefined) settings.push(node.font === null ? "font null" : `font ${family(node.font.family)} ${num(node.font.size)}`);
@@ -316,9 +427,10 @@ export function nodeLine(node: WindowNode, region?: string): string {
     settings.push(`padding ${p.every((x) => x === p[0]) ? p[0] : p.join(" ")}`);
   }
   if (node.alignment !== undefined) settings.push(`alignment ${node.alignment ?? "null"}`);
-  if (node.prefWidth != null) settings.push(`pref width ${num(node.prefWidth)}`);
-  if (node.prefHeight != null) settings.push(`pref height ${num(node.prefHeight)}`);
+  if (node.prefWidth != null && !pane) settings.push(`pref width ${num(node.prefWidth)}`);
+  if (node.prefHeight != null && !pane) settings.push(`pref height ${num(node.prefHeight)}`);
   if (node.style != null) settings.push(`style ${quoteText(node.style)}`);
+  if (!shape) settings.push(...transformSettings(node));
   const flags: string[] = kind ? [...kind.flags] : [];
   if (node.disable) flags.push("disabled");
   if (node.visible === false) flags.push("hidden");
@@ -380,17 +492,30 @@ function outlineNode(node: WindowNode, depth: number, out: string[], region?: st
  * (x axis NumberAxis "Year" 2000 to 2020 by 5, series "Helsinki": (2000, 555) (2005, 560)). Mouse
  * handlers, a slider's block increment and minor tick count, and the categories an axis took from
  * the data are left out.
+ *
+ * Part 14.3's shapes, in their parent's coordinates: Polygon (0, -10) (10, 10) (-10, 10), at
+ * (300, 200), rotate 90, fill #000000 (the points as given, then its translate as "at", its layout
+ * and rotate when they aren't 0, its fill, and its stroke when it has one, with the stroke's width
+ * when it isn't 1); Circle radius 20 at (150, 100), fill ...; Rectangle 40 x 20 at (10, 10), fill
+ * ...; Line (0, 0) to (100, 50), stroke #000000 (a fill only when set); Text "Points: 30" at
+ * (10, 20) (its fill only when it isn't black); Path area (5, 5) to (10, 10). The other shapes and
+ * nodes give their translate as "translate (x, y)", then "layout (x, y)" and "rotate r". A Pane
+ * with a preferred width and height is Pane 600 x 400. When frames ran, the last line is
+ * "frames run: N".
  */
 export function windowOutline(w: WindowState | null | undefined): string {
-  if (!w || !w.windows.length) return w?.closed ? CLOSED_WINDOW : NO_WINDOW;
+  if (!w || !w.windows.length) return (w?.closed ? CLOSED_WINDOW : NO_WINDOW) + (w ? framesLine(w) : "");
   const out: string[] = [];
   for (const stage of w.windows) {
     out.push(stage.title == null ? "Window without a title" : `Window ${quoteText(stage.title)}`);
     if (!stage.scene) out.push("  (no scene)");
     else outlineNode(stage.scene.root, 1, out);
   }
-  return out.join("\n");
+  return out.join("\n") + framesLine(w);
 }
+
+/** "\nframes run: 120" when frames ran (the outline's last line), else "". */
+const framesLine = (w: WindowState) => (w.frames && w.frames.count > 0 ? `\nframes run: ${w.frames.count}` : "");
 
 const MOUSE_HANDLERS = ["onMousePressed", "onMouseDragged", "onMouseReleased", "onMouseClicked"] as const;
 /** A list in words: a, b and c. */
@@ -450,10 +575,11 @@ export function compareOutlines(expected: string, got: string): { expected: Outl
 // ------------------------------------------------------------------ events
 
 /** The JavaFX classes an event's target can name (Java Arena's node classes). */
-export const NODE_TYPES = ["Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea", "Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart"];
+export const NODE_TYPES = ["Node", "Parent", "Region", "Pane", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Control", "Labeled", "Label", "ButtonBase", "Button", "TextInputControl", "TextField", "PasswordField", "TextArea", "Canvas", "ImageView", "Slider", "LineChart", "BarChart", "ScatterChart", "Shape", "Polygon", "Circle", "Rectangle", "Line", "Text", "Path"];
 
-export type EventCommand = "click" | "type" | "set" | "enter" | "close" | "press" | "drag" | "release";
-const COMMANDS: EventCommand[] = ["click", "type", "set", "enter", "close", "press", "drag", "release"];
+export type EventCommand = "click" | "type" | "set" | "enter" | "close" | "press" | "drag" | "release" | "press key" | "release key" | "key" | "frames";
+/** The words an event line can start with. */
+const COMMANDS = ["click", "type", "set", "enter", "close", "press", "drag", "release", "key", "frames"];
 const MOUSE_COMMANDS = ["press", "drag", "release"];
 
 /**
@@ -468,7 +594,7 @@ export type EventTarget = { kind: "number"; n: number } | { kind: "id"; id: stri
  * JSON's problems). `number` is the number of set Slider 1 25, `point` the point of a mouse event
  * (press, drag, release, and click ... at), each as written.
  */
-export type ParsedEvent = { line: string; command: EventCommand; target?: EventTarget; text?: string; number?: string; point?: { x: string; y: string }; problem?: undefined } | { line: string; problem: string };
+export type ParsedEvent = { line: string; command: EventCommand; target?: EventTarget; text?: string; number?: string; point?: { x: string; y: string }; key?: string; problem?: undefined } | { line: string; problem: string };
 
 /** A line as the library sees it: without the characters up to a space at its ends (Java's trim). */
 const trimLine = (s: string) => s.replace(/^[\u0000- ]+|[\u0000- ]+$/g, "");
@@ -507,12 +633,114 @@ export function nodeNoun(type: string): string {
       return "bar chart";
     case "ScatterChart":
       return "scatter chart";
+    case "Shape":
+      return "shape";
+    case "Polygon":
+      return "polygon";
+    case "Circle":
+      return "circle";
+    case "Rectangle":
+      return "rectangle";
+    case "Line":
+      return "line";
+    case "Text":
+      return "text";
+    case "Path":
+      return "path";
     default:
       return type;
   }
 }
 
 class Bad extends Error {}
+
+// ------------------------------------------------------------------ keys and frames
+
+/** Other names people give keys, and KeyCode's (the library's Keys.ALIASES). */
+const KEY_ALIASES: Record<string, string> = {
+  ESC: "ESCAPE",
+  CTRL: "CONTROL",
+  SPACEBAR: "SPACE",
+  RETURN: "ENTER",
+  DEL: "DELETE",
+  BACKSPACE: "BACK_SPACE",
+  ARROWLEFT: "LEFT",
+  ARROWRIGHT: "RIGHT",
+  ARROWUP: "UP",
+  ARROWDOWN: "DOWN",
+  LEFTARROW: "LEFT",
+  RIGHTARROW: "RIGHT",
+  UPARROW: "UP",
+  DOWNARROW: "DOWN",
+  PGUP: "PAGE_UP",
+  PGDN: "PAGE_DOWN",
+  INS: "INSERT",
+};
+
+/** ASCII letters in capitals (as the library makes them, the same in every locale). */
+const asciiUpper = (s: string) => s.replace(/[a-z]/g, (c) => c.toUpperCase());
+
+/** The edit distance between a and b, one UTF-16 unit at a time (as the library's Keys.distance). */
+function editDistance(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Why a key's name in an event line isn't one of KeyCode's, naming the closest real one; null when
+ * it is one. The library's Keys.nameProblem, word for word.
+ */
+export function keyNameProblem(word: string): string | null {
+  if (KEY_CODES.includes(word)) return null;
+  const upper = asciiUpper(word);
+  if (KEY_CODES.includes(upper)) return `write the key's name in capital letters, as KeyCode names it: ${upper}`;
+  let suggestion: string | undefined;
+  if (/^[0-9]$/.test(word)) suggestion = `DIGIT${word}`;
+  else {
+    const bare = upper.replace(/[_\- ]/g, "");
+    suggestion = KEY_CODES.find((k) => k.replace(/_/g, "") === bare) ?? KEY_ALIASES[bare];
+    if (!suggestion) {
+      let best = Infinity;
+      for (const k of KEY_CODES) {
+        const d = editDistance(upper, k);
+        if (d < best) [best, suggestion] = [d, k];
+      }
+    }
+  }
+  return `there's no key called ${word} (did you mean ${suggestion}? keys are named as in KeyCode, such as LEFT, UP, SPACE, A and DIGIT1)`;
+}
+
+/** A key's name for people, as KeyCode.getName() gives it: LEFT is "Left", DIGIT1 is "1". */
+export const keyName = (code: string) => KEY_NAMES[KEY_CODES.indexOf(code)] ?? code;
+
+/** The frames a frames line may run at once. */
+const MAX_FRAMES_LINE = 3600;
+
+/** press key LEFT, release key LEFT, key SPACE: the KeyCode name after the command, checked. */
+function keyEvent(line: string, command: "press key" | "release key" | "key", toks: Token[], at: number): ParsedEvent {
+  const example = `${command} ${command === "key" ? "SPACE" : "LEFT"}`;
+  if (at >= toks.length) throw new Bad(`${command} needs the name of a key, such as ${example}`);
+  const name = toks[at];
+  if (name.quoted) throw new Bad(`write the key's name without quotes, such as ${example}`);
+  const problem = keyNameProblem(name.text);
+  if (problem) throw new Bad(problem);
+  if (at + 1 < toks.length) throw new Bad("there's something extra at the end of the line");
+  return { line, command, key: name.text };
+}
+
+/** frames 30: a whole number of frames from 1 to 3600. */
+function framesEvent(line: string, toks: Token[]): ParsedEvent {
+  if (toks.length < 2) throw new Bad("frames needs how many frames to run, such as frames 30");
+  const n = toks[1];
+  if (n.quoted || !digits(n.text) || number(n.text) < 1 || number(n.text) > MAX_FRAMES_LINE) throw new Bad(`frames takes a whole number from 1 to ${MAX_FRAMES_LINE}, such as frames 30`);
+  if (toks.length > 2) throw new Bad("there's something extra at the end of the line");
+  return { line, command: "frames", number: String(number(n.text)) };
+}
 
 type Token = { text: string; quoted: boolean };
 
@@ -623,13 +851,20 @@ export function parseEventLine(raw: string): ParsedEvent | null {
     const toks = tokens(line);
     const first = toks[0];
     const command = first.text;
-    if (first.quoted || !COMMANDS.includes(command as EventCommand)) {
+    if (first.quoted || !COMMANDS.includes(command)) {
       const lower = first.quoted ? "" : command.toLowerCase();
-      if (COMMANDS.includes(lower as EventCommand)) throw new Bad(`write the event in small letters: ${lower}`);
+      if (COMMANDS.includes(lower)) throw new Bad(`write the event in small letters: ${lower}`);
       const name = first.quoted ? `"${command}"` : command;
+      if (lower.startsWith("fram") || editDistance(lower, "frames") === 1) throw new Bad("write frames, such as frames 30");
+      // A near miss (keys, pres, clik): one letter off one event's name.
+      const near = lower.length >= 3 ? COMMANDS.find((c) => editDistance(lower, c) === 1) : undefined;
+      if (near) throw new Bad(`there's no event called ${name} (did you mean ${near}? the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)`);
       if (toks.some((t) => !t.quoted && (t.text === "at" || t.text === "to"))) throw new Bad(`there's no event called ${name} (the mouse events are press, drag, release and click, such as press Canvas 1 at 10 20)`);
-      throw new Bad(`there's no event called ${name} (the events are click, type, set, enter and close)`);
+      throw new Bad(`there's no event called ${name} (the events are click, type, set, enter, close, press, drag, release, press key, release key, key and frames)`);
     }
+    if (command === "key") return keyEvent(line, "key", toks, 1);
+    if (command === "frames") return framesEvent(line, toks);
+    if ((command === "press" || command === "release") && toks.length > 1 && !toks[1].quoted && toks[1].text === "key") return keyEvent(line, `${command} key`, toks, 2);
     if (command === "close") {
       if (toks.length > 1) throw new Bad("close takes nothing after it");
       return { line, command: "close" };
@@ -670,6 +905,28 @@ export function eventLines(text: string): string[] {
     .filter((l) => l && !l.startsWith("//"));
 }
 
+/** A test's frames above this many make the build warn: each test runs in the learner's browser, and 300 frames of a game take about 3 seconds there. */
+export const TEST_FRAMES_WARN = 300;
+
+/** How many frames these event lines run in all (the sum of their frames lines; lines that can't be read count nothing). */
+export function framesInEvents(lines: string[]): number {
+  let n = 0;
+  for (const l of lines) {
+    const e = parseEventLine(l);
+    if (e && e.problem === undefined && e.command === "frames") n += Number(e.number);
+  }
+  return n;
+}
+
+/**
+ * The window a test keeps (the solution's, for the task card and the results): the window JSON
+ * with the frames' count but not the frames themselves, which only the page's animation of a run
+ * uses. The outline needs only the count (its "frames run: N" line).
+ */
+export function testWindow(w: WindowState): WindowState {
+  return w.frames ? { ...w, frames: { count: w.frames.count, list: [] } } : w;
+}
+
 /** The text of .arena/events.txt for these event lines (the grader, the build and the page write the same). */
 export const eventsFileText = (events: string[]) => (events.length ? events.join("\n") + "\n" : "");
 
@@ -703,7 +960,16 @@ export function describeEvent(raw: string): string {
   if (e.problem !== undefined) return e.line;
   const where = e.target ? targetWords(e.target, e.command) : "";
   const at = e.point ? `(${e.point.x}, ${e.point.y})` : "";
+  const key = e.key ? keyName(e.key) : "";
   switch (e.command) {
+    case "press key":
+      return `hold ${key}`;
+    case "release key":
+      return `let go of ${key}`;
+    case "key":
+      return `press and release ${key}`;
+    case "frames":
+      return `run ${e.number} ${e.number === "1" ? "frame" : "frames"}`;
     case "click":
       return e.point ? `click ${where} at ${at}` : `click ${where}`;
     case "press":

@@ -14,6 +14,13 @@
 // panel, a real range input). Canvases, image views and charts keep their own size; a slider is
 // 140 px wide and fills a column's width, as JavaFX's does.
 //
+// The shapes of part 14.3 (Polygon, Circle, Rectangle, Line, Text, and the Path of Shape.intersect)
+// are SVG at their real coordinates: in a plain Pane, each run of shapes next to each other is one
+// SVG at the pane's coordinates, each shape moved by its layout and translate and turned about the
+// middle of its box as JavaFX turns it; in a pane that lays its children out, a shape is an SVG of its
+// own box. Other nodes in a plain Pane are moved there too (CSS). The frames of a game are drawn
+// with this same drawing, frame by frame (window-frames.ts, window-player.ts).
+//
 // The drawing is a tree of plain element descriptions (Drawn), so that one function decides the
 // look and two render it: windowDrawingHtml (an HTML string, for lesson text, which
 // scripts/prerender.mjs also uses) and the React components in WindowView.tsx (the task card, the
@@ -73,9 +80,9 @@ export type DrawnControl = {
   pointer?: { width: number; height: number; scale: number; draws: boolean };
 };
 
-/** One element of the drawing. */
+/** One element of the drawing: HTML, or SVG for the shapes of part 14.3 (inside an "svg"). */
 export type Drawn = {
-  tag: "div" | "span" | "img";
+  tag: "div" | "span" | "img" | "svg" | "g" | "polygon" | "circle" | "rect" | "line" | "text" | "tspan";
   cls: string;
   /** Unique among its siblings, and the same for the same place in the next run's window (React reuses the element). */
   key: string;
@@ -140,8 +147,11 @@ const growsWide = (n: WindowNode) => isPane(n) || isField(n.type) || n.type === 
 /** Only panes and text areas grow taller. */
 const growsTall = (n: WindowNode) => isPane(n) || n.type === "TextArea";
 
-/** How a pane places one child: whether the child is stretched across and down, and any CSS of its slot. */
-type Place = { wide: boolean; tall: boolean; css?: Css };
+/**
+ * How a pane places one child: whether the child is stretched across and down, and any CSS of its
+ * slot; `plain`: the pane is a plain Pane, which puts the child at its layout x and y.
+ */
+type Place = { wide: boolean; tall: boolean; css?: Css; plain?: boolean };
 
 /**
  * What a text input asks for when no pref size is set, at JavaFX's default 13 px font: headless
@@ -229,8 +239,12 @@ const REGIONS = ["top", "left", "center", "right", "bottom"] as const;
 function drawNode(node: WindowNode, place: Place, key: string, path: string, counts: Counts, parentDisabled: boolean, sizedRoot = false): Drawn {
   const disabled = parentDisabled || !!node.disable;
   // The pane decides how the child sits in its slot (place.css): align-self is across in a column and down in a row.
+  if (isShape(node)) return drawShapeAlone(node, place, key);
   const style: Css = { ...(place.css ?? {}), ...sizeCss(node, place) };
   if (node.visible === false) style.visibility = "hidden";
+  // Moved and turned (setTranslateX, setLayoutX in a plain Pane, setRotate): drawn there, turned about its middle.
+  const moved = nodeTransformCss(node, !!place.plain);
+  if (moved) style.transform = moved;
   const attrs: Record<string, string> = { "data-n": String(node.n) };
   // Nothing inside a disabled pane can be used; axe and screen readers learn it from aria-disabled.
   if (node.disable) attrs["aria-disabled"] = "true";
@@ -326,7 +340,24 @@ function drawNode(node: WindowNode, place: Place, key: string, path: string, cou
       // A plain Pane (and a class of the program's own that extends Region) doesn't place its
       // children: each sits at the top left at its own size, over the ones before it.
       cls += " fx-plain";
-      (node.children ?? []).forEach((c, i) => child(c, { wide: false, tall: false }, String(i)));
+      // Shapes are SVG at the pane's own coordinates: each run of shapes next to each other in the
+      // children list is one SVG over the children before it (JavaFX paints children in order).
+      let run: WindowNode[] = [];
+      let first = 0;
+      const flush = () => {
+        if (run.length) kids.push(shapesSvg(run, node, `shapes${first}`));
+        run = [];
+      };
+      (node.children ?? []).forEach((c, i) => {
+        if (isShape(c)) {
+          if (!run.length) first = i;
+          run.push(c);
+          return;
+        }
+        flush();
+        child(c, { wide: false, tall: false, plain: true }, String(i));
+      });
+      flush();
     }
   }
   return { tag: "div", cls, key, style, attrs, kids };
@@ -559,6 +590,364 @@ function drawChart(node: WindowNode, style: Css, attrs: Record<string, string>, 
   return { tag: "span", cls: "fx-chart" + off(disabled), key, style, attrs: { ...attrs, role: "img", "aria-label": name }, markup: chartSvg(node) };
 }
 
+// ------------------------------------------------------------------ shapes (part 14.3)
+
+const SHAPE_TYPES = new Set(["Polygon", "Circle", "Rectangle", "Line", "Text", "Path"]);
+/** Whether a node is one of the shapes, drawn as SVG. */
+export const isShape = (n: WindowNode) => SHAPE_TYPES.has(n.type);
+
+/** A box: its least and greatest x and y. */
+export type Box = { minX: number; minY: number; maxX: number; maxY: number };
+/** A number of the JSON, or `fallback` when it isn't a finite one. */
+const num = (v: WindowNumber | null | undefined, fallback = 0) => (typeof v === "number" && Number.isFinite(v) ? v : fallback);
+/** A Text's font size (JavaFX's default is 13). */
+const textSize = (n: WindowNode) => Math.min(Math.max(num(n.font?.size, DEFAULT_FONT_SIZE), 1), 200);
+const textOf = (n: WindowNode) => (typeof n.text === "string" ? n.text : "");
+/** A stroke's width when the shape has a stroke, else 0. */
+const strokeOf = (n: WindowNode) => (n.stroke != null ? Math.max(0, num(n.strokeWidth, 1)) : 0);
+
+/**
+ * A shape's box in its own coordinates, without its stroke (null: nothing to draw, as a polygon
+ * without points or an empty Path). A Text's is the library's estimate (engine/libraries/javafx's
+ * Geometry.textBox: from the baseline up 0.93 of the size, down 0.24, half the size wide per
+ * character), so it turns about the same point as there.
+ */
+export function shapeBox(n: WindowNode): Box | null {
+  switch (n.type) {
+    case "Polygon": {
+      const p = n.points ?? [];
+      const xs: number[] = [];
+      const ys: number[] = [];
+      for (let i = 0; i + 1 < p.length; i += 2) {
+        const x = p[i];
+        const y = p[i + 1];
+        if (typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)) {
+          xs.push(x);
+          ys.push(y);
+        }
+      }
+      return xs.length
+        ? {
+            minX: Math.min(...xs),
+            minY: Math.min(...ys),
+            maxX: Math.max(...xs),
+            maxY: Math.max(...ys),
+          }
+        : null;
+    }
+    case "Circle": {
+      const r = Math.max(0, num(n.radius));
+      const cx = num(n.centerX);
+      const cy = num(n.centerY);
+      return { minX: cx - r, minY: cy - r, maxX: cx + r, maxY: cy + r };
+    }
+    case "Rectangle": {
+      const x = num(n.x);
+      const y = num(n.y);
+      return {
+        minX: x,
+        minY: y,
+        maxX: x + Math.max(0, num(n.width)),
+        maxY: y + Math.max(0, num(n.height)),
+      };
+    }
+    case "Line": {
+      const [x1, y1, x2, y2] = [num(n.startX), num(n.startY), num(n.endX), num(n.endY)];
+      return {
+        minX: Math.min(x1, x2),
+        minY: Math.min(y1, y2),
+        maxX: Math.max(x1, x2),
+        maxY: Math.max(y1, y2),
+      };
+    }
+    case "Text": {
+      const size = textSize(n);
+      const x = num(n.x);
+      const y = num(n.y);
+      return {
+        minX: x,
+        minY: y - size * 0.93,
+        maxX: x + [...textOf(n)].length * size * 0.5,
+        maxY: y + size * 0.24,
+      };
+    }
+    case "Path": {
+      const a = n.area;
+      if (!a || a.length !== 4 || !a.every((v) => typeof v === "number" && Number.isFinite(v))) return null;
+      const [x1, y1, x2, y2] = a as number[];
+      return { minX: x1, minY: y1, maxX: x2, maxY: y2 };
+    }
+  }
+  return null;
+}
+
+/** A number for SVG and CSS: at most 3 decimals, no -0. */
+const n3 = (v: number) => {
+  const r = Math.round(v * 1000) / 1000;
+  return String(r === 0 ? 0 : r);
+};
+
+/**
+ * Where a node is drawn and how it is turned: its translate (and in a plain Pane its layout too),
+ * then its rotate in degrees, clockwise, about the middle of its own box, as JavaFX turns it.
+ */
+function placement(n: WindowNode, plain: boolean): { x: number; y: number; r: number } {
+  return {
+    x: num(n.translateX) + (plain ? num(n.layoutX) : 0),
+    y: num(n.translateY) + (plain ? num(n.layoutY) : 0),
+    r: num(n.rotate),
+  };
+}
+
+/** A node's move and turn as CSS (a node that isn't a shape: CSS turns it about its middle), or "" when it has none. */
+function nodeTransformCss(n: WindowNode, plain: boolean): string {
+  const { x, y, r } = placement(n, plain);
+  const out: string[] = [];
+  if (x || y) out.push(`translate(${n3(x)}px, ${n3(y)}px)`);
+  if (r) out.push(`rotate(${n3(r)}deg)`);
+  return out.join(" ");
+}
+
+/** A shape's move and turn as an SVG transform (turned about the middle of its box), or undefined when it has none. */
+function shapeTransform(n: WindowNode, box: Box, plain: boolean): string | undefined {
+  const { x, y, r } = placement(n, plain);
+  const out: string[] = [];
+  if (x || y) out.push(`translate(${n3(x)} ${n3(y)})`);
+  if (r) out.push(`rotate(${n3(r)} ${n3((box.minX + box.maxX) / 2)} ${n3((box.minY + box.maxY) / 2)})`);
+  return out.length ? out.join(" ") : undefined;
+}
+
+/**
+ * Where a shape reaches in its parent: its box with half its stroke around it, turned and moved
+ * (the corners of that box, turned: a little more than JavaFX's bounds for a turned circle).
+ */
+export function shapeReach(n: WindowNode, plain = true): Box | null {
+  const box = shapeBox(n);
+  if (!box) return null;
+  const h = strokeOf(n) / 2;
+  const { x, y, r } = placement(n, plain);
+  const cx = (box.minX + box.maxX) / 2;
+  const cy = (box.minY + box.maxY) / 2;
+  const a = (r * Math.PI) / 180;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  const out: Box = {
+    minX: Infinity,
+    minY: Infinity,
+    maxX: -Infinity,
+    maxY: -Infinity,
+  };
+  for (const [px, py] of [
+    [box.minX - h, box.minY - h],
+    [box.maxX + h, box.minY - h],
+    [box.maxX + h, box.maxY + h],
+    [box.minX - h, box.maxY + h],
+  ]) {
+    const qx = cx + (px - cx) * cos - (py - cy) * sin + x;
+    const qy = cy + (px - cx) * sin + (py - cy) * cos + y;
+    out.minX = Math.min(out.minX, qx);
+    out.minY = Math.min(out.minY, qy);
+    out.maxX = Math.max(out.maxX, qx);
+    out.maxY = Math.max(out.maxY, qy);
+  }
+  return out;
+}
+
+/**
+ * One shape as an SVG element, in its parent's coordinates: its fill (none when null), its stroke
+ * (centered on the outline, square caps and miter joins with a limit of 10, as JavaFX's defaults),
+ * its move and turn, hidden when it isn't visible. A Path (what Shape.intersect returns) is drawn
+ * as the box of its area: the library keeps only that.
+ */
+function shapeElement(n: WindowNode, key: string, plain: boolean): Drawn | null {
+  const box = shapeBox(n);
+  if (!box) return null;
+  const fill = n.fill === undefined ? (n.type === "Line" ? null : "#000000") : n.fill;
+  const attrs: Record<string, string> = {
+    "data-n": String(n.n),
+    fill: fill ?? "none",
+  };
+  if (n.stroke != null)
+    Object.assign(attrs, {
+      stroke: n.stroke,
+      "stroke-width": n3(strokeOf(n)),
+      "stroke-linecap": "square",
+      "stroke-miterlimit": "10",
+    });
+  const transform = shapeTransform(n, box, plain);
+  if (transform) attrs.transform = transform;
+  if (n.visible === false) attrs.visibility = "hidden";
+  const k = `${key}:${n.type}`;
+  switch (n.type) {
+    case "Polygon": {
+      const p = n.points ?? [];
+      const pts: string[] = [];
+      for (let i = 0; i + 1 < p.length; i += 2) if (typeof p[i] === "number" && typeof p[i + 1] === "number") pts.push(`${n3(num(p[i]))},${n3(num(p[i + 1]))}`);
+      return {
+        tag: "polygon",
+        cls: "fx-shape",
+        key: k,
+        attrs: { ...attrs, points: pts.join(" ") },
+      };
+    }
+    case "Circle":
+      return {
+        tag: "circle",
+        cls: "fx-shape",
+        key: k,
+        attrs: {
+          ...attrs,
+          cx: n3(num(n.centerX)),
+          cy: n3(num(n.centerY)),
+          r: n3(Math.max(0, num(n.radius))),
+        },
+      };
+    case "Rectangle":
+    case "Path":
+      return {
+        tag: "rect",
+        cls: "fx-shape",
+        key: k,
+        attrs: {
+          ...attrs,
+          x: n3(box.minX),
+          y: n3(box.minY),
+          width: n3(box.maxX - box.minX),
+          height: n3(box.maxY - box.minY),
+        },
+      };
+    case "Line":
+      return {
+        tag: "line",
+        cls: "fx-shape",
+        key: k,
+        attrs: {
+          ...attrs,
+          x1: n3(num(n.startX)),
+          y1: n3(num(n.startY)),
+          x2: n3(num(n.endX)),
+          y2: n3(num(n.endY)),
+        },
+      };
+    case "Text": {
+      // On its baseline at (x, y); each line of a text with line breaks one line lower.
+      const size = textSize(n);
+      const style: Css = { fontSize: px(size), whiteSpace: "pre" };
+      const family = cssFamily(n.font?.family ?? null);
+      if (family) style.fontFamily = family;
+      const x = n3(num(n.x));
+      const lines = textOf(n).split("\n");
+      const t: Drawn = {
+        tag: "text",
+        cls: "fx-shape fx-shape-text",
+        key: k,
+        style,
+        attrs: { ...attrs, x, y: n3(num(n.y)) },
+      };
+      if (lines.length === 1) t.text = lines[0];
+      else
+        t.kids = lines.map((l, i) => ({
+          tag: "tspan",
+          cls: "",
+          key: `l${i}`,
+          attrs: { x, dy: i ? n3(size * 1.17) : "0" },
+          text: l,
+        }));
+      return t;
+    }
+  }
+  return null;
+}
+
+/**
+ * The shapes next to each other in a plain Pane, as one SVG at the pane's coordinates. Its box is
+ * the pane's preferred size, else the size JavaFX gives a pane with none (Parent.computePrefWidth):
+ * from the left- and topmost of 0 and the shapes' layout bounds to the right- and bottommost of 0
+ * and theirs, each shape at its layout (its translate and turn don't count; its stroke does). Like
+ * a JavaFX Pane, the SVG never cuts off its shapes (.fx-shapes is overflow: visible): a shape bigger
+ * than the pane paints over what is next to it, and only the window's scene cuts off what is outside
+ * it (.fx-scene), as the window does in JavaFX (a root Pane there takes the scene's size).
+ */
+function shapesSvg(shapes: WindowNode[], pane: WindowNode, key: string): Drawn {
+  let minX = 0;
+  let minY = 0;
+  let maxX = 0;
+  let maxY = 0;
+  const kids: Drawn[] = [];
+  shapes.forEach((c, i) => {
+    const d = shapeElement(c, String(i), true);
+    if (d) kids.push(d);
+    // Hidden shapes count too: JavaFX lays out every managed child, seen or not.
+    const box = shapeLayoutBox(c);
+    if (box) {
+      minX = Math.min(minX, box.minX);
+      minY = Math.min(minY, box.minY);
+      maxX = Math.max(maxX, box.maxX);
+      maxY = Math.max(maxY, box.maxY);
+    }
+  });
+  const pw = size(pane.prefWidth);
+  const ph = size(pane.prefHeight);
+  const width = Math.min(Math.ceil(pw ?? maxX - minX), 4000);
+  const height = Math.min(Math.ceil(ph ?? maxY - minY), 4000);
+  return {
+    tag: "svg",
+    cls: "fx-shapes",
+    key,
+    attrs: {
+      width: String(width),
+      height: String(height),
+      viewBox: `0 0 ${width} ${height}`,
+      "aria-hidden": "true",
+      focusable: "false",
+    },
+    kids,
+  };
+}
+
+/**
+ * A shape's layout bounds in a plain Pane, as Parent.computePrefWidth and computePrefHeight use
+ * them: its box with half its stroke around it, moved by its layout only (not its translate or turn).
+ */
+function shapeLayoutBox(n: WindowNode): Box | null {
+  const box = shapeBox(n);
+  if (!box) return null;
+  const h = strokeOf(n) / 2;
+  const x = num(n.layoutX);
+  const y = num(n.layoutY);
+  return { minX: box.minX - h + x, minY: box.minY - h + y, maxX: box.maxX + h + x, maxY: box.maxY + h + y };
+}
+
+/**
+ * A shape in a pane that lays its children out (a VBox, an HBox...): an SVG as big as its box and
+ * stroke, where the pane puts it, then moved by its translate and turned about its middle (CSS).
+ */
+function drawShapeAlone(n: WindowNode, place: Place, key: string): Drawn {
+  const box = shapeBox(n) ?? { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  const half = strokeOf(n) / 2;
+  const w = Math.min(box.maxX - box.minX + 2 * half, 4000);
+  const h = Math.min(box.maxY - box.minY + 2 * half, 4000);
+  const d = shapeElement({ ...n, translateX: undefined, translateY: undefined, rotate: undefined }, "0", false);
+  const style: Css = { ...(place.css ?? {}) };
+  const moved = nodeTransformCss(n, !!place.plain);
+  if (moved) style.transform = moved;
+  if (n.visible === false) style.visibility = "hidden";
+  return {
+    tag: "svg",
+    cls: "fx-shapes fx-shape-alone",
+    key,
+    style,
+    attrs: {
+      width: n3(w),
+      height: n3(h),
+      viewBox: `${n3(box.minX - half)} ${n3(box.minY - half)} ${n3(w)} ${n3(h)}`,
+      "aria-hidden": "true",
+      focusable: "false",
+    },
+    kids: d ? [d] : [],
+  };
+}
+
 /** The windows of a window JSON, drawn: each with its title and scene. */
 export function drawWindows(w: WindowState | null | undefined): DrawnWindow[] {
   if (!w) return [];
@@ -607,6 +996,46 @@ function html(d: Drawn): string {
 export const TITLE_BUTTONS_SVG =
   '<svg class="fx-title-buttons" viewBox="0 0 58 12" width="58" height="12" aria-hidden="true" focusable="false"><path d="M1 8.5h10M24 2.5h9v8h-9zM47 2l9 9M56 2l-9 9"/></svg>';
 
+/** A drawn window as one element (its title bar and scene), as windowHtml writes it: for the animation (window-player.ts). */
+export function windowAsDrawn(w: DrawnWindow): Drawn {
+  return {
+    tag: "div",
+    cls: "fx-window",
+    key: w.key,
+    style: w.style,
+    kids: [
+      {
+        tag: "div",
+        cls: "fx-titlebar",
+        key: "bar",
+        kids: [
+          { tag: "span", cls: "fx-title", key: "t", text: w.title ?? "" },
+          {
+            tag: "span",
+            cls: "fx-title-glyphs",
+            key: "g",
+            markup: TITLE_BUTTONS_SVG,
+          },
+        ],
+      },
+      {
+        tag: "div",
+        cls: "fx-scene",
+        key: "scene",
+        style: w.sceneStyle,
+        kids: [
+          w.scene ?? {
+            tag: "span",
+            cls: "fx-no-scene",
+            key: "none",
+            text: "(no scene)",
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function windowHtml(w: DrawnWindow): string {
   const title = w.title == null ? "" : esc(w.title);
   const scene = w.scene ? html(w.scene) : '<p class="fx-no-scene">(no scene)</p>';
@@ -635,10 +1064,15 @@ export const WIDE_NOTE = "This window is wider than the screen: scroll it sidewa
  * The drawing itself is hidden from screen readers: the window as text has it all. With no window
  * showing, the outline's sentence instead.
  */
-export function windowDrawingHtml(w: WindowState | null | undefined): string {
+export function windowDrawingHtml(w: WindowState | null | undefined, play?: number): string {
   const drawn = drawWindows(w);
   if (!drawn.length) return `<p class="fx-none">${esc(windowOutline(w))}</p>`;
-  return `<div class="fx-frame"><div class="fx-scroll" tabindex="0" role="group" aria-label="${esc(drawingLabel(w))}"><div class="fx-desktop" aria-hidden="true">${drawn.map(windowHtml).join("")}</div></div><p class="fx-wide-note">${esc(WIDE_NOTE)}</p></div>`;
+  // A window with frames, in lesson text on the page (`play`: which one, in order): the place for
+  // the animation's frames and, under the frame, for the player (Markdown.tsx attaches them).
+  const frames = play != null && w?.frames && w.frames.list.length > 0;
+  const anim = frames ? '<div class="fx-desktop fx-anim"></div>' : "";
+  const player = frames ? `<div class="fx-player-box" data-fx-play="${play}"></div>` : "";
+  return `<div class="fx-frame"><div class="fx-scroll" tabindex="0" role="group" aria-label="${esc(drawingLabel(w))}">${anim}<div class="fx-desktop" aria-hidden="true">${drawn.map(windowHtml).join("")}</div></div><p class="fx-wide-note">${esc(WIDE_NOTE)}</p></div>${player}`;
 }
 
 /**
@@ -659,9 +1093,11 @@ export function windowTextHtml(outline: string): string {
 
 /**
  * A java window example in lesson text (the build's ```window block): the window after the
- * example's clicks and typing (said in plain words), drawn, with the window as text under it.
+ * example's clicks and typing (said in plain words), drawn, with the window as text under it. On the
+ * page (`play`, numbering the examples with frames in order), a game's frames get a player; the
+ * pre-rendered pages show only the window after the last event.
  */
-export function windowFigureHtml(ex: WindowExample): string {
+export function windowFigureHtml(ex: WindowExample, play?: number): string {
   const after = ex.events.length ? `<p class="fx-events">After: ${esc(describeEvents(ex.events))}</p>` : "";
-  return `<figure class="fx-figure"><figcaption>The window</figcaption>${after}${windowDrawingHtml(ex.window)}${windowTextHtml(ex.outline)}</figure>\n`;
+  return `<figure class="fx-figure"><figcaption>The window</figcaption>${after}${windowDrawingHtml(ex.window, play)}${windowTextHtml(ex.outline)}</figure>\n`;
 }

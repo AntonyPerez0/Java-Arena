@@ -4,6 +4,7 @@
 import { ancestorsOf, classAt, codeOnly, declares, droppedLink, fileName, isRealSubtype, isSubtype, knows, ownClasses, parameterTypes, splitTopLevel, subtypesOf, typeNamed, type HeaderLink, type OwnClass, type OwnClasses, type OwnMember } from "./own-classes";
 import type { Diagnostic, SourceFile } from "./types";
 import { declaredPackage, folderOf, packageOfPath } from "../grader/files.js";
+import { KEY_CODES, KEY_NAMES } from "../grader/keycodes.js";
 
 /**
  * Rules are tried in order, so specific ones come before general ones. `explain` gets the
@@ -23,6 +24,8 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.resolve.location", when: /location: variable \w+ of type Object$/m, explain: objectHasNo },
   { code: "compiler.err.cant.resolve.location.args", when: /location: variable \w+ of type Object$/m, explain: objectHasNo },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable length\n/, explain: lengthOf },
+  { code: "compiler.err.cant.resolve.location", when: /location: class (?:javafx\.scene\.input\.)?KeyCode$/m, explain: fxKeyCodeName },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+(?:class|variable) [A-Z]/, explain: noDatabase },
   // A name that this method created in a block that has ended is stronger evidence than an enum constant of the same name.
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: outOfScope },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable [\w$]+\n\s*location: (?:class|interface|enum|record) /, explain: enumConstant },
@@ -30,25 +33,34 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class [\w$]+\n\s*location: package javafx/, explain: fxNotInPackage },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class [\w$]+\n\s*location: package /, explain: notInPackage },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: classElsewhere },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+(?:variable|class) [A-Z][\w$]*\n/, explain: importedFromMissing },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+(?:variable|class) [\w$]+\n/, explain: importFor },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+(?:variable|class) [A-Z][\w$]*\n/, explain: fxMissingClass },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable [\w$]+\n\s*location: (?:class|interface) /, explain: fxMethodAsVariableAfterCall },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable [\w$]+\n\s*location: variable /, explain: fxMethodAsVariable },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: () => "Java doesn't know a variable with this name here. Check the spelling (upper and lower case matter) and that the variable was created before this line, inside the same block { }." },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+class/, explain: () => "Java doesn't know a class with this name. Check the spelling and capital letters, and whether it needs an import at the top of the file." },
   { code: "compiler.err.doesnt.exist", when: /^package system does not exist/, explain: () => "System needs a capital S. With a small s, Java reads system as the name of a package (a folder of classes), and there is no such package." },
   { code: "compiler.err.doesnt.exist", when: /^package javafx\b/, explain: fxPackage },
   { code: "compiler.err.doesnt.exist", when: /^package [A-Z][\w$]* does not exist/, explain: fxOuterAsPackage },
+  { code: "compiler.err.doesnt.exist", when: /^package (?:(?:java|javax)\.sql|org\.h2)\b/, explain: noDatabase },
   { code: "compiler.err.doesnt.exist", explain: unknownPackage },
+  { code: "compiler.err.doesnt.exist", explain: libraryPackage },
   { code: "compiler.err.doesnt.exist", explain: () => "Java can't find this package. Check the spelling of the import or name before the dot, for example java.util.Scanner." },
   { code: "compiler.err.cant.resolve.location.args", when: /symbol:\s+method [A-Z]/, explain: missingNew },
   { code: "compiler.err.cant.resolve.location.args", when: /symbol:\s+method launch\(/, explain: fxLaunchMissing },
+  { code: "compiler.err.cant.resolve.location.args", when: /of type (?:javafx\.geometry\.)?Point2D$|location: class (?:javafx\.geometry\.)?Point2D$/m, explain: fxPointSetter },
+  { code: "compiler.err.cant.resolve.location.args", explain: fxIntersectMethod },
+  { code: "compiler.err.cant.resolve.location.args", explain: fxIntersectCall },
   { code: "compiler.err.cant.resolve.location.args", explain: fxMethod },
   { code: "compiler.err.cant.resolve.location.args", explain: notInOwnType },
   { code: "compiler.err.cant.resolve.location.args", explain: libraryMethod },
   { code: "compiler.err.cant.resolve.location.args", explain: () =>"There is no method with this name that takes these arguments. Check the spelling, and which methods this type really has." },
   { code: "compiler.err.cant.resolve.location", explain: () => "Java can't find this name. Check the spelling and capital letters." },
+  { code: "compiler.err.cant.resolve", when: /symbol:\s+method /, explain: fxAnonymousMethod },
   { code: "compiler.err.cant.resolve", when: /symbol:\s+class [\w$]+$/m, explain: fxNested },
   { code: "compiler.err.cant.resolve", when: /symbol:\s+class [\w$]+$/m, explain: importFor },
+  { code: "compiler.err.cant.resolve", when: /symbol:\s+variable [A-Z][\w$]*$/m, explain: importFor },
   { code: "compiler.err.cant.resolve", when: /symbol:\s+class [A-Z][\w$]*$/m, explain: fxMissingClass },
   { code: "compiler.err.cant.resolve", explain: () => "Java can't find this name. Check the spelling and capital letters." },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: bad return type in lambda expression/, explain: lambdaResult },
@@ -68,6 +80,8 @@ const RULES: Rule[] = [
   { code: "compiler.err.prob.found.req", when: /^incompatible types: Number cannot be converted to /, explain: fxNumberValue },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: Object cannot be converted to /, explain: fxRawObject },
   { code: "compiler.err.prob.found.req", when: /possible lossy conversion from double to /, explain: fxLossy },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: String cannot be converted to KeyCode$/, explain: fxKeyCodeText },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: (?:Shape|Path) cannot be converted to boolean$/, explain: fxIntersectValue },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: cannot infer type arguments for [\w$.]+<>\n\s*reason: inference variable/, explain: diamondValue },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: Object(?:\[\])? cannot be converted to [\w$]+(?:\[\])?$/, explain: objectForTypeParameter },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: Object cannot be converted to [\w$.]+$/, explain: rawGeneric },
@@ -124,6 +138,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.unclosed.str.lit", explain: () => "This text is missing its closing quote \". Every string starts and ends with a double quote on the same line." },
   { code: "compiler.err.unclosed.char.lit", explain: () => "A char is one character between single quotes, like 'a'. Use double quotes for longer text." },
   { code: "compiler.err.empty.char.lit", explain: () => "'' is empty: a char needs exactly one character between the single quotes." },
+  { code: "compiler.err.cant.apply.symbol", when: /^constructor Point2D in class /, explain: fxPointNew },
   {
     code: "compiler.err.cant.apply.symbol",
     when: /^constructor ([\w$]+) in class \1 cannot be applied[\s\S]*found:\s+no arguments\n\s*reason: actual and formal argument lists differ in length/,
@@ -157,6 +172,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.apply.symbol", when: /^incompatible types: invalid method reference/, explain: fxMethodRef },
   { code: "compiler.err.cant.apply.symbol", when: /^incompatible types: /, explain: fxWrongValue },
   { code: "compiler.err.cant.apply.symbol", when: /^method add in class GridPane cannot be applied/, explain: fxGridAdd },
+  { code: "compiler.err.cant.apply.symbol", when: /^method intersect in class Shape cannot be applied/, explain: fxIntersectCall },
   { code: "compiler.err.cant.apply.symbol", explain: () => "The method was called with the wrong number or types of arguments. Compare the call with the method's parameter list (Java lists what it required and what it found)." },
   {
     code: "compiler.err.cant.apply.symbols",
@@ -193,6 +209,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.already.defined", when: /^variable [\w$]+ is already defined in/, explain: lambdaParameterTaken },
   { code: "compiler.err.already.defined", explain: () => "A variable or method with this name already exists here. Use a different name, or drop the type to change the existing variable (name = ... instead of String name = ...)." },
   { code: "compiler.err.report.access", when: /^getChildren\(\) has protected access/, explain: fxProtectedChildren },
+  { code: "compiler.err.report.access", when: /^[xy] has private access in (?:javafx\.geometry\.)?Point2D$/, explain: fxPointField },
   { code: "compiler.err.report.access", explain: privateInParent },
   { code: "compiler.err.report.access", explain: accessDenied },
   { code: "compiler.err.report.access", explain: () => "This is private, so only code inside its own class can use it. Use a public method of that class (for example a getter) instead." },
@@ -205,15 +222,21 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.deref", explain: () => "Primitive values like int, double and boolean have no methods, so you can't put a dot after them. Use a wrapper or a helper, for example String.valueOf(number)." },
   { code: "compiler.err.operator.cant.be.applied.1", when: /^\s*(?:first|second) type:\s+Optional/m, explain: optionalInArithmetic },
   { code: "compiler.err.operator.cant.be.applied.1", when: /^\s*(?:first|second) type:\s+Number$/m, explain: fxNumberArithmetic },
+  { code: "compiler.err.operator.cant.be.applied.1", when: /^\s*(?:first|second) type:\s+Point2D$/m, explain: fxPointArithmetic },
+  { code: "compiler.err.operator.cant.be.applied.1", when: /^\s*(?:first|second) type:\s+(?:Shape|Path|Bounds|BoundingBox)$/m, explain: fxIntersectValue },
   { code: "compiler.err.operator.cant.be.applied.1", explain: () => "This operator doesn't work with these two types, for example subtracting a String, or comparing a String with <." },
   { code: "compiler.err.operator.cant.be.applied", explain: () => "This operator doesn't work with this type, for example ! on a number." },
+  { code: "compiler.err.incomparable.types", when: /^incomparable types: (?:KeyCode and String|String and KeyCode)$/, explain: fxKeyCodeText },
   { code: "compiler.err.incomparable.types", explain: () => "These two values have types that can never be equal, so comparing them with == makes no sense." },
+  { code: "compiler.err.does.not.override.abstract", when: /abstract method handle\(long\) in AnimationTimer$/, explain: fxTimerHandle },
   { code: "compiler.err.does.not.override.abstract", explain: missingAbstractMethod },
   { code: "compiler.err.override.weaker.access", explain: weakerAccess },
   { code: "compiler.err.override.weaker.access", explain: () => "A method that replaces an inherited one can't be harder to reach than the method it replaces. Give it the same access word as that method (public, protected or none), or a more open one, such as public." },
   { code: "compiler.err.override.static", explain: overrideStatic },
   { code: "compiler.err.override.incompatible.ret", explain: overrideReturnType },
+  { code: "compiler.err.method.does.not.override.superclass", explain: fxTimerOverride },
   { code: "compiler.err.method.does.not.override.superclass", explain: overridesNothing },
+  { code: "compiler.err.abstract.cant.be.instantiated", explain: fxAbstract },
   { code: "compiler.err.abstract.cant.be.instantiated", explain: cannotCreate },
   { code: "compiler.err.intf.expected.here", explain: (d) => wrongParentKind(d, "class") },
   { code: "compiler.err.intf.expected.here", explain: () => "implements needs an interface, and this is a class. A class extends another class (class Dog extends Animal) and implements interfaces (class Book implements Readable)." },
@@ -3445,9 +3468,12 @@ const FX: Record<string, { pkg: string; parent: string; methods: string }> = {
   EventType: { pkg: "javafx.event", parent: "", methods: "getName" },
   Insets: { pkg: "javafx.geometry", parent: "", methods: "getTop getRight getBottom getLeft" },
   Pos: { pkg: "javafx.geometry", parent: "", methods: "" },
-  Node: { pkg: "javafx.scene", parent: "", methods: "setId getId setDisable isDisable isDisabled setVisible isVisible getParent getScene setStyle getStyle lookup setOnMousePressed getOnMousePressed setOnMouseDragged getOnMouseDragged setOnMouseReleased getOnMouseReleased setOnMouseClicked getOnMouseClicked" },
+  Point2D: { pkg: "javafx.geometry", parent: "", methods: "getX getY distance add subtract multiply normalize midpoint angle magnitude dotProduct" },
+  Bounds: { pkg: "javafx.geometry", parent: "", methods: "getMinX getMinY getMinZ getWidth getHeight getDepth getMaxX getMaxY getMaxZ getCenterX getCenterY getCenterZ isEmpty contains intersects" },
+  BoundingBox: { pkg: "javafx.geometry", parent: "Bounds", methods: "isEmpty contains intersects" },
+  Node: { pkg: "javafx.scene", parent: "", methods: "setId getId setDisable isDisable isDisabled setVisible isVisible getParent getScene setStyle getStyle lookup setOnMousePressed getOnMousePressed setOnMouseDragged getOnMouseDragged setOnMouseReleased getOnMouseReleased setOnMouseClicked getOnMouseClicked setTranslateX getTranslateX setTranslateY getTranslateY setLayoutX getLayoutX setLayoutY getLayoutY setRotate getRotate getBoundsInLocal getBoundsInParent setOnKeyPressed getOnKeyPressed setOnKeyReleased getOnKeyReleased setOnKeyTyped getOnKeyTyped requestFocus" },
   Parent: { pkg: "javafx.scene", parent: "Node", methods: "getChildrenUnmodifiable lookup" },
-  Scene: { pkg: "javafx.scene", parent: "", methods: "getRoot setRoot getWidth getHeight" },
+  Scene: { pkg: "javafx.scene", parent: "", methods: "getRoot setRoot getWidth getHeight setOnKeyPressed getOnKeyPressed setOnKeyReleased getOnKeyReleased setOnKeyTyped getOnKeyTyped" },
   Region: { pkg: "javafx.scene.layout", parent: "Parent", methods: "setPadding getPadding setPrefWidth getPrefWidth setPrefHeight getPrefHeight setPrefSize setMinSize setMaxSize" },
   Pane: { pkg: "javafx.scene.layout", parent: "Region", methods: "getChildren" },
   FlowPane: { pkg: "javafx.scene.layout", parent: "Pane", methods: "setHgap getHgap setVgap getVgap setAlignment getAlignment" },
@@ -3467,12 +3493,22 @@ const FX: Record<string, { pkg: string; parent: string; methods: string }> = {
   TextArea: { pkg: "javafx.scene.control", parent: "TextInputControl", methods: "setWrapText isWrapText" },
   Slider: { pkg: "javafx.scene.control", parent: "Control", methods: "setMin getMin setMax getMax setValue getValue valueProperty setShowTickLabels isShowTickLabels setShowTickMarks isShowTickMarks setMajorTickUnit getMajorTickUnit setMinorTickCount getMinorTickCount setBlockIncrement getBlockIncrement setSnapToTicks isSnapToTicks" },
   Font: { pkg: "javafx.scene.text", parent: "", methods: "getDefault font getName getFamily getStyle getSize" },
+  Text: { pkg: "javafx.scene.text", parent: "Shape", methods: "setText getText setX getX setY getY setFont getFont" },
+  Shape: { pkg: "javafx.scene.shape", parent: "Node", methods: "setFill getFill setStroke getStroke setStrokeWidth getStrokeWidth intersect" },
+  Polygon: { pkg: "javafx.scene.shape", parent: "Shape", methods: "getPoints" },
+  Circle: { pkg: "javafx.scene.shape", parent: "Shape", methods: "setCenterX getCenterX setCenterY getCenterY setRadius getRadius" },
+  Rectangle: { pkg: "javafx.scene.shape", parent: "Shape", methods: "setX getX setY getY setWidth getWidth setHeight getHeight" },
+  Line: { pkg: "javafx.scene.shape", parent: "Shape", methods: "setStartX getStartX setStartY getStartY setEndX getEndX setEndY getEndY" },
+  Path: { pkg: "javafx.scene.shape", parent: "Shape", methods: "" },
+  AnimationTimer: { pkg: "javafx.animation", parent: "", methods: "handle start stop" },
   Paint: { pkg: "javafx.scene.paint", parent: "", methods: "" },
   Color: { pkg: "javafx.scene.paint", parent: "Paint", methods: "color rgb web brighter darker grayscale invert getRed getGreen getBlue getOpacity" },
   Canvas: { pkg: "javafx.scene.canvas", parent: "Node", methods: "getGraphicsContext2D setWidth getWidth setHeight getHeight" },
   GraphicsContext: { pkg: "javafx.scene.canvas", parent: "", methods: "getCanvas setFill getFill setStroke getStroke setLineWidth getLineWidth setFont getFont fillRect strokeRect clearRect fillOval strokeOval strokeLine fillText strokeText fillPolygon strokePolygon" },
   InputEvent: { pkg: "javafx.scene.input", parent: "Event", methods: "" },
   MouseEvent: { pkg: "javafx.scene.input", parent: "InputEvent", methods: "getEventType getX getY getSceneX getSceneY" },
+  KeyEvent: { pkg: "javafx.scene.input", parent: "InputEvent", methods: "getEventType getCharacter getText getCode isShiftDown isControlDown isAltDown isMetaDown isShortcutDown" },
+  KeyCode: { pkg: "javafx.scene.input", parent: "", methods: "getName getCode getChar isFunctionKey isNavigationKey isArrowKey isModifierKey isLetterKey isDigitKey isKeypadKey isWhitespaceKey isMediaKey getKeyCode" },
   Image: { pkg: "javafx.scene.image", parent: "", methods: "getWidth getHeight isError getException getPixelReader" },
   WritableImage: { pkg: "javafx.scene.image", parent: "Image", methods: "getPixelWriter" },
   PixelReader: { pkg: "javafx.scene.image", parent: "", methods: "getArgb getColor" },
@@ -3497,9 +3533,9 @@ export { FX as PRACTICE_JAVAFX };
 /** The practice version's packages, in the order of the table. */
 const FX_PACKAGES = [...new Set(Object.values(FX).map((c) => c.pkg))];
 /** The events the practice version has, in a sentence's words. */
-const FX_EVENTS = "setOnAction (a click on a Button, or Enter in a TextField) and the mouse events of a Canvas or an ImageView, setOnMousePressed, setOnMouseDragged, setOnMouseReleased and setOnMouseClicked";
-/** The nodes a program creates with new: the controls and the panes. */
-const FX_NODES = ["Label", "Button", "TextField", "PasswordField", "TextArea", "Slider", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Pane", "Canvas", "ImageView", "LineChart", "BarChart", "ScatterChart"];
+const FX_EVENTS = "setOnAction (a click on a Button, or Enter in a TextField), the mouse events of a Canvas or an ImageView, setOnMousePressed, setOnMouseDragged, setOnMouseReleased and setOnMouseClicked, and the key events of a Scene, setOnKeyPressed, setOnKeyReleased and setOnKeyTyped";
+/** The nodes a program creates with new: the controls, the panes and the shapes (not Shape, which is abstract, or Path, which only Shape.intersect gives). */
+const FX_NODES = ["Label", "Button", "TextField", "PasswordField", "TextArea", "Slider", "FlowPane", "HBox", "VBox", "StackPane", "BorderPane", "GridPane", "Pane", "Canvas", "ImageView", "Polygon", "Circle", "Rectangle", "Line", "Text", "LineChart", "BarChart", "ScatterChart"];
 const FX_CONTROLS = "Label, Button, TextField, PasswordField, TextArea and Slider";
 const FX_PANES = "FlowPane, HBox, VBox, StackPane, BorderPane, GridPane and Pane";
 
@@ -3520,7 +3556,7 @@ const REAL_FX: Record<string, string> = Object.fromEntries(
     "javafx.scene.image": "PixelFormat",
     "javafx.scene.chart": "PieChart AreaChart StackedBarChart BubbleChart",
     "javafx.scene.media": "AudioClip Media MediaPlayer MediaView",
-    "javafx.animation": "Timeline KeyFrame KeyValue AnimationTimer FadeTransition TranslateTransition RotateTransition PauseTransition Animation Interpolator",
+    "javafx.animation": "Timeline KeyFrame KeyValue AnimationTimer FadeTransition TranslateTransition RotateTransition ScaleTransition FillTransition StrokeTransition PathTransition ParallelTransition SequentialTransition PauseTransition Transition Animation Interpolator",
     "javafx.util": "Duration Pair Callback StringConverter",
     "javafx.geometry": "HPos VPos Orientation Side",
     "javafx.stage": "FileChooser DirectoryChooser Modality StageStyle Screen WindowEvent",
@@ -3532,7 +3568,7 @@ const REAL_FX: Record<string, string> = Object.fromEntries(
 );
 /** Packages of real JavaFX (its modules base, graphics, controls, fxml, media, web and swing) that the practice version has nothing of. */
 const REAL_FX_PACKAGES = new Set(
-  "javafx.animation javafx.beans javafx.beans.binding javafx.beans.property.adapter javafx.collections.transformation javafx.concurrent javafx.css javafx.print javafx.scene.control.cell javafx.scene.effect javafx.scene.robot javafx.scene.shape javafx.scene.transform javafx.util javafx.util.converter javafx.fxml javafx.scene.media javafx.scene.web javafx.embed.swing".split(" "),
+  "javafx.beans javafx.beans.binding javafx.beans.property.adapter javafx.collections.transformation javafx.concurrent javafx.css javafx.print javafx.scene.control.cell javafx.scene.effect javafx.scene.robot javafx.scene.transform javafx.util javafx.util.converter javafx.fxml javafx.scene.media javafx.scene.web javafx.embed.swing".split(" "),
 );
 
 /** An FX class's parents, nearest first. */
@@ -3576,17 +3612,19 @@ function fxInstead(pkg: string, name?: string): string {
   if (pkg === "javafx.scene.control") return `Its controls are ${FX_CONTROLS}.`;
   if (pkg === "javafx.scene.layout" || (pkg === "javafx.scene" && name === "Group")) return `Its panes are ${FX_PANES}.`;
   if (pkg === "javafx.scene.input" || /Event$/.test(name ?? "")) return `Of the events, it has ${FX_EVENTS}.`;
-  if (pkg === "javafx.scene.text") return "For text, use a Label; of javafx.scene.text it has only Font, with a family and a size, as in Font.font(20).";
+  if (pkg === "javafx.scene.text") return "For text, use a Label, or a Text in a Pane of shapes; of javafx.scene.text it has Font, with a family and a size, as in Font.font(20), and Text, as in new Text(10, 20, \"Points: 0\").";
   if (pkg === "javafx.scene.paint") return "Of javafx.scene.paint, it has Color (and Paint, what a color is).";
   if (pkg === "javafx.scene.image") return "Of javafx.scene.image, it has Image, WritableImage, PixelReader, PixelWriter and ImageView: pixels are read and written one at a time, with getArgb, getColor, setArgb and setColor.";
   if (pkg === "javafx.scene.chart") return "Of the charts, it has LineChart, BarChart and ScatterChart, with NumberAxis and CategoryAxis.";
   if (pkg === "javafx.scene.media") return fxNoSound(name);
-  if (/^javafx\.scene\.(?:shape|effect|transform)$/.test(pkg)) return "It doesn't have shapes as nodes: to draw, use a Canvas and its GraphicsContext (fillRect, fillOval, strokeLine, fillPolygon, fillText).";
-  if (pkg === "javafx.animation") return "It has no animations: each click, slider move or use of the mouse runs the program again from the start.";
+  if (pkg === "javafx.scene.shape") return "Of javafx.scene.shape, it has Shape, Polygon, Circle, Rectangle, Line and Path (what Shape.intersect gives).";
+  if (/^javafx\.scene\.(?:effect|transform)$/.test(pkg)) return "It has no effects or transforms: a node is moved with setTranslateX and setTranslateY and turned with setRotate, and a Canvas and its GraphicsContext draw (fillRect, fillOval, strokeLine, fillPolygon, fillText).";
+  if (pkg === "javafx.animation") return "Of javafx.animation, it has AnimationTimer, a game loop whose handle runs once per frame; Timeline, TranslateTransition and the other animations are part of real JavaFX but not of this version. To move or turn a node over time, change its translate or rotate a little in the timer's handle each frame.";
+  if (pkg === "javafx.util" && name === "Duration") return "Duration is the length of time a Timeline or a transition takes, and those animations are part of real JavaFX but not of this version. Of javafx.animation, it has AnimationTimer, a game loop whose handle runs once per frame: to move or turn a node over time, change its translate or rotate a little in handle each frame.";
   if (pkg === "javafx.beans.property" || pkg === "javafx.beans" || pkg === "javafx.beans.binding") return "Of the properties, it has StringProperty and SimpleStringProperty (a label's or a text field's textProperty()) and DoubleProperty and SimpleDoubleProperty (a slider's valueProperty()), with change listeners.";
   if (pkg === "javafx.collections") return "Of javafx.collections, it has ObservableList, the list that getChildren() gives, and FXCollections.observableArrayList(...).";
   if (pkg === "javafx.stage") return "Of javafx.stage, it has Stage, the window.";
-  if (pkg === "javafx.geometry") return "Of javafx.geometry, it has Insets and Pos.";
+  if (pkg === "javafx.geometry") return "Of javafx.geometry, it has Insets, Pos, Point2D, and Bounds with BoundingBox.";
   if (pkg === "javafx.event") return "Of javafx.event, it has Event, ActionEvent, EventHandler and EventType.";
   return `Its packages are ${list(FX_PACKAGES)}.`;
 }
@@ -3783,7 +3821,7 @@ function fxMethodList(fx: string): string {
 }
 
 /** The static methods of the practice version's classes (the others' methods belong to each object). scripts/explanations.test.mjs checks them against the library's class files. */
-const FX_STATIC: Record<string, string> = { Application: "launch", Platform: "runLater exit isFxApplicationThread", Font: "getDefault font", GridPane: "getColumnIndex getRowIndex", Color: "color rgb web", FXCollections: "observableArrayList" };
+const FX_STATIC: Record<string, string> = { Application: "launch", Platform: "runLater exit isFxApplicationThread", Font: "getDefault font", GridPane: "getColumnIndex getRowIndex", Color: "color rgb web", FXCollections: "observableArrayList", Shape: "intersect", KeyCode: "getKeyCode" };
 export { FX_STATIC as PRACTICE_JAVAFX_STATIC };
 
 /** The methods of a list, such as the children list that getChildren() gives. */
@@ -3861,11 +3899,14 @@ function fxMethod(d: Diagnostic, own: OwnClasses): string | null {
       return `${holder}, and Java Arena's practice version of JavaFX has no ${method}: its windows have no events of their own, such as setOnCloseRequest and setOnShown, which are part of real JavaFX. To do something as the program ends, after the last window closes, override stop() in your class that extends Application: JavaFX calls it then.`;
     const of = `${holder}, and Java Arena's practice version of JavaFX has no ${method}: of the events, it has ${FX_EVENTS}.`;
     if (FX_NODE_EVENT.test(method) && (fxIsKind(fx, "Node") || fx === "Scene"))
-      return `${of} Keyboard, scroll and drag-and-drop events and the other mouse events, such as setOnKeyPressed and setOnMouseMoved, are part of real JavaFX but not of this version. ${tip}`;
+      return `${of} Keyboard, scroll and drag-and-drop events and the other mouse events, such as setOnScroll and setOnMouseMoved, are part of real JavaFX but not of this version, except the key events of a Scene (scene.setOnKeyPressed). ${tip}`;
     return `${of} ${tip}`;
   }
   const elsewhere = FX_NODES.concat(Object.keys(FX).filter((k) => !FX_NODES.includes(k))).filter((k) => !fxIsKind(fx, k) && !fxIsKind(k, fx) && fxMethods(k).includes(method));
   const concrete = elsewhere.filter((k) => !elsewhere.some((o) => o !== k && fxIsKind(o, k)) || FX_NODES.includes(k));
+  // A Canvas draws through its GraphicsContext: name that first (the shapes' setFill is no help to a canvas).
+  if (fx === "Canvas" && concrete.includes("GraphicsContext"))
+    return `${has}: ${method} is a method of GraphicsContext, the canvas's drawing tools. Get them from the canvas and call it on them: GraphicsContext gc = ${v === "pane" ? "canvas" : v}.getGraphicsContext2D(); gc.${dots};`;
   if (concrete.length) {
     const call = fx === "Application" && concrete.includes("Stage") ? ` Call it on the Stage that start gets, as in stage.${dots}.` : "";
     return `${has}: in Java Arena's practice version of JavaFX, ${method} is a method of ${listed(concrete.slice(0, 6))}.${call}`;
@@ -4833,6 +4874,546 @@ function fxNumberArithmetic(d: Diagnostic, own: OwnClasses): string | null {
   return `${v} is a Number${listener}, an object that holds a number, and ${op} doesn't work on it. Take the number out of it first: ${v}.doubleValue() gives it as a double, and ${v}.intValue() as a whole number${example ? `,${example}` : ""}.`;
 }
 
+// ------------------------------------------------------------------ part 14.3: shapes, keys and a game loop
+
+/**
+ * The anonymous class whose body holds `at` in the code, as new AnimationTimer() { ... }: its type as
+ * written and where its { is; null when the innermost class body around `at` is a named class's.
+ */
+function anonymousAt(code: string, at: number): { type: string; open: number } | null {
+  let depth = 0;
+  for (let k = at - 1; k >= 0; k--) {
+    const ch = code[k];
+    if (ch === "}") depth++;
+    else if (ch === "{") {
+      if (depth > 0) {
+        depth--;
+        continue;
+      }
+      const before = code.slice(Math.max(0, k - 300), k);
+      const anon = /\bnew\s+((?:[\w$]+\s*\.\s*)*[\w$]+)\s*(?:<[^<>;{}]*(?:<[^<>;{}]*>[^<>;{}]*)*>)?\s*\([^;{}]*\)\s*$/.exec(before);
+      if (anon) return { type: anon[1].replace(/\s+/g, ""), open: k };
+      if (/\b(?:class|interface|enum|record)\s+[\w$]+[^;{}]*$/.test(before)) return null;
+    }
+  }
+  return null;
+}
+
+/** The methods a class body that opens at `open` declares (not those of classes inside it): name, parameters as written, and whether @Override is above it. */
+function methodsIn(code: string, text: string, open: number): { name: string; params: string; override: boolean }[] {
+  const close = bracketClose(code, open);
+  // The body with every block inside it (method bodies, inner classes) cut down to {}, positions kept.
+  let body = code.slice(open + 1, close);
+  for (let prev = ""; prev !== body; ) {
+    prev = body;
+    body = body.replace(/\{[^{}]*\}/g, (b) => `{${" ".repeat(b.length - 2)}}`);
+  }
+  const out: { name: string; params: string; override: boolean }[] = [];
+  for (const m of body.matchAll(/(@\s*(?:java\.lang\.)?Override\s+)?(?:(?:public|protected|private|static|final|synchronized|abstract)\s+)*[\w$<>[\]?,. ]+?\s+([\w$]+)\s*\(([^()]*)\)\s*(?:throws\s[^{;]*)?\{/g)) {
+    if (/^(?:if|for|while|switch|catch|return|new|else)$/.test(m[2])) continue;
+    const at = open + 1 + m.index + m[0].indexOf("(", m[0].indexOf(m[2]));
+    out.push({ name: m[2], params: text.slice(at + 1, at + 1 + m[3].length).replace(/\s+/g, " ").trim(), override: !!m[1] });
+  }
+  return out;
+}
+
+/** How an AnimationTimer's handle is written. */
+const FX_HANDLE = "public void handle(long now) { ... }";
+/** What handle is, in a sentence's words. */
+const FX_HANDLE_IS = "handle(long now), the method JavaFX calls once per frame (about 60 times a second), with exactly one parameter, a long: the time of the frame in nanoseconds";
+/** What handle is, in a few words. */
+const FX_HANDLE_SHORT = "handle(long now), which JavaFX calls once per frame";
+
+/** "<anonymous Main$1> is not abstract and does not override abstract method handle(long) in AnimationTimer": a timer without its handle(long), or with it misspelled or with other parameters. */
+function fxTimerHandle(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^(.+?) is not abstract and does not override abstract method handle\(long\) in AnimationTimer$/.exec(d.message);
+  const p = caretIn(d, own);
+  if (!m || !p || knows(own, "AnimationTimer")) return null;
+  const anonymous = m[1].startsWith("<anonymous ");
+  const open = p.code.indexOf("{", p.at);
+  if (open < 0) return null;
+  const who = anonymous ? "A new AnimationTimer() { ... } must write" : `${simple(m[1])} extends AnimationTimer, so it must write`;
+  const head = `${who} ${FX_HANDLE_IS}.`;
+  const methods = methodsIn(p.code, p.text, open);
+  const same = methods.find((x) => x.name === "handle");
+  if (same)
+    return `${head} Its handle takes ${same.params ? `(${same.params})` : "no parameter"} instead, so to Java it's another method, and the timer still has no handle(long). Write it as ${FX_HANDLE}${same.params ? "" : ", even when it doesn't use now"}.`;
+  const near = methods.find((x) => x.name.toLowerCase() === "handle" || editDistance(x.name.toLowerCase(), "handle") <= 2);
+  if (near)
+    return `${head} It has ${near.name}(${near.params}) instead: the name must be handle, spelled exactly so, or JavaFX never calls it. Rename it: ${FX_HANDLE}. ${
+      near.override
+        ? "The @Override above it already makes Java check that the method really replaces one, which is why Java also reports the wrong name at the method itself."
+        : "Write @Override above it: then Java checks that the method really replaces one, and says so at the method itself when the name is wrong."
+    }`;
+  const other = methods.find((x) => /^(?:final\s+)?long\s+[\w$]+$/.test(x.params));
+  if (other) return `${head} It has ${other.name}(${other.params}) instead, but JavaFX calls only handle: rename it, ${FX_HANDLE}.`;
+  return `${head} It has none yet: add it inside the braces, as in new AnimationTimer() { @Override public void handle(long now) { ... } }.start();`;
+}
+
+/**
+ * "method does not override or implement a method from a supertype" on a method of an AnimationTimer
+ * (an anonymous one or a class that extends it), or in an anonymous class whose JavaFX class isn't imported.
+ */
+function fxTimerOverride(d: Diagnostic, own: OwnClasses): string | null {
+  const lines = own.code.get(d.file);
+  const text = own.lines.get(d.file);
+  if (!lines || !text) return null;
+  const code = lines.join("\n");
+  const at = lineStart(lines, d.line);
+  const header = /^[^(;{}]*?([\w$]+)\s*\(([^)]*)\)/.exec(code.slice(at).replace(/^\s*@\s*(?:java\.lang\.)?Override\b/, ""));
+  if (!header) return null;
+  const name = header[1];
+  const params = header[2].replace(/\s+/g, " ").trim();
+  const anon = anonymousAt(code, at);
+  const type = anon ? simple(anon.type) : null;
+  const unknown = fxAnonymousUnknown(own, d.file, code, at);
+  if (unknown) return `This method is inside new ${unknown.type}() { ... }, and ${unknown.why}. Until Java knows the class, it can't tell what ${name} replaces, so the @Override fails. Add the import, and this error goes away.`;
+  const cls = classAt(own, d.file, d.line);
+  const timer = anon ? type === "AnimationTimer" : !!cls && cls.extends.includes("AnimationTimer");
+  if (!timer || knows(own, "AnimationTimer")) return null;
+  if (name === "handle")
+    return `@Override says that handle replaces AnimationTimer's handle, but AnimationTimer's takes exactly one parameter, a long (the time of the frame in nanoseconds), and this one takes ${params ? `(${params})` : "none"}. Write it as ${FX_HANDLE}${params ? "" : ", even when it doesn't use now"}: JavaFX calls it once per frame.`;
+  const near = editDistance(name.toLowerCase(), "handle") <= 2 ? " Did you mean handle? The name must be spelled exactly so." : "";
+  return `@Override says that ${name} replaces a method of AnimationTimer, and the one a timer writes is ${FX_HANDLE_SHORT} (besides it, AnimationTimer has only start and stop).${near} Write it as ${FX_HANDLE}, or, if ${name} is a method of its own, remove @Override.`;
+}
+
+/** The JavaFX class of the anonymous class around `at` (new AnimationTimer() { ... }) when the file doesn't import it, and why Java doesn't know it, or null. */
+function fxAnonymousUnknown(own: OwnClasses, file: string, code: string, at: number): { type: string; why: string } | null {
+  const anon = anonymousAt(code, at);
+  const type = anon ? simple(anon.type) : null;
+  if (!anon || !type || !FX[type] || knows(own, type) || anon.type.includes(".") || fxImported(own, file, FX[type].pkg, type)) return null;
+  return { type, why: `Java doesn't know ${type} here: it needs import ${FX[type].pkg}.${type}; at the top of the file (Java reports that too)` };
+}
+
+/** "cannot find symbol: method stop()" (no location) inside new AnimationTimer() { ... } when AnimationTimer isn't imported: the class's own methods are unknown too. */
+function fxAnonymousMethod(d: Diagnostic, own: OwnClasses): string | null {
+  const method = /symbol:\s+method ([\w$]+)\(/.exec(d.message)?.[1];
+  const p = caretIn(d, own);
+  if (!method || !p) return null;
+  const unknown = fxAnonymousUnknown(own, d.file, p.code, p.at);
+  if (!unknown || !fxMethods(unknown.type).includes(method)) return null;
+  return `${method} is a method of ${unknown.type}, and this code is inside new ${unknown.type}() { ... }, but ${unknown.why}. Add the import, and this error goes away.`;
+}
+
+/** "AnimationTimer is abstract; cannot be instantiated" and "Shape is abstract": new on an abstract class of the practice JavaFX. */
+function fxAbstract(d: Diagnostic, own: OwnClasses): string | null {
+  const name = simple(/^([\w$.]+) is abstract; cannot be instantiated/.exec(d.message)?.[1] ?? "");
+  if (knows(own, name) || !usesFX(own)) return null;
+  if (name === "AnimationTimer")
+    return `AnimationTimer is abstract: its ${FX_HANDLE_SHORT}, has no body there, since each timer writes its own. Create it with a body of its own, as an anonymous class: new AnimationTimer() { @Override public void handle(long now) { ... } }.start(); Or write a class that extends AnimationTimer and create that.`;
+  if (name === "Shape")
+    return "Shape is abstract: it's what every shape is, not a shape of its own. Create one of its kinds, a Polygon, a Circle, a Rectangle, a Line or a Text; a variable can still have the type Shape, as in Shape rock = new Circle(30);";
+  return null;
+}
+
+/** A KeyCode constant's name for a name that isn't one (LEFT for LEFT_ARROW, ESCAPE for ESC, DIGIT1 for 1), and how it was found, or null. */
+function keyCodeFor(word: string): { code: string; caps: boolean } | null {
+  const upper = word.toUpperCase();
+  if (KEY_CODES.includes(word)) return null;
+  if (KEY_CODES.includes(upper)) return { code: upper, caps: true };
+  const digit = /^(?:(?:KEY|VK|NUM(?:BER)?|DIGIT|D)_?)?([0-9])$/.exec(upper);
+  if (digit) return { code: `DIGIT${digit[1]}`, caps: false };
+  // KEY_LEFT, VK_LEFT, W_KEY and SPACEKEY name the key without KEY or VK.
+  const stem = upper.replace(/^(?:KEY|VK|KC)_/, "").replace(/_?KEY$/, "") || upper;
+  const bare = stem.replace(/[_\- ]/g, "");
+  // The closest constant: one edit away for short names (a letter swapped for its neighbour counts as one), two for longer ones, then with the same first letter.
+  const closest = (word: string, of: (k: string) => string, ok: (k: string) => boolean) => {
+    let best: string | undefined;
+    let bestDistance = 3;
+    for (const k of KEY_CODES) {
+      if (!ok(k)) continue;
+      const name = of(k);
+      const distance = swapDistance(name, word);
+      const limit = name.length <= 5 ? 1 : 2;
+      if (distance <= limit && (distance < 2 || name[0] === word[0]) && distance < bestDistance) [best, bestDistance] = [k, distance];
+    }
+    return best;
+  };
+  const found =
+    KEY_CODES.find((k) => k.replace(/_/g, "") === bare) ??
+    KEY_ALIASES[bare] ??
+    closest(stem, (k) => k, (k) => k.length > 1) ??
+    (bare.length > 5 ? closest(bare, (k) => k.replace(/_/g, ""), (k) => k.length > 5) : undefined);
+  return found ? { code: found, caps: false } : null;
+}
+
+/** The edit distance between two words, where two neighbouring letters swapped count as one edit (RIGTH is one away from RIGHT). */
+function swapDistance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  return d[a.length][b.length];
+}
+/** Other names people give keys, and KeyCode's (as the event lines take them, src/grader/window.ts), with a few more. */
+const KEY_ALIASES: Record<string, string> = {
+  ESC: "ESCAPE",
+  CTRL: "CONTROL",
+  SPACEBAR: "SPACE",
+  RETURN: "ENTER",
+  DEL: "DELETE",
+  BACKSPACE: "BACK_SPACE",
+  ARROWLEFT: "LEFT",
+  ARROWRIGHT: "RIGHT",
+  ARROWUP: "UP",
+  ARROWDOWN: "DOWN",
+  LEFTARROW: "LEFT",
+  RIGHTARROW: "RIGHT",
+  UPARROW: "UP",
+  DOWNARROW: "DOWN",
+  PGUP: "PAGE_UP",
+  PGDN: "PAGE_DOWN",
+  INS: "INSERT",
+  CAPSLOCK: "CAPS",
+  OPTION: "ALT",
+  CMD: "COMMAND",
+  WIN: "WINDOWS",
+};
+/** "KeyCode.LEFT (the key called Left)". */
+const keyCodeNamed = (code: string) => `KeyCode.${code} (the key ${/^DIGIT/.test(code) ? "" : "called "}${KEY_NAMES[KEY_CODES.indexOf(code)] ?? code}${/^DIGIT/.test(code) ? " above the letters" : ""})`;
+/** KeyCode's names in a sentence, for a name that isn't one. */
+const KEY_CODE_NAMES = "KeyCode names the keys as JavaFX does: LEFT, RIGHT, UP and DOWN for the arrow keys, SPACE, ENTER, ESCAPE, SHIFT and CONTROL, A to Z for the letters, and DIGIT0 to DIGIT9 for the digits above them (NUMPAD0 to NUMPAD9 on the number pad).";
+/** The sentence that names the closest KeyCode constant to a name, or "". */
+function keyCodeHint(word: string): string {
+  const k = keyCodeFor(word);
+  if (!k) return "";
+  if (k.caps) return ` Its constants are written in capital letters: ${keyCodeNamed(k.code)}.`;
+  return ` Did you mean ${keyCodeNamed(k.code)}?`;
+}
+
+/** "cannot find symbol: variable LEFT_ARROW, location: class KeyCode": a name that isn't one of KeyCode's constants. */
+function fxKeyCodeName(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+variable ([\w$]+)\n\s*location: class (?:javafx\.scene\.input\.)?KeyCode$/m.exec(d.message);
+  if (!m || knows(own, "KeyCode")) return null;
+  return `KeyCode has no constant ${m[1]}.${keyCodeHint(m[1])} ${KEY_CODE_NAMES}`;
+}
+
+/** A KeyCode for a piece of text in quotes ("LEFT", "a", "Left"), written as code: KeyCode.LEFT, or null. */
+function keyCodeOfText(literal: string | undefined): string | null {
+  if (literal == null) return null;
+  const word = literal.trim();
+  if (KEY_CODES.includes(word)) return `KeyCode.${word}`;
+  const named = KEY_NAMES.findIndex((n) => n.toLowerCase() === word.toLowerCase());
+  if (named >= 0) return `KeyCode.${KEY_CODES[named]}`;
+  const k = /^[\w$ -]+$/.test(word) ? keyCodeFor(word.replace(/[ -]/g, "_")) : null;
+  return k ? `KeyCode.${k.code}` : null;
+}
+
+/**
+ * "incomparable types: KeyCode and String" and "String cannot be converted to KeyCode": a key's code
+ * compared with or used as text, as in event.getCode() == "LEFT", case "UP": or map.put("LEFT", true).
+ */
+function fxKeyCodeText(d: Diagnostic, own: OwnClasses): string | null {
+  const compare = /^incomparable types: (KeyCode and String|String and KeyCode)$/.exec(d.message);
+  const convert = /^incompatible types: String cannot be converted to KeyCode$/.test(d.message);
+  const p = caretIn(d, own);
+  if ((!compare && !convert) || !p || knows(own, "KeyCode")) return null;
+  const lineText = own.lines.get(d.file)?.[d.line - 1] ?? "";
+  const lineCode = own.code.get(d.file)?.[d.line - 1] ?? "";
+  const enumIs = "a KeyCode is a constant of an enum, not text";
+  if (compare) {
+    // The two sides of the == or != at the caret.
+    const left = p.text.slice(expressionStart(p.code, p.at), p.at).trim();
+    const opEnd = p.at + (/^[=!]=/.exec(p.code.slice(p.at))?.[0].length ?? 0);
+    const right = p.text.slice(opEnd, expressionEnd(p.code, opEnd)).trim();
+    const [textSide, keySide] = compare[1].startsWith("KeyCode") ? [right, left] : [left, right];
+    const literal = /^"((?:[^"\\]|\\.)*)"$/.exec(textSide)?.[1];
+    const key = keyCodeOfText(literal);
+    if (literal != null) {
+      const fix = key ? `${keySide} == ${key}` : `${keySide} == KeyCode.LEFT, with the key's KeyCode constant`;
+      return `${keySide} is a KeyCode, and "${literal}" is a String: ${enumIs}, so the two can never be equal, and Java doesn't allow == between them. Compare it with the constant itself: ${fix}.${key ? "" : keyCodeHint(literal)}`;
+    }
+    if (/\bgetText\s*\(\s*\)$/.test(textSide.replace(/\s+/g, ""))) {
+      const event = textSide.replace(/\s*\.\s*getText\s*\(\s*\)$/, "");
+      return `${textSide} gives the key's text as a String (such as "a"), and ${keySide} is a KeyCode: they can never be equal. Compare the event's KeyCode instead: ${event}.getCode() == ${keySide}.`;
+    }
+    return `${keySide} is a KeyCode and ${textSide} is a String: ${enumIs}, so the two can never be equal. Compare KeyCodes with KeyCodes, as in event.getCode() == KeyCode.LEFT.`;
+  }
+  // case "UP": in a switch on a KeyCode.
+  const label = /^\s*case\s+"((?:[^"\\]|\\.)*)"/.exec(lineText);
+  if (label && /^\s*case\b/.test(lineCode)) {
+    const key = keyCodeOfText(label[1]);
+    return `This switch is on a KeyCode, so each case is one of KeyCode's constants, written by its name alone, without quotes: case ${key ? key.slice("KeyCode.".length) : "LEFT"}:${key ? "" : keyCodeHint(label[1])} ("${label[1]}" is text, a String, and ${enumIs}.)`;
+  }
+  const literal = /^"((?:[^"\\]|\\.)*)"/.exec(p.text.slice(p.at))?.[1];
+  if (literal != null) {
+    const key = keyCodeOfText(literal);
+    return `"${literal}" is text, a String, and here Java needs a KeyCode: ${enumIs}. Write the constant itself: ${key ?? "KeyCode.LEFT"}${key ? "" : ", with the key's name"}.${key ? "" : keyCodeHint(literal)}`;
+  }
+  // event.getText(), with javac's caret at its start or on its parenthesis.
+  const call = /^((?:[\w$]+\s*\.\s*)*[\w$]+)\s*\.\s*getText\s*\(\s*\)/.exec(p.text.slice(p.at)) ?? (p.code[p.at] === "(" ? /((?:[\w$]+\s*\.\s*)*[\w$]+)\s*\.\s*getText\s*$/.exec(p.text.slice(Math.max(0, p.at - 80), p.at)) : null);
+  if (call) return `${call[1]}.getText() gives the key's text as a String (such as "a"), and here Java needs a KeyCode. Use ${call[1]}.getCode(), which gives the key's KeyCode (such as KeyCode.A).`;
+  return null;
+}
+
+/** The value before the dot at the caret (speed in speed.x), as written, and where it starts, or null. */
+function receiverBeforeDot(p: { code: string; text: string; at: number }): { value: string; start: number } | null {
+  // javac's caret is on the dot (speed.x) or on the name after it.
+  const dot = p.code[p.at] === "." ? [""] : /\.\s*$/.exec(p.code.slice(Math.max(0, p.at - 50), p.at));
+  if (!dot) return null;
+  const end = p.at - (p.code[p.at] === "." ? 0 : dot[0].length);
+  let start = expressionStart(p.code, end);
+  // new Point2D(1, 2).getX: the new belongs to the value too.
+  const created = /\bnew\s+$/.exec(p.code.slice(Math.max(0, start - 20), start));
+  if (created) start -= created[0].length;
+  const v = p.text.slice(start, end).trim();
+  return v && v.length <= 40 ? { value: v, start } : null;
+}
+
+/** The value before the dot at the caret (speed in speed.x), as written, or null. */
+function valueBeforeDot(p: { code: string; text: string; at: number }): string | null {
+  return receiverBeforeDot(p)?.value ?? null;
+}
+
+/** Whether a value can be given a new value with =: a name, this.name, fields of fields, and array elements (points[0]), with no call and no new. */
+const pointAssignable = (v: string) => !/^new\b/.test(v) && /^[\w$]+(?:\s*\[[^\][()]*\])*(?:\s*\.\s*[\w$]+(?:\s*\[[^\][()]*\])*)*$/.test(v);
+/** Whether a value is the class Point2D itself (Point2D.x, Point2D.setX), not a Point2D. */
+const isPointClass = (v: string) => /^(?:javafx\s*\.\s*geometry\s*\.\s*)?Point2D$/.test(v);
+/** A value that needs no parentheses inside a longer expression: a number, a name, a field or a call. */
+const simpleOperand = (s: string) => /^(?:-?\d[\w.]*|[\w$]+(?:\s*(?:\.\s*[\w$]+|\([^()]*\)))*)$/.test(s);
+/** The operand in parentheses unless it's simple. */
+const grouped = (s: string) => (simpleOperand(s) ? s : `(${s})`);
+
+/** A Point2D never changes: what to write instead, in a sentence. */
+const pointNew = (v: string) => `A Point2D never changes once it's created: its methods, such as add and multiply, give a new Point2D, so keep that one in the variable, as in ${v} = ${v}.add(1, 0);`;
+/** For a Point2D that a call or new gives (ship.getMovement()), which no variable keeps: where a new one can go instead. */
+function pointNotKept(v: string): string {
+  const got = /^(.+?)\s*\.\s*get\s*\(([^()]*)\)$/.exec(v);
+  const where = got ? `put it back in its place, as in ${got[1]}.set(${got[2]}, ${v}.add(1, 0));` : "give it to the object it belongs to through a setter, or keep it in a variable of your own.";
+  return `This Point2D comes from ${/^new\b/.test(v) ? "new" : "a method call"}, not from a variable, so to change it, keep the new one somewhere: ${where}`;
+}
+
+/** "x has private access in Point2D": a Point2D's x or y read or changed as a variable. */
+function fxPointField(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^([xy]) has private access in (?:javafx\.geometry\.)?Point2D$/.exec(d.message);
+  const p = caretIn(d, own);
+  if (!m || !p || knows(own, "Point2D")) return null;
+  const xy = m[1];
+  const XY = xy.toUpperCase();
+  const v = valueBeforeDot(p) ?? "point";
+  if (isPointClass(v))
+    return `${v}.${xy} asks the class Point2D for ${xy === "x" ? "an" : "a"} ${xy}, but x and y are private, and each Point2D object has its own: they don't belong to the class. Read them with the methods of a Point2D in a variable, as in point.getX() and point.getY(), and make a new Point2D for other values, as in point = new Point2D(${xy === "x" ? "newX, point.getY()" : "point.getX(), newY"});`;
+  const get = (s: string) => s.replace(/\b([\w$]+(?:\s*\.\s*[\w$]+)*)\s*\.\s*([xy])\b(?!\s*\()/g, (_all, obj, f) => `${obj}.get${f.toUpperCase()}()`);
+  // The field's name ends after the caret (javac's caret is on the dot before it, or on the name).
+  const nameEnd = p.at + (/^\.?\s*[xy]\b/.exec(p.code.slice(p.at))?.[0].length ?? 1);
+  const after = p.code.slice(nameEnd);
+  const before = p.code.slice(Math.max(0, p.at - 60), p.at + (p.code[p.at] === "." ? 1 : 0));
+  const op = /^\s*([-+*/%]?=(?!=)|\+\+|--)/.exec(after)?.[1] ?? (/(\+\+|--)\s*[\w$.\s]*\.\s*$/.test(before) ? /(\+\+|--)\s*[\w$.\s]*\.\s*$/.exec(before)![1] : null);
+  const read = `A Point2D's x and y are private: read them with its methods, ${v}.getX() and ${v}.getY().`;
+  if (!op) return read;
+  const never = "A Point2D's x and y are private, and a Point2D never changes once it's created: its methods, such as add, give a new Point2D.";
+  if (!pointAssignable(v)) return `${never} ${pointNotKept(v)} (Read x and y with ${v}.getX() and ${v}.getY().)`;
+  // The value after the operator, up to the end of the statement, with any other x or y read through getX() or getY().
+  const from = nameEnd + (/^\s*(?:[-+*/%]?=)/.exec(after)?.[0].length ?? 0);
+  const rhs = op !== "++" && op !== "--" ? get(p.text.slice(from, expressionEnd(p.code, from)).trim()) : "";
+  const other = xy === "x" ? `${v}.getY()` : `${v}.getX()`;
+  const at = (val: string) => (xy === "x" ? `${val}, ${other}` : `${other}, ${val}`);
+  const scaled = /^[*/%]=$/.test(op) && rhs ? `${v}.get${XY}() ${op[0]} ${grouped(rhs)}` : null;
+  const fix =
+    op === "++" || op === "--"
+      ? `${v} = ${v}.add(${xy === "x" ? `${op === "++" ? 1 : -1}, 0` : `0, ${op === "++" ? 1 : -1}`});`
+      : op === "+=" && rhs
+        ? `${v} = ${v}.add(${xy === "x" ? `${rhs}, 0` : `0, ${rhs}`});`
+        : op === "-=" && rhs
+          ? `${v} = ${v}.subtract(${xy === "x" ? `${rhs}, 0` : `0, ${rhs}`});`
+          : op === "=" && rhs
+            ? `${v} = new Point2D(${at(rhs)});`
+            : scaled
+              ? `${v} = new Point2D(${at(scaled)});`
+              : `${v} = new Point2D(${at(`new${XY}`)});`;
+  return `${never} To change it, make a new one and keep it in the variable: ${fix} (Read x and y with ${v}.getX() and ${v}.getY().)`;
+}
+
+/** "cannot find symbol: method setX(int), location: variable speed of type Point2D": a method that would change a Point2D, which never changes. */
+function fxPointSetter(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+method ((?:set|move|translate|increase|decrease|change|update|scale|rotate|normali[sz]e|inc|dec)[\w$]*)\((.*)\)\n\s*location: (?:variable ([\w$]+) of type |class )(?:javafx\.geometry\.)?Point2D$/m.exec(d.message);
+  const p = caretIn(d, own);
+  if (!m || knows(own, "Point2D")) return null;
+  const method = m[1];
+  const written = p ? receiverBeforeDot(p) : null;
+  // The value as written (other.speed, points[0]) when it's the variable javac names, or javac's name.
+  const ends = (v: string) => !m[3] || new RegExp(`(?:^|\\.)\\s*${escapeRegExp(m[3])}$`).test(v);
+  const v = written && (!pointAssignable(written.value) || ends(written.value)) ? written.value : (m[3] ?? written?.value ?? "point");
+  if (isPointClass(v))
+    return `${v}.${method}(...) calls ${method} on the class Point2D itself, as a static method, but ${method} isn't a static method of Point2D, and Point2D has no ${method} at all: a Point2D never changes once it's created. Its methods, such as add and multiply, give a new Point2D, so keep that one in a variable of your own, as in point = point.add(1, 0);`;
+  const has = `${v} is a Point2D, and a Point2D has no ${method}(...).`;
+  // normalise, normalized: normalize, which gives a new Point2D.
+  if (/^normali[sz]/.test(method)) {
+    // speed.normalise(); on a line of its own: keep what normalize gives in the same variable.
+    const statement = !!p && !!written && /(?:^|[;{}])\s*$/.test(p.code.slice(0, written.start)) && /^(?:\.\s*)?[\w$]+\s*\([^()]*\)\s*;/.test(p.code.slice(p.at));
+    const keep = statement && pointAssignable(v) ? `, so keep it, as in ${v} = ${v}.normalize();` : `: use what it gives, as in Point2D direction = ${v}.normalize();`;
+    return `${has} It's spelled normalize: ${v}.normalize() gives a new Point2D of length 1 pointing the same way${keep}`;
+  }
+  if (!pointAssignable(v)) return `${has} A Point2D never changes once it's created: its methods, such as add and multiply, give a new Point2D. ${pointNotKept(v)} A call such as ${v}.add(1, 0); on a line of its own changes nothing: the new Point2D it gives is thrown away.`;
+  const instead =
+    /^setX$/.test(method)
+      ? ` To give it another x, write ${v} = new Point2D(newX, ${v}.getY());`
+      : /^setY$/.test(method)
+        ? ` To give it another y, write ${v} = new Point2D(${v}.getX(), newY);`
+        : "";
+  return `${has} ${pointNew(v)}${instead} A call such as ${v}.add(1, 0); on a line of its own changes nothing: the new Point2D it gives is thrown away.`;
+}
+
+/** "bad operand types for binary operator '+'" with a Point2D: arithmetic on points, which their methods do. */
+function fxPointArithmetic(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^bad operand types for binary operator '([^']+)'\n\s*first type:\s+(\S+)\n\s*second type:\s+(\S+)/.exec(d.message);
+  const p = caretIn(d, own);
+  if (!m || !p || knows(own, "Point2D") || ![m[2], m[3]].includes("Point2D")) return null;
+  const [, op, first, second] = m;
+  const left = p.text.slice(expressionStart(p.code, p.at), p.at).trim();
+  // speed += other: javac names the operator without its =, and the right side is everything after the =.
+  const compound = /^[-+*/%]$/.test(op) && p.code[p.at + op.length] === "=";
+  const opEnd = p.at + op.length + (compound ? 1 : 0);
+  const right = p.text.slice(opEnd, expressionEnd(p.code, opEnd)).trim();
+  const number = (t: string) => /^(?:int|long|double|float|short|byte|Integer|Double|Long)$/.test(t);
+  const way: Record<string, string | undefined> = {
+    "+": first === "Point2D" && second === "Point2D" ? `${left}.add(${right})` : undefined,
+    "-": first === "Point2D" && second === "Point2D" ? `${left}.subtract(${right})` : undefined,
+    "*": first === "Point2D" && number(second) ? `${left}.multiply(${right})` : second === "Point2D" && number(first) ? `${right}.multiply(${left})` : undefined,
+    "/": first === "Point2D" && number(second) ? `${left}.multiply(1.0 / ${grouped(right)})` : undefined,
+  };
+  // A compound assignment keeps the new point in the variable on the left, which must be the Point2D.
+  const fits = left.length <= 40 && right.length <= 40 && (!compound || (first === "Point2D" && pointAssignable(left)));
+  const value = fits ? way[op] : undefined;
+  const call = value && compound ? `${left} = ${value};` : value;
+  const methods = "add and subtract (another Point2D, or an x and a y), multiply (a number), and normalize, magnitude and distance";
+  return `Java's ${op}${compound ? "=" : ""} works on numbers, and a Point2D is an object, so it has methods for its arithmetic instead: ${methods}. Each gives a new Point2D${call ? `${compound ? ", so keep it in the variable" : ""}: write ${call}${compound ? "" : "."}` : "."}`;
+}
+
+/** "constructor Point2D in class Point2D cannot be applied to given types": new Point2D without its x and y. */
+function fxPointNew(d: Diagnostic, own: OwnClasses): string | null {
+  if (!/^constructor Point2D in class (?:javafx\.geometry\.)?Point2D cannot be applied[\s\S]*reason: actual and formal argument lists differ in length/.test(d.message) || knows(own, "Point2D")) return null;
+  return "A Point2D is a point (or a direction and a speed) with an x and a y, so new Point2D(...) takes both, as in new Point2D(0, 0) (Point2D.ZERO is that point) or new Point2D(1.5, -2).";
+}
+
+/** How the MOOC checks two shapes for a collision. */
+const FX_COLLIDE = "Shape.intersect(ship, rock).getBoundsInLocal().getWidth() != -1";
+/** What Shape.intersect gives, in a sentence. */
+const FX_INTERSECT_IS = `Shape.intersect(a, b) doesn't say true or false: it gives a new Shape, the area that a and b have in common, and that shape is empty when they don't overlap (it is never null). Its bounds then have a width of -1, so a collision is ${FX_COLLIDE}, true when the two overlap.`;
+
+/** Whether the statement around the caret calls intersect, or uses a variable that got what intersect gave. */
+function nearIntersect(p: { code: string; at: number }): boolean {
+  const from = Math.max(p.code.lastIndexOf(";", p.at - 1), p.code.lastIndexOf("{", p.at - 1), p.code.lastIndexOf("}", p.at - 1)) + 1;
+  const statement = p.code.slice(from, expressionEnd(p.code, p.at) + 1);
+  if (/\bintersect\s*\(/.test(statement)) return true;
+  return [...statement.matchAll(/[\w$]+/g)].some((w) => new RegExp(`\\b${escapeRegExp(w[0])}\\s*=\\s*(?:\\(\\s*[\\w$]+\\s*\\)\\s*)?(?:[\\w$]+\\s*\\.\\s*)*intersect\\s*\\(`).test(p.code.slice(0, from)));
+}
+
+/** A collision check written another way than the MOOC's: intersect's Shape compared with a number, used as a boolean, or a Bounds compared with a number. */
+function fxIntersectValue(d: Diagnostic, own: OwnClasses): string | null {
+  const p = caretIn(d, own);
+  if (!p || knows(own, "Shape") || !usesFX(own)) return null;
+  const operands = /^bad operand types for binary operator '([^']+)'\n\s*first type:\s+(\S+)\n\s*second type:\s+(\S+)/.exec(d.message);
+  if (operands && [operands[2], operands[3]].some((t) => /^(?:Bounds|BoundingBox)$/.test(t)))
+    return `getBoundsInLocal() gives the bounds of a node, a Bounds: the box around it, not a number. Its width is a number: getBoundsInLocal().getWidth(). For a collision, the MOOC's check is ${FX_COLLIDE}.`;
+  const shape = operands ? [operands[2], operands[3]].some((t) => /^(?:Shape|Path)$/.test(t)) : /^incompatible types: (?:Shape|Path) cannot be converted to boolean$/.test(d.message);
+  if (!shape || !nearIntersect(p)) return null;
+  return FX_INTERSECT_IS;
+}
+
+/** "cannot find symbol: method getWidth(), location: class Shape" on what intersect gave: a Bounds method called on the shape. */
+function fxIntersectMethod(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+method ([\w$]+)\((.*)\)\n\s*location: (?:variable [\w$]+ of type |class )(?:javafx\.scene\.shape\.)?(?:Shape|Path)$/m.exec(d.message);
+  const p = caretIn(d, own);
+  if (!m || !p || knows(own, "Shape") || !fxMethods("Bounds").includes(m[1]) || !nearIntersect(p)) return null;
+  return `${FX_INTERSECT_IS} ${m[1]}() is a method of those bounds, so it comes after getBoundsInLocal(): Shape.intersect(ship, rock).getBoundsInLocal().${m[1]}().`;
+}
+
+/** "method intersect in class Shape cannot be applied to given types" (ship.intersect(rock)), and intersects or another name on a shape: how two shapes are checked for a collision. */
+function fxIntersectCall(d: Diagnostic, own: OwnClasses): string | null {
+  if (knows(own, "Shape") || !usesFX(own)) return null;
+  const call = callAt(d, own);
+  if (/^method intersect in class Shape cannot be applied/.test(d.message)) {
+    if (!call || call.args.length !== 1 || !call.receiver || /^(?:javafx\.scene\.shape\.)?Shape$/.test(call.receiver.replace(/\s+/g, ""))) return null;
+    return `intersect is a static method of Shape: it belongs to the class, not to one shape, and takes both shapes. Write Shape.intersect(${call.receiver}, ${call.args[0]}) instead of ${call.receiver}.intersect(${call.args[0]}). ${FX_INTERSECT_IS.replace(/Shape\.intersect\(ship, rock\)/, `Shape.intersect(${call.receiver}, ${call.args[0]})`)}`;
+  }
+  const m = /symbol:\s+method (intersects|collides?(?:With)?|overlaps|hits|touches)\((.*)\)\n\s*location: (?:variable ([\w$]+) of type |class )(?:javafx\.scene\.shape\.)?([\w$]+)$/m.exec(d.message);
+  if (!m || !fxIsKind(m[4], "Shape") || !FX[m[4]]) return null;
+  const real = m[1] === "intersects" && m[4] !== "Shape" ? ` (A node's intersects(...) of real JavaFX takes a Bounds in the node's own coordinates, not another node, and the practice version doesn't have it; ${m[3] ?? "a"}.getBoundsInParent().intersects(other.getBoundsInParent()) compares only the boxes around two nodes.)` : "";
+  return `To check whether two shapes overlap, use Shape.intersect, a static method of Shape that takes both. ${FX_INTERSECT_IS}${real}`;
+}
+
+/** "cannot find symbol: variable getWidth, location: class Bounds": a method of a JavaFX class written without its parentheses, after a call. */
+function fxMethodAsVariableAfterCall(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+variable ([\w$]+)\n\s*location: (?:class|interface) (?:[\w$]+\.)*([\w$]+)$/m.exec(d.message);
+  const p = caretIn(d, own);
+  const fx = m ? fxTypeOf(own, m[2]) : null;
+  if (!m || !p || !fx || !fxMethods(fx).includes(m[1]) || (FX_STATIC[fx] ?? "").split(" ").includes(m[1])) return null;
+  if (p.code[p.at] !== "." && !/\.\s*$/.test(p.code.slice(0, p.at))) return null;
+  const v = valueBeforeDot(p);
+  if (v && /^[A-Z][\w$]*$/.test(v)) return null;
+  const parens = /^(?:get|is)[A-Z]/.test(m[1]) ? "()" : "(...)";
+  return `${m[1]} is a method of ${fx}, so it needs parentheses: ${v ? `${v}.` : ""}${m[1]}${parens}.`;
+}
+
+/** The classes of java.sql (JDBC) that programs use most, which this page's Java doesn't have. */
+const JDBC = /^(?:Connection|DriverManager|PreparedStatement|Statement|ResultSet|SQLException|ResultSetMetaData|DataSource)$/;
+/** Why there are no databases here, and where they are. */
+const NO_DATABASE =
+  "This page has no database: the Java that runs here has only Java's basic classes (java.base), not java.sql, and there's no database or database driver (such as H2's) to connect to. On your own computer, java.sql is part of the JDK and Maven adds H2 to the project; module 54, \"Libraries, Maven and databases\", shows how to run it there. In this page, keep the data in a data access object of your own that stores it in a list or a map.";
+
+/** "package java.sql does not exist", and its classes without their package: no database here. */
+function noDatabase(d: Diagnostic, own: OwnClasses): string | null {
+  const pkg = /^package ((?:java|javax)\.sql(?:\.[\w$.]+)?|org\.h2(?:\.[\w$.]+)?) does not exist/.exec(d.message)?.[1];
+  if (pkg?.startsWith("org.h2")) return `org.h2 is H2, a database written in Java, a library that a project gets through Maven (a dependency in its pom.xml). ${NO_DATABASE}`;
+  if (pkg) {
+    const name = /^\s*import\s+[\w$.]+\.([A-Z][\w$]*)\s*;/.exec(own.lines.get(d.file)?.[d.line - 1] ?? "")?.[1];
+    return `${name ? `${name} (${pkg}.${name})` : `The package ${pkg}`} is part of Java's classes for databases, JDBC. ${NO_DATABASE}`;
+  }
+  const name = /symbol:\s+(?:class|variable) ([\w$]+)\n\s*location: (?:class|interface|enum|record) /.exec(d.message)?.[1];
+  if (!name || !JDBC.test(name) || knows(own, name)) return null;
+  // Connection, Statement and DataSource may be classes of the program's own not written yet: only with signs of JDBC around.
+  const jdbc = (own.lines.get(d.file) ?? []).some((l) => /\bjava\.sql\b|\bDriverManager\b|"jdbc:/.test(l));
+  if (!jdbc && !/^(?:DriverManager|PreparedStatement|ResultSet|SQLException)$/.test(name)) return null;
+  return `${name} is part of java.sql, Java's classes for databases (JDBC), as in import java.sql.${name};. ${NO_DATABASE}`;
+}
+
+/**
+ * "cannot find symbol: class Gson" (or variable StringUtils) when the file imports it from a package
+ * that isn't here: a library's, H2's, or a package of real JavaFX that the practice version doesn't have.
+ */
+function importedFromMissing(d: Diagnostic, own: OwnClasses): string | null {
+  const name = /symbol:\s+(?:variable|class) ([A-Z][\w$]*)\n/.exec(d.message)?.[1];
+  if (!name || knows(own, name)) return null;
+  const full = (own.imports.get(d.file) ?? []).find((i) => i.endsWith(`.${name}`));
+  const pkg = full?.slice(0, -name.length - 1);
+  if (!pkg) return null;
+  if (/^javafx\./.test(pkg) && REAL_FX[name] === pkg && !FX[name]) return fxMissing(name, pkg);
+  const roots = ownPackages(own).map((p) => p.split(".")[0]);
+  if (!LIBRARY_ROOT.test(pkg) || roots.includes(pkg.split(".")[0])) return null;
+  const why = `${name} is the class the file imports from ${pkg}, and that package isn't here (Java reports that at the import too), so Java doesn't know ${name} either.`;
+  if (/^org\.h2\b/.test(pkg)) return `${why} ${NO_DATABASE}`;
+  if (/^org\.junit\.jupiter\b/.test(pkg)) return `${why} ${pkg} is JUnit 5, and this page has JUnit 4: import ${name === "Test" ? "org.junit.Test;" : `its ${name}`} instead${name === "Test" ? "" : " from org.junit"}.`;
+  if (JUNIT5.test(pkg)) return `${why} ${pkg} is part of JUnit 5, and this page has JUnit 4, which doesn't have it.`;
+  if (/^org\.junit(?:\.|$)/i.test(pkg)) return `${why} This page has JUnit 4, so ${pkg} is probably a misspelling: ${JUNIT4_PACKAGES}`;
+  return `${why} ${pkg} is probably a library, which a project on your own computer gets through Maven; in this page, a program can use Java's own classes, JUnit 4 and Java Arena's practice version of JavaFX, and no other libraries.`;
+}
+
+/** JUnit 5's packages (Jupiter, the Platform and Vintage), which this page doesn't have. */
+const JUNIT5 = /^org\.junit\.(?:jupiter|platform|vintage)\b/;
+/** JUnit 4's packages, for an import of it that's misspelled. */
+const JUNIT4_PACKAGES =
+  "JUnit 4's classes are in org.junit (Test, Before, After and Assert), org.junit.runner and org.junit.rules, written in small letters, and Test, Before and Assert are classes, not packages. Check the spelling, as in import org.junit.Test; and import static org.junit.Assert.assertEquals;.";
+
+/** Roots of package names that libraries use (org.apache, com.google, io.github), unlike Java's own (java, javax, jdk) and JavaFX's. */
+const LIBRARY_ROOT = /^(?:org|com|net|io|edu|dev|me|de|fi|nl|ch|uk|fr|se|no|dk|eu|info|biz)\.[\w$]+/;
+
+/** "package org.apache.commons.lang3 does not exist": a library that a project on your own computer would get through Maven. */
+function libraryPackage(d: Diagnostic, own: OwnClasses): string | null {
+  const pkg = /^package ([\w$.]+) does not exist/.exec(d.message)?.[1];
+  if (!pkg || !LIBRARY_ROOT.test(pkg)) return null;
+  const roots = ownPackages(own).map((p) => p.split(".")[0]);
+  if (roots.includes(pkg.split(".")[0])) return null;
+  const here = "In this page, a program can use Java's own classes (java.base), JUnit 4 and Java Arena's practice version of JavaFX, and no other libraries.";
+  if (JUNIT5.test(pkg))
+    return `${pkg} is ${/^org\.junit\.jupiter\b/.test(pkg) ? "" : "part of "}JUnit 5, and this page has JUnit 4: write its imports instead, such as import org.junit.Test; and import static org.junit.Assert.assertEquals;. ${here}`;
+  // org.Junit, org.junit.asserts: JUnit 4 is here, so a misspelling of its packages.
+  if (/^org\.junit(?:\.|$)/i.test(pkg)) return `There is no package ${pkg}: this page has JUnit 4, and that isn't one of its packages. ${JUNIT4_PACKAGES}`;
+  return `There is no package ${pkg} here. It isn't part of Java, so it's probably a library: on your own computer, a project gets one through Maven, as a dependency in its pom.xml (module 54, "Libraries, Maven and databases", shows how). ${here} If ${pkg} is meant to be a package of your own, check its spelling and that its files are in the folder ${pkg.replace(/\./g, "/")}/.`;
+}
+
 /** Color's errors: a value outside 0 to 255 for Color.rgb, outside 0.0 to 1.0 for Color.color and new Color, and text Color.web can't read. */
 function fxColor(m: string, c: CrashContext): string | null {
   // The Color method the program called: the outermost of Color's own frames.
@@ -5277,7 +5858,12 @@ function explainIllegal(m: string, c: CrashContext): string {
         : name.toUpperCase() !== name
           ? ` If the text comes from input, change it to capitals first: ${e}.valueOf(text.toUpperCase()).`
           : "";
-    return `${e}.valueOf gives the constant whose name it gets, and ${e} has no constant named "${name}": the name must match exactly, capital letters included.${hint}`;
+    // KeyCode's names (LEFT, not LEFT_ARROW): the closest one.
+    const fxKey = e === "KeyCode" && !c.own?.types.has("KeyCode");
+    const key = fxKey ? keyCodeFor(name.trim()) : null;
+    // A name close to no constant ("Fire", "JUMP"): capitals wouldn't help, so the names themselves.
+    const keyHint = key ? ` Did you mean ${key.code}? ${KEY_CODE_NAMES}` : fxKey && name.trim() && name.trim() === name ? ` ${KEY_CODE_NAMES}` : "";
+    return `${e}.valueOf gives the constant whose name it gets, and ${e} has no constant named "${name}": the name must match exactly, capital letters included.${keyHint || hint}`;
   }
   if (/^Comparison method violates its general contract/.test(m))
     return "Sorting found that the program's compareTo or Comparator gives answers that contradict each other, such as that a comes before b and also that b comes before a. It must give a negative number when the first comes first, 0 when they're equal and a positive number when the second comes first, the same way every time. For numbers, Integer.compare(first, second) or Double.compare(first, second) does that.";
@@ -5335,6 +5921,31 @@ function explainConcurrent(_m: string, _library: boolean, frames: string[]): str
   if (frames.some((f) => /^java\.util\.(?:Linked)?(?:HashMap|TreeMap)\b/.test(f)))
     return "The program added to or removed from a map or a set while a loop was going through it. Collect the changes and make them after the loop. To remove elements while going through them, use an Iterator: its remove() removes the element that next() gave last.";
   return "The program added to or removed from a list while a for-each loop was going through it. Loop over the indexes instead (going backwards when removing), or collect the changes and make them after the loop. To remove elements while going through the list, use an Iterator: its remove() removes the element that next() gave last.";
+}
+
+/**
+ * ConcurrentModificationException in an AnimationTimer's handle (the practice JavaFX's frames called
+ * it): a game that removes hit objects from a list while a for-each loop or forEach goes through it.
+ */
+function fxConcurrent(c: CrashContext): string | null {
+  if (!c.stack.some((f) => /\barena\.fx\.Frames\.runOne\b/.test(f)) || c.javaFrames.some((f) => /^java\.util\.(?:Linked)?(?:HashMap|TreeMap)\b/.test(f))) return null;
+  const line = lineOf(c, c.frames[0]);
+  // for (Circle rock : rocks) or rocks.forEach(rock -> ...) on the line the trace points at.
+  const each = line && /\bfor\s*\(\s*(?:final\s+)?[\w$.<>?,\s[\]]+?\s+([\w$]+)\s*:\s*((?:this\s*\.\s*)?[\w$]+)\s*\)/.exec(line.code);
+  const forEach = line && /((?:this\s*\.\s*)?[\w$]+)\s*\.\s*forEach\s*\(\s*\(?\s*([\w$]+)/.exec(line.code);
+  const list = (each?.[2] ?? forEach?.[1])?.replace(/^this\s*\.\s*/, "").replace(/\s+/g, "");
+  const item = each?.[1] ?? forEach?.[2] ?? "item";
+  const l = list ?? "list";
+  const how = each ? "a for-each loop" : forEach ? "forEach" : "a loop";
+  return `The game loop's handle went through ${list ?? "a list"} with ${how} and, inside it, removed or added an element of that same list, as a game does when it removes the objects that were hit: a list must not change while a loop goes through it. Change it after going through it, in one of these ways. Give each object an alive flag (a boolean with isAlive and setAlive), set it to false on a hit inside the loop, and after the loop remove the dead ones, ${l}.removeIf(${item} -> !${item}.isAlive()), and take their shapes out of the pane's children too. Or remove the hit ones with removeIf itself, which goes through the list and then removes each one for which its lambda gives true. Or go through a copy of the list, for (... ${item} : new ArrayList<>(${l})), so that removing from ${l} itself doesn't disturb the loop.`;
+}
+
+/** SQLException "No suitable driver found for jdbc:h2:./todo": a database address without its driver on the class path (on your own computer: Java Arena's page has no java.sql). */
+function noDriver(m: string): string {
+  const url = /^No suitable driver found for (\S+)/.exec(m)?.[1];
+  if (!url) return `The database said: ${sentence(m)}`;
+  const h2 = /^jdbc:h2:/.test(url) ? " For H2, that's the library com.h2database:h2, a dependency in the project's pom.xml (Maven then puts it on the class path)." : "";
+  return `DriverManager.getConnection found no database driver for the address ${url}: a driver for that kind of database must be on the class path.${h2} Module 54, "Libraries, Maven and databases", shows how to run a database program on your own computer; Java Arena's page has no database at all.`;
 }
 
 /** The line of the learner's code a frame points at, as written and with comments and strings blanked out (see codeOnly), when its file's text is known. */
@@ -5641,7 +6252,8 @@ const EXCEPTIONS: [RegExp, (message: string, c: CrashContext) => string][] = [
   [/InputMismatchException$/, () => "The program asked the Scanner for a number, but the next input wasn't one."],
   [/NoSuchElementException$/, (m, c) => explainNoSuchElement(m, c.library, c.javaFrames)],
   [/ClassCastException$/, (m, c) => explainCast(m, c.library, c)],
-  [/ConcurrentModificationException$/, (m, c) => explainConcurrent(m, c.library, c.javaFrames)],
+  [/ConcurrentModificationException$/, (m, c) => fxConcurrent(c) ?? explainConcurrent(m, c.library, c.javaFrames)],
+  [/SQLException$/, noDriver],
   [/PatternSyntaxException$/, (m, c) => explainRegex(m, c.library, c.javaFrames, c.more)],
   [/StackOverflowError$/, () => "A method kept calling itself (or methods kept calling each other) without stopping, until the call stack ran out of room. Check the stopping condition of the recursion."],
   [/OutOfMemoryError$/, () => "The program used up all its memory, for example by adding to a list forever."],

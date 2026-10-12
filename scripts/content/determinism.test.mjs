@@ -60,3 +60,27 @@ test("other unseeded randomness and the clock are flagged; seeded ones aren't", 
   // The message says how to shuffle with a seed.
   assert.match(check("Collections.shuffle(cards);")[0], /Collections\.shuffle\(list, new Random\(42\)\)/);
 });
+
+test("an AnimationTimer whose handle reads its now is flagged; one that ignores it, or counts frames, isn't", () => {
+  const timer = (body, extra = "") => nondeterminism([{ path: "Main.java", text: `import javafx.animation.AnimationTimer;\n\npublic class Main {\n    private long now;\n    private int frame;\n    void f() {\n        new AnimationTimer() {\n            @Override\n            public void handle(long now) {\n                ${body}\n            }\n        }.start();\n    }\n${extra}}\n` }]);
+  for (const body of ["System.out.println(now);", "long t = now / 1_000_000;", "if (now - last > 100) { last = now; }", "x += (now % 7);"]) {
+    const [m] = timer(body);
+    assert.match(m ?? "", /uses the now value that AnimationTimer's handle\(long now\) gets/, body);
+    assert.match(m, /made-up clock/);
+    assert.match(m, /count the frames in a field instead/);
+  }
+  // Not reading it: a field of the same name through this, frames counted, a comment or a string.
+  for (const body of ["frame++;", "this.now = 5;", "// now is not used\n                frame++;", 'String s = "now";', "long nowish = 3;"]) assert.deepEqual(timer(body), [], body);
+  // A class of its own, with final and a different name.
+  const own = nondeterminism([{ path: "Loop.java", text: "import javafx.animation.AnimationTimer;\n\nclass Loop extends AnimationTimer {\n    @Override\n    public void handle(final long t) {\n        if (t > 0) {\n            stop();\n        }\n    }\n}\n" }]);
+  assert.match(own[0] ?? "", /handle\(long t\)/);
+  // A key handler named handle isn't a timer.
+  assert.deepEqual(timer("frame++;", "    void handle(KeyEvent now) {\n        System.out.println(now);\n    }\n"), []);
+});
+
+test("an unseeded Random in a game says that the page runs the program again for every event", () => {
+  const [m] = check("Random r2 = new Random();");
+  assert.match(m, /new Random\(\) without a seed/);
+  assert.match(m, /runs it again from the start for every new click, key or frames line/);
+  assert.match(m, /new Random\(42\)/);
+});

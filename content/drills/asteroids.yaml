@@ -1,0 +1,256 @@
+topic: asteroids
+drills:
+  - type: predict
+    after: shapes
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.shape.Polygon fin = new javafx.scene.shape.Polygon(0, 0, 10, 0, 5, 8);
+      fin.setTranslateX(40);
+      fin.setRotate(fin.getRotate() + 30);
+      fin.setRotate(fin.getRotate() - 50);
+      System.out.println(fin.getTranslateX() + " " + fin.getRotate());
+      System.out.println(fin.getPoints().size());
+    why: "Translate and rotate are doubles that start at 0, so the shape is at x `40.0` and turned 30 - 50 = `-20.0` degrees. Moving and turning never change the corners: `getPoints()` still holds the 6 numbers it was given, an x and a y for each of the 3 corners."
+
+  - type: predict
+    after: keys-and-loop
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      Map<javafx.scene.input.KeyCode, Boolean> held = new HashMap<>();
+      held.put(javafx.scene.input.KeyCode.UP, true);
+      held.put(javafx.scene.input.KeyCode.UP, false);
+      boolean up = held.getOrDefault(javafx.scene.input.KeyCode.UP, true);
+      boolean down = held.getOrDefault(javafx.scene.input.KeyCode.DOWN, false);
+      System.out.println(up + " " + down + " " + held.size());
+    why: "The second `put` replaces the value of the key UP, so UP is `false`, and `getOrDefault` returns that value: its default is used only for a key that isn't in the map. DOWN was never put, so it gets the default `false`. The map has one key."
+
+  - type: predict
+    after: vectors
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.geometry.Point2D v = new javafx.geometry.Point2D(1, 2);
+      v.add(10, 10);
+      javafx.geometry.Point2D w = v.add(v).multiply(0.5);
+      System.out.println(v);
+      System.out.println(w.equals(v));
+    why: "A Point2D is immutable: `v.add(10, 10)` returns a new point that nobody keeps, so `v` is still (1, 2). `v.add(v)` is (2, 4), and half of it is (1, 2) again, so `w` equals `v`."
+
+  - type: predict
+    after: vectors
+    prompt: What does this print?
+    body: |
+      double angle = Math.toRadians(90);
+      System.out.println(Math.round(Math.cos(angle) * 4) + " " + Math.round(Math.sin(angle) * 4));
+      angle = Math.toRadians(180);
+      System.out.println(Math.round(Math.cos(angle) * 4) + " " + Math.round(Math.sin(angle) * 4));
+    why: "At 90 degrees the direction is (0, 1): down on the screen. At 180 degrees it's (-1, 0): left. Multiplied by 4 and rounded, the tiny errors of cos and sin (such as the cosine of 90 degrees, which is about 0.00000000000000006 instead of 0) disappear, and `Math.round` of a double gives a `long`, printed without `.0`."
+
+  - type: predict
+    after: collisions
+    prompt: "This code runs inside `start`. What does it print? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.shape.Rectangle a = new javafx.scene.shape.Rectangle(0, 0, 20, 10);
+      javafx.scene.shape.Rectangle b = new javafx.scene.shape.Rectangle(20, 0, 20, 10);
+      javafx.scene.layout.Pane pane = new javafx.scene.layout.Pane(a, b);
+      System.out.println(javafx.scene.shape.Shape.intersect(a, b).getBoundsInLocal().getWidth());
+      b.setTranslateX(-5);
+      System.out.println(javafx.scene.shape.Shape.intersect(a, b).getBoundsInLocal().getWidth());
+    why: "The first rectangle ends at x 20, where the second starts: they touch, but share no area, so the result is empty and its width is `-1.0`. Moved 5 to the left, the second one starts at 15, and they share a strip 5 pixels wide."
+
+  - type: fill
+    after: vectors
+    prompt: "This code runs inside `start`. Fill in the method that gives a new point with the push added to the velocity. (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.geometry.Point2D velocity = new javafx.geometry.Point2D(1, 0);
+      double angle = Math.toRadians(0);
+      velocity = velocity.[[add]](Math.cos(angle) * 2, Math.sin(angle) * 2);
+      System.out.println(velocity);
+    why: "`add(x, y)` returns a new Point2D with both numbers added, and the assignment keeps it. At 0 degrees the push of 2 goes all to the right: (1, 0) becomes (3, 0)."
+
+  - type: fill
+    after: collisions
+    prompt: "This code runs inside `start`. Fill in the comparison operator that makes `overlap` true when the two circles share some area. (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.shape.Circle bubble = new javafx.scene.shape.Circle(5);
+      javafx.scene.shape.Circle jelly = new javafx.scene.shape.Circle(5);
+      jelly.setTranslateX(8);
+      javafx.scene.layout.Pane pane = new javafx.scene.layout.Pane(bubble, jelly);
+      javafx.scene.shape.Shape shared = javafx.scene.shape.Shape.intersect(bubble, jelly);
+      boolean overlap = shared.getBoundsInLocal().getWidth() [[!=‖>]] -1;
+      System.out.println(overlap);
+    why: "An empty result of `Shape.intersect` has the width -1, and a non-empty one is 0 or wider, so `!= -1` and `> -1` both say the shapes overlap (`>= -1` would always be true). The centers are 8 apart and the radii add up to 10, so these circles overlap."
+
+  - type: bug
+    after: edges
+    prompt: "`wrap` should wrap any value, negative ones too, into the range from 0 up to `size`. Fix the line marked `// BUG`."
+    pre: |
+      public static double wrap(double value, double size) {
+          double result = value % size;
+          if (result < 0) {
+              result = result - size; // BUG
+          }
+          return result;
+      }
+    body: |
+      System.out.println(wrap(370, 360));
+      System.out.println(wrap(-10, 360));
+    fix: result = result + size;
+    why: "In Java a remainder has the sign of the number on the left: `-10 % 360` is -10. Taking `size` away makes it -370, even further out; adding `size` brings it into the sea, at 350. A positive value such as 370 gives the remainder 10, which is already right."
+
+  - type: bug
+    after: movers
+    prompt: "A TumblingKite should move as a Kite does and then turn. Fix the line marked `// BUG`."
+    classes: |
+      class Kite {
+          private int x;
+
+          public void move() {
+              x += 3;
+          }
+
+          public int getX() {
+              return x;
+          }
+      }
+
+      class TumblingKite extends Kite {
+          private int angle;
+
+          @Override
+          public void move() {
+              move(); // BUG
+              angle += 10;
+          }
+
+          public int getAngle() {
+              return angle;
+          }
+      }
+    body: |
+      TumblingKite k = new TumblingKite();
+      k.move();
+      k.move();
+      System.out.println(k.getX() + " " + k.getAngle());
+    fix: super.move();
+    why: "Inside TumblingKite, `move()` calls TumblingKite's own `move` again, which calls it again, until the program crashes with a StackOverflowError. `super.move()` runs the parent's version, which moves the TumblingKite by 3."
+
+  - type: compiles
+    after: keys-and-loop
+    prompt: "This code runs inside `start`. Will it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.animation.AnimationTimer timer = now -> System.out.println("frame");
+      timer.start();
+    why: "A lambda can only stand for an interface with one abstract method. AnimationTimer is an abstract class, so it takes a class that extends it, such as an anonymous class: `new AnimationTimer() { @Override public void handle(long now) { ... } }`."
+
+  - type: compiles
+    after: movers
+    prompt: "This code runs inside `start`. Will it compile? (Drills have no import lines, so JavaFX's classes are written with their full names.)"
+    body: |
+      javafx.scene.shape.Shape shape = new javafx.scene.shape.Circle(3);
+      shape.setTranslateX(5);
+      shape.setRotate(45);
+      System.out.println(shape.getTranslateX() + " " + shape.getRotate());
+    why: "A Circle is a Shape, so a variable of the type Shape can hold it, as Mover's field does. Translate and rotate are methods of Node, which every Shape is, so they can be called through the Shape variable."
+
+  - type: choice
+    after: keys-and-loop
+    prompt: Why does the game keep the held keys in a `Map<KeyCode, Boolean>` and turn the submarine in the AnimationTimer, rather than turning it in the key pressed handler?
+    choices:
+      - "A key handler can't change a shape's rotate."
+      - "Holding a key gives one press here (and, on a computer, repeated presses only after a pause), while the game loop runs in every frame, so turning there is smooth and the same everywhere."
+      - "The map makes the program faster."
+      - "`setOnKeyPressed` works only for letter keys."
+    answer: 2
+    why: "The pressed handler runs once per press. Here a held key isn't repeated at all, and on a computer its repeats start after a short pause and come about 30 times a second, so turning in the handler would be jerky. The map remembers which keys are down, and the timer acts on them in every frame."
+
+  - type: choice
+    after: collisions
+    prompt: Why do the games of this module make their Random with a seed, as in `new Random(8)`?
+    choices:
+      - "Without a seed, `nextInt` would always return 0."
+      - "A seed makes the numbers more random."
+      - "The page runs the program again from the start for every new key or frames line, so the jellyfish must be in the same places on every run."
+      - "JavaFX can't use a Random without a seed."
+    answer: 3
+    why: "Each new event on the page reruns the whole program. A seeded Random gives the same numbers in the same order on every run, so the game continues where it was; an unseeded one would place the jellyfish elsewhere every time, and the window couldn't be compared with the model solution's."
+
+  - type: boss
+    after: points-and-the-end
+    prompt: |
+      Count the shots. Make a window whose scene's root is a `Pane` with the preferred size 200 x 60, holding one `Text` made with `new Text(10, 30, "Shots: 0")`. Every press of Space adds one shot, and the Text then says `Shots: 1`, `Shots: 2` and so on; at each shot the program also prints the same text. Other keys do nothing. The window's title is `Shots`. Put the key handler on the scene.
+    seed: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.input.KeyCode;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.text.Text;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+
+          @Override
+          public void start(Stage stage) {
+              Pane pane = new Pane();
+
+              stage.setScene(new Scene(pane));
+              stage.setTitle("Shots");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    solution: |
+      import javafx.application.Application;
+      import javafx.scene.Scene;
+      import javafx.scene.input.KeyCode;
+      import javafx.scene.layout.Pane;
+      import javafx.scene.text.Text;
+      import javafx.stage.Stage;
+
+      public class Main extends Application {
+          private int shots = 0;
+
+          @Override
+          public void start(Stage stage) {
+              Pane pane = new Pane();
+              pane.setPrefSize(200, 60);
+              Text text = new Text(10, 30, "Shots: 0");
+              pane.getChildren().add(text);
+
+              Scene scene = new Scene(pane);
+              scene.setOnKeyPressed(event -> {
+                  if (event.getCode() == KeyCode.SPACE) {
+                      shots++;
+                      text.setText("Shots: " + shots);
+                      System.out.println("Shots: " + shots);
+                  }
+              });
+
+              stage.setScene(scene);
+              stage.setTitle("Shots");
+              stage.show();
+          }
+
+          public static void main(String[] args) {
+              launch(Main.class);
+          }
+      }
+    hints:
+      - "The count must be a field, `private int shots = 0;`, since the lambda changes it. The Text goes into the pane with `pane.getChildren().add(text);`."
+      - "`scene.setOnKeyPressed(event -> { if (event.getCode() == KeyCode.SPACE) { ... } });`, where the braces add one, call `text.setText(...)` and print."
+    tests:
+      - events: |
+          key SPACE
+          key SPACE
+      - events: |
+          key A
+          key SPACE
+          press key LEFT
+          key SPACE
+          release key LEFT
+          key SPACE
+        hidden: true
+      - events: []
+        hidden: true

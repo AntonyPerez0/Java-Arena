@@ -1,13 +1,18 @@
 // End-to-end tests in headless Chromium against the built site (dist/), served under BASE_PATH
 // like GitHub Pages: pre-rendered pages, lessons (fill-ins, code challenges, hidden tests, rules,
 // hints, solutions, progress), the engine prototype page, errors and crashes explained, endless
-// loops stopped, the mobile-data question holding the download, offline use, and axe (WCAG 2.2 AA)
+// loops stopped, the mobile-data question holding the download, offline use, moving progress between
+// browsers (transfer links, QR codes, progress files), projects (whatever content/projects has), the
+// personal record page and its print styles (a PDF printed), and axe (WCAG 2.2 AA)
 // on every page type in both themes and at phone widths.
 //
 // Usage: npm run build && node scripts/e2e.mjs [--shots dir]
 // E2E_ONLY=<regular expression> runs only the tests whose names match (while working on something).
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
+import jsQR from 'jsqr';
 import { launchChromium } from './browser.mjs';
 import { serve } from './serve.mjs';
 import { indentProblems } from '../src/grader/style.js';
@@ -128,7 +133,9 @@ async function setCode(page, text) {
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.insertText(text);
 }
-const editorText = (page) => page.evaluate(() => [...document.querySelectorAll('.cm-content .cm-line')].map((l) => l.textContent).join('\n'));
+// The whole text of the (first) editor: CodeMirror only draws the lines in view, so the `.cm-line`
+// nodes can hold part of a long program. src/components/CodeEditor.tsx gives the editor this hook.
+const editorText = (page) => page.evaluate(() => document.querySelector('.cm-editor').javaArenaText());
 const MAIN = (body) => `public class Main {\n    public static void main(String[] args) {\n${body}\n    }\n}\n`;
 
 console.log('Pages');
@@ -144,6 +151,8 @@ const PRERENDERED = {
   'placement/': 'Placement quiz',
   'settings/': 'Settings',
   'about/': 'About and credits',
+  'transfer/': 'Move your progress',
+  'projects/': 'Projects',
 };
 await test('every page is pre-rendered with its own title, description, canonical link and text', async () => {
   for (const [path, h1] of Object.entries(PRERENDERED)) {
@@ -167,6 +176,8 @@ await test('sitemap and robots', async () => {
   expect(sitemap.includes('/bench/</loc>'), 'sitemap lists the prototype page');
   expect(sitemap.includes('/learn/reading-input/joining-strings/</loc>'), 'sitemap lists lesson steps');
   expect(!sitemap.includes('404'), 'no 404 page in the sitemap');
+  expect(!sitemap.includes('/transfer/'), 'no transfer page in the sitemap');
+  expect((await (await fetch(BASE + 'transfer/')).text()).includes('<meta name="robots" content="noindex">'), 'the transfer page is not indexed');
   const robots = await (await fetch(BASE + 'robots.txt')).text();
   expect(robots.includes('Sitemap:'), 'robots.txt points to the sitemap');
 });
@@ -3242,6 +3253,8 @@ await test('module 54 lesson: an xml block is shown colored under its file\'s na
   const i = texts.indexOf(fragText);
   expect(i >= 0, `no Java block shows the fragment exactly (${texts.length} Java blocks)`);
   const fragPre = javaPres.nth(i);
+  // The coloring is applied a moment after the text shows: wait for it (a slow runner needs longer).
+  await fragPre.locator('span.tk-kw', { hasText: /^try$/ }).first().waitFor({ timeout: 15000 }).catch(() => {});
   expect((await fragPre.locator('span.tk-kw', { hasText: /^try$/ }).count()) >= 1 && (await fragPre.locator('span.tk-str').count()) >= 1, 'the fragment is colored');
   expect((await fragPre.getAttribute('tabindex')) === '0', 'the fragment takes the keyboard focus to scroll');
   expect((await fragPre.locator('xpath=..').locator('button').count()) === 0, 'the fragment has a button');
@@ -3825,6 +3838,780 @@ await test('placement quiz: the first miss sets the start; skipping unlocks dril
   await ctx.close();
 });
 
+console.log('Moving progress');
+const KEY = 'java-arena-v1';
+const T = 1_760_000_000_000;
+const PHONE = { viewport: { width: 390, height: 860 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+const freshSettings = (over = {}) => ({ theme: 'system', textScale: 1, mobileData: false, sound: false, unlockAll: false, topicsOff: [], boss: true, keys: true, ...over });
+/** Saved progress as the store keeps it. */
+const progress = (over = {}) => ({ version: 1, steps: {}, drills: {}, dm: { best: { deathmatch: 0, casual: 0, warmup: 0, interview: 0 }, runs: [], reps: 0, kills: 0, bossKills: 0, days: {} }, daily: {}, placed: [], settings: freshSettings(), ...over });
+/** A phone-sized browser whose saved progress starts as `st` (and stays as the page changes it). */
+async function phoneWith(st, opts = {}) {
+  const r = await newPage({ ...PHONE, ...opts });
+  if (st) await r.ctx.addInitScript(([k, v]) => localStorage.getItem(k) || localStorage.setItem(k, v), [KEY, JSON.stringify(st)]);
+  return r;
+}
+const saved = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY);
+/** On 320 and 390 px phones in both themes: nothing scrolls sideways and axe passes. */
+async function phonesBothThemes(page, label) {
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 860 });
+    await noOverflow(page, `${label} at ${width} px`);
+    for (const colorScheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme });
+      await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+      await axe(page, `${label} at ${width} px, ${colorScheme} theme`);
+    }
+  }
+  await page.setViewportSize(PHONE.viewport);
+}
+/** Screenshots of one part of the page at 390 px in both themes (with --shots). */
+async function partShots(page, selector, name) {
+  if (!SHOTS) return;
+  await page.setViewportSize(PHONE.viewport);
+  // The sticky header would cover the part where the page scrolls to it.
+  await page.evaluate(() => document.querySelector('.topbar')?.style.setProperty('position', 'static'));
+  for (const colorScheme of ['dark', 'light']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await page.locator(selector).first().screenshot({ path: `${SHOTS}/${name}-390-${colorScheme}.png` });
+  }
+  await page.evaluate(() => document.querySelector('.topbar')?.style.removeProperty('position'));
+}
+async function makeLink(page, withCode) {
+  await page.goto(BASE + 'settings/');
+  await page.check(`input[name="transfer-what"][value="${withCode ? 'code' : 'progress'}"]`);
+  await page.click('text=Make a transfer link');
+  await page.locator('#transfer-link-text').waitFor();
+  return page.locator('#transfer-link-text').inputValue();
+}
+
+// The learner on the first phone: two steps done (one with code saved later than the second phone's), drills, a run, dark theme.
+const phoneA = progress({
+  steps: {
+    'printing-first-program': { done: true, doneAt: T + 1000, clean: true, challenges: { 0: { done: true, hintsUsed: 0, attempts: 1, code: 'public class Main { /* from phone A */ }', savedAt: T + 900 }, 1: { done: true, hintsUsed: 0, attempts: 1 }, 2: { done: true, hintsUsed: 0, attempts: 2 } } },
+    'printing-several-lines': { done: true, doneAt: T + 2000, challenges: { 0: { done: true, hintsUsed: 1, attempts: 3, code: 'A newer program', savedAt: T + 5000 } } },
+  },
+  drills: { 'printing-1': { box: 3, right: 2, wrong: 0, last: T + 3000, due: T + 3000 + 86_400_000 } },
+  dm: { best: { deathmatch: 5, casual: 0, warmup: 0, interview: 0 }, runs: [{ at: T + 100, mode: 'deathmatch', streak: 5, reps: 6, kills: 5 }], reps: 6, kills: 5, bossKills: 0, days: {} },
+  settings: freshSettings({ theme: 'dark', textScale: 1.25 }),
+});
+// The second phone: a step the first doesn't have, older code in one challenge, the light theme.
+const phoneB = progress({
+  steps: {
+    'printing-print-and-println': { done: true, doneAt: T + 500, challenges: { 0: { done: true, hintsUsed: 0, attempts: 1 } } },
+    'printing-several-lines': { done: false, challenges: { 0: { done: false, hintsUsed: 0, attempts: 1, code: 'An older program', savedAt: T + 10 } } },
+  },
+  settings: freshSettings({ textScale: 1.125 }),
+});
+
+await test('moving progress: a link made on one phone opens in another browser and merges (a summary first, the address loses #p=, a reload offers nothing); axe on the summary in both themes at 320 and 390 px', async () => {
+  const a = await phoneWith(phoneA);
+  const link = await makeLink(a.page, true);
+  expect(/\/Java-Arena\/transfer\/#p=[A-Za-z0-9_-]+$/.test(new URL(link).pathname + new URL(link).hash), link);
+  const told = await a.page.locator('.transfer-length').innerText();
+  expect(told.includes(`${link.length.toLocaleString('en-US')} characters`), told);
+  await a.ctx.close();
+
+  const b = await phoneWith(phoneB);
+  await b.page.goto(link);
+  const review = b.page.locator('.import-review');
+  await review.waitFor();
+  const text = await review.innerText();
+  for (const words of ['adds 2 finished steps', 'keeps your 1 finished step that the import doesn\'t have', 'replaces your code in 1 challenge where the import\'s is newer', 'Merge into my progress', 'Replace my progress'])
+    expect(text.toLowerCase().includes(words.toLowerCase()), `the summary says "${words}": ${text}`);
+  // Nothing changes before a choice.
+  expect((await saved(b.page)).steps['printing-first-program'] === undefined, 'nothing imported yet');
+  await b.page.emulateMedia({ colorScheme: 'dark' });
+  await phonesBothThemes(b.page, 'the import summary');
+  await partShots(b.page, '.transfer-page .card', 'transfer-summary');
+  await b.page.click('button:has-text("Merge into my progress")');
+  await b.page.locator('.transfer-done').waitFor();
+  expect(!b.page.url().includes('#p='), `the address keeps the link: ${b.page.url()}`);
+  const st = await saved(b.page);
+  expect(st.steps['printing-first-program'].done && st.steps['printing-print-and-println'].done, 'steps from both');
+  expect(st.steps['printing-several-lines'].challenges[0].code === 'A newer program', 'the code saved later');
+  expect(st.steps['printing-several-lines'].done, 'done in either');
+  expect(st.drills['printing-1']?.box === 3 && st.dm.best.deathmatch === 5, 'drills and Deathmatch');
+  expect(st.settings.textScale === 1.125 && st.settings.theme === 'system', 'settings stay local on merge');
+  await b.page.reload();
+  await b.page.locator('#main h1').waitFor();
+  expect((await b.page.locator('.import-review').count()) === 0, 'a reload offers nothing');
+  expect(b.errors.length === 0, b.errors.join('\n'));
+  await b.ctx.close();
+});
+
+await test('moving progress: Replace makes the progress and settings the import\'s; a damaged or cut link changes nothing', async () => {
+  const a = await phoneWith(phoneA);
+  const link = await makeLink(a.page, false);
+  await a.ctx.close();
+  const b = await phoneWith(phoneB);
+  await b.page.goto(link);
+  await b.page.locator('.import-review').waitFor();
+  expect((await b.page.locator('.import-review').innerText()).includes('without code'), 'a link without code says so');
+  await b.page.click('text=Replace my progress');
+  await b.page.locator('.transfer-done').waitFor();
+  const st = await saved(b.page);
+  expect(!st.steps['printing-print-and-println'], 'the local step is gone');
+  expect(st.steps['printing-first-program'].done && st.steps['printing-first-program'].challenges[0].code === undefined, 'progress only: no code');
+  expect(st.settings.theme === 'dark' && st.settings.textScale === 1.25, 'settings replaced');
+  expect(await b.page.evaluate(() => document.documentElement.dataset.theme) === 'dark', 'the page takes the new theme');
+  // Damaged links: a cut one, and nonsense.
+  const before = JSON.stringify(await saved(b.page));
+  for (const bad of [link.slice(0, link.length - 12), BASE + 'transfer/#p=not*a*link']) {
+    // On /transfer/ already, a new link is only a change of the hash: reload so each link is read
+    // by a fresh page, not checked against the message the one before it left.
+    await b.page.goto(bad);
+    await b.page.reload();
+    const msg = await b.page.locator('.transfer-error').innerText();
+    expect(/damaged|incomplete/.test(msg), msg);
+    expect(JSON.stringify(await saved(b.page)) === before, 'nothing changed');
+  }
+  await b.ctx.close();
+});
+
+await test('moving progress: another open tab that saves after a Merge or a Replace keeps the import (its older code, drills and steps don\'t come back)', async () => {
+  const a = await phoneWith(phoneA);
+  const link = await makeLink(a.page, true);
+  await a.ctx.close();
+  for (const choice of ['Merge into my progress', 'Replace my progress']) {
+    const b = await phoneWith(phoneB);
+    // The other tab: open on Settings with phone B's progress (and its older code) before the import.
+    const other = await b.ctx.newPage();
+    const otherErrors = [];
+    other.on('pageerror', (e) => otherErrors.push(e.message));
+    await other.goto(BASE + 'settings/');
+    await other.locator('input[name="size"]').first().waitFor();
+    await b.page.goto(link);
+    await b.page.locator('.import-review').waitFor();
+    await b.page.click(`button:has-text("${choice}")`);
+    await b.page.locator('.transfer-done').waitFor();
+    // The other tab then saves something that isn't progress.
+    await other.waitForTimeout(300);
+    await other.check('input[name="size"][value="1.4"]');
+    // The other tab saves a moment later (its save waits a little); wait for that write, not a fixed time.
+    await other.waitForFunction((k) => JSON.parse(localStorage.getItem(k) ?? 'null')?.settings?.textScale === 1.4, KEY);
+    const st = await saved(b.page);
+    expect(st.steps['printing-several-lines']?.challenges[0].code === 'A newer program', `${choice}: the import's newer code stays: ${JSON.stringify(st.steps['printing-several-lines'])}`);
+    expect(st.drills['printing-1']?.box === 3, `${choice}: the import's drill stays`);
+    expect(st.settings.textScale === 1.4, `${choice}: the other tab's setting is saved`);
+    if (choice.startsWith('Replace')) expect(!st.steps['printing-print-and-println'], 'Replace: the step it removed doesn\'t come back');
+    else expect(st.steps['printing-print-and-println']?.done, 'Merge: the local step stays');
+    // The other tab shows the import too, and its next save is the same.
+    await other.reload();
+    await other.locator('input[name="size"]').first().waitFor();
+    expect(JSON.stringify((await saved(other)).steps) === JSON.stringify(st.steps), `${choice}: a reload of the other tab keeps it`);
+    expect(b.errors.length === 0 && otherErrors.length === 0, [...b.errors, ...otherErrors].join('\n'));
+    await b.ctx.close();
+  }
+});
+
+await test('moving progress: a progress file downloads with code and loads in another browser; a newer or wrong file changes nothing', async () => {
+  const a = await phoneWith(phoneA);
+  await a.page.goto(BASE + 'settings/');
+  const [download] = await Promise.all([a.page.waitForEvent('download'), a.page.click('text=Download a progress file')]);
+  expect(/^java-arena-progress-\d{4}-\d{2}-\d{2}\.json$/.test(download.suggestedFilename()), download.suggestedFilename());
+  const file = join(mkdtempSync(join(tmpdir(), 'ja-progress-')), download.suggestedFilename());
+  await download.saveAs(file);
+  const json = JSON.parse(readFileSync(file, 'utf8'));
+  expect(json.format === 'java-arena-progress' && json.version === 1 && json.withCode === true && json.site.endsWith('/Java-Arena/'), JSON.stringify({ ...json, data: '...' }));
+  expect(json.data.steps['printing-first-program'].challenges[0].code.includes('from phone A'), 'the file has the code');
+  await a.ctx.close();
+
+  const b = await phoneWith(phoneB);
+  await b.page.goto(BASE + 'settings/');
+  const before = JSON.stringify(await saved(b.page));
+  // A file from a newer version, and one that isn't a progress file.
+  for (const [content, words] of [[JSON.stringify({ ...json, version: 99 }), 'newer version'], ['{"hello": 1}', "isn't a Java Arena progress file"]]) {
+    await b.page.setInputFiles('[data-testid="progress-file"]', { name: 'p.json', mimeType: 'application/json', buffer: Buffer.from(content) });
+    await b.page.waitForFunction((w) => document.querySelector('.transfer-file-message')?.textContent.includes(w), words);
+    expect(JSON.stringify(await saved(b.page)) === before, 'nothing changed');
+  }
+  await b.page.setInputFiles('[data-testid="progress-file"]', file);
+  await b.page.locator('.import-review').waitFor();
+  expect((await b.page.locator('.import-review').innerText()).includes('This progress file was made on'), 'the summary names the file');
+  await phonesBothThemes(b.page, 'settings with a file\'s summary');
+  await b.page.click('button:has-text("Merge into my progress")');
+  await b.page.waitForFunction(() => document.querySelector('.transfer-file-message')?.textContent.startsWith('Merged.'));
+  const st = await saved(b.page);
+  expect(st.steps['printing-first-program'].challenges[0].code.includes('from phone A') && st.steps['printing-print-and-println'].done, 'merged with code');
+  // The focus moves once the message has rendered: wait for it rather than read it at once.
+  const focused = await b.page.waitForFunction(() => document.activeElement?.classList.contains('transfer-file-message'), null, { timeout: 10000 }).then(() => true, () => false);
+  expect(focused, 'focus moves to the message');
+  await b.ctx.close();
+});
+
+/** Reads the QR code on the page as drawn at its size on screen (in CSS pixels), with jsQR. */
+async function readQr(page) {
+  const img = await page.locator('.transfer-qr svg').evaluate(async (svg) => {
+    const box = svg.getBoundingClientRect();
+    const w = Math.round(box.width);
+    const src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg).replace('<svg', `<svg width="${w}" height="${w}"`));
+    const im = new Image();
+    im.src = src;
+    await im.decode();
+    const c = document.createElement('canvas');
+    c.width = c.height = w;
+    const g = c.getContext('2d');
+    g.drawImage(im, 0, 0, w, w);
+    return { w, data: [...g.getImageData(0, 0, w, w).data] };
+  });
+  return { width: img.w, text: jsQR(Uint8ClampedArray.from(img.data), img.w, img.w)?.data ?? null };
+}
+
+await test('moving progress: a short link gets a QR code that scans at its size on a 320 px phone; a long one is refused with Progress only offered; the Settings section passes axe in both themes at 320 and 390 px', async () => {
+  const a = await phoneWith(progress({ steps: { 'printing-first-program': phoneA.steps['printing-first-program'] } }), { viewport: { width: 320, height: 860 }, deviceScaleFactor: 1 });
+  const short = await makeLink(a.page, false);
+  await a.page.click('button:has-text("QR code")');
+  await a.page.locator('.transfer-qr svg').waitFor();
+  const read = await readQr(a.page);
+  expect(read.text === short, `the QR code (${read.width} px) reads as ${read.text}`);
+  await phonesBothThemes(a.page, 'settings with a QR code');
+  await partShots(a.page, '#your-progress', 'settings-progress-qr');
+  await partShots(a.page, '.transfer-qr', 'qr');
+  // Long code: the link is too long for a QR code; Progress only is one tap away.
+  await a.page.evaluate(([k, code]) => {
+    const s = JSON.parse(localStorage.getItem(k));
+    s.steps['printing-first-program'].challenges[0].code = code;
+    localStorage.setItem(k, JSON.stringify(s));
+  }, [KEY, Array.from({ length: 400 }, (_, i) => `        System.out.println("line ${i} ${(i * 7919) % 1000}");`).join('\n')]);
+  const long = await makeLink(a.page, true);
+  expect(long.length > 1273, `${long.length} characters`);
+  await a.page.click('button:has-text("QR code")');
+  const refused = await a.page.locator('.qr-refused').innerText();
+  expect(refused.includes('too long for a QR code') && refused.includes('1,273'), refused);
+  expect((await a.page.locator('.transfer-qr svg').count()) === 0, 'no QR code');
+  await phonesBothThemes(a.page, 'settings with a refused QR code');
+  await partShots(a.page, '#your-progress', 'settings-progress-refused');
+  await a.page.click('text=Make a Progress only link');
+  await a.page.locator('.transfer-qr svg').waitFor();
+  expect((await readQr(a.page)).text === (await a.page.locator('#transfer-link-text').inputValue()), 'the Progress only link scans');
+  expect(a.errors.length === 0, a.errors.join('\n'));
+  await a.ctx.close();
+});
+
+await test('moving progress: over 8,000 characters the page says some apps cut long links and suggests the file', async () => {
+  const code = Array.from({ length: 3000 }, (_, i) => `x${(i * 2654435761) % 4294967291}`).join(' ');
+  const a = await phoneWith(progress({ steps: { 'printing-first-program': { done: true, challenges: { 0: { done: true, hintsUsed: 0, attempts: 1, code, savedAt: T } } } } }));
+  const link = await makeLink(a.page, true);
+  expect(link.length > 8000, `${link.length}`);
+  const note = await a.page.locator('.transfer-long').innerText();
+  expect(note.includes('Some apps cut long links') && note.includes('progress file'), note);
+  await partShots(a.page, '#your-progress', 'settings-progress-long');
+  await a.ctx.close();
+});
+
+await test('moving progress: /transfer/ works offline after a visit', async () => {
+  const ctx = await browser.newContext({ ...PHONE });
+  const page = await ctx.newPage();
+  await page.goto(BASE + 'settings/');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  expect(await page.evaluate(() => !!navigator.serviceWorker.controller), 'service worker controls the page');
+  await page.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, JSON.stringify(phoneA)]);
+  await page.reload();
+  const link = await makeLink(page, false);
+  await page.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, JSON.stringify(progress())]);
+  await ctx.setOffline(true);
+  await page.goto(link);
+  await page.locator('.import-review').waitFor();
+  await page.click('button:has-text("Merge into my progress")');
+  await page.locator('.transfer-done').waitFor();
+  expect((await saved(page)).steps['printing-first-program'].done, 'imported offline');
+  await ctx.close();
+});
+
+console.log('Projects');
+/** The projects of the build (content/projects), whole, in course order. */
+const PROJECTS = (JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8')).projects ?? []).map((p) => JSON.parse(readFileSync(new URL(`../src/generated/projects/${p.id}.json`, import.meta.url), 'utf8')));
+/** A program with a comment line after Main.java's code, so the code that passed can be told from the model solution. */
+const markMain = (code, mark) => joinFiles(splitFiles(code).map((f) => (f.path === 'Main.java' ? { ...f, text: f.text.replace(/\n*$/, `\n// ${mark}\n`) } : f)));
+/** A program with a milestone's new files after its own (src/lib/projects.ts withFiles). */
+const addFiles = (code, files = {}) => {
+  const have = splitFiles(code);
+  const added = Object.entries(files).filter(([p]) => !have.some((f) => f.path === p)).map(([path, text]) => ({ path, text }));
+  return added.length ? joinFiles([...have, ...added]) : code;
+};
+/** The text of Main.java in the editor (its tab, when there are several files). */
+async function mainText(page) {
+  const paths = await tabPaths(page);
+  if (paths.length) {
+    await page.click(`#file-tab-${paths.indexOf('Main.java')}`);
+    await page.locator('.file-tab-on', { hasText: 'Main.java' }).waitFor();
+  }
+  return editorText(page);
+}
+const sameText = (a, b) => a.replace(/\s+$/, '') === b.replace(/\s+$/, '');
+async function openMilestone(page, k) {
+  await page.locator('.milestones > li').nth(k).locator('button').click();
+  await page.locator('#milestone-h', { hasText: `Milestone ${k + 1}:` }).waitFor();
+  await page.locator('.task-card', { hasText: `Milestone ${k + 1} of` }).waitFor();
+}
+
+await test('projects: the Learn and home pages link to them; the list says which module each comes after; a project opens one milestone at a time, each starting from the code that passed the one before with its new files; a shown solution opens the next, which offers the model solution; passing them all finishes the project, which travels in a transfer link; axe in both themes at 320 and 390 px', async () => {
+  const { ctx, page, errors } = await phoneWith(progress(), { colorScheme: 'dark' });
+  await ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+  for (const path of ['', 'learn/']) {
+    await page.goto(BASE + path);
+    await page.locator('#main h1').first().waitFor();
+    expect((await page.locator('#main a[href$="/projects/"]').count()) > 0, `${path || 'home'}: no link to the projects`);
+  }
+  await page.goto(BASE + 'projects/');
+  await page.locator('#main h1', { hasText: 'Projects' }).waitFor();
+  await phonesBothThemes(page, 'the projects page');
+  if (!PROJECTS.length) {
+    expect((await page.locator('#main').innerText()).includes('No projects yet'), 'an empty list says so');
+    await ctx.close();
+    return;
+  }
+  const plan = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8')).plan;
+  for (const x of PROJECTS) {
+    const card = page.locator('.project-card', { hasText: x.title });
+    const after = plan.find((m) => m.id === x.after);
+    expect((await card.innerText()).includes(`After module ${after.number}: ${after.title}`), `${x.title}: which module it comes after`);
+  }
+  await shot(page, 'projects-list');
+  // The first project, milestone by milestone.
+  const p = PROJECTS[0];
+  const ms = p.milestones;
+  const n = ms.length;
+  // Every project's page is pre-rendered with its intro and tasks, listed in the sitemap, and saved for offline use with its file.
+  const sitemap = await (await fetch(BASE + 'sitemap.xml')).text();
+  const sw = await (await fetch(BASE + 'sw.js')).text();
+  for (const x of PROJECTS) {
+    const html = await (await fetch(BASE + `projects/${x.id}/`)).text();
+    expect(html.includes(`<h1>${x.title.replace(/&/g, '&amp;')}</h1>`) && html.includes('Milestone 1: '), `projects/${x.id}/ is pre-rendered`);
+    expect(sitemap.includes(`/projects/${x.id}/</loc>`), `the sitemap lists projects/${x.id}/`);
+    expect(sw.includes(`"projects/${x.id}/"`) && sw.includes(`"lessons/projects/${x.id}-`), `the service worker saves projects/${x.id}/ and its file`);
+  }
+  await page.locator('.project-card', { hasText: p.title }).locator('a').first().click();
+  await page.locator('#main h1', { hasText: p.title }).waitFor();
+  await lessonReady(page);
+  expect((await page.locator('.milestones > li.milestone-locked').count()) === n - 1, 'only the first milestone is open');
+  // Milestone 1 starts from the seed, which doesn't pass.
+  expect(sameText(await mainText(page), splitFiles(ms[0].seed).find((f) => f.path === 'Main.java').text), 'milestone 1 starts from the seed');
+  expect(!(await check(page)).includes('All tests passed'), 'the seed passes milestone 1');
+  await phonesBothThemes(page, `${p.title}, milestone 1 checked`);
+  await shot(page, 'project-milestone-1');
+  /** Passes milestone k with its model solution, marked so the next milestone's start can be told apart. */
+  const pass = async (k) => {
+    const code = markMain(ms[k].solution, `passed milestone ${k + 1} here`);
+    await setProgram(page, code);
+    const out = await check(page);
+    expect(out.includes('All tests passed'), `milestone ${k + 1}: ${out.slice(0, 500)}`);
+    return code;
+  };
+  let passed = await pass(0);
+  await page.locator('.banner-pass', { hasText: `Milestone 1 of ${n} complete` }).waitFor();
+  expect((await page.locator('.milestones > li').nth(1).getAttribute('class')).includes('milestone-open'), 'milestone 2 opens');
+  // Milestone 2 starts from the code that passed milestone 1, with the files it adds.
+  await openMilestone(page, 1);
+  const start2 = addFiles(passed, ms[1].files);
+  if (splitFiles(start2).length > 1) expect(JSON.stringify(await tabPaths(page)) === JSON.stringify(splitFiles(start2).map((f) => f.path)), `milestone 2's files: ${await tabPaths(page)}`);
+  expect((await mainText(page)).includes('// passed milestone 1 here'), 'milestone 2 starts from the code that passed milestone 1');
+  // Its solution, shown after the hints, opens milestone 3 without passing milestone 2.
+  expect((await page.locator('.milestones > li').nth(2).getAttribute('class')).includes('milestone-locked'), 'milestone 3 is locked');
+  while ((await page.locator('.btn-hint').count()) > 0) await page.locator('.btn-hint').click();
+  await page.click('button:has-text("Show solution")');
+  await page.locator('#solution').waitFor();
+  if (n > 2) {
+    expect((await page.locator('.milestones > li').nth(2).getAttribute('class')).includes('milestone-open'), 'milestone 3 opens after milestone 2\'s solution is shown');
+    await openMilestone(page, 2);
+    expect((await page.locator('.milestone-note').allInnerTexts()).join(' ').includes('starts from the model solution of milestone 2'), 'milestone 3 says it starts from the model solution');
+    expect(sameText(await mainText(page), splitFiles(ms[2].seed).find((f) => f.path === 'Main.java').text), 'milestone 3 starts from milestone 2\'s model solution');
+    // After typing in it, "Start from the model solution of milestone 2" puts that back, once confirmed.
+    await page.click('.cm-content');
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.insertText('// a change of mine\n');
+    expect((await editorText(page)).includes('// a change of mine'), 'the change is in the editor');
+    page.once('dialog', (d) => d.accept());
+    await page.click('button:has-text("Start from the model solution of milestone 2")');
+    await page.waitForFunction(() => !document.querySelector('.cm-editor')?.javaArenaText?.().includes('a change of mine'));
+    expect(sameText(await mainText(page), splitFiles(ms[2].seed).find((f) => f.path === 'Main.java').text), 'the model solution of milestone 2 is back');
+    await phonesBothThemes(page, `${p.title}, milestone 3 with the model solution offered`);
+    await shot(page, 'project-milestone-3');
+    passed = await pass(2);
+    // The later milestones, each from the code that passed the one before.
+    for (let k = 3; k < n; k++) {
+      await openMilestone(page, k);
+      expect((await mainText(page)).includes(`// passed milestone ${k} here`), `milestone ${k + 1} starts from the code that passed milestone ${k}`);
+      passed = await pass(k);
+    }
+  }
+  expect((await page.locator('.banner-pass', { hasText: 'Project complete' }).count()) === 0, 'complete with milestone 2 not passed');
+  // Milestone 2 passes last, which finishes the project.
+  await openMilestone(page, 1);
+  await pass(1);
+  await page.locator('.banner-pass', { hasText: `Project complete: ${p.title}` }).waitFor();
+  // Saved a moment after the change.
+  await page.waitForFunction(([k, id]) => JSON.parse(localStorage.getItem(k))?.projects?.[id]?.done, [KEY, p.id]);
+  const st = await saved(page);
+  expect(st.projects[p.id].done && typeof st.projects[p.id].doneAt === 'number', JSON.stringify(st.projects[p.id]).slice(0, 300));
+  expect(ms.every((m) => st.projects[p.id].milestones[m.id].done), 'every milestone is done');
+  await page.reload();
+  await page.locator('#main h1', { hasText: p.title }).waitFor();
+  // The saved progress is read after the page renders: wait for the chip instead of counting at once.
+  await page.locator('.step-count .done-chip').first().waitFor({ timeout: 15000 }).catch(() => {});
+  expect((await page.locator('.step-count .done-chip').count()) === 1, 'the project page says done after a reload');
+  // The finished project travels in a transfer link (progress only).
+  const link = await makeLink(page, false);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+  const b = await phoneWith(progress());
+  await b.page.goto(link);
+  await b.page.locator('.import-review').waitFor();
+  expect((await b.page.locator('.import-review').innerText()).includes(`${n} finished project milestone`), await b.page.locator('.import-review').innerText());
+  await b.page.click('button:has-text("Merge into my progress")');
+  await b.page.locator('.transfer-done').waitFor();
+  expect((await saved(b.page)).projects[p.id]?.done, 'the project arrives done');
+  await b.page.goto(BASE + 'projects/');
+  await b.page.locator('.project-card.done', { hasText: p.title }).waitFor();
+  // The record page lists the finished project.
+  await b.page.goto(BASE + 'record/');
+  await b.page.locator('.record-projects li', { hasText: p.title }).waitFor();
+  await b.ctx.close();
+});
+
+console.log('Personal record');
+const COURSE_INDEX = JSON.parse(readFileSync(new URL('../src/generated/course.json', import.meta.url), 'utf8'));
+const RECORD_NOTICE = "This is a personal record made by Java Arena from the progress saved in this browser. It is not a certificate. It isn't issued or checked by the University of Helsinki or the MOOC, and nobody verifies it.";
+const RECORD_DAY = 86_400_000;
+/** A step done, with every challenge, at `at`. */
+const stepDone = (s, at) => ({ done: true, doneAt: at, clean: true, challenges: Object.fromEntries([...Array(s.challenges).keys()].map((k) => [k, { done: true, hintsUsed: 0, attempts: 1 }])) });
+/** Every step of these modules done, module k's last step on day k (noon, so the date is the same everywhere). */
+function finished(ids, from = T) {
+  const steps = {};
+  ids.forEach((id, k) => {
+    const m = COURSE_INDEX.modules.find((x) => x.id === id);
+    m.steps.forEach((s, i) => (steps[s.id] = stepDone(s, from + k * RECORD_DAY - (m.steps.length - 1 - i) * 3_600_000)));
+  });
+  return steps;
+}
+const shortDate = (ms) => { const d = new Date(ms); return `${d.getDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()]} ${d.getFullYear()}`; };
+/** The number of pages of a PDF Chromium printed. */
+const pdfPages = (buf) => (buf.toString('latin1').match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
+/** Prints the page as Chromium's print preview would (A4), saves it with --shots, and returns its page count. */
+async function printPdf(page, name) {
+  const buf = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+  if (SHOTS) (await import('node:fs')).writeFileSync(`${SHOTS}/${name}.pdf`, buf);
+  return pdfPages(buf);
+}
+const recordWords = /\b(certificate|certified|awarded|credentials?)\b/i;
+
+await test('record: the record page lists the modules finished by part with their dates, the parts and projects finished and the totals; the name is kept in settings; it says plainly what it is; module pages and the end of a finished part link to it; axe in both themes at 320 and 390 px', async () => {
+  const part1 = COURSE_INDEX.plan.filter((m) => m.course === 'I' && m.part === 1).map((m) => m.id);
+  const part2 = COURSE_INDEX.plan.filter((m) => m.course === 'I' && m.part === 2).map((m) => m.id);
+  const half = COURSE_INDEX.modules.find((m) => m.id === part2[1]);
+  const proj = COURSE_INDEX.projects?.[0];
+  const st = progress({
+    steps: { ...finished([...part1, part2[0]]), [half.steps[0].id]: stepDone(half.steps[0], T) },
+    projects: proj ? { [proj.id]: { done: true, doneAt: T + 20 * RECORD_DAY, milestones: {} } } : {},
+  });
+  const { ctx, page, errors } = await phoneWith(st);
+  await ctx.addInitScript(() => (window.print = () => (window.__printed = (window.__printed ?? 0) + 1)));
+  await page.goto(BASE + 'record/');
+  await page.locator('.record-sheet').waitFor();
+  expect((await page.locator('#main h1').innerText()) === 'Your record', 'the heading');
+  expect((await page.locator('.record-notice').innerText()).trim() === RECORD_NOTICE, `the notice: ${await page.locator('.record-notice').innerText()}`);
+  const sheet = await page.locator('.record-sheet').innerText();
+  // Part 1: every module, each with the day its last step was finished; the part finished on the last one's day.
+  const p1 = page.locator('.record-part', { has: page.locator('h4', { hasText: /^Part 1(?!\d)/ }) });
+  expect((await p1.locator('.record-list li').count()) === part1.length, `part 1 lists ${part1.length} modules`);
+  for (const [k, id] of part1.entries()) {
+    const m = COURSE_INDEX.modules.find((x) => x.id === id);
+    const row = await p1.locator('.record-list li').nth(k).innerText();
+    expect(row.includes(`Module ${m.number}: ${m.title}`) && row.includes(shortDate(T + k * RECORD_DAY)), `module ${m.number}'s row: ${row}`);
+  }
+  expect((await p1.locator('h4').innerText()).includes(`finished ${shortDate(T + (part1.length - 1) * RECORD_DAY)}`), await p1.locator('h4').innerText());
+  // Part 2: one module finished (the half-done one isn't listed).
+  const p2 = page.locator('.record-part', { has: page.locator('h4', { hasText: /^Part 2(?!\d)/ }) });
+  expect((await p2.locator('h4').innerText()).includes(`1 of ${part2.length} modules`), await p2.locator('h4').innerText());
+  expect(!sheet.includes(`: ${half.title}`), 'a module with a step left is not listed');
+  if (proj) expect(sheet.includes(proj.title) && sheet.includes(shortDate(T + 20 * RECORD_DAY)), `the project: ${sheet}`);
+  const totals = await page.locator('.record-totals').innerText();
+  const steps = part1.concat(part2[0]).reduce((a, id) => a + COURSE_INDEX.modules.find((m) => m.id === id).steps.length, 0) + 1;
+  for (const words of [`Modules finished ${part1.length + 1} of ${COURSE_INDEX.plan.length}`, `Parts finished 1 of ${COURSE_INDEX.plan.filter((m) => m.part != null).reduce((a, m) => a.add(m.part), new Set()).size}`, `Steps done ${steps} of `])
+    expect(totals.replace(/\s+/g, ' ').includes(words), `the totals say "${words}": ${totals}`);
+  if (proj) expect(totals.replace(/\s+/g, ' ').includes(`Projects finished 1 of ${COURSE_INDEX.projects.length}`), totals);
+  expect(sheet.includes(new URL(BASE).host + '/Java-Arena'), `the site's address: ${sheet.slice(0, 200)}`);
+
+  // The name: typed, kept in settings, on the record; still there after a reload.
+  await page.fill('#record-name', 'Ada Lovelace');
+  await page.waitForFunction((k) => JSON.parse(localStorage.getItem(k))?.settings?.name === 'Ada Lovelace', KEY);
+  expect((await page.locator('.record-who').innerText()) === 'Ada Lovelace', 'the name on the record');
+  await page.reload();
+  await page.locator('.record-who', { hasText: 'Ada Lovelace' }).waitFor();
+  expect((await page.inputValue('#record-name')) === 'Ada Lovelace', 'the name field after a reload');
+  // No word the design rules out, anywhere on the page but the notice's "It is not a certificate".
+  const all = (await page.locator('body').innerText()).replace(RECORD_NOTICE, '');
+  expect(!recordWords.test(all), `a word the record must not use: ${all.match(recordWords)?.[0]}`);
+  // The button opens the print dialog.
+  await page.click('button:has-text("Print or save as PDF")');
+  expect((await page.evaluate(() => window.__printed)) === 1, 'Print or save as PDF calls window.print');
+
+  await phonesBothThemes(page, 'the record page');
+  if (SHOTS) {
+    for (const width of [320, 390])
+      for (const colorScheme of ['dark', 'light']) {
+        await page.setViewportSize({ width, height: 860 });
+        await page.emulateMedia({ colorScheme });
+        await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+        // Let the buttons' color transitions end.
+        await page.waitForTimeout(400);
+        await shot(page, `record-${width}-${colorScheme}`);
+      }
+    await page.setViewportSize(PHONE.viewport);
+  }
+
+  // Printed (in the dark theme, too): only the record, light, with the logo, the address and the notice.
+  await page.emulateMedia({ colorScheme: 'dark', media: 'print' });
+  const printed = await page.evaluate(() => {
+    const shown = (sel) => { const e = document.querySelector(sel); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height > 0; };
+    const sheet = document.querySelector('.record-sheet');
+    return {
+      header: shown('.topbar'), footer: shown('.footer'), controls: shown('.record-controls'), intro: shown('.page-head'),
+      sheet: shown('.record-sheet'), logo: shown('.record-sheet .brand-mark'), address: shown('.record-address'), notice: shown('.record-notice'),
+      bg: getComputedStyle(document.body).backgroundColor, sheetBg: getComputedStyle(sheet).backgroundColor, color: getComputedStyle(sheet).color, notice2: getComputedStyle(document.querySelector('.record-notice')).color,
+    };
+  });
+  expect(!printed.header && !printed.footer && !printed.controls && !printed.intro, `printed: no navigation, footer, name field or button: ${JSON.stringify(printed)}`);
+  expect(printed.sheet && printed.logo && printed.address && printed.notice, `printed: the record, the logo, the address and the notice: ${JSON.stringify(printed)}`);
+  const rgb = (c) => c.match(/\d+/g).slice(0, 3).map(Number);
+  expect(rgb(printed.bg).every((v) => v === 255) && rgb(printed.sheetBg).every((v) => v === 255), `printed on white: ${printed.bg}, ${printed.sheetBg}`);
+  expect(rgb(printed.color).every((v) => v < 80) && rgb(printed.notice2).every((v) => v < 80), `printed in dark text: ${printed.color}, ${printed.notice2}`);
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/record-print-emulated.png`, fullPage: true });
+  const pages = await printPdf(page, 'record');
+  expect(pages === 1, `the record prints on one page: ${pages}`);
+  await page.emulateMedia({ media: 'screen' });
+
+  // Links to the record: a finished module's page (the last of part 1 says the part is finished too), the end of part 1 on the Learn page; not a module with a step left.
+  const last = COURSE_INDEX.modules.find((m) => m.id === part1[part1.length - 1]);
+  await page.goto(BASE + `learn/${last.id}/`);
+  const told = await page.locator('.record-link').innerText();
+  expect(told.includes(`You finished this module on ${shortDate(T + (part1.length - 1) * RECORD_DAY)}, and with it part 1.`), told);
+  expect((await page.locator('.record-link a').getAttribute('href')) === '/Java-Arena/record/', 'the module page links to the record');
+  await page.goto(BASE + `learn/${part2[0]}/`);
+  expect(!(await page.locator('.record-link').innerText()).includes('part 2'), 'part 2 is not finished');
+  await page.goto(BASE + `learn/${half.id}/`);
+  await page.locator('#main h1').waitFor();
+  expect((await page.locator('.record-link').count()) === 0, 'a module with a step left does not link to the record');
+  await page.goto(BASE + 'learn/');
+  await page.locator('.module-live').first().waitFor();
+  expect((await page.locator('.record-link').count()) === 1, 'only part 1 ends with a link to the record');
+  expect((await page.locator('.part', { hasText: 'Part 1' }).first().locator('.record-link').innerText()).includes('Part 1 finished.'), 'the end of part 1');
+  await phonesBothThemes(page, 'the Learn page with a part finished');
+  // The link takes the learner there.
+  await page.click('.record-link a');
+  await page.locator('.record-sheet').waitFor();
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+await test('record: with nothing finished it says so; with the whole course and every project finished it still prints on at most two pages', async () => {
+  const empty = await phoneWith(progress());
+  await empty.page.goto(BASE + 'record/');
+  await empty.page.locator('.record-empty').waitFor();
+  expect((await empty.page.locator('.record-empty').innerText()).includes('Nothing is finished yet in this browser.'), 'the empty record');
+  await phonesBothThemes(empty.page, 'an empty record');
+  await empty.ctx.close();
+
+  const ids = COURSE_INDEX.modules.map((m) => m.id);
+  const st = progress({
+    steps: finished(ids),
+    projects: Object.fromEntries((COURSE_INDEX.projects ?? []).map((p, k) => [p.id, { done: true, doneAt: T + (ids.length + k) * RECORD_DAY, milestones: {} }])),
+    settings: freshSettings({ name: 'Maximilian Alexander Featherstonehaugh-Worthington' }),
+  });
+  const { ctx, page, errors } = await phoneWith(st);
+  await page.goto(BASE + 'record/');
+  await page.locator('.record-sheet').waitFor();
+  expect((await page.locator('.record-sheet .record-list li').count()) === ids.length + (COURSE_INDEX.projects?.length ?? 0), 'every module and project is listed');
+  const totals = (await page.locator('.record-totals').innerText()).replace(/\s+/g, ' ');
+  expect(totals.includes(`Modules finished ${ids.length} of ${COURSE_INDEX.plan.length}`), totals);
+  await phonesBothThemes(page, 'a full record');
+  if (SHOTS) await shot(page, 'record-full-390');
+  await page.emulateMedia({ media: 'print' });
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/record-full-print-emulated.png`, fullPage: true });
+  const pages = await printPdf(page, 'record-full');
+  expect(pages >= 1 && pages <= 2, `the whole course prints on at most two pages: ${pages}`);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+console.log('Projects, milestone by milestone');
+/** Every file of the program in the editor, joined as the grader joins them (each tab's text, when there are several). */
+async function programText(page) {
+  const paths = await tabPaths(page);
+  if (!paths.length) return editorText(page);
+  const files = [];
+  for (const [i, path] of paths.entries()) {
+    await page.click(`#file-tab-${i}`);
+    await page.locator(`#file-tab-${i}[aria-selected="true"]`).waitFor();
+    files.push({ path, text: await editorText(page) });
+  }
+  await page.click('#file-tab-0');
+  return files;
+}
+/** The same files with the same texts (trailing white space aside), in the same order. */
+function sameProgram(got, want) {
+  const g = Array.isArray(got) ? got : [{ path: 'Main.java', text: got }];
+  const w = splitFiles(want);
+  return g.length === w.length && g.every((f, i) => f.path === w[i].path && sameText(f.text, w[i].text));
+}
+/** Passes milestone k of `ms` with its model solution, marked so the next milestone's start can be told from it. */
+async function passMilestone(page, ms, k) {
+  const code = markMain(ms[k].solution, `passed milestone ${k + 1} here`);
+  await setProgram(page, code);
+  const out = await check(page);
+  expect(out.includes('All tests passed'), `milestone ${k + 1} (${ms[k].id}): ${out.slice(0, 500)}`);
+  return code;
+}
+/** The state class of each milestone in the list: done, open or locked. */
+const milestoneStates = (page) => page.locator('.milestones > li').evaluateAll((els) => els.map((e) => (e.className.match(/milestone-(done|open|locked)/) ?? [])[1]));
+/** Screenshots at 390 px in both themes and on a 1280 px desktop in both themes (with --shots). */
+async function phoneAndDesktopShots(page, name) {
+  if (!SHOTS) return;
+  const st = await saved(page);
+  const url = page.url();
+  // A full-page shot of a scrolled page draws the sticky header where the view was.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  for (const colorScheme of ['dark', 'light']) {
+    await page.emulateMedia({ colorScheme });
+    await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+    await page.waitForTimeout(400);
+    await shot(page, `${name}-390-${colorScheme}`);
+  }
+  const d = await newPage();
+  await d.ctx.addInitScript(([k, v]) => localStorage.setItem(k, v), [KEY, JSON.stringify(st)]);
+  await d.ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+  for (const colorScheme of ['dark', 'light']) {
+    await d.page.emulateMedia({ colorScheme });
+    await d.page.goto(url);
+    await d.page.locator('#main h1').first().waitFor();
+    if (await d.page.locator('.workbench').count()) await lessonReady(d.page);
+    await d.page.waitForTimeout(400);
+    await shot(d.page, `${name}-desktop-${colorScheme}`);
+  }
+  await d.ctx.close();
+}
+
+for (const x of PROJECTS) {
+  await test(`projects: ${x.title}: the page renders with its intro and milestones; milestone 1 passes with its model solution; milestone 2 opens from that code with its new files`, async () => {
+    const ms = x.milestones;
+    const n = ms.length;
+    const { ctx, page, errors } = await phoneWith(progress());
+    await ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+    await page.goto(BASE + `projects/${x.id}/`);
+    await page.locator('#main h1', { hasText: x.title }).waitFor();
+    // The pre-rendered list has no states: wait for the app's.
+    await page.locator('.milestones > li.milestone-open').first().waitFor();
+    expect((await page.locator('.milestones > li').count()) === n, `${n} milestones listed`);
+    expect(JSON.stringify(await milestoneStates(page)) === JSON.stringify(['open', ...Array(n - 1).fill('locked')]), `at first only milestone 1 is open: ${await milestoneStates(page)}`);
+    for (const [k, m] of ms.entries()) expect((await page.locator('.milestones > li').nth(k).innerText()).includes(m.title), `milestone ${k + 1}'s title in the list`);
+    expect((await page.locator('article.step-text').innerText()).length > 300, 'the intro is shown');
+    // "Project · After module N: title" is one run of text (pre-rendered too): on a phone it wraps like a sentence, each line from the left edge, not as two narrow columns.
+    const html = await (await fetch(BASE + `projects/${x.id}/`)).text();
+    expect(html.includes('<div class="step-count"><span class="project-label">Project · After '), `the pre-rendered label: ${html.match(/<div class="step-count">.{0,200}/)?.[0]}`);
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 860 });
+      const lines = await page.locator('.step-count > .project-label').evaluate((e) => { const left = e.parentElement.getBoundingClientRect().left; return [...e.getClientRects()].map((r) => Math.round(r.left - left)); });
+      expect(lines.length >= 1 && lines.every((x) => x === 0), `${width} px: the label's lines start at ${lines} px from the left edge`);
+    }
+    await page.setViewportSize(PHONE.viewport);
+    await page.locator('.task-card', { hasText: `Milestone 1 of ${n}` }).waitFor();
+    await lessonReady(page);
+    expect(sameProgram(await programText(page), ms[0].seed), 'milestone 1 starts from the seed');
+    const passed = await passMilestone(page, ms, 0);
+    await page.locator('.banner-pass', { hasText: `Milestone 1 of ${n} complete` }).waitFor();
+    await page.waitForFunction(([k, id, m]) => JSON.parse(localStorage.getItem(k))?.projects?.[id]?.milestones?.[m]?.done, [KEY, x.id, ms[0].id]);
+    expect(JSON.stringify(await milestoneStates(page)) === JSON.stringify(['done', 'open', ...Array(n - 2).fill('locked')]), `after milestone 1: ${await milestoneStates(page)}`);
+    // "Next milestone" opens milestone 2, from the code that passed milestone 1 and the files milestone 2 adds.
+    await page.click('button:has-text("Next milestone")');
+    await page.locator('#milestone-h', { hasText: `Milestone 2: ${ms[1].title}` }).waitFor();
+    await page.locator('.task-card', { hasText: `Milestone 2 of ${n}` }).waitFor();
+    expect(sameProgram(await programText(page), addFiles(passed, ms[1].files)), `milestone 2 starts from the code that passed milestone 1: ${JSON.stringify(await programText(page)).slice(0, 400)}`);
+    if (Object.keys(ms[1].files ?? {}).length) expect((await page.locator('.milestone-note').allInnerTexts()).join(' ').includes('This milestone adds'), 'milestone 2 says which files it adds');
+    // The page still says so after a reload.
+    await page.reload();
+    await page.locator('#main h1', { hasText: x.title }).waitFor();
+    await page.locator('.milestones > li.milestone-open').first().waitFor();
+    expect((await milestoneStates(page))[0] === 'done', 'milestone 1 is still done after a reload');
+    expect(errors.length === 0, errors.join('\n'));
+    await ctx.close();
+  });
+}
+
+await test('projects: one project passed milestone by milestone in order finishes; the record page lists it with its date; a transfer link made after that carries the project into a fresh browser', async () => {
+  // A project other than the one the test above shows solutions in, when there are several.
+  const p = PROJECTS[PROJECTS.length > 1 ? 1 : 0];
+  if (!p) return;
+  const ms = p.milestones;
+  const n = ms.length;
+  const { ctx, page, errors } = await phoneWith(progress());
+  await ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+  await page.goto(BASE + 'projects/');
+  await page.locator('.project-card', { hasText: p.title }).waitFor();
+  await phoneAndDesktopShots(page, 'projects-index');
+  await page.goto(BASE + `projects/${p.id}/`);
+  await page.locator('#main h1', { hasText: p.title }).waitFor();
+  await lessonReady(page);
+  let passed = null;
+  for (let k = 0; k < n; k++) {
+    if (k > 0) {
+      await page.click('button:has-text("Next milestone")');
+      await page.locator('#milestone-h', { hasText: `Milestone ${k + 1}: ${ms[k].title}` }).waitFor();
+      expect(sameProgram(await programText(page), addFiles(passed, ms[k].files)), `milestone ${k + 1} starts from the code that passed milestone ${k}`);
+    }
+    if (k === 1) await phoneAndDesktopShots(page, 'project-milestone');
+    passed = await passMilestone(page, ms, k);
+    const want = [...Array(k + 1).fill('done'), ...(k + 1 < n ? ['open'] : []), ...Array(Math.max(0, n - k - 2)).fill('locked')];
+    expect(JSON.stringify(await milestoneStates(page)) === JSON.stringify(want), `after milestone ${k + 1}: ${await milestoneStates(page)}, not ${want}`);
+    if (k + 1 < n) await page.locator('.banner-pass', { hasText: `Milestone ${k + 1} of ${n} complete` }).waitFor();
+  }
+  await page.locator('.banner-pass', { hasText: `Project complete: ${p.title}` }).waitFor();
+  await page.waitForFunction(([k, id]) => JSON.parse(localStorage.getItem(k))?.projects?.[id]?.done, [KEY, p.id]);
+  // The banner and the finished project's header link to the record.
+  await page.locator(`.banner-pass a[href="/Java-Arena/record/"]`).waitFor();
+  await page.locator(`.step-text .record-link a[href="/Java-Arena/record/"]`).waitFor();
+  expect((await page.locator('.step-text .record-link').innerText()).startsWith('You finished this project on '), await page.locator('.step-text .record-link').innerText());
+  const st = await saved(page);
+  const doneAt = st.projects[p.id].doneAt;
+  expect(typeof doneAt === 'number' && ms.every((m) => st.projects[p.id].milestones[m.id].done), JSON.stringify(st.projects[p.id]).slice(0, 300));
+  // Done in order: no solution was shown on the way.
+  expect(ms.every((m) => !st.projects[p.id].milestones[m.id].sawSolution), 'no solution was looked at');
+  // The record page lists it with the day it was finished.
+  await page.goto(BASE + 'record/');
+  const row = page.locator('.record-projects li', { hasText: p.title });
+  await row.waitFor();
+  expect((await row.innerText()).includes(shortDate(doneAt)), `the record's row: ${await row.innerText()}`);
+  // All of it on one day: "finished on <day>", not "from <day> to <day>".
+  const made = await page.locator('.record-made').innerText();
+  expect(made.includes(`Everything with a date below was finished on ${shortDate(doneAt)}.`) && !made.includes('run from'), `the record's date line: ${made}`);
+  expect((await page.locator('.record-totals').innerText()).replace(/\s+/g, ' ').includes(`Projects finished 1 of ${PROJECTS.length}`), await page.locator('.record-totals').innerText());
+  await phoneAndDesktopShots(page, 'record');
+  // A transfer link made now carries the project, its milestones and its code into a fresh browser.
+  const link = await makeLink(page, true);
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+  const b = await phoneWith(null);
+  await b.ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+  await b.page.goto(link);
+  await b.page.locator('.import-review').waitFor();
+  expect((await b.page.locator('.import-review').innerText()).includes(`${n} finished project milestone`), await b.page.locator('.import-review').innerText());
+  await b.page.click('button:has-text("Merge into my progress")');
+  await b.page.locator('.transfer-done').waitFor();
+  const got = (await saved(b.page)).projects[p.id];
+  expect(got?.done && got.doneAt === doneAt && ms.every((m) => got.milestones[m.id]?.done), `the project arrives done: ${JSON.stringify(got).slice(0, 300)}`);
+  expect(got.milestones[ms[n - 1].id].code === st.projects[p.id].milestones[ms[n - 1].id].code, 'the last milestone\'s code arrives');
+  await b.page.goto(BASE + `projects/${p.id}/`);
+  await b.page.locator('#main h1', { hasText: p.title }).waitFor();
+  await b.page.locator('.milestones > li.milestone-done').first().waitFor();
+  expect((await milestoneStates(b.page)).every((s) => s === 'done'), `every milestone is done in the fresh browser: ${await milestoneStates(b.page)}`);
+  expect((await b.page.locator('.step-count .done-chip').count()) === 1, 'the project page says done');
+  await b.page.goto(BASE + 'record/');
+  await b.page.locator('.record-projects li', { hasText: p.title }).waitFor();
+  await b.ctx.close();
+});
+
 console.log('Engine prototype');
 const { ctx: mainCtx, page, errors } = await newPage();
 await test('engine downloads and starts', async () => {
@@ -4013,7 +4800,7 @@ await test('offline: after one visit, pages and the engine work without a connec
 });
 
 console.log('Accessibility and layout');
-const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'learn/calculating/tracing-values/', 'playground/', 'deathmatch/', 'daily/', 'placement/', 'settings/', 'about/', 'learn/nowhere/'];
+const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'learn/calculating/tracing-values/', 'playground/', 'deathmatch/', 'daily/', 'placement/', 'settings/', 'about/', 'transfer/', 'projects/', 'learn/nowhere/'];
 for (const colorScheme of ['light', 'dark']) {
   await test(`axe, ${colorScheme} theme: every page type`, async () => {
     const { ctx, page } = await newPage({ colorScheme });

@@ -37,6 +37,8 @@ export const playgroundPage = editorPage(() => import("./Playground"));
 export const deathmatchPage = editorPage(() => import("./Deathmatch"));
 export const dailyPage = editorPage(() => import("./Daily"));
 export const placementPage = editorPage(() => import("./Placement"));
+export const projectPage = editorPage(() => import("./ProjectPage"));
+export const loadProjectPage = projectPage.preload;
 export const loadStepPage = stepPage.preload;
 export const loadPlayground = playgroundPage.preload;
 /** Practice pages, by their first address segment. */

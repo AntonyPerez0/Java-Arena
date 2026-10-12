@@ -1,13 +1,14 @@
 import { useEffect } from "react";
 import { ArrowRight, Check, ChevronRight } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
-import { COURSE_NAMES, moduleById, prefetchModule, stepPath } from "../content";
+import { COURSE_NAMES, moduleById, modules, plan, prefetchModule, stepPath } from "../content";
 import { useStore } from "../state/store";
 import { challengeDone, moduleProgress } from "../state/derived";
 import MoocCredit from "../components/MoocCredit";
 import ExtraTag from "../components/ExtraTag";
 import NotFound from "./NotFound";
 import { useTitle } from "../lib/title";
+import { finishedPart, isoDay, moduleFinished, recordDate } from "../lib/record";
 
 export default function ModulePage() {
   const { moduleId = "" } = useParams();
@@ -20,6 +21,8 @@ export default function ModulePage() {
   if (!m || !next) return <NotFound />;
   const pr = moduleProgress(s, m);
   const started = m.steps.some((st) => s.steps[st.id]);
+  const fin = moduleFinished(s, m);
+  const part = fin.done ? finishedPart(s, plan, modules, m.id) : null;
   return (
     <div className="module-page narrow">
       <nav className="crumbs" aria-label="Breadcrumb">
@@ -35,6 +38,15 @@ export default function ModulePage() {
         <p className="muted small">
           {m.steps.length} steps, each with 3 challenges. {pr.done} of {pr.total} steps done.
         </p>
+        {fin.done && (
+          <p className="record-link">
+            <Check className="icon" aria-hidden="true" />
+            <span>
+              You finished this module{fin.doneAt != null ? <> on <time dateTime={isoDay(fin.doneAt)}>{recordDate(fin.doneAt)}</time></> : null}
+              {part != null ? `, and with it part ${part}` : ""}. <Link to="/record/">See your record</Link>
+            </span>
+          </p>
+        )}
         <p>
           <Link className="btn btn-primary" to={stepPath(m, next)}>
             {pr.done === pr.total ? "Review" : started ? "Continue" : "Start"}: {next.title} <ArrowRight className="icon" aria-hidden="true" />

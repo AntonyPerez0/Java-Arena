@@ -1,6 +1,7 @@
-// Replays every program of the lessons and drills in the browser engine (headless Chromium, the built site's
+// Replays every program of the lessons, drills and projects in the browser engine (headless Chromium, the built site's
 // own worker code) and compares with the reference JDK's results, which scripts/build-content.mjs
-// wrote to fidelity/out/content-checks.json: every solution on every test input, every example,
+// wrote to fidelity/out/content-checks.json: every solution on every test input (a project's model
+// solutions on the earlier milestones' visible tests too), every example,
 // and javac's exact message for every example that must not compile. Where a test checks the
 // files a program writes, every file the run leaves in its folder is compared too, and a JavaFX
 // program's window (.arena/window.json, after a test's clicks and typing or an example's events

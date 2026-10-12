@@ -103,7 +103,12 @@ export default function CodeEditor({ value, onChange, onRun, diagnostics = [], m
         basicSetup={{ tabSize: 4, foldGutter: false, highlightActiveLine: true, autocompletion: false }}
         indentWithTab
         initialState={initialState}
-        onCreateEditor={(v) => (view.current = v)}
+        onCreateEditor={(v) => {
+          view.current = v;
+          // CodeMirror only draws the lines in view, so the browser tests (scripts/e2e.mjs) read the
+          // whole text through this rather than the page.
+          (v.dom as HTMLElement & { javaArenaText?: () => string }).javaArenaText = () => v.state.doc.toString();
+        }}
       />
     </div>
   );

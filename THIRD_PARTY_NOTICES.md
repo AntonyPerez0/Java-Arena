@@ -32,10 +32,11 @@ The site's pages are built with these npm packages (and their small dependencies
 | [@uiw/react-codemirror](https://github.com/uiwjs/react-codemirror) | MIT |
 | [marked](https://marked.js.org) (lesson Markdown) | MIT |
 | [Lucide](https://lucide.dev) icons (`lucide-react`) | ISC |
+| [uqr](https://github.com/unjs/uqr) (QR codes of transfer links; a port of Project Nayuki's QR Code generator) | MIT |
 | [Inter](https://rsms.me/inter/) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) fonts, from [Fontsource](https://fontsource.org) | SIL Open Font License 1.1 |
 
 The site's design and parts of its page code are adapted from [C/C++ Arena](https://cpparena.com), by the same author.
 
 ## Build and test tools
 
-Vite (MIT) bundles the site and may add small runtime helpers to the published scripts, such as its module preload helper. TypeScript, the Vite React plugin, the `yaml` package, Playwright and axe-core are used to build and test the site and are not part of the published pages.
+Vite (MIT) bundles the site and may add small runtime helpers to the published scripts, such as its module preload helper. TypeScript, the Vite React plugin, the `yaml` package, Playwright, axe-core and jsQR (Apache 2.0, reads the QR codes back in the tests) are used to build and test the site and are not part of the published pages.

@@ -1,10 +1,16 @@
-// Builds src/generated/ (course.json and modules/<id>.json) from content/course.yaml and content/modules/*.yaml.
+// Builds src/generated/ (course.json, modules/<id>.json and projects/<id>.json) from content/course.yaml,
+// content/modules/*.yaml and content/projects/*.yaml.
 //
 // Every reference solution and every example program in the lessons is compiled and run with the
 // reference JDK (Eclipse Temurin 21.0.10+7, or JAVA_HOME). The expected outputs the site grades
 // against come from those real runs, or are checked against them where the author wrote them down,
 // so nothing is hand-typed guesswork. It also checks that starter code doesn't already pass, that
 // every step has three challenges, and that solutions follow their own require/forbid rules.
+//
+// A project (content/projects/<id>.yaml) is one program built over several milestones: each
+// milestone is checked like a challenge, starting from the previous milestone's model solution,
+// and each model solution must still pass every earlier milestone's visible tests, except those
+// a milestone names in `replaces`.
 //
 // It also writes fidelity/out/content-checks.json: every program with its inputs and the JDK's
 // results, which scripts/content-browser.mjs replays in the browser engine.
@@ -13,9 +19,10 @@
 // programs are checked and copied to public/images/<name>-<hash>.png, where the site serves them.
 //
 // Usage: node scripts/build-content.mjs [--no-cache] [--dry] [--drill-file <name>.yaml]
-//   --dry         check only: write nothing (no cache, no generated files), so several checks can run at once
-//   --drill-file  check only this file of content/drills, or placement.yaml (with --dry, for writing drills)
-//   --module-file check only this file of content/modules and its drills (with --dry, for writing a module)
+//   --dry          check only: write nothing (no cache, no generated files), so several checks can run at once
+//   --drill-file   check only this file of content/drills, or placement.yaml (with --dry, for writing drills)
+//   --module-file  check only this file of content/modules and its drills (with --dry, for writing a module)
+//   --project-file check only this file of content/projects (with --dry, for writing a project)
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -36,7 +43,7 @@ import { REFERENCE_JVM_FLAGS, referenceJavaHome, stderrKey } from "./fidelity/su
 import { LAUNCHER_KEY, javaRunArgs } from "./javafx/reference.mjs";
 import { unpackLibrary } from "./libraries.mjs";
 import { ANY_CLASSES, drawClassDiagrams, UNDRAWN_CLASSES } from "./content/class-diagram.mjs";
-import { nondeterminism } from "./content/determinism.mjs";
+import { nondeterminism, nondeterministicUses } from "./content/determinism.mjs";
 import { blockKindProblem } from "../src/components/code-blocks.ts";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -49,6 +56,9 @@ const LESSONS = path.join(ROOT, "public", "lessons");
 const ASSETS_DIR = path.join(ROOT, "content", "assets");
 const IMAGES = path.join(ROOT, "public", ASSET_FOLDER);
 const CHECKS_JSON = path.join(ROOT, "fidelity", "out", "content-checks.json");
+// Projects (content/projects): each one's file is fetched when its page opens, from public/lessons/projects/.
+const PROJECTS_DIR = path.join(ROOT, "content", "projects");
+const PROJECT_LESSONS = "projects";
 const TIME_LIMIT_MS = 10_000;
 /** A window's JSON (a test's or an example's) above this many KB is a warning, and above the most an error. */
 const WINDOW_KB_WARN = 256;
@@ -72,12 +82,21 @@ const useCache = !process.argv.includes("--no-cache");
 const dry = process.argv.includes("--dry");
 const drillFileArg = process.argv.includes("--drill-file") ? process.argv[process.argv.indexOf("--drill-file") + 1] : null;
 const moduleFileArg = process.argv.includes("--module-file") ? process.argv[process.argv.indexOf("--module-file") + 1] : null;
+const projectFileArg = process.argv.includes("--project-file") ? process.argv[process.argv.indexOf("--project-file") + 1] : null;
 if (process.argv.includes("--module-file") && !/\.ya?ml$/.test(moduleFileArg ?? "")) {
   console.error("--module-file needs a file name, such as 13-lists.yaml.");
   process.exit(2);
 }
-if ((drillFileArg || moduleFileArg) && !dry) {
-  console.error("--drill-file and --module-file check part of the content, so they need --dry.");
+if (process.argv.includes("--project-file") && !/\.ya?ml$/.test(projectFileArg ?? "")) {
+  console.error("--project-file needs a file name, such as text-adventure.yaml.");
+  process.exit(2);
+}
+if ((drillFileArg || moduleFileArg || projectFileArg) && !dry) {
+  console.error("--drill-file, --module-file and --project-file check part of the content, so they need --dry.");
+  process.exit(2);
+}
+if ([drillFileArg, moduleFileArg, projectFileArg].filter(Boolean).length > 1) {
+  console.error("Use one of --drill-file, --module-file and --project-file at a time.");
   process.exit(2);
 }
 const CACHE_VERSION = 2;
@@ -491,6 +510,8 @@ const KEYS = {
   rule: ["pattern", "flags", "message", "min", "max", "raw"],
   test: ["name", "stdin", "args", "call", "files", "writes", "events", "expect", "hidden", "junit", "replace", "outcome"],
   drillFile: ["topic", "drills"],
+  project: ["id", "title", "after", "summary", "intro", "seed", "milestones"],
+  milestone: ["id", "title", "task", "files", "hints", "tests", "require", "forbid", "solution", "replaces", "style"],
   drill: ["id", "type", "prompt", "pre", "body", "classes", "stdin", "answer", "expect", "fix", "choices", "compiles", "verify", "why", "after", "seed", "solution", "hints", "tests", "require", "forbid", "style", "module"],
 };
 function checkKeys(where, obj, kind) {
@@ -803,7 +824,11 @@ async function buildPredict(where, raw, hints) {
   return { kind: "predict", seed: program, solution: program, hints, tests: [{ name: "Output", stdin: "", expect: out, hidden: false }], require: [], forbid: [], lines };
 }
 
-async function buildExercise(where, raw) {
+/**
+ * `startName` names the code the learner starts from in messages: "the starter code" in a lesson,
+ * the previous milestone's model solution in a project.
+ */
+async function buildExercise(where, raw, { startName = null } = {}) {
   if (raw.predict != null) {
     const hints = raw.hints ?? [];
     if (!Array.isArray(hints) || hints.length === 0 || hints.some((h) => typeof h !== "string")) errors.push(`${where}: needs a list of hints (as text)`);
@@ -821,7 +846,8 @@ async function buildExercise(where, raw) {
   if (kind === "fill" && typeof raw.fill !== "string") errors.push(`${where}: a fill challenge is one file of text`);
   const seed = kind === "fill" ? ensureNl(raw.fill) : codeOf(`${where} seed`, raw.seed);
   const solution = kind === "fill" ? ensureNl(templateSolution(raw.fill)) : raw.solution == null ? "" : codeOf(`${where} solution`, raw.solution, { packages: true });
-  if (kind === "code" && raw.seed != null && splitFiles(seed).map((f) => f.path).join() !== splitFiles(solution).map((f) => f.path).join()) errors.push(`${where}: the seed and the solution must have the same files, in the same order`);
+  if (kind === "code" && raw.seed != null && splitFiles(seed).map((f) => f.path).join() !== splitFiles(solution).map((f) => f.path).join())
+    errors.push(`${where}: ${startName ?? "the seed"} and the solution must have the same files, in the same order (${startName ? "the starting code has" : "the seed has"} ${splitFiles(seed).map((f) => f.path).join(", ")}; the solution ${splitFiles(solution).map((f) => f.path).join(", ")})`);
   if (!solution) {
     errors.push(`${where}: missing solution`);
     return null;
@@ -959,7 +985,7 @@ async function buildExercise(where, raw) {
       const sr = await Promise.all(tests.map((t, i) => run(sc, t.stdin, how(i))));
       const passes = tests.every((t, i) => sr[i].exitCode === 0 && !sr[i].timedOut && normalizeOutput(sr[i].stdout) === t.expect && wroteAsWanted(t, sr[i]) && windowAsWanted(t, sr[i]));
       const styleOk = style !== "indent" || indentProblems(seed).length === 0;
-      if (passes && styleOk && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: the starter code already passes`);
+      if (passes && styleOk && checkRules(seed, require, forbid).length === 0) errors.push(`${where}: ${startName ?? "the starter code"} already passes`);
     }
   }
   // A fill-in with all its blanks empty must not pass either.
@@ -1408,9 +1434,178 @@ async function buildPlacement(modules) {
   return out;
 }
 
-const modules = await buildModules();
-const drills = await buildDrills(modules);
-const placement = moduleFileArg || (drillFileArg && drillFileArg !== "placement.yaml") ? [] : await buildPlacement(modules);
+// ---------------------------------------------------------------- projects
+/**
+ * Projects: content/projects/<id>.yaml, one program built over several milestones (see
+ * content/README.md, "Projects"). Milestone 1 starts from the project's `seed`, and each later
+ * milestone from the previous one's model solution (on the site, from the learner's own passing
+ * code), with the files the milestone adds (`files`). Each milestone is checked like a lesson
+ * challenge on that starting code, and its model solution must also pass every visible test of the
+ * earlier milestones, except those it or a milestone before it names in `replaces` (behavior that
+ * is meant to change). Every test of a project has a name of its own, which `replaces` uses.
+ */
+async function buildProjects() {
+  const files = (fs.existsSync(PROJECTS_DIR) ? fs.readdirSync(PROJECTS_DIR).filter((f) => /\.ya?ml$/.test(f)).sort() : []).filter((f) => !projectFileArg || f === projectFileArg);
+  if (projectFileArg && !files.length) errors.push(`--project-file: no content/projects/${projectFileArg}`);
+  // A module named "projects" would share public/lessons/projects with the project files.
+  if (planned.has(PROJECT_LESSONS)) errors.push(`content/course.yaml: a module can't have the id ${PROJECT_LESSONS} (public/lessons/${PROJECT_LESSONS}/ holds the projects)`);
+  const built = (await Promise.all(files.map(buildProject))).filter(Boolean);
+  // In course order: by the module each comes after, then by title.
+  return built.sort((a, b) => (planned.get(a.after)?.number ?? 0) - (planned.get(b.after)?.number ?? 0) || a.title.localeCompare(b.title));
+}
+
+/** A project's file: the project, checked, or null. */
+async function buildProject(name) {
+  const file = `content/projects/${name}`;
+  const data = readYaml(path.join(PROJECTS_DIR, name));
+  if (!data) return null;
+  checkKeys(file, data, "project");
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const id = name.replace(/\.ya?ml$/, "");
+  if (!KEBAB.test(id)) errors.push(`${file}: the file's name is the project's id, in kebab-case (like text-adventure.yaml)`);
+  if (data.id !== id) errors.push(`${file}: id must be ${id}, the file's name (progress is saved by it)`);
+  for (const k of ["title", "summary", "intro"]) if (typeof data[k] !== "string" || !data[k].trim()) errors.push(`${file}: needs ${k === "title" ? "a title" : k === "summary" ? "a summary (one or two sentences for the list of projects)" : "an intro (Markdown: what the program will do)"} (as text)`);
+  const after = planned.get(data.after);
+  if (!after) errors.push(`${file}: after must be the id of a module in content/course.yaml: the last module whose topics the project needs (it's shown as "after module 20")`);
+  const intro = await checkExamples(`${file} intro`, String(data.intro ?? "").trim() + "\n");
+  if (data.seed == null) errors.push(`${file}: needs a seed: the code milestone 1 starts from`);
+  const seed = codeOf(`${file} seed`, data.seed);
+  for (const m of indentProblems(seed)) errors.push(`${file} seed: indentation: ${m}`);
+  if (!Array.isArray(data.milestones) || data.milestones.length < 2) {
+    errors.push(`${file}: needs milestones, a list of at least 2`);
+    return null;
+  }
+  const ids = new Set();
+  // Every test's name in the project, and the milestone it belongs to.
+  const testNames = new Map();
+  // The earlier milestones' visible tests still in force: { k, test } (a built test).
+  let inForce = [];
+  // The code the next milestone starts from, before the files it adds.
+  let program = seed;
+  const milestones = [];
+  for (const [k, raw] of data.milestones.entries()) {
+    const where = `${file} milestone ${k + 1} (${raw?.title ?? "untitled"})`;
+    checkKeys(where, raw, "milestone");
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    // Progress is saved by the milestone's id, so it's explicit: a number would shift when one is inserted.
+    if (typeof raw.id !== "string" || !KEBAB.test(raw.id)) errors.push(`${where}: needs an id in kebab-case (progress is saved by it)`);
+    else if (ids.has(raw.id)) errors.push(`${where}: duplicate milestone id ${raw.id}`);
+    ids.add(raw.id);
+    if (typeof raw.title !== "string" || !raw.title.trim()) errors.push(`${where}: needs a title (as text)`);
+    if (typeof raw.task !== "string" || !raw.task.trim()) errors.push(`${where}: needs a task (Markdown, as text)`);
+    // Files the milestone adds to the program, with the text they start with.
+    const added = [];
+    const have = splitFiles(program).map((f) => f.path);
+    if (raw.files != null) {
+      if (typeof raw.files !== "object" || Array.isArray(raw.files)) errors.push(`${where}: files maps the names of files this milestone adds to the program (like Item.java) to the text they start with`);
+      else
+        for (const [p, text] of Object.entries(raw.files)) {
+          const problem = pathProblem(p);
+          if (problem) errors.push(`${where}: files: "${p}" ${problem}`);
+          else if (have.includes(p)) errors.push(`${where}: files: the program already has ${p} (from ${k ? "the earlier milestones" : "the seed"}); files only adds new ones`);
+          else added.push({ path: p, text: ensureNl(String(text ?? "")) });
+        }
+      for (const f of added) for (const m of indentMessages(f.text)) errors.push(`${where}: files: ${f.path}: indentation: ${m}`);
+    }
+    const start = added.length ? joinFiles([...splitFiles(program), ...added]) : program;
+    // Every test is named: replaces names them, and the results show them.
+    const tests = Array.isArray(raw.tests) ? raw.tests : [];
+    if (!tests.length) errors.push(`${where}: needs tests, each with a name`);
+    let ok = true;
+    tests.forEach((t, i) => {
+      const n = `${where} test ${i + 1}`;
+      if (t?.junit != null) {
+        ok = false;
+        errors.push(`${n}: a project's tests run the program (stdin, args, call, files, writes); junit tests aren't used in projects`);
+      }
+      if (typeof t?.name !== "string" || !t.name.trim()) errors.push(`${n}: every test of a project needs a name of its own (replaces in a later milestone names it)`);
+      else if (testNames.has(t.name)) errors.push(`${n}: the test name "${t.name}" is used already (in milestone ${testNames.get(t.name) + 1}); each test of a project has a name of its own`);
+      else testNames.set(t.name, k);
+    });
+    if (!ok || !tests.length) return null;
+    const from = k === 0 ? "the project's seed" : "the previous milestone's model solution";
+    const ex = await buildExercise(where, { seed: start, solution: raw.solution, hints: raw.hints, tests, require: raw.require, forbid: raw.forbid, style: raw.style }, { startName: added.length ? `${from} with this milestone's files` : from });
+    // A later milestone starts from this one's model solution, so the project stops at the first that fails.
+    if (!ex) return null;
+    checkTaskOutput(where, raw.task, ex);
+    const task = await checkExamples(`${where} task`, String(raw.task ?? "").trim() + "\n");
+    // Expected outputs come from one run of the model solution, and later milestones build on it.
+    const uses = nondeterministicUses(mainFile(ex.solution));
+    if (uses.length) errors.push(`${where}: the model solution uses ${uses.join(", ")}, but a project's expected outputs come from one run of it on the JDK, so it must print the same on every run (give a Random a seed, new Random(42); use day numbers instead of today's date)`);
+    // The earlier visible tests it changes on purpose.
+    const replaces = [];
+    if (raw.replaces != null) {
+      if (!Array.isArray(raw.replaces) || raw.replaces.some((x) => typeof x !== "string")) errors.push(`${where}: replaces is a list of the names of earlier milestones' visible tests whose behavior this milestone changes`);
+      else
+        for (const name of raw.replaces) {
+          if (inForce.some((e) => e.test.name === name)) replaces.push(name);
+          else if (testNames.get(name) === k) errors.push(`${where}: replaces names "${name}", a test of this milestone; it names earlier milestones' tests`);
+          else if (testNames.has(name) && testNames.get(name) < k) errors.push(`${where}: replaces names "${name}" (milestone ${testNames.get(name) + 1}), which is a hidden test or was replaced already; only visible tests still in force can be replaced`);
+          else errors.push(`${where}: replaces names "${name}", which isn't a test of an earlier milestone`);
+        }
+    }
+    await checkEarlierTests(where, ex.solution, inForce, replaces);
+    inForce = [...inForce.filter((e) => !replaces.includes(e.test.name)), ...ex.tests.filter((t) => !t.hidden).map((test) => ({ k, test }))];
+    program = ex.solution;
+    milestones.push({ id: raw.id, title: raw.title, task, ...(added.length ? { files: Object.fromEntries(added.map((f) => [f.path, f.text])) } : {}), ...(replaces.length ? { replaces } : {}), ...ex });
+  }
+  return { id, title: String(data.title ?? ""), summary: String(data.summary ?? ""), after: String(data.after ?? ""), intro, milestones };
+}
+
+/**
+ * Runs a model solution on earlier milestones' visible tests, each milestone's tests as that
+ * milestone's check runs them (with its own check program for tests that call methods). A test still
+ * in force that fails is an error; one this milestone replaces that still passes is a warning (it
+ * may not need replacing). The runs go to the browser replay too.
+ */
+async function checkEarlierTests(where, solution, inForce, replaces) {
+  const replaced = new Set(replaces);
+  const byMilestone = new Map();
+  for (const e of inForce) byMilestone.set(e.k, [...(byMilestone.get(e.k) ?? []), e.test]);
+  for (const [k, tests] of byMilestone) {
+    const res = await runTests(tests, solution);
+    const w = `${where}, milestone ${k + 1}'s tests`;
+    if (!res.compiled) {
+      errors.push(`${w}: the model solution doesn't compile with milestone ${k + 1}'s check:\n${res.output}`);
+      continue;
+    }
+    for (const x of res.results) {
+      if (replaced.has(x.test.name)) {
+        if (x.pass) warnings.push(`${where}: replaces "${x.test.name}" (milestone ${k + 1}), but its model solution still passes that test`);
+      } else if (!x.pass) errors.push(`${where}: the model solution must still pass milestone ${k + 1}'s visible test "${x.test.name}" (or the milestone names it in replaces, when its behavior changes on purpose): ${x.why}`);
+    }
+    const kept = res.results.filter((x) => !replaced.has(x.test.name) && x.pass);
+    if (kept.length) checks.push({ where: w, kind: "run", files: res.files, ...(res.check ? { mainClass: CHECK_CLASS } : {}), tests: kept.map((x) => ({ stdin: x.test.stdin, ...x.inputs, stdout: x.r.stdout, exitCode: 0, ...(x.r.written ? { written: x.r.written } : {}), ...(x.r.window != null ? { window: x.r.window } : {}) })) });
+  }
+}
+
+/**
+ * Runs built tests (as a challenge stores them) on a program on the JDK, as the browser's grader
+ * would: { compiled, output, files, check, results: [{ test, pass, why, r, inputs }] }.
+ */
+async function runTests(tests, text) {
+  const check = tests.some((t) => t.call != null);
+  const files = check ? [...mainFile(text), { path: CHECK_FILE, text: checkSource(tests.map((t) => ({ call: t.call })), mainFile(text)).text }] : mainFile(text);
+  const c = await compile(files);
+  if (!c.ok) return { compiled: false, output: c.output, files, check, results: [] };
+  const results = await Promise.all(
+    tests.map(async (t, i) => {
+      // What the replay gives the program: its arguments, and its files (with the events of a window).
+      const inputs = { ...(check ? { args: [String(i)] } : t.args ? { args: t.args } : {}), ...(t.files ? { files: t.files } : {}), ...(t.events ? { events: t.events } : {}) };
+      const r = await run(c, t.stdin, { ...(check ? { mainClass: CHECK_CLASS, args: [String(i)] } : t.args ? { args: t.args } : {}), ...(t.events ? { files: withEventsFile(t.files, t.events) } : t.files ? { files: t.files } : {}), ...(t.writes ? { writes: true } : {}) });
+      const out = normalizeOutput(r.stdout);
+      const why = r.timedOut ? "it times out" : r.exitCode !== 0 ? `it exits with ${r.exitCode}\n${r.stderr}` : out !== t.expect ? `the test expects\n${t.expect}\nbut it prints\n${out}` : t.writes && !compareWrites(t.writes, r.written).every((f) => f.pass) ? "the files it writes differ" : t.events && !checkWindow(t, r.window).pass ? "its window differs" : null;
+      return { test: t, pass: !why, why, r, inputs };
+    }),
+  );
+  return { compiled: true, files, check, results };
+}
+
+// A project check (--project-file) checks that project only; a module or drill check, no projects.
+const modules = projectFileArg ? [] : await buildModules();
+const drills = projectFileArg ? [] : await buildDrills(modules);
+const placement = projectFileArg || moduleFileArg || (drillFileArg && drillFileArg !== "placement.yaml") ? [] : await buildPlacement(modules);
+const projects = moduleFileArg || drillFileArg ? [] : await buildProjects();
 
 if (!dry) {
   fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
@@ -1425,8 +1620,11 @@ if (errors.length) {
   process.exit(1);
 }
 
+/** A count with its word, singular for one: "1 project", "4 projects". */
+const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 if (dry) {
-  console.log(`check ok (nothing written): ${modules.length} modules${moduleFileArg ? ` (${moduleFileArg})` : ""}, ${drills.length} drills${drillFileArg ? ` in ${drillFileArg}` : ""}, ${placement.length} placement questions`);
+  console.log(`check ok (nothing written): ${count(modules.length, "module")}${moduleFileArg ? ` (${moduleFileArg})` : ""}, ${count(drills.length, "drill")}${drillFileArg ? ` in ${drillFileArg}` : ""}, ${count(placement.length, "placement question")}, ${count(projects.length, "project")}${projectFileArg ? ` (${projectFileArg})` : ""} with ${count(projects.reduce((n, x) => n + x.milestones.length, 0), "milestone")}`);
   process.exit(0);
 }
 
@@ -1435,6 +1633,9 @@ if (dry) {
 // never stale. The whole modules are for the pre-rendered pages and the tests.
 const lessonJson = new Map(modules.flatMap((m) => m.steps.map((s) => [s.id, JSON.stringify(s)])));
 const lessonHash = (s) => crypto.createHash("sha256").update(lessonJson.get(s.id)).digest("hex").slice(0, 10);
+// A project's page fetches its whole file (the intro and every milestone): public/lessons/projects/<id>-<hash>.json.
+const projectJson = new Map(projects.map((x) => [x.id, JSON.stringify(x)]));
+const projectHash = (x) => crypto.createHash("sha256").update(projectJson.get(x.id)).digest("hex").slice(0, 10);
 const live = new Set(modules.map((m) => m.id));
 const plan = course.modules.map((m, i) => ({ id: m.id, number: i + 1, title: m.title, course: m.course, part: m.part ?? null, mooc: m.mooc ?? [], steps: m.steps, live: live.has(m.id) }));
 const index = {
@@ -1444,6 +1645,8 @@ const index = {
   modules: modules.map(({ steps, ...m }) => ({ ...m, drills: drills.filter((d) => d.topic === m.id).length, steps: steps.map((s) => ({ id: s.id, slug: s.slug, title: s.title, hash: lessonHash(s), challenges: 1 + s.more.length, drills: drills.filter((d) => d.after === s.id).length })) })),
   interviewDrills: drills.filter((d) => d.topic === "interview").length,
   placementQuestions: placement.length,
+  // The projects, in course order: what the list of projects and their pages need before the file loads.
+  projects: projects.map((x) => ({ id: x.id, title: x.title, summary: x.summary, after: x.after, hash: projectHash(x), milestones: x.milestones.map((m) => ({ id: m.id, title: m.title })) })),
   // The images of content/assets, which the Playground offers as sample files.
   assets: [...assets.values()].map((a) => a.file),
 };
@@ -1458,10 +1661,19 @@ for (const m of modules) {
     fs.writeFileSync(file, lessonJson.get(s.id));
   }
 }
+fs.mkdirSync(path.join(LESSONS, PROJECT_LESSONS), { recursive: true });
+for (const x of projects) {
+  const file = path.join(LESSONS, PROJECT_LESSONS, `${x.id}-${projectHash(x)}.json`);
+  lessonFiles.add(file);
+  fs.writeFileSync(file, projectJson.get(x.id));
+}
 fs.rmSync(GENERATED, { recursive: true, force: true });
 fs.mkdirSync(path.join(GENERATED, "modules"), { recursive: true });
+fs.mkdirSync(path.join(GENERATED, "projects"), { recursive: true });
 fs.writeFileSync(path.join(GENERATED, "course.json"), JSON.stringify(index));
 for (const m of modules) fs.writeFileSync(path.join(GENERATED, "modules", `${m.id}.json`), JSON.stringify(m));
+// The whole projects, for the pre-rendered pages and the tests.
+for (const x of projects) fs.writeFileSync(path.join(GENERATED, "projects", `${x.id}.json`), projectJson.get(x.id));
 for (const dir of fs.readdirSync(LESSONS)) {
   const full = path.join(LESSONS, dir);
   for (const f of fs.readdirSync(full)) if (!lessonFiles.has(path.join(full, f))) fs.rmSync(path.join(full, f));
@@ -1483,4 +1695,4 @@ fs.writeFileSync(CHECKS_JSON, JSON.stringify({ jdk: jdkVersion, checks }, null, 
 const steps = modules.reduce((a, m) => a + m.steps.length, 0);
 const challenges = modules.reduce((a, m) => a + m.steps.reduce((b, s) => b + 1 + s.more.length, 0), 0);
 const runs = checks.reduce((a, c) => a + (c.tests?.length ?? 0), 0);
-console.log(`content ok: ${modules.length} modules, ${steps} steps, ${challenges} challenges, ${drills.length} drills, ${placement.length} placement questions; ${checks.length} programs and ${runs} runs checked on ${jdkVersion} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+console.log(`content ok: ${count(modules.length, "module")}, ${count(steps, "step")}, ${count(challenges, "challenge")}, ${count(drills.length, "drill")}, ${count(placement.length, "placement question")}, ${count(projects.length, "project")} with ${count(projects.reduce((n, x) => n + x.milestones.length, 0), "milestone")}; ${count(checks.length, "program")} and ${count(runs, "run")} checked on ${jdkVersion} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);

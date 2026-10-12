@@ -1,13 +1,23 @@
 import { useEffect } from "react";
 import { Check, Lock } from "lucide-react";
 import { Link } from "react-router-dom";
-import { COURSE_NAMES, moduleById, modulePath, modules, plan, planByCourse } from "../content";
+import { COURSE_NAMES, moduleById, modulePath, modules, plan, planByCourse, projects } from "../content";
 import { useStore } from "../state/store";
 import { moduleProgress, nextStep } from "../state/derived";
 import { prefetchStep, stepPath } from "../content";
 import { useTitle } from "../lib/title";
 import { loadStepPage } from "./editorPages";
 import ExtraTag from "../components/ExtraTag";
+import { moduleFinished } from "../lib/record";
+import type { PlannedModule } from "../content/types";
+import type { State } from "../state/store";
+
+/** Every module of a part is written and finished (the end of the part then links to the record). */
+const partDone = (s: State, part: PlannedModule[]) =>
+  part.every((pm) => {
+    const m = moduleById.get(pm.id);
+    return !!m && moduleFinished(s, m).done;
+  });
 
 const COURSE_NOTES: Record<string, string> = {
   I: "Parts 1 to 7 of the MOOC: the basics of programming, up to classes, objects and larger programs.",
@@ -42,6 +52,17 @@ export default function Learn() {
           </p>
         )}
       </div>
+      <section className="card learn-projects" aria-labelledby="projects-h">
+        <h2 id="projects-h" className="h3">
+          Projects
+        </h2>
+        <p>
+          {projects.length
+            ? `${projects.length === 1 ? "One larger program" : `${projects.length} larger programs`} to build over several milestones, each after the modules it needs.`
+            : "Larger programs to build over several milestones, each after the modules it needs, are on their way."}{" "}
+          <Link to="/projects/">See the projects</Link>
+        </p>
+      </section>
       {courses.map((c) => (
         <section key={c.course} className="phase" aria-labelledby={`course-${c.course}`}>
           <h2 id={`course-${c.course}`} className="course-title">
@@ -99,6 +120,14 @@ export default function Learn() {
                   );
                 })}
               </ol>
+              {partDone(s, p.modules) && (
+                <p className="record-link">
+                  <Check className="icon" aria-hidden="true" />
+                  <span>
+                    {p.part != null ? `Part ${p.part} finished.` : "Every extra module finished."} <Link to="/record/">See your record</Link>
+                  </span>
+                </p>
+              )}
             </div>
           ))}
         </section>

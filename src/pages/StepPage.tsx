@@ -68,7 +68,7 @@ function StepView({ m, step, takeFocus }: { m: ModuleSummary; step: Step; takeFo
   // The challenge on screen, for checks that finish after the learner switched to another one.
   const curRef = useRef(cur);
   curRef.current = cur;
-  const [banner, setBanner] = useState<{ text: string; next: number | null; drills?: number } | null>(null);
+  const [banner, setBanner] = useState<{ text: string; next: number | null; drills?: number; record?: boolean } | null>(null);
 
   const goChallenge = (k: number) => {
     setCur(k);
@@ -102,7 +102,7 @@ function StepView({ m, step, takeFocus }: { m: ModuleSummary; step: Step; takeFo
       // Finishing the step opens the Deathmatch drills that practice it (unless they were open already).
       const openAlready = getState().settings.unlockAll || getState().placed.includes(m.id);
       const drills = openAlready ? 0 : (m.steps[idx]?.drills ?? 0);
-      if (shown) setBanner({ text: moduleDone ? `Module complete: ${m.title}` : "Step complete", next: null, drills });
+      if (shown) setBanner({ text: moduleDone ? `Module complete: ${m.title}` : "Step complete", next: null, drills, record: moduleDone });
     },
     [step, m, idx, challenges],
   );
@@ -157,6 +157,12 @@ function StepView({ m, step, takeFocus }: { m: ModuleSummary; step: Step; takeFo
                     <Link to="/deathmatch/">
                       {banner.drills} new {banner.drills === 1 ? "drill" : "drills"} in Deathmatch
                     </Link>
+                  </>
+                ) : null}
+                {banner.record ? (
+                  <>
+                    {" · "}
+                    <Link to="/record/">See your record</Link>
                   </>
                 ) : null}
               </span>

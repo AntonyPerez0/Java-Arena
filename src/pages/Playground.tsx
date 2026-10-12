@@ -43,7 +43,8 @@ function loadSaved(): Saved {
 
 function save(s: Saved) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    // savedAt: a transfer keeps the program saved later (src/lib/transfer.ts).
+    localStorage.setItem(KEY, JSON.stringify({ ...s, savedAt: Date.now() }));
   } catch {
     /* storage full or blocked */
   }

@@ -16,8 +16,21 @@
  * AnimationTimer whose handle(long now) reads now (a made-up clock here, the system's in JavaFX).
  */
 export function nondeterminism(files) {
-  const code = files.map((f) => f.text.replace(/"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, " ")).join("\n");
-  const found = [
+  const code = blanked(files);
+  const found = nondeterministicUses(files);
+  const messages = found.length ? [`uses ${found.join(", ")}, but a program with a window must show the same window on every run: the page runs it again from the start for every new click, key or frames line, and a game must play the same each time (give a Random a seed, new Random(42), and shuffle with one: Collections.shuffle(list, new Random(42)))`] : [];
+  return [...messages, ...windowNondeterminism(files, code)];
+}
+
+/**
+ * What in a program could make it print something else on another run (randomness without a seed,
+ * the clock, identity hash codes, Set.of and Map.of), each named for a message, or []. Comments and
+ * strings don't count. The content build also checks every model solution of a project with it,
+ * since a project's expected outputs come from one run on the JDK.
+ */
+export function nondeterministicUses(files) {
+  const code = blanked(files);
+  return [
     [/\bMath\s*\.\s*random\s*\(/, "Math.random()"],
     [/\bnew\s+(?:java\s*\.\s*util\s*\.\s*)?Random\s*\(\s*\)/, "new Random() without a seed"],
     [/\bThreadLocalRandom\b/, "ThreadLocalRandom"],
@@ -39,7 +52,15 @@ export function nondeterminism(files) {
   ]
     .filter(([re]) => re.test(code))
     .map(([, what]) => what);
-  const messages = found.length ? [`uses ${found.join(", ")}, but a program with a window must show the same window on every run: the page runs it again from the start for every new click, key or frames line, and a game must play the same each time (give a Random a seed, new Random(42), and shuffle with one: Collections.shuffle(list, new Random(42)))`] : [];
+}
+
+/** The program's code with comments and strings blanked out. */
+const blanked = (files) => files.map((f) => f.text.replace(BLANK, " ")).join("\n");
+const BLANK = /"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g;
+
+/** The rest of nondeterminism's checks: an AnimationTimer's now, and an image from the internet. */
+function windowNondeterminism(files, code) {
+  const messages = [];
   // The now that AnimationTimer's handle gets is a made-up clock here and the system's clock in real
   // JavaFX: a window that depends on it isn't the same here and there.
   const now = timerNowUses(code);
@@ -47,7 +68,7 @@ export function nondeterminism(files) {
     messages.push(`uses the now value that AnimationTimer's handle(long ${now[0]}) gets, but in Java Arena it's a made-up clock (each frame 1/60 of a second later) and in real JavaFX the computer's clock, so the game wouldn't be the same on every run or on real JavaFX: count the frames in a field instead (frame++ in handle), and move things by a fixed step each frame`);
   // An image from the internet depends on the network: real JavaFX downloads it, and Java Arena's
   // JavaFX reads only files in the program's folder (giving an error image). Comments don't count; strings do.
-  const withStrings = files.map((f) => f.text.replace(/"""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) => (m.startsWith("/") ? " " : m))).join("\n");
+  const withStrings = files.map((f) => f.text.replace(BLANK, (m) => (m.startsWith("/") ? " " : m))).join("\n");
   if (/\bnew\s+(?:javafx\s*\.\s*scene\s*\.\s*image\s*\.\s*)?(?:Image|ImageView)\s*\(\s*"\s*(?:https?|ftp|jar):/i.test(withStrings))
     messages.push('reads an image from the internet (new Image("https:...")), which depends on the network: give the program an image file of content/assets instead (files: { landscape.png: { asset: landscape.png } } in a test, an asset block before an example) and read it with new Image("file:landscape.png")');
   return messages;

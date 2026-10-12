@@ -1,7 +1,7 @@
 import { ArrowRight, BookOpen, CalendarCheck, Check, Compass, Cpu, Crosshair, Lightbulb, ListChecks, Smartphone, WifiOff } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useEffect } from "react";
-import { course, modules, plan, prefetchStep, stepPath, totalChallenges, totalSteps, modulePath } from "../content";
+import { course, modules, plan, prefetchStep, projects, stepPath, totalChallenges, totalSteps, modulePath } from "../content";
 import { localDay, useStore } from "../state/store";
 import { nextStep, stepsDone } from "../state/derived";
 import { useTitle } from "../lib/title";
@@ -105,6 +105,9 @@ export default function Home() {
                 <h2 className="h3">The whole course is online</h2>
                 <p>
                   All {plan.length} modules are online: {moocCount} following the MOOC (Java Programming I and II){extraCount > 0 && ` and ${extraCount} extra ${extraCount === 1 ? "module" : "modules"} of Java Arena's own`}, with {totalSteps} steps, {totalChallenges} challenges and {drillCount} practice drills. <Link to="/learn/">The course page</Link> lists them all.
+                </p>
+                <p>
+                  {projects.length ? `${projects.length === 1 ? "A project lets" : `${projects.length} projects let`} you build a larger program over several milestones.` : "Projects, larger programs built over several milestones, are on their way."} <Link to="/projects/">See the projects</Link>
                 </p>
               </>
             ) : (

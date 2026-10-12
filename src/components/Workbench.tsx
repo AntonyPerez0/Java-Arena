@@ -19,7 +19,8 @@ type Props = {
   ex: Exercise;
   progress?: ChallengeProgress;
   onChange: (patch: Partial<ChallengeProgress>) => void;
-  onPass: (info: { hintsUsed: number; sawSolution: boolean }) => void;
+  /** Called when a check passes, with the source that was graded (not what the editor holds by then). */
+  onPass: (info: { hintsUsed: number; sawSolution: boolean; code: string }) => void;
   /** What a "Report a problem" issue says (the code and last result are added). */
   report: Omit<ReportInfo, "code" | "result">;
 };
@@ -106,7 +107,7 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
       requestAnimationFrame(() =>
         boxRef.current?.querySelector(".results")?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }),
       );
-      if (r.status === "pass") onPass({ hintsUsed, sawSolution });
+      if (r.status === "pass") onPass({ hintsUsed, sawSolution, code: source });
     } finally {
       busyRef.current = false;
       setBusy(null);

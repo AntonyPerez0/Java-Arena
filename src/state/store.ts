@@ -1,11 +1,14 @@
 // Progress and settings, kept in this browser's localStorage, with a React hook.
 import { useSyncExternalStore } from "react";
+import type { PlaygroundSave } from "../lib/transfer";
 
 /** One challenge of a step. `attempts` and `sawSolution` are saved, so a reload doesn't reset them. */
 export type ChallengeProgress = {
   done: boolean;
   code?: string;
   blanks?: string[];
+  /** When `code` or `blanks` last changed (ms), so a transfer keeps the newer code. Saves before Batch 19 have none. */
+  savedAt?: number;
   hintsUsed: number;
   attempts: number;
   sawSolution?: boolean;
@@ -20,6 +23,22 @@ export type StepProgress = {
   doneAt?: number;
   clean?: boolean;
   challenges: Record<number, ChallengeProgress>;
+};
+
+/**
+ * A project's milestone: a challenge's progress, and `passed`, the learner's code when it last
+ * passed, which the next milestone starts from.
+ */
+export type MilestoneProgress = ChallengeProgress & { passed?: string };
+
+/**
+ * A project (content/projects): `milestones` by milestone id. `done` once every milestone has
+ * passed, first at `doneAt`.
+ */
+export type ProjectProgress = {
+  done: boolean;
+  doneAt?: number;
+  milestones: Record<string, MilestoneProgress>;
 };
 
 export type Theme = "system" | "dark" | "light";
@@ -46,6 +65,8 @@ export type DmStats = {
 export type State = {
   version: 1;
   steps: Record<string, StepProgress>;
+  /** Projects, by project id. */
+  projects: Record<string, ProjectProgress>;
   drills: Record<string, DrillStat>;
   dm: DmStats;
   /** Daily challenge: the local date and whether the first answer was right. */
@@ -56,6 +77,12 @@ export type State = {
   placedAt?: number;
   /** When "Delete all progress" was last used, so another open tab doesn't bring the old progress back. */
   resetAt?: number;
+  /**
+   * When progress from a transfer link or file was last merged in (importProgress), so another open
+   * tab takes the imported progress as it is, instead of saving its own older code and drills back
+   * over it. Never part of a transfer.
+   */
+  importAt?: number;
   settings: {
     theme: Theme;
     /** Text size multiplier: 1, 1.125, 1.25 or 1.4. */
@@ -72,6 +99,8 @@ export type State = {
     boss: boolean;
     /** Deathmatch: single-key shortcuts (Y and N, line numbers, A to D, R). */
     keys: boolean;
+    /** The name the learner typed for the record page (/record/), as typed. Never sent anywhere. */
+    name?: string;
   };
 };
 
@@ -92,6 +121,7 @@ const freshDm = (): DmStats => ({ best: { deathmatch: 0, casual: 0, warmup: 0, i
 const fresh = (): State => ({
   version: 1,
   steps: {},
+  projects: {},
   drills: {},
   dm: freshDm(),
   daily: {},
@@ -104,18 +134,22 @@ function normalize(s: Partial<State>): State {
   const f = fresh();
   const steps: Record<string, StepProgress> = {};
   for (const [id, p] of Object.entries(s.steps ?? {})) steps[id] = { done: !!p.done, doneAt: p.doneAt, clean: p.clean, challenges: p.challenges ?? {} };
+  const projects: Record<string, ProjectProgress> = {};
+  for (const [id, p] of Object.entries(s.projects ?? {})) projects[id] = { done: !!p?.done, doneAt: p?.doneAt, milestones: p?.milestones ?? {} };
   const dm = { ...f.dm, ...s.dm, best: { ...f.dm.best, ...s.dm?.best } };
   return {
     ...f,
     ...s,
     version: 1,
     steps,
+    projects,
     drills: s.drills ?? {},
     dm,
     daily: s.daily ?? {},
     placed: Array.isArray(s.placed) ? s.placed : [],
     placedAt: typeof s.placedAt === "number" ? s.placedAt : undefined,
     resetAt: typeof s.resetAt === "number" ? s.resetAt : undefined,
+    importAt: typeof s.importAt === "number" ? s.importAt : undefined,
     settings: { ...f.settings, ...s.settings, topicsOff: Array.isArray(s.settings?.topicsOff) ? s.settings.topicsOff : [] },
   };
 }
@@ -135,17 +169,28 @@ const listeners = new Set<() => void>();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const notify = () => listeners.forEach((l) => l());
 
-function mergeChallenge(a: ChallengeProgress | undefined, b: ChallengeProgress | undefined): ChallengeProgress {
+function mergeChallenge<C extends MilestoneProgress>(a: C | undefined, b: C | undefined): C {
   if (!a || !b) return (a ?? b)!;
   return {
+    ...b,
     done: a.done || b.done,
     // This tab's code wins: it's what the learner sees here.
     code: b.code ?? a.code,
     blanks: b.blanks ?? a.blanks,
+    savedAt: b.code != null || b.blanks != null ? b.savedAt : a.savedAt,
     hintsUsed: Math.max(a.hintsUsed, b.hintsUsed),
     attempts: Math.max(a.attempts, b.attempts),
     sawSolution: a.sawSolution || b.sawSolution || undefined,
+    passed: b.passed ?? a.passed,
   };
+}
+
+function mergeProject(a: ProjectProgress | undefined, b: ProjectProgress | undefined): ProjectProgress {
+  if (!a || !b) return (a ?? b)!;
+  const milestones: Record<string, MilestoneProgress> = {};
+  for (const k of new Set([...Object.keys(a.milestones), ...Object.keys(b.milestones)])) milestones[k] = mergeChallenge(a.milestones[k], b.milestones[k]);
+  const times = [a.doneAt, b.doneAt].filter((t): t is number => t != null);
+  return { done: a.done || b.done, doneAt: times.length ? Math.min(...times) : undefined, milestones };
 }
 
 function mergeStep(a: StepProgress | undefined, b: StepProgress | undefined): StepProgress {
@@ -182,8 +227,10 @@ function mergeDm(a: State, b: State): Pick<State, "drills" | "dm" | "daily"> {
 /**
  * Combines the saved progress (possibly written by another tab) with this tab's: a step or challenge
  * done in either stays done, and practice in either counts. After "Delete all progress" in one tab,
- * the newer reset wins. Settings come from `settingsFrom`, and placement skips from the tab that
- * changed them last.
+ * the newer reset wins, and after an import (a transfer link or file) the newer import wins, so the
+ * other tab's older code and drills don't come back over it. Like a reset, that drops what the other
+ * tab changed and hadn't saved yet. Settings come from `settingsFrom`, and placement skips from the
+ * tab that changed them last.
  */
 function merge(saved: State, local: State, settingsFrom: "saved" | "local"): State {
   const from = settingsFrom === "saved" ? saved : local;
@@ -193,10 +240,18 @@ function merge(saved: State, local: State, settingsFrom: "saved" | "local"): Sta
     const newer = savedReset > localReset ? saved : local;
     return { ...newer, settings: from.settings };
   }
+  const savedImport = saved.importAt ?? 0;
+  const localImport = local.importAt ?? 0;
+  if (savedImport !== localImport) {
+    const newer = savedImport > localImport ? saved : local;
+    return { ...newer, settings: from.settings };
+  }
   const steps: Record<string, StepProgress> = {};
   for (const id of new Set([...Object.keys(saved.steps), ...Object.keys(local.steps)])) steps[id] = mergeStep(saved.steps[id], local.steps[id]);
+  const projects: Record<string, ProjectProgress> = {};
+  for (const id of new Set([...Object.keys(saved.projects), ...Object.keys(local.projects)])) projects[id] = mergeProject(saved.projects[id], local.projects[id]);
   const placedFrom = (saved.placedAt ?? 0) === (local.placedAt ?? 0) ? from : (saved.placedAt ?? 0) > (local.placedAt ?? 0) ? saved : local;
-  return { ...local, steps, ...mergeDm(saved, local), placed: placedFrom.placed, placedAt: placedFrom.placedAt, settings: from.settings };
+  return { ...local, steps, projects, ...mergeDm(saved, local), placed: placedFrom.placed, placedAt: placedFrom.placedAt, settings: from.settings };
 }
 
 function write() {
@@ -270,8 +325,26 @@ export function patchStep(id: string, patch: Partial<Omit<StepProgress, "challen
 export function patchChallenge(id: string, k: number, patch: Partial<ChallengeProgress>) {
   update((s) => {
     const step = stepOf(s, id);
-    const challenges = { ...step.challenges, [k]: { ...emptyChallenge(), ...step.challenges[k], ...patch } };
+    // Saved code gets the time it changed, which a transfer compares.
+    const saved = patch.code !== undefined || patch.blanks !== undefined ? { savedAt: Date.now() } : {};
+    const challenges = { ...step.challenges, [k]: { ...emptyChallenge(), ...step.challenges[k], ...patch, ...saved } };
     return { ...s, steps: { ...s.steps, [id]: { ...step, challenges } } };
+  });
+}
+
+const projectOf = (s: State, id: string): ProjectProgress => s.projects[id] ?? { done: false, milestones: {} };
+
+export function patchProject(id: string, patch: Partial<Omit<ProjectProgress, "milestones">>) {
+  update((s) => ({ ...s, projects: { ...s.projects, [id]: { ...projectOf(s, id), ...patch } } }));
+}
+
+/** Changes a milestone's progress; saved code gets the time it changed, as a challenge's does. */
+export function patchMilestone(id: string, milestone: string, patch: Partial<MilestoneProgress>) {
+  update((s) => {
+    const p = projectOf(s, id);
+    const saved = patch.code !== undefined ? { savedAt: Date.now() } : {};
+    const milestones = { ...p.milestones, [milestone]: { ...emptyChallenge(), ...p.milestones[milestone], ...patch, ...saved } };
+    return { ...s, projects: { ...s.projects, [id]: { ...p, milestones } } };
   });
 }
 
@@ -288,6 +361,39 @@ export function patchSettings(patch: Partial<State["settings"]>) {
 
 /** Where the Playground keeps its program (separate from progress, but deleted with it). */
 export const PLAYGROUND_KEY = "java-arena-playground";
+
+/** The Playground's saved program, or null when there's none (or it's damaged). */
+export function readPlayground(): PlaygroundSave | null {
+  try {
+    const p = JSON.parse(read(PLAYGROUND_KEY) ?? "null");
+    return p && typeof p.code === "string" ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Takes in progress from a transfer link or file (already merged or replacing, src/lib/transfer.ts)
+ * and saves it at once. It's written as it is, not merged again with the saved copy as a normal save
+ * is: the saved copy is this tab's progress, which the import was just combined with by the
+ * transfer's own rules. The Playground program is saved too (null: none). It's stamped with
+ * `importAt`, so this browser's other open tabs take it as it is (see merge). A Replace also carries
+ * a new `resetAt`, which wins the same way.
+ */
+export function importProgress(next: State, playground: PlaygroundSave | null) {
+  if (saveTimer) write();
+  const importAt = Math.max(Date.now(), (state.importAt ?? 0) + 1);
+  state = { ...normalize(next), importAt };
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+    localStorage.setItem(MOBILE_KEY, state.settings.mobileData ? "1" : "0");
+    if (playground) localStorage.setItem(PLAYGROUND_KEY, JSON.stringify(playground));
+    else localStorage.removeItem(PLAYGROUND_KEY);
+  } catch {
+    /* storage full or blocked: the progress lasts for this visit only */
+  }
+  notify();
+}
 
 /** The learner's local date as YYYY-MM-DD (the daily challenge changes at local midnight). */
 export function localDay(d = new Date()) {

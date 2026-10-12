@@ -1,6 +1,6 @@
 # Lesson content
 
-This folder holds the course: `course.yaml` (every planned module, in order, with the MOOC sections it follows) and one file per written module in `modules/`, named after its place in the course (`01-printing.yaml`).
+This folder holds the course: `course.yaml` (every planned module, in order, with the MOOC sections it follows) and one file per written module in `modules/`, named after its place in the course (`01-printing.yaml`); `projects/` holds the projects, larger programs built over several milestones (see "Projects").
 
 ## License and credit
 
@@ -701,6 +701,88 @@ See `scripts/fx-check/README.md` for what the check proves and what it doesn't.
 In the first step of module 53 (part 14.3), say in a sentence or two: the game is drawn by the page from what your program told JavaFX, approximately, like the windows before; it doesn't run live: you choose which keys are held and how many frames to run, and the page plays those frames back as an animation; and what the check against real JavaFX did with the model solutions (as "Keys and frames on real JavaFX" above says: say only that). Say where keys first come up that a held key doesn't repeat here, and where `Random` first comes up in the game that it needs a seed, since the page runs the program again from the start for every new event.
 
 In the first step of each module of part 14.1 and 14.2, say in a sentence or two: charts and drawings are drawn by the page from what your program told JavaFX to show, approximately, like the windows of part 13; images are read and written pixel by pixel exactly; and sound can't play here (that step is reading only, and the MOOC's sound exercise needs your own computer). Never claim more than the checks prove: see "Canvases" above for drawings.
+
+## Projects
+
+A project is one larger program that the learner builds over several **milestones**: `projects/<id>.yaml`, where the file's name is the project's id. Its page is `/projects/<id>/`, and `/projects/` lists every project with the module it comes after. A project is Java Arena's own scenario (no MOOC exercise, and not one a module already uses).
+
+Each milestone is a code challenge, checked like a lesson's (task, hints, tests with hidden ones, `require` and `forbid` rules, a model solution), with these differences:
+
+- **One program, carried forward.** Milestone 1 starts from the project's `seed`. Every later milestone starts from the learner's own code that passed the milestone before it, with the files this milestone adds (`files`) after the program's own. So the learner builds one program from start to end, and a task says what to change or add, not what to write from nothing.
+- **Locked until the one before passes.** A milestone opens when the one before it passes, or when the learner has looked at that one's solution (as a lesson's solution is shown: after all the hints or 3 checks). A milestone opened that way starts from the learner's own code of the one before, or from its model solution when there's none, and offers "Start from the model solution of milestone k".
+- **The build checks the chain.** The build checks milestone k on the code it starts from on the model solutions: milestone k - 1's model solution with milestone k's `files` (the seed for milestone 1). That code must not already pass (as starter code must not), and the model solution of milestone k must have the same files in the same order. Each model solution must also still pass every visible test of the earlier milestones (as that milestone's check runs it), except tests a milestone names in `replaces`: behavior meant to change. A replaced test stays replaced for the later milestones. Only the visible tests of earlier milestones are run this way; hidden tests check only their own milestone.
+- **Every test has a name**, unique in the project, because `replaces` names tests and results show the names. Tests are of the kinds lessons have (`stdin`, `args`, `call`, `files`, `writes`, `expect`, `hidden`; `events` for a JavaFX program); JUnit tests (`junit`) aren't used in projects.
+- **Determinism, more strictly than in lessons:** every model solution must print the same on every run, because later milestones are checked against its runs. The build rejects the same things as in a program with a window (see "Windows (JavaFX)"): unseeded `Random`, `Math.random()`, the clock or today's date, `Set.of` and `Map.of`, identity hash codes. Use day numbers (`int day = 12;`) for dates, and `new Random(42)` if something must be random.
+- **Indentation:** every model solution, the seed and every file a milestone adds must be indented to match its braces (4 spaces per level).
+
+```yaml
+id: text-adventure              # must match the file name: projects/text-adventure.yaml
+title: A text adventure
+after: lists-of-objects         # the id of the last module (content/course.yaml) whose topics it needs;
+                                # the site shows "After module 20: Lists of objects"
+summary: One or two sentences for the list of projects.
+intro: |
+  Markdown, shown above the milestones: what the program will do when it's finished.
+  Lesson examples (```java run with an ```output block, and so on) work here and are checked.
+seed: |                         # the code milestone 1 starts from: text (Main.java), or a map of files
+  import java.util.Scanner;
+
+  public class Main {
+      public static void main(String[] args) {
+          Scanner scanner = new Scanner(System.in);
+      }
+  }
+milestones:
+  - id: rooms                   # permanent: progress is saved by it (kebab-case, unique in the project)
+    title: Rooms and moves
+    task: |
+      Markdown, shown in the task card. As in a lesson task, its last plain ``` block, when it has one,
+      must be exactly what the first visible test prints.
+    hints:
+      - Shown one at a time.
+    tests:
+      - name: Walk north            # every test has a name, unique in the project
+        stdin: |
+          north
+          quit
+      - name: Walk into a wall
+        stdin: |
+          west
+          quit
+        hidden: true
+    require:                    # rules, as in a lesson challenge
+      - pattern: while\s*\(
+        message: Read moves in a loop.
+    solution: |                 # the model solution: text, or a map of files
+      ...
+  - id: items
+    title: Items
+    task: |
+      ...
+    files:                      # files this milestone adds to the program, with the text they start with
+      Item.java: |
+        public class Item {
+        }
+    tests:
+      - name: Pick up the lamp
+        stdin: ...
+    solution:                   # every file of the program, in the order the starting code has them:
+      Main.java: |              # the earlier ones first, then the ones this milestone added
+        ...
+      Item.java: |
+        ...
+  - id: save-and-load
+    title: Saving the game
+    replaces: [Walk north]      # earlier visible tests whose behavior this milestone changes on purpose
+    task: |
+      ...
+```
+
+Projects come after the modules they need, so their tasks may use anything up to and including the module named in `after` (and nothing after it). Five or six milestones make a good project; a milestone is a little more than one lesson challenge.
+
+Programs that read or write files work as in lessons (`files` and `writes` in a test). A project's tests run the program as a whole, so a test of milestone 2 that reads input sees the program as milestone 2 leaves it. Write the tests of an early milestone so that later milestones can keep them passing: test what the milestone adds, and give a later milestone that changes the output `replaces` for the tests it changes (the build says when a replaced test still passes, which means it may not need replacing).
+
+To check one project while writing it, without changing any generated file: `node scripts/build-content.mjs --dry --project-file text-adventure.yaml` (with `JAVA_HOME` set to the reference JDK, as for modules). The full build (`npm run content`) writes each project to `src/generated/projects/<id>.json` and `public/lessons/projects/<id>-<hash>.json` (the file the page fetches), adds the list of projects to `src/generated/course.json`, and adds every milestone's programs to the browser replay (`npm run content:browser`), including the runs of each model solution on the earlier milestones' tests. The pages are pre-rendered, listed in the sitemap and saved for offline use like the lessons. Progress is kept by project and milestone id in the same store as the lessons (`projects` in `java-arena-v1`), and moves with transfer links and progress files.
 
 ## Drills (Deathmatch, daily challenge, interview prep)
 

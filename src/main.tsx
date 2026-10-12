@@ -1,23 +1,26 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
-import App, { loadPlayground, loadPractice, loadStepPage } from "./App";
-import { loadStep } from "./content";
+import App, { loadPlayground, loadPractice, loadProjectPage, loadStepPage } from "./App";
+import { loadProject, loadStep } from "./content";
 import { loadDrills } from "./content/drills";
 import "./styles.css";
 
-// A lesson or the playground opened directly: load its code first, so the pre-rendered page stays
+// A lesson, a project or the playground opened directly: load its code first, so the pre-rendered page stays
 // until the app can show the same page (no flash of a loading message).
 const base = import.meta.env.BASE_URL;
 const path = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : location.pathname;
 const lesson = /^learn\/([^/]+)\/([^/]+)/.exec(path);
 const practice = loadPractice[path.replace(/\/$/, "")];
+const project = /^projects\/([^/]+)/.exec(path);
 const ready = lesson
   ? Promise.all([loadStepPage(), loadStep(lesson[1], lesson[2])]).catch(() => undefined)
-  : /^playground\/?$/.test(path)
-    ? loadPlayground().catch(() => undefined)
-    : practice
-      ? Promise.all([practice(), loadDrills()]).catch(() => undefined)
-      : Promise.resolve();
+  : project
+    ? Promise.all([loadProjectPage(), loadProject(project[1])]).catch(() => undefined)
+    : /^playground\/?$/.test(path)
+      ? loadPlayground().catch(() => undefined)
+      : practice
+        ? Promise.all([practice(), loadDrills()]).catch(() => undefined)
+        : Promise.resolve();
 
 // The app replaces the pre-rendered page, which drops the focus of a keyboard user who moved to one
 // of its links before the app started. The same link in the app gets it back: the one at the same

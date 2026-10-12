@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { clearEngineCache, downloadMegabytes, engineCached, engineSupported, ensureEngine } from "../engine/client";
 import { patchSettings, resetProgress, useStore, type Theme } from "../state/store";
 import { challengesDone, stepsDone } from "../state/derived";
 import { TEXT_SIZES } from "../lib/appearance";
 import { useTitle } from "../lib/title";
 import { useEngineStatus } from "../components/Engine";
+import { ProgressTransfer } from "../components/Transfer";
 
 const THEMES: { value: Theme; label: string }[] = [
   { value: "system", label: "Same as my device" },
@@ -95,13 +97,18 @@ export default function Settings() {
         )}
       </section>
 
-      <section className="card" aria-labelledby="progress-h">
+      <section className="card" aria-labelledby="progress-h" id="your-progress">
         <h2 id="progress-h" className="h3">
-          Progress
+          Your progress
         </h2>
         <p>
-          {stepsDone(s)} steps and {challengesDone(s)} challenges done. Progress is saved in this browser; moving it to another device comes in a later version of the site.
+          {stepsDone(s)} {stepsDone(s) === 1 ? "step" : "steps"} and {challengesDone(s)} {challengesDone(s) === 1 ? "challenge" : "challenges"} done. Progress is saved in this browser. To continue on another device, move it there with a transfer link or a progress file.
         </p>
+        <p>
+          <Link to="/record/">Your record</Link> lists the modules and projects you finished, with their dates, and prints or saves as a PDF.
+        </p>
+        <ProgressTransfer />
+        <h3 className="h4">Start over</h3>
         <div className="actions">
           <button
             type="button"

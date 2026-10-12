@@ -1,0 +1,352 @@
+topic: sealed-and-patterns
+drills:
+  - type: predict
+    after: instanceof-patterns
+    body: |
+      Object[] things = {"kiwi", 7, "banana", 12};
+      int total = 0;
+      for (Object thing : things) {
+          if (thing instanceof String word && word.length() > 4) {
+              total += word.length();
+          } else if (thing instanceof Integer number) {
+              total += number;
+          }
+      }
+      System.out.println(total);
+    why: "`\"kiwi\"` is a String, but only 4 characters long, so the first condition is false; it isn't an Integer either, so it adds nothing. 7 and 12 are Integers, and `\"banana\"` adds its 6 characters: 7 + 6 + 12 = 25."
+
+  - type: predict
+    after: instanceof-patterns
+    pre: |
+      public static String size(Object value) {
+          if (!(value instanceof String text)) {
+              return "?";
+          }
+          return "" + text.length();
+      }
+    body: |
+      System.out.println(size("tea") + size(null) + size(3) + size(""));
+    why: "After the `if` that returns for everything that isn't a String, `text` can be used. `null` isn't an instance of anything, so `size(null)` is `?`, and so is `size(3)`. The empty String has length 0: `3??0`."
+
+  - type: predict
+    after: switch-on-types
+    classes: |
+      sealed interface Snack permits Fruit, Candy {
+      }
+
+      record Fruit(String name) implements Snack {
+      }
+
+      record Candy(String name, int sugar) implements Snack {
+      }
+    pre: |
+      public static int price(Snack snack) {
+          return switch (snack) {
+              case Candy candy when candy.sugar() > 20 -> 3;
+              case Candy candy -> 2;
+              case Fruit fruit -> 1;
+          };
+      }
+    body: |
+      Snack[] basket = {new Candy("fudge", 40), new Fruit("pear"), new Candy("mint", 20), new Fruit("fig")};
+      int total = 0;
+      for (Snack snack : basket) {
+          total += price(snack);
+      }
+      System.out.println(total);
+    why: "The fudge has more than 20 grams of sugar, so the guarded case gives 3. The mint has exactly 20, so `when` is false and the plain Candy case gives 2. Each fruit costs 1: 3 + 1 + 2 + 1 = 7."
+
+  - type: predict
+    after: record-patterns
+    classes: |
+      record Pair(int first, int second) {
+      }
+    body: |
+      Object thing = new Pair(10, 3);
+      if (thing instanceof Pair(int second, int first)) {
+          System.out.println(first - second);
+      }
+    why: "A record pattern matches components by position, not by name. The first component, 10, goes to the variable that is written first, here called `second`, and 3 goes to `first`. So `first - second` is 3 - 10 = -7."
+
+  - type: predict
+    after: record-patterns
+    classes: |
+      sealed interface Dish permits Plain, Topped {
+      }
+
+      record Plain(String base) implements Dish {
+      }
+
+      record Topped(Dish under, String topping) implements Dish {
+      }
+    pre: |
+      public static String describe(Dish dish) {
+          return switch (dish) {
+              case Plain(String base) -> base;
+              case Topped(Dish under, String topping) -> describe(under) + "+" + topping;
+          };
+      }
+    body: |
+      Dish bowl = new Topped(new Topped(new Plain("rice"), "egg"), "chili");
+      System.out.println(describe(bowl));
+    why: "The outer Topped holds `chili`, and under it another Topped with `egg`, and under that the plain rice. `describe` calls itself on the dish underneath first, so the innermost part comes first: `rice+egg+chili`."
+
+  - type: fill
+    after: sealed-interfaces
+    prompt: "Fill in the blank, one word, so that the program compiles and prints `bolt`."
+    classes: |
+      sealed interface Fastener permits Bolt, Nail {
+      }
+
+      [[final‖non-sealed]] class Bolt implements Fastener {
+          public String toString() {
+              return "bolt";
+          }
+      }
+
+      record Nail(int length) implements Fastener {
+      }
+    body: |
+      Fastener piece = new Bolt();
+      System.out.println(piece);
+    why: "A class that a sealed interface permits must say how its own family goes on: `final` (no subclasses), `sealed` (with its own `permits` list) or `non-sealed` (open to any subclass). `final` is the usual choice; `non-sealed` compiles too. The record Nail needs nothing, since records are final already."
+
+  - type: fill
+    after: record-patterns
+    prompt: "Fill in the blank, a type, so that the program prints `60 x 40`."
+    classes: |
+      record Frame(int width, int height) {
+      }
+    pre: |
+      public static String size(Object item) {
+          if (item instanceof Frame([[int‖var]] w, int h)) {
+              return w + " x " + h;
+          }
+          return "not a frame";
+      }
+    body: |
+      System.out.println(size(new Frame(60, 40)));
+    why: "Each component's pattern needs a type that fits the component: `int`, or `var`, which takes the component's own type."
+
+  - type: bug
+    after: instanceof-patterns
+    prompt: "The program should print `big order: 250`. Which line is wrong?"
+    body: |
+      Object amount = 250;
+      if (amount instanceof Integer cents || cents > 100) { // BUG
+          System.out.println("big order: " + cents);
+      }
+    fix: "if (amount instanceof Integer cents && cents > 100) {"
+    why: "The right side of `||` runs only when the left side is false, and then there's no `cents`: javac says `cannot find symbol`. With `&&`, the right side runs only after the pattern has matched."
+
+  - type: bug
+    after: sealed-interfaces
+    prompt: "The program should print `Bed[plant=tulips]`. Which line is wrong? (Keep Plot sealed.)"
+    classes: |
+      sealed interface Plot permits Lawn, Pond { // BUG
+      }
+
+      record Lawn(int squareMeters) implements Plot {
+      }
+
+      record Pond(int depth) implements Plot {
+      }
+
+      record Bed(String plant) implements Plot {
+      }
+    body: |
+      Plot spring = new Bed("tulips");
+      System.out.println(spring);
+    fix: "sealed interface Plot permits Lawn, Pond, Bed {"
+    why: "Only the classes in the `permits` list may implement a sealed interface, so Bed doesn't compile: `class is not allowed to extend sealed class: Plot`. Adding it to the list fixes that."
+
+  - type: bug
+    after: record-patterns
+    prompt: "The program should print `portrait` for a poster that is taller than it is wide. Which line is wrong?"
+    classes: |
+      record Poster(int width, int height) {
+      }
+    pre: |
+      public static String shape(Poster poster) {
+          return switch (poster) {
+              case Poster(int h, int w) when h > w -> "portrait"; // BUG
+              case Poster(int w, int h) -> "landscape or square";
+          };
+      }
+    body: |
+      System.out.println(shape(new Poster(50, 70)));
+    fix: "case Poster(int w, int h) when h > w -> \"portrait\";"
+    why: "A record pattern takes the components in order: the first variable gets the width, whatever it's called. The first case called the width `h`, so it asked whether the width is larger than the height."
+
+  - type: compiles
+    after: sealed-interfaces
+    classes: |
+      sealed interface Animal permits Cat, Dog {
+      }
+
+      final class Cat implements Animal {
+      }
+
+      class Dog implements Animal {
+      }
+    body: |
+      Animal pet = new Dog();
+      System.out.println(pet instanceof Dog);
+    why: "No. Dog is permitted, but it doesn't say whether its family goes on: javac says `sealed, non-sealed or final modifiers expected`. Cat is fine, as `final`."
+
+  - type: compiles
+    after: switch-on-types
+    classes: |
+      sealed interface Weather permits Sun, Rain {
+      }
+
+      record Sun(int uvIndex) implements Weather {
+      }
+
+      record Rain(int millimeters) implements Weather {
+      }
+    pre: |
+      public static String advice(Weather weather) {
+          return switch (weather) {
+              case Sun sun when sun.uvIndex() >= 6 -> "sunscreen";
+              case Rain rain -> "umbrella";
+          };
+      }
+    body: |
+      System.out.println(advice(new Rain(4)));
+    why: "No: `the switch expression does not cover all possible input values`. A case with `when` doesn't cover its type, since its condition can be false, so a Sun with a low UV index has no case. A plain `case Sun sun -> ...` after the guarded one would fix it."
+
+  - type: choice
+    after: switch-on-types
+    prompt: "`Shape` is `sealed interface Shape permits Circle, Square`, and both are records. A method returns `switch (shape) { case Circle c -> \"round\"; }`. What happens?"
+    choices:
+      - "It compiles, and returns `null` for a Square"
+      - "It compiles, and throws an exception for a Square"
+      - "It doesn't compile: the switch doesn't cover every Shape"
+      - "It compiles, since a sealed interface needs no `default`"
+    answer: 3
+    why: "javac knows every kind of Shape, so it checks that a switch expression has a case for each: without a case for Square, it says `the switch expression does not cover all possible input values`. A sealed interface needs no `default` only when every permitted type has its case."
+
+  - type: choice
+    after: switch-on-types
+    prompt: What does this print?
+    classes: |
+      sealed interface Ride permits Bus, Ferry {
+      }
+
+      record Bus(int line) implements Ride {
+      }
+
+      record Ferry(int line) implements Ride {
+      }
+    pre: |
+      public static String sign(Ride ride) {
+          return switch (ride) {
+              case Bus bus when bus.line() < 100 -> "city bus";
+              case Bus bus -> "regional bus";
+              case Ferry ferry when ferry.line() == 4 -> "ferry to the island";
+              case Ferry ferry -> "ferry";
+          };
+      }
+    body: |
+      System.out.println(sign(new Bus(550)) + ", " + sign(new Ferry(4)) + ", " + sign(new Bus(55)));
+    choices:
+      - "`regional bus, ferry to the island, city bus`"
+      - "`city bus, ferry, city bus`"
+      - "`regional bus, ferry, regional bus`"
+      - "`city bus, ferry to the island, regional bus`"
+    answer: 1
+    verify: output
+    why: "Java tries the cases from the top and takes the first that matches. Bus 550 fails the guard `line() < 100`, so the plain Bus case gives `regional bus`. Ferry 4 meets its guard. Bus 55 is under 100: `city bus`."
+
+  - type: boss
+    after: record-patterns
+    prompt: |
+      A to-do app has two kinds of task: a `Simple(String title)` and a `Checklist(String title, int done, int total)`. In `Main.java`, write `status(Task task)` with a switch over record patterns:
+
+      - a Simple task: its title;
+      - a Checklist whose `done` equals its `total`: the title and ` (finished)`;
+      - any other Checklist: the title, a space, and `done/total` in parentheses.
+
+      Don't use `default`. The check runs:
+
+      ```java fragment
+      System.out.println(status(new Simple("Water the plants")));
+      System.out.println(status(new Checklist("Pack for the trip", 3, 8)));
+      System.out.println(status(new Checklist("Tax return", 5, 5)));
+      ```
+
+      and expects:
+
+      ```
+      Water the plants
+      Pack for the trip (3/8)
+      Tax return (finished)
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(status(new Simple("Water the plants")));
+                System.out.println(status(new Checklist("Pack for the trip", 3, 8)));
+                System.out.println(status(new Checklist("Tax return", 5, 5)));
+            }
+
+            public static String status(Task task) {
+                return "";
+            }
+        }
+      Task.java: |
+        public sealed interface Task permits Simple, Checklist {
+        }
+      Simple.java: |
+        public record Simple(String title) implements Task {
+        }
+      Checklist.java: |
+        public record Checklist(String title, int done, int total) implements Task {
+        }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(status(new Simple("Water the plants")));
+                System.out.println(status(new Checklist("Pack for the trip", 3, 8)));
+                System.out.println(status(new Checklist("Tax return", 5, 5)));
+            }
+
+            public static String status(Task task) {
+                return switch (task) {
+                    case Simple(String title) -> title;
+                    case Checklist(String title, int done, int total) when done == total -> title + " (finished)";
+                    case Checklist(String title, int done, int total) -> title + " (" + done + "/" + total + ")";
+                };
+            }
+        }
+      Task.java: |
+        public sealed interface Task permits Simple, Checklist {
+        }
+      Simple.java: |
+        public record Simple(String title) implements Task {
+        }
+      Checklist.java: |
+        public record Checklist(String title, int done, int total) implements Task {
+        }
+    hints:
+      - "`case Checklist(String title, int done, int total) when done == total -> ...` comes before the plain Checklist case."
+      - "The last case builds `title + \" (\" + done + \"/\" + total + \")\"`."
+    require:
+      - pattern: \bcase\s+Checklist\s*\(
+        message: "Take the checklist apart with a record pattern: `case Checklist(String title, int done, int total)`."
+    forbid:
+      - pattern: \bdefault\b
+        message: "Leave out `default`: Task is sealed, so its cases can cover it."
+    tests:
+      - call: |
+          System.out.println(status(new Simple("Water the plants")));
+          System.out.println(status(new Checklist("Pack for the trip", 3, 8)));
+          System.out.println(status(new Checklist("Tax return", 5, 5)));
+      - call: |
+          System.out.println(status(new Checklist("Paint the fence", 0, 4)));
+          System.out.println(status(new Checklist("Nothing yet", 0, 0)));
+          System.out.println(status(new Simple("Call Grandma")));
+        hidden: true

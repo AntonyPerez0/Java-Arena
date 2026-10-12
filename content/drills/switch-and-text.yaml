@@ -1,0 +1,260 @@
+topic: switch-and-text
+drills:
+  - type: predict
+    after: switch-statements
+    body: |
+      int level = 2;
+      switch (level) {
+          case 1:
+              System.out.print("A");
+          case 2:
+              System.out.print("B");
+          case 3:
+              System.out.print("C");
+              break;
+          default:
+              System.out.print("D");
+      }
+      System.out.println();
+    why: "The switch jumps to `case 2` and prints `B`. There's no `break` there, so it falls through into `case 3` and prints `C`; the `break` after it ends the switch before `default`."
+
+  - type: predict
+    after: switch-expressions
+    body: |
+      int total = 0;
+      for (int i = 1; i <= 4; i++) {
+          total += switch (i) {
+              case 1, 3 -> 10;
+              case 2 -> 5;
+              default -> 1;
+          };
+      }
+      System.out.println(total);
+    why: "Arrow cases never fall through: each value gets exactly one case. 1 and 3 give 10 each, 2 gives 5, and 4 goes to `default`, 1. That's 10 + 5 + 10 + 1 = 26."
+
+  - type: predict
+    after: strings-and-enums
+    body: |
+      String[] words = {"Stop", "stop", "go"};
+      for (String word : words) {
+          String action = switch (word) {
+              case "stop" -> "brake";
+              case "go" -> "drive";
+              default -> "?";
+          };
+          System.out.println(action);
+      }
+    why: "A String label matches only a String that `equals` it, capitals included. `Stop` isn't `stop`, so it goes to `default` and prints `?`; the other two match their labels."
+
+  - type: predict
+    after: var
+    body: |
+      var a = 7 / 2;
+      var b = 7 / 2.0;
+      var c = 'A' + 1;
+      System.out.println(a + " " + b + " " + c);
+    why: "`var` takes the type of the value. `7 / 2` is an int division, so `a` is the int 3. `7 / 2.0` is a double, 3.5. A char plus an int is an int, so `c` is 66 (the code of `A` is 65), not the letter `B`."
+
+  - type: predict
+    after: text-blocks-and-format
+    body: |
+      String block = """
+          hi
+          yo
+          """;
+      System.out.println(block.length());
+    why: "The indentation is removed, since the closing quotes are as far in as the text. What's left is `hi`, a line break, `yo` and a line break: the closing `\"\"\"` on its own line adds one. That's 6 characters."
+
+  - type: fill
+    after: switch-expressions
+    prompt: "Fill in the blank, a word, so that the block gives its value to the switch."
+    body: |
+      int roll = 6;
+      int points = switch (roll) {
+          case 1 -> 0;
+          case 6 -> {
+              int bonus = 4;
+              [[yield]] roll + bonus;
+          }
+          default -> roll;
+      };
+      System.out.println(points);
+    why: "A block in a switch expression gives its value with `yield`. `return` would try to leave the whole method, and javac doesn't allow it inside a switch expression."
+
+  - type: fill
+    after: text-blocks-and-format
+    prompt: "Fill in the blank, a format for the name, so that the name is left-aligned in 8 characters, with the spaces after it."
+    body: |
+      System.out.println(String.format("[[%-8s]]|%5.2f", "tea", 1.5));
+    why: "A width between `%` and `s` pads the text to that many characters; the minus sign puts the spaces after it, so the text is left-aligned. `%8s` would put them in front."
+
+  - type: bug
+    after: strings-and-enums
+    prompt: "The reply should be `Great` for `yes` in any capitals. Fix the case label."
+    body: |
+      String answer = "YES".toLowerCase();
+      String reply = switch (answer) {
+          case "Yes" -> "Great"; // BUG
+          default -> "Okay";
+      };
+      System.out.println(reply);
+    fix: case "yes" -> "Great";
+    why: "`toLowerCase()` turns the answer into `yes`, and a String label matches only a String that `equals` it exactly. `Yes` with a capital never matches a lowercased answer."
+
+  - type: bug
+    after: var
+    prompt: "The average of 3 and 4 should print as 3.5. Fix the line that declares `average`."
+    body: |
+      var total = 3 + 4;
+      var count = 2;
+      var average = total / count; // BUG
+      System.out.println(average);
+    fix: var average = (double) total / count;
+    why: "`total` and `count` are ints, so `total / count` is an int division, 3, and `var` makes `average` an int to match. Casting one of them to a double makes the division, and with it `average`, a double."
+
+  - type: bug
+    after: text-blocks-and-format
+    prompt: "The line should print `2.5 kg`. Fix the format."
+    body: |
+      double weight = 2.5;
+      String label = String.format("%d kg", weight); // BUG
+      System.out.println(label);
+    fix: String label = String.format("%.1f kg", weight);
+    why: "`%d` is for whole numbers: given a double, `String.format` throws an IllegalFormatConversionException when the program runs. `%.1f` formats a decimal number with one decimal (`%s` would work too)."
+
+  - type: compiles
+    after: switch-expressions
+    body: |
+      int button = 2;
+      String snack = switch (button) {
+          case 1 -> "Chips";
+          case 2 -> "Apple";
+      };
+      System.out.println(snack);
+    why: "A switch expression must give a value for every value of its selector, and an int has many more than 1 and 2. javac says that the switch expression does not cover all possible input values: it needs a `default`."
+
+  - type: compiles
+    after: var
+    body: |
+      var names = new ArrayList<>();
+      names.add("Ada");
+      String first = names.get(0);
+      System.out.println(first);
+    why: "With `<>` and `var`, javac has nothing to work the type argument out from, so `names` is an `ArrayList<Object>`. Its `get` returns an Object, which can't be put in a String variable without a cast. `new ArrayList<String>()` would fix it."
+
+  - type: choice
+    after: switch-statements
+    prompt: "A switch with constant labels such as `case 1:` works on many types. Which of these can't be its selector?"
+    choices:
+      - "an `int`"
+      - "a `String`"
+      - "an enum"
+      - "a `double`"
+    answer: 4
+    why: "A switch on constants takes an int (or a smaller whole-number type or a char), a String or an enum. Java 21's rules don't allow a double, and javac rejects it with \"selector type double is not allowed\". (Comparing decimal numbers for exact equality is rarely what a program means anyway.)"
+
+  - type: choice
+    after: text-blocks-and-format
+    prompt: "What does `System.out.println(String.format(\"[%6.1f]\", 3.14159));` print?"
+    body: |
+      System.out.println(String.format("[%6.1f]", 3.14159));
+    choices:
+      - "`[   3.1]`"
+      - "`[3.1   ]`"
+      - "`[3.14159]`"
+      - "`[  3.14]`"
+    answer: 1
+    verify: output
+    why: "`.1` rounds to one decimal, `3.1`, and the width 6 pads it to six characters with spaces in front, so it's right-aligned. A minus sign, `%-6.1f`, would put the spaces after it."
+
+  - type: boss
+    after: strings-and-enums
+    prompt: |
+      A coin counter knows four coins: the enum `Coin` with `PENNY` (1 cent), `NICKEL` (5), `DIME` (10) and `QUARTER` (25). Write the method `cents(Coin coin)`, which returns a coin's value with a switch expression that covers every constant and has no `default`, and the method `total(ArrayList<Coin> coins)`, which returns the value of all the coins in the list, in cents. `total` of a QUARTER, a DIME and two PENNYs is 37.
+    seed: |
+      import java.util.ArrayList;
+
+      public class Main {
+          enum Coin {
+              PENNY, NICKEL, DIME, QUARTER
+          }
+
+          public static void main(String[] args) {
+              ArrayList<Coin> coins = new ArrayList<>();
+              coins.add(Coin.QUARTER);
+              coins.add(Coin.DIME);
+              coins.add(Coin.PENNY);
+              coins.add(Coin.PENNY);
+              System.out.println(total(coins));
+          }
+
+          public static int cents(Coin coin) {
+              return 0;
+          }
+
+          public static int total(ArrayList<Coin> coins) {
+              return 0;
+          }
+      }
+    solution: |
+      import java.util.ArrayList;
+
+      public class Main {
+          enum Coin {
+              PENNY, NICKEL, DIME, QUARTER
+          }
+
+          public static void main(String[] args) {
+              ArrayList<Coin> coins = new ArrayList<>();
+              coins.add(Coin.QUARTER);
+              coins.add(Coin.DIME);
+              coins.add(Coin.PENNY);
+              coins.add(Coin.PENNY);
+              System.out.println(total(coins));
+          }
+
+          public static int cents(Coin coin) {
+              return switch (coin) {
+                  case PENNY -> 1;
+                  case NICKEL -> 5;
+                  case DIME -> 10;
+                  case QUARTER -> 25;
+              };
+          }
+
+          public static int total(ArrayList<Coin> coins) {
+              int sum = 0;
+              for (Coin coin : coins) {
+                  sum += cents(coin);
+              }
+              return sum;
+          }
+      }
+    hints:
+      - "`return switch (coin) { case PENNY -> 1; ... };` with one case per constant needs no `default`."
+      - "`total` goes through the list and adds `cents(coin)` for each coin."
+    require:
+      - pattern: \bswitch\s*\(\s*coin\s*\)
+        message: "Give each coin's value with `switch (coin)`."
+    forbid:
+      - pattern: \bdefault\b
+        message: "Leave out `default`: cover each of the four constants with its own case."
+    tests:
+      - call: |
+          ArrayList<Coin> coins = new ArrayList<>();
+          coins.add(Coin.QUARTER);
+          coins.add(Coin.DIME);
+          coins.add(Coin.PENNY);
+          coins.add(Coin.PENNY);
+          System.out.println(total(coins));
+      - call: System.out.println(cents(Coin.NICKEL) + " " + cents(Coin.QUARTER));
+        hidden: true
+      - call: |
+          ArrayList<Coin> coins = new ArrayList<>();
+          for (Coin coin : Coin.values()) {
+              coins.add(coin);
+              coins.add(coin);
+          }
+          System.out.println(total(coins));
+          System.out.println(total(new ArrayList<>()));
+        hidden: true

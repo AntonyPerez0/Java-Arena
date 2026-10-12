@@ -1,7 +1,7 @@
 // Tests of the plain-English explanations of part 11 mistakes (src/engine/friendly.ts): exceptions,
 // packages and files; of part 12: type parameters, lists and hash maps of your own, Random and
 // two-dimensional arrays; of parts 13 and 14: JavaFX, with Java Arena's practice version of it (charts, images, and
-// 14.3's game: shapes, keys, AnimationTimer, Point2D, collisions); and of 14.4: databases and libraries. Each diagnostic is javac's own (the same on the JDK and in the browser, as the
+// 14.3's game: shapes, keys, AnimationTimer, Point2D, collisions); of 14.4: databases and libraries; and of the extra modules 55 to 59: records, switch, sealed types, patterns, text blocks, var, recursion and linked structures. Each diagnostic is javac's own (the same on the JDK and in the browser, as the
 // fidelity suite checks), rebuilt here from its code, place and message. Run: npm run test:unit
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -1744,4 +1744,694 @@ test("part 14.4: java.sql and H2 (no database here), a library's package (Maven)
   // On your own computer without H2 on the class path.
   const driver = explainCrash('Exception in thread "main" java.sql.SQLException: No suitable driver found for jdbc:h2:./todo\n\tat java.sql/java.sql.DriverManager.getConnection(DriverManager.java:708)\n\tat java.sql/java.sql.DriverManager.getConnection(DriverManager.java:230)\n\tat Main.main(Main.java:9)\n', files);
   has(driver.explanation, "DriverManager.getConnection found no database driver for the address jdbc:h2:./todo", "com.h2database:h2, a dependency in the project's pom.xml", "Java Arena's page has no database at all.");
+});
+
+// ---- The extra modules 55 to 59 (records, switch, sealed types, patterns, text blocks, var, recursion, linked structures) ----
+// Each message is javac's own, the same from the JDK and the browser's javac (fidelity errors 80 to 92).
+
+const CANT_ASSIGN = "compiler.err.cant.assign.val.to.var";
+
+test("extra: a record's component assigned from outside, in its own method and in its compact constructor, read as a field and called as getX() (fidelity 80)", () => {
+  const files = program({
+    "Point.java": ["public record Point(int x, int y) {", "    public Point {", "        if (x < 0) {", "            this.x = 0;", "        }", "    }", "", "    public void moveRight() {", "        x = x + 1;", "    }", "}"],
+    "Main.java": ["public class Main {", "    record Book(String title, boolean available) {", "    }", "", "    public static void main(String[] args) {", "        Point p = new Point(1, 2);", "        System.out.println(p.x);", "        p.y = 4;", "        System.out.println(p.getX());", '        Book book = new Book("Dune", true);', '        book.title = "Emma";', "        System.out.println(book.isAvailable());", "    }", "}"],
+  });
+  has(explain(files, "Point.java", 4, ".x", CANT_ASSIGN, "cannot assign a value to final variable x"), "This is the compact constructor of the record Point", "Java assigns the fields itself when it ends", "x = ...; (without this.)", "Here: x = 0;");
+  has(explain(files, "Point.java", 9, "x =", CANT_ASSIGN, "cannot assign a value to final variable x"), "x is a component of the record Point, and a record's components are final", "not even in Point's own methods", "return new Point(x + 1, y);");
+  has(explain(files, "Main.java", 11, ".title", CANT_ASSIGN, "cannot assign a value to final variable title"), "title is a component of the record Book", 'book = new Book("Emma", book.available());');
+  has(explain(files, "Main.java", 7, ".x", "compiler.err.report.access", "x has private access in Point"), "x is a component of the record Point", "read it with p.x(), with parentheses");
+  has(explain(files, "Main.java", 8, ".y", "compiler.err.report.access", "y has private access in Point"), "can't change after it is created", "p = new Point(p.x(), 4);");
+  has(explain(files, "Main.java", 9, ".getX", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method getX()\n  location: variable p of type Point"), "Point is a record", "without get: p.x(), not p.getX()", "Its accessors are x() and y().");
+  has(explain(files, "Main.java", 12, ".isAvailable", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method isAvailable()\n  location: variable book of type Book"), "without is: book.available(), not book.isAvailable()");
+  // A final variable that isn't a record's component, and a private variable of an ordinary class, keep their notes.
+  const plain = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        final int max = 3;", "        max = 4;", "    }", "}"] });
+  assert.equal(explain(plain, "Main.java", 4, "max", CANT_ASSIGN, "cannot assign a value to final variable max"), "This variable is final, so it can't get a new value after the first one.");
+  const cls = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        Item item = new Item();", "        System.out.println(item.price);", "    }", "}"], "Item.java": ["public class Item {", "    private int price;", "}"] });
+  has(explain(cls, "Main.java", 4, ".price", "compiler.err.report.access", "price has private access in Item"), "price is private in Item", "getPrice");
+});
+
+test("extra: a record that extends a class, has an instance variable, or a canonical constructor that leaves a field without a value; a class that extends a record (fidelity 81 to 83)", () => {
+  const ext = program({ "Main.java": ["class Shape {", "}", "", "record Circle(double radius) extends Shape {", "}"] });
+  has(explain(ext, "Main.java", 4, " extends", "compiler.err.expected", "'{' expected"), "A record can't extend a class: every record already extends Java's class Record", "record Circle(double radius) implements Shape", "make it an interface");
+  const intf = program({ "Main.java": ["interface Shape {", "}", "", "record Circle(double radius) extends Shape {", "}"] });
+  has(explain(intf, "Main.java", 4, " extends", "compiler.err.expected", "'{' expected"), "Shape is an interface, so write implements instead of extends: record Circle(double radius) implements Shape.");
+  // '{' expected elsewhere keeps its note.
+  const other = program({ "Main.java": ["public class Main", "    int x;", "}"] });
+  has(explain(other, "Main.java", 1, "Main", "compiler.err.expected", "'{' expected"), "Java expected '{' here.");
+  const field = program({ "Main.java": ["public class Main {", "    record Counter(String name) {", "        int count;", "    }", "}"] });
+  has(explain(field, "Main.java", 3, "count", "compiler.err.record.cannot.declare.instance.fields", "field declaration must be static\n  (consider replacing field with record component)"), "A record can't have instance variables besides its components", "record Counter(String name, int count)", "static int count;");
+  const canonical = program({ "Main.java": ["public class Main {", "    record Temperature(double celsius, String place) {", "        Temperature(double celsius, String place) {", "            this.celsius = celsius;", "        }", "    }", "}"] });
+  has(explain(canonical, "Main.java", 5, "}", "compiler.err.var.might.not.have.been.initialized", "variable place might not have been initialized"), "canonical constructor", "place never gets one", "this.place = place;", "Temperature { ... }");
+  // An ordinary local variable keeps its note.
+  const local = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        int sum;", "        System.out.println(sum);", "    }", "}"] });
+  has(explain(local, "Main.java", 4, "sum", "compiler.err.var.might.not.have.been.initialized", "variable sum might not have been initialized"), "This variable is used before it has a value.");
+  const sub = program({ "Main.java": ["record Point(int x, int y) {", "}", "", "class Point3D extends Point {", "}"] });
+  has(explain(sub, "Main.java", 4, "Point {", "compiler.err.cant.inherit.from.final", "cannot inherit from final Point"), "Point is a record, and records are final");
+});
+
+test("extra: switch expressions that don't cover every value: an enum's constant, a sealed interface's record, an int; and a switch statement with patterns (fidelity 84)", () => {
+  const files = program({
+    "Main.java": [
+      "sealed interface Shape permits Circle, Square, Triangle {",
+      "}",
+      "record Circle(double radius) implements Shape {",
+      "}",
+      "record Square(double side) implements Shape {",
+      "}",
+      "record Triangle(double base, double height) implements Shape {",
+      "}",
+      "public class Main {",
+      "    enum Light { RED, YELLOW, GREEN }",
+      "    static double area(Shape shape) {",
+      "        return switch (shape) {",
+      "            case Circle c -> Math.PI * c.radius() * c.radius();",
+      "            case Square s -> s.side() * s.side();",
+      "        };",
+      "    }",
+      "    static String action(Light light) {",
+      "        return switch (light) {",
+      '            case RED -> "stop";',
+      '            case GREEN -> "go";',
+      "        };",
+      "    }",
+      "    static String dayName(int day) {",
+      "        return switch (day) {",
+      '            case 1 -> "Monday";',
+      "        };",
+      "    }",
+      "    static void describe(Object value) {",
+      "        switch (value) {",
+      "            case String s -> System.out.println(s);",
+      "        }",
+      "    }",
+      "}",
+    ],
+  });
+  const NOT_ALL = "the switch expression does not cover all possible input values";
+  has(explain(files, "Main.java", 12, "switch", "compiler.err.not.exhaustive", NOT_ALL), "Shape is sealed, and the classes that may implement it are Circle, Square and Triangle", "no case for Triangle", "case Triangle t -> ...;");
+  has(explain(files, "Main.java", 18, "switch", "compiler.err.not.exhaustive", NOT_ALL), "This switch expression on light has no case for YELLOW of the enum Light", "case YELLOW -> ...;");
+  has(explain(files, "Main.java", 24, "switch", "compiler.err.not.exhaustive", NOT_ALL), "This switch expression on day has cases for only some values, and a number has far more possible values", "default -> ...");
+  has(explain(files, "Main.java", 29, "switch", "compiler.err.not.exhaustive.statement", "the switch statement does not cover all possible input values"), "A switch statement that uses patterns (case String s) or case null must handle every possible value", "default -> ...");
+});
+
+test("extra: a case's block without yield, colon cases without a value, a switch with no values, return, break and a value on its own in a switch expression (fidelity 84 to 86)", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static String size(int length) {",
+      "        return switch (length) {",
+      '            case 1 -> "short";',
+      "            case 2 -> {",
+      '                String word = "medium";',
+      "            }",
+      '            default -> "long";',
+      "        };",
+      "    }",
+      "    static String count(int n) {",
+      "        return switch (n) {",
+      "            case 0:",
+      '                yield "none";',
+      "            default:",
+      '                System.out.println("many");',
+      "        };",
+      "    }",
+      "    static String name(int day) {",
+      "        String text = switch (day) {",
+      "            case 1 -> {",
+      '                return "Monday";',
+      "            }",
+      "            case 2 -> {",
+      "                break;",
+      "            }",
+      "            default -> {",
+      '                "other";',
+      "            }",
+      "        };",
+      "        return text;",
+      "    }",
+      "    static void print(int n) {",
+      "        String text = switch (n) {",
+      "            case 1:",
+      '                System.out.println("one");',
+      "            default:",
+      '                System.out.println("many");',
+      "        };",
+      "    }",
+      "}",
+    ],
+  });
+  has(explain(files, "Main.java", 7, "}", "compiler.err.rule.completes.normally", "switch rule completes without providing a value\n  (switch rules in switch expressions must either provide a value or throw)"), "The block of case 2 -> { ... } ends without giving a value", "yield result;", "return doesn't work here");
+  has(explain(files, "Main.java", 17, "}", "compiler.err.switch.expression.completes.normally", "switch expression completes without providing a value\n  (switch expressions must either provide a value or throw for all possible input values)"), "uses cases with a colon (case 0:)", "must end with yield and its value", "case 0 -> ...;");
+  has(explain(files, "Main.java", 22, "return", "compiler.err.return.outside.switch.expression", "attempt to return out of a switch expression"), "return can't be used inside a switch expression", 'yield "Monday";', "return switch (...) { ... };");
+  has(explain(files, "Main.java", 25, "break", "compiler.err.break.outside.switch.expression", "attempt to break out of a switch expression"), "break can't leave a switch expression");
+  has(explain(files, "Main.java", 28, '"other"', "compiler.err.not.stmt", "not a statement"), '"other" on its own isn\'t a statement', 'yield "other";');
+  has(explain(files, "Main.java", 34, "switch", "compiler.err.switch.expression.no.result.expressions", "switch expression does not have any result expressions"), "None of the cases of this switch expression gives a value", "(String text = switch ...)", "remove String text = in front of it");
+  // "not a statement" outside a switch expression keeps its note.
+  const plain = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        int x = 1;", "        x + 1;", "    }", "}"] });
+  has(explain(plain, "Main.java", 4, "x + 1", "compiler.err.not.stmt", "not a statement"), "This isn't a complete statement on its own.");
+});
+
+test("extra: a duplicate case, a switch on a double, a long and a boolean, a case value of another type, a dominated case, and arrow and colon cases mixed (fidelity 85 and 87)", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static String label(int day) {",
+      "        return switch (day) {",
+      '            case 1 -> "Monday";',
+      '            case 2, 3 -> "midweek";',
+      '            case 3 -> "Wednesday";',
+      '            default -> "other";',
+      "        };",
+      "    }",
+      "    static int code(String letter, int k) {",
+      "        switch (k) {",
+      '            case "1" -> System.out.println(1);',
+      "            default -> System.out.println(0);",
+      "        }",
+      "        return switch (letter) {",
+      "            case 'a' -> 1;",
+      "            default -> 0;",
+      "        };",
+      "    }",
+      "    static String kind(Object value) {",
+      "        return switch (value) {",
+      '            case CharSequence text -> "text";',
+      '            case String s -> "string";',
+      '            case Integer n -> "number";',
+      '            case 0 -> "zero";',
+      '            default -> "other";',
+      "        };",
+      "    }",
+      "    static void print(int size, String day) {",
+      "        switch (size) {",
+      '            case 1 -> System.out.println("small");',
+      "            case 2:",
+      '                System.out.println("big");',
+      "                break;",
+      "        }",
+      "        switch (day) {",
+      '            case "sat":',
+      '                System.out.println("weekend");',
+      "                break;",
+      '            case "mon" -> System.out.println("work");',
+      "        }",
+      "    }",
+      "}",
+    ],
+  });
+  has(explain(files, "Main.java", 6, "case", "compiler.err.duplicate.case.label", "duplicate case label"), "This switch already has case 3 (on line 5)", "list them in one case");
+  for (const [t, extra] of [["double", "Use if and else if instead"], ["long", "you could cast it: switch ((int) value)"], ["boolean", "if (on) { ... } else { ... }"]])
+    has(explainDiagnostic({ kind: "error", code: "compiler.err.selector.type.not.allowed", file: "Main.java", line: 1, column: 1, message: `selector type ${t} is not allowed`, formatted: "" }, files), `switch can't switch on a ${t}`, "In Java 21 it works on int, char, short and byte values, on Strings and enums", extra);
+  has(explain(files, "Main.java", 12, '"1"', "compiler.err.prob.found.req", "incompatible types: String cannot be converted to int"), "This case's value is a String, but the switch works on an int", "Write the number without quotes: 1.");
+  has(explain(files, "Main.java", 16, "'a'", "compiler.err.prob.found.req", "incompatible types: char cannot be converted to String"), "This case's value is a char, but the switch works on a String", "Text goes in double quotes: \"a\", not 'a'.");
+  has(explain(files, "Main.java", 23, "String s", "compiler.err.pattern.dominated", "this case label is dominated by a preceding case label"), "case CharSequence text (on line 22)", "every String is a CharSequence", "case String s above case CharSequence text");
+  has(explain(files, "Main.java", 25, "0", "compiler.err.pattern.dominated", "this case label is dominated by a preceding case label"), "case Integer n (on line 24)", "constants go before the patterns", "case 0 above case Integer n");
+  has(explain(files, "Main.java", 32, "case", "compiler.err.switch.mixing.case.types", "different case kinds used in the switch"), "its first case uses an arrow (case 1 -> ...), and case 2 uses a colon (case 2:)", "write case 2 -> ...");
+  has(explain(files, "Main.java", 40, "case", "compiler.err.switch.mixing.case.types", "different case kinds used in the switch"), 'its first case uses a colon (case "sat":), and case "mon" uses an arrow', 'write case "mon": like the others');
+  // A wrong value outside a case keeps its note.
+  const plain = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", '        int x = "5";', "    }", "}"] });
+  has(explain(plain, "Main.java", 3, '"5"', "compiler.err.prob.found.req", "incompatible types: String cannot be converted to int"), "The value on the right has a different type");
+});
+
+test("extra: a class a sealed type doesn't permit, and a permitted class without final, sealed or non-sealed (fidelity 88)", () => {
+  const files = program({
+    "Main.java": ["sealed interface Payment permits Cash, Card {", "}", "record Cash(int cents) implements Payment {", "}", "class Card implements Payment {", "}", "record Voucher(String code) implements Payment {", "}", "sealed abstract class Vehicle permits Car, Bus {", "}", "final class Car extends Vehicle {", "}", "abstract class Bus extends Vehicle {", "}", "final class Bike extends Vehicle {", "}"],
+  });
+  const SEALED = "compiler.err.cant.inherit.from.sealed";
+  has(explain(files, "Main.java", 7, "record", SEALED, "class is not allowed to extend sealed class: Payment (as it is not listed in its 'permits' clause)"), "Payment is sealed: only the classes named after permits in its header (Cash and Card) may implement it, and Voucher isn't one of them", "sealed interface Payment permits Cash, Card, Voucher", "remove implements Payment from Voucher");
+  has(explain(files, "Main.java", 15, "Bike", SEALED, "class is not allowed to extend sealed class: Vehicle (as it is not listed in its 'permits' clause)"), "(Car and Bus) may extend it", "sealed abstract class Vehicle permits Car, Bus, Bike", "remove extends Vehicle from Bike");
+  const MODS = ["compiler.err.non.sealed.sealed.or.final.expected", "sealed, non-sealed or final modifiers expected"];
+  has(explain(files, "Main.java", 5, "class", ...MODS), "Card implements the sealed interface Payment", "final (none may), sealed (only the ones it lists after permits) or non-sealed (any may)", "final class Card implements Payment");
+  has(explain(files, "Main.java", 13, "class", ...MODS), "Bus extends the sealed class Vehicle", "An abstract class is meant to be extended, so it can't be final", "non-sealed abstract class Bus extends Vehicle");
+});
+
+test("extra: a pattern variable used after its if, and inside the block of a negated instanceof (fidelity 89)", () => {
+  const files = program({
+    "Main.java": ["public class Main {", "    static int length(Object value) {", "        if (value instanceof String text) {", "            System.out.println(text);", "        }", "        return text.length();", "    }", "    static int twice(Object value) {", "        if (!(value instanceof Integer number)) {", "            System.out.println(number);", "        }", "        return 0;", "    }", "}"],
+  });
+  const missing = (name) => `cannot find symbol\n  symbol:   variable ${name}\n  location: class Main`;
+  has(explain(files, "Main.java", 6, "text", NOT_FOUND, missing("text")), "text is a pattern variable: instanceof String text on line 3 creates it", "inside the if's block (and after && in the same condition)", "if (!(... instanceof String text)) { return; }");
+  has(explain(files, "Main.java", 10, "number", NOT_FOUND, missing("number")), "number is a pattern variable", "the block runs when the test was false, so number doesn't exist in it", "Use number in the else block");
+  // A variable created in an ended block still gets the block note; an unknown name the general one.
+  const block = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        if (args.length > 0) {", "            int count = 1;", "        }", "        System.out.println(count);", "        System.out.println(totl);", "    }", "}"] });
+  has(explain(block, "Main.java", 6, "count", NOT_FOUND, missing("count")), "count was created inside the if block above");
+  has(explain(block, "Main.java", 7, "totl", NOT_FOUND, missing("totl")), "Java doesn't know a variable with this name here.");
+});
+
+test("extra: text after a text block's opening \"\"\", its closing \"\"\" read as another opening, and one on one line (fidelity 90)", () => {
+  const files = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", '        String poem = """Roses are red,', "            violets are blue.", '            """;', '        String one = """hello""";', "    }", "}"] });
+  const OPEN = ["compiler.err.illegal.text.block.open", "illegal text block open delimiter sequence, missing line terminator"];
+  has(explain(files, "Main.java", 3, "Roses", ...OPEN), 'A text block\'s opening """ must end its line', 'keep String poem = """ on this line', "(Roses are red,) to the next line");
+  has(explain(files, "Main.java", 5, ";", ...OPEN), 'Java read this """ as the start of another text block, because the text block above (on line 3) didn\'t open properly');
+  const one = program({ "Main.java": ["public class Main {", '    String one = """hello""";', "}"] });
+  has(explain(one, "Main.java", 2, "hello", ...OPEN), "can't be on one line", '"hello"');
+});
+
+test("extra: var without a value, with null, an array initializer or a lambda, a var variable given another type, and var outside a method (fidelity 91 and 92)", () => {
+  const INFER = "compiler.err.cant.infer.local.var.type";
+  const files = program({ "Main.java": ["public class Main {", "    private var count = 0;", "    static var twice(int x) {", "        return x * 2;", "    }", "    static int half(var x) {", "        return x / 2;", "    }", "    public static void main(String[] args) {", "        var total;", "        var best = null;", "        var numbers = {1, 2, 3};", "        var add = (int x) -> x * 2;", "        var size = 0;", '        size = "many";', "        var a = 1, b = 2;", "    }", "}"] });
+  has(explain(files, "Main.java", 10, "total", INFER, "cannot infer type for local variable total\n  (cannot use 'var' on variable without initializer)"), "a var variable needs its value on the same line: var total = 0;", "int total;");
+  has(explain(files, "Main.java", 11, "best", INFER, "cannot infer type for local variable best\n  (variable initializer is 'null')"), "null has no type of its own", "String best = null;");
+  has(explain(files, "Main.java", 12, "numbers", INFER, "cannot infer type for local variable numbers\n  (array initializer needs an explicit target-type)"), "int[] numbers = {1, 2, 3};", "var numbers = new int[] {1, 2, 3};");
+  has(explain(files, "Main.java", 13, "add", INFER, "cannot infer type for local variable add\n  (lambda expression needs an explicit target-type)"), "A lambda has no type of its own");
+  has(explain(files, "Main.java", 15, '"many"', "compiler.err.prob.found.req", "incompatible types: String cannot be converted to int"), "size was created with var size = 0;, so Java gave it the type of that first value, int", "var doesn't let a variable change type later");
+  const HERE = ["compiler.err.restricted.type.not.allowed.here", "'var' is not allowed here"];
+  has(explain(files, "Main.java", 2, "var", ...HERE), "var works only for local variables", "a lambda's parameters and a record pattern's components", "count is an instance variable", "private int count = 0;");
+  // var as an instanceof pattern's type: the pattern variable is local, so the message must not open with "only for local variables".
+  const pattern = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", '        Object o = "x";', "        if (o instanceof var x) {", "            System.out.println(x);", "        }", "    }", "}"] });
+  const inst = explain(pattern, "Main.java", 4, "var", ...HERE);
+  has(inst, "A pattern after instanceof must name the type it checks for", "o instanceof String x");
+  assert.ok(!inst.includes("only for local variables"), inst);
+  has(explain(files, "Main.java", 3, "var", ...HERE), "A method's return type must be written out: replace var before twice(...)");
+  has(explain(files, "Main.java", 6, "var", ...HERE), "A method's parameters must have their types written out: replace var before x");
+  has(explain(files, "Main.java", 16, "var", "compiler.err.restricted.type.not.allowed.compound", "'var' is not allowed in a compound declaration"), "var a = 1; and then var b = 2;");
+});
+
+/** HotSpot's trace of a StackOverflowError: the same frames over and over (it prints up to 1024; a few are enough here). */
+const overflow = (frames, times = 30) => `Exception in thread "main" java.lang.StackOverflowError\n${Array.from({ length: times }, () => frames.map((f) => `\tat ${f}\n`).join("")).join("")}`;
+
+test("extra crashes: a StackOverflowError names the method and why the recursion never ended: no base case, the same value, a base case jumped over, two methods", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static int factorial(int n) {",
+      "        return n * factorial(n - 1);",
+      "    }",
+      "    static int countDown(int n) {",
+      "        if (n == 0) {",
+      "            return 0;",
+      "        }",
+      "        return countDown(n - 2);",
+      "    }",
+      "    static int sum(int n) {",
+      "        if (n == 0) {",
+      "            return 0;",
+      "        }",
+      "        return n + sum(n);",
+      "    }",
+      "    static boolean isEven(int n) {",
+      "        if (n == 0) {",
+      "            return true;",
+      "        }",
+      "        return isOdd(n + 1);",
+      "    }",
+      "    static boolean isOdd(int n) {",
+      "        if (n == 0) {",
+      "            return false;",
+      "        }",
+      "        return isEven(n - 1);",
+      "    }",
+      "}",
+    ],
+  });
+  const none = explainCrash(overflow(["Main.factorial(Main.java:3)"]), files);
+  assert.equal(none.line, 3);
+  has(none.explanation, "factorial calls itself on line 3 (Main.java)", "Java keeps every unfinished call on the call stack", "factorial has no base case", "if (n <= 0) { return ...; }");
+  has(explainCrash(overflow(["Main.countDown(Main.java:9)"]), files).explanation, "countDown has a base case (the if on line 6), but the calls never reach it", "An == test is missed when the value jumps over it", "n <= 0");
+  has(explainCrash(overflow(["Main.sum(Main.java:15)"]), files).explanation, "It calls itself with the same value it got (sum(n))", "sum(n - 1)");
+  has(explainCrash(overflow(["Main.isOdd(Main.java:27)", "Main.isEven(Main.java:21)"]), files).explanation, "isOdd and isEven kept calling each other (line 27 and line 21)", "At least one of them needs a base case");
+  // A void method has no answer to give back: its base case just returns.
+  const bounce = program({ "Main.java": ["public class Main {", "    public static void main(String[] args) {", "        bounce(40);", "    }", "", "    public static void bounce(int height) {", "        System.out.println(height);", "        bounce(height / 2);", "    }", "    static <T> void each(T item) {", "        each(item);", "    }", "}"] });
+  const v = explainCrash(overflow(["Main.bounce(Main.java:8)"]), bounce).explanation;
+  has(v, "bounce has no base case: a case, checked before the call, that stops without calling bounce again", "if (height <= 0) { return; }");
+  lacks(v, "return ...;", "answer");
+  const generic = explainCrash(overflow(["Main.each(Main.java:11)"]), bounce).explanation;
+  has(generic, "each has no base case", "if (...) { return; }");
+  lacks(generic, "return ...;");
+  // Without the program's text, or in Java's own code, the general note stays.
+  assert.equal(explainCrash(overflow(["Main.factorial(Main.java:3)"])).explanation.startsWith("factorial calls itself on line 3"), true);
+  has(explainCrash(overflow(["java.base/java.util.AbstractCollection.toString(AbstractCollection.java:457)"]), files).explanation, "A method kept calling itself (or methods kept calling each other) without stopping");
+});
+
+test("extra crashes: a NullPointerException on a node: past the end of a linked list, an empty list's head, and a tree's leaf in a recursive method", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static class Node {",
+      "        int value;",
+      "        Node next;",
+      "        Node getNext() {",
+      "            return next;",
+      "        }",
+      "    }",
+      "    static class LinkedList {",
+      "        private Node head;",
+      "        int first() {",
+      "            return head.value;",
+      "        }",
+      "    }",
+      "    static class TreeNode {",
+      "        int value;",
+      "        TreeNode left;",
+      "        TreeNode right;",
+      "    }",
+      "    static int size(TreeNode node) {",
+      "        return 1 + size(node.left) + size(node.right);",
+      "    }",
+      "    public static void main(String[] args) {",
+      "        Node current = new Node();",
+      "        while (current.next.next != null) {",
+      "            current = current.getNext();",
+      "        }",
+      "    }",
+      "}",
+    ],
+  });
+  const npe = (m, frames) => explainCrash(`Exception in thread "main" java.lang.NullPointerException: ${m}\n${frames.map((f) => `\tat ${f}\n`).join("")}`, files);
+  has(npe('Cannot read field "next" because "<local1>.next" is null', ["Main.main(Main.java:25)"]).explanation, "The program read next of current.next, but current.next is null: there is no Node there", "In a linked list, null marks the end", "check current.next != null before using current.next.next", "while (node != null)");
+  has(npe('Cannot invoke "Main$Node.getNext()" because "<local1>" is null', ["Main.main(Main.java:26)"]).explanation, "The program called getNext() on current, but current is null", "a variable that has followed it past the last node");
+  has(npe('Cannot read field "value" because "this.head" is null', ["Main$LinkedList.first(Main.java:12)", "Main.main(Main.java:24)"]).explanation, "head is null while the LinkedList is empty: no node has been added yet", "if (head == null)");
+  has(npe('Cannot read field "left" because "<parameter1>" is null', ["Main.size(Main.java:21)", "Main.size(Main.java:21)", "Main.main(Main.java:24)"]).explanation, "The program read left of node, but node is null: there is no TreeNode there", "a leaf's left and right are null", "A recursive method such as size reaches null at every leaf", "if (node == null) { return ...; }");
+  // A null that isn't a node keeps the general note.
+  has(npe('Cannot invoke "String.length()" because "<local1>" is null', ["Main.main(Main.java:25)"]).explanation, "The program called length() on a String that is null");
+});
+
+test("extra: a final variable next to a record with a component of its name keeps the plain note: a class's field, a local, a local in a record's method, and a receiver that isn't a record", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    record Point(int x, int y) {",
+      "        Point shift() {",
+      "            final int x = 1;",
+      "            x = 2;",
+      "            return this;",
+      "        }",
+      "    }",
+      "    static class Spot {",
+      "        final int x = 0;",
+      "        void move() {",
+      "            this.x = 3;",
+      "        }",
+      "    }",
+      "    static Spot spot() {",
+      "        return new Spot();",
+      "    }",
+      "    public static void main(String[] args) {",
+      "        final int x = 5;",
+      "        x = 6;",
+      "        Spot s = new Spot();",
+      "        s.x = 7;",
+      "        spot().x = 8;",
+      "        var p = new Point(1, 2);",
+      "        p.x = 4;",
+      "    }",
+      "}",
+    ],
+  });
+  const PLAIN = "This variable is final, so it can't get a new value after the first one.";
+  const final = (line, at) => explain(files, "Main.java", line, at, CANT_ASSIGN, "cannot assign a value to final variable x");
+  assert.equal(final(5, "x ="), PLAIN);
+  assert.equal(final(12, ".x"), PLAIN);
+  assert.equal(final(20, "x ="), PLAIN);
+  assert.equal(final(22, ".x"), PLAIN);
+  assert.equal(final(23, ".x"), PLAIN);
+  // var p = new Point(...): p's type is the record, so the record's note.
+  has(final(25, ".x"), "x is a component of the record Point", "p = new Point(4, p.y());");
+});
+
+test("extra: a wrong value in a case's code on the case's line keeps the general note; only the label gets the case note", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static void f(int k) {",
+      "        int total = 0;",
+      '        String name = "";',
+      "        switch (k) {",
+      '            case 1 -> total = "one";',
+      "            case 2: name = 5; break;",
+      "            case 6 -> { String q = 3; }",
+      "        }",
+      "    }",
+      "    static void g(Object o) {",
+      "        switch (o) {",
+      "            case String t -> { int q = t; }",
+      "            default -> { }",
+      "        }",
+      "    }",
+      "}",
+    ],
+  });
+  for (const [line, at, from, to] of [[6, '"one"', "String", "int"], [7, "5;", "int", "String"], [8, "3;", "int", "String"], [13, "t;", "String", "int"]]) {
+    const note = explain(files, "Main.java", line, at, BAD_TYPES, `incompatible types: ${from} cannot be converted to ${to}`);
+    lacks(note, "This case's value");
+    has(note, "The value on the right has a different type");
+  }
+});
+
+test("extra crashes: a StackOverflowError is explained by the part of the trace that repeats: Java's code or a helper on top, and toString through String.valueOf (HotSpot's traces)", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static String stars(int n) {",
+      '        return new StringBuilder().append("*").append(stars(n - 1)).toString();',
+      "    }",
+      "    static int square(int n) {",
+      "        return n * n;",
+      "    }",
+      "    static int sumSquares(int n) {",
+      "        return square(n) +",
+      "            sumSquares(n - 1);",
+      "    }",
+      "    static class Bead {",
+      "        String color;",
+      "        Bead next;",
+      "        public String toString() {",
+      '            return color + " " + next;',
+      "        }",
+      "    }",
+      "}",
+    ],
+  });
+  const trace = (top, frames, times = 30) => `Exception in thread "main" java.lang.StackOverflowError\n${top.map((f) => `\tat ${f}\n`).join("")}${Array.from({ length: times }, () => frames.map((f) => `\tat ${f}\n`).join("")).join("")}`;
+  // Java's own code on top (the -Xint trace and the JIT's differ there): stars still has no base case.
+  const library = explainCrash(trace(["java.base/java.lang.StringBuilder.<init>(StringBuilder.java:106)"], ["Main.stars(Main.java:3)"]), files).explanation;
+  has(library, "stars calls itself on line 3 (Main.java)", "stars has no base case", "if (n <= 0) { return ...; }");
+  // A helper on top: one method, and the line of its call of itself, not square's.
+  const helper = explainCrash(trace(["Main.square(Main.java:6)", "Main.sumSquares(Main.java:9)"], ["Main.sumSquares(Main.java:10)"]), files).explanation;
+  has(helper, "sumSquares calls itself on line 10 (Main.java)", "sumSquares has no base case");
+  lacks(helper, "kept calling each other", "square");
+  // toString through String.valueOf: objects linked in a circle.
+  const circle = explainCrash(trace([], ["java.base/java.lang.String.valueOf(String.java:4454)", "Main$Bead.toString(Main.java:16)"]), files).explanation;
+  has(circle, "Bead's toString ended up calling itself again (line 16, Main.java)", "went around in a circle (such as a.next = a");
+  lacks(circle, "base case");
+});
+
+test("extra: a sealed type without a permits list: its subtypes in its file go in the new list, nested ones by their path", () => {
+  const files = program({
+    "Main.java": ["public class Main {", "}", "sealed interface Shape {", "    record Circle(double r) implements Shape {", "    }", "}", "record Square(double s) implements Shape {", "}"],
+    "Hexagon.java": ["public record Hexagon(double s) implements Shape {", "}"],
+  });
+  const note = explain(files, "Hexagon.java", 1, "record", "compiler.err.cant.inherit.from.sealed", "class is not allowed to extend sealed class: Shape (as it is not listed in its 'permits' clause)");
+  has(note, "it has no permits list, so only the classes in its own file (Shape.Circle and Square) may implement it", "sealed interface Shape permits Shape.Circle, Square, Hexagon", "remove implements Shape from Hexagon");
+});
+
+test("extra: a switch on one of two enums that share constants names the selector's enum; an enum of Java's own gets the general note", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    enum Color { RED, GREEN, BLUE }",
+      "    enum Light { RED, GREEN, AMBER }",
+      "    static String a(Light light) {",
+      "        return switch (light) {",
+      '            case RED -> "stop";',
+      '            case GREEN -> "go";',
+      "        };",
+      "    }",
+      "    static String b(Object any) {",
+      "        return switch (Main.pick()) {",
+      '            case Color.RED -> "r";',
+      '            case Color.GREEN -> "g";',
+      "        };",
+      "    }",
+      "    static String d(java.time.DayOfWeek day) {",
+      "        return switch (day) {",
+      '            case RED -> "m";',
+      "        };",
+      "    }",
+      "    static Color pick() {",
+      "        return Color.RED;",
+      "    }",
+      "}",
+    ],
+  });
+  const NOT_ALL = "the switch expression does not cover all possible input values";
+  has(explain(files, "Main.java", 5, "switch", "compiler.err.not.exhaustive", NOT_ALL), "no case for AMBER of the enum Light");
+  has(explain(files, "Main.java", 11, "switch", "compiler.err.not.exhaustive", NOT_ALL), "no case for BLUE of the enum Color");
+  const other = explain(files, "Main.java", 17, "switch", "compiler.err.not.exhaustive", NOT_ALL);
+  lacks(other, "enum Color", "enum Light");
+  has(other, "Add default -> ... at the end");
+});
+
+test("extra: an ordinary variable of the same name created after the pattern gets the block note, not the pattern note", () => {
+  const missing = (name) => `cannot find symbol\n  symbol:   variable ${name}\n  location: class Main`;
+  // (a) a for loop's variable created after the pattern, used after the loop.
+  const forLoop = program({ "Main.java": ["public class Main {", "    static int a(Object o) {", "        if (o instanceof String s) {", "            System.out.println(s);", "        }", "        for (int s = 0; s < 3; s++) {", "            System.out.println(s);", "        }", "        return s;", "    }", "}"] });
+  const a = explain(forLoop, "Main.java", 9, "s", NOT_FOUND, missing("s"));
+  has(a, "s was created in the header of the for loop above");
+  assert.ok(!a.includes("pattern variable"), a);
+  // (b) the local comes before the pattern: the pattern is the one meant, and keeps the pattern note.
+  const before = program({ "Main.java": ["public class Main {", "    static int b(Object o) {", "        if (o != null) {", "            int s = 1;", "        }", "        if (o instanceof String s) {", "            System.out.println(s);", "        }", "        return s.length();", "    }", "}"] });
+  has(explain(before, "Main.java", 9, "s", NOT_FOUND, missing("s")), "s is a pattern variable: instanceof String s on line 6 creates it");
+  // (c) a for-each variable created after the pattern.
+  const forEach = program({ "Main.java": ["public class Main {", "    static int c(Object o, String[] words) {", "        if (o instanceof String s) {", "            System.out.println(s);", "        }", "        for (String s : words) {", "            System.out.println(s);", "        }", "        return s.length();", "    }", "}"] });
+  const c = explain(forEach, "Main.java", 9, "s", NOT_FOUND, missing("s"));
+  assert.ok(!c.includes("pattern variable"), c);
+  has(c, "s was created");
+  // (d) a block local created after the pattern.
+  const blockLocal = program({ "Main.java": ["public class Main {", "    static int d(Object o) {", "        if (o instanceof String s) {", "            System.out.println(s);", "        }", "        if (o != null) {", "            int s = 2;", "        }", "        return s;", "    }", "}"] });
+  const dd = explain(blockLocal, "Main.java", 9, "s", NOT_FOUND, missing("s"));
+  has(dd, "s was created inside the if block above");
+  assert.ok(!dd.includes("pattern variable"), dd);
+});
+
+test("extra: a pattern variable in the else block, after || in the condition, after && of a negated test, and in a ?: (javac's carets)", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static int a(Object v) {",
+      "        if (v instanceof String t) {",
+      "            return 1;",
+      "        } else {",
+      "            return t.length();",
+      "        }",
+      "    }",
+      "    static boolean b(Object v) {",
+      "        if (v instanceof String t || t.isEmpty()) {",
+      "            return true;",
+      "        }",
+      "        return false;",
+      "    }",
+      "    static boolean c(Object v) {",
+      "        if (!(v instanceof Integer k) && k > 0) {",
+      "            return true;",
+      "        }",
+      "        return false;",
+      "    }",
+      "    static int d(Object v) {",
+      "        return v instanceof String s ? 1 : s.length();",
+      "    }",
+      "}",
+    ],
+  });
+  const missing = (name) => `cannot find symbol\n  symbol:   variable ${name}\n  location: class Main`;
+  const elseNote = explain(files, "Main.java", 6, "t.", NOT_FOUND, missing("t"));
+  has(elseNote, "In the else block the test was false, so t doesn't exist there", "Move the code that uses t into the if's block");
+  lacks(elseNote, "after that block");
+  const or = explain(files, "Main.java", 10, "t.isEmpty", NOT_FOUND, missing("t"));
+  has(or, "After || the test may have been false", "use && instead");
+  lacks(or, "after that block");
+  const and = explain(files, "Main.java", 16, "k >", NOT_FOUND, missing("k"));
+  has(and, "the instanceof test was false", "With || instead");
+  lacks(and, "always leaves");
+  const ternary = explain(files, "Main.java", 22, "s.length", NOT_FOUND, missing("s"));
+  has(ternary, "the part of ? : for false");
+  lacks(ternary, "if's block (and", "after that block");
+});
+
+test("extra: arrow and colon cases mixed with a default: default is named as a label, and counts as the first one", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static void a(int k) {",
+      "        switch (k) {",
+      "            case 1 -> System.out.println(1);",
+      "            default: System.out.println(0);",
+      "        }",
+      "        switch (k) {",
+      "            case 1: System.out.println(1); break;",
+      "            default -> System.out.println(0);",
+      "        }",
+      "        switch (k) {",
+      "            default -> System.out.println(0);",
+      "            case 1: System.out.println(1);",
+      "        }",
+      "    }",
+      "}",
+    ],
+  });
+  const MIXED = ["compiler.err.switch.mixing.case.types", "different case kinds used in the switch"];
+  const one = explain(files, "Main.java", 5, "default", ...MIXED);
+  has(one, "its first case uses an arrow (case 1 -> ...), and default uses a colon (default:)", "write default -> ...");
+  lacks(one, "this case");
+  const two = explain(files, "Main.java", 9, "default", ...MIXED);
+  has(two, "its first case uses a colon (case 1:), and default uses an arrow (default -> ...)", "write default: like the others");
+  const three = explain(files, "Main.java", 13, "case", ...MIXED);
+  has(three, "its first label, default, uses an arrow (default -> ...), and case 1 uses a colon (case 1:)", "write case 1 -> ...");
+});
+
+test("extra: var for a static field keeps its modifiers, and var in a catch or a record's header names what goes there instead", () => {
+  const files = program({ "Main.java": ["public class Main {", "    static var count = 0;", '    private static final var NAME = "x";', "    record R(var x) {}", "    public static void main(String[] args) {", "        try {", "            System.out.println(1);", "        } catch (var e) {", "        }", "    }", "}"] });
+  const HERE = ["compiler.err.restricted.type.not.allowed.here", "'var' is not allowed here"];
+  const count = explain(files, "Main.java", 2, "var", ...HERE);
+  has(count, "count is a class variable", "static int count = 0;");
+  lacks(count, "instance variable", "private int");
+  has(explain(files, "Main.java", 3, "var", ...HERE), 'private static final String NAME = "x";');
+  const record = explain(files, "Main.java", 4, "var", ...HERE);
+  has(record, "A record's components are listed in its header with their types written out", "record R(int x)");
+  lacks(record, "method's parameters");
+  const caught = explain(files, "Main.java", 8, "var", ...HERE);
+  has(caught, "A catch must name the type of exception it catches", "catch (Exception e)");
+  lacks(caught, "such as int");
+});
+
+test("extra crashes: a null link of a class that isn't a list or a tree keeps the general note; a list's next without a loop keeps the list note", () => {
+  const files = program({
+    "Main.java": [
+      "public class Main {",
+      "    static class Person {",
+      "        String name;",
+      "        Person mentor;",
+      "    }",
+      "    static class Clue {",
+      "        String place;",
+      "        Clue next;",
+      "    }",
+      "    public static void main(String[] args) {",
+      "        Person ada = new Person();",
+      "        System.out.println(ada.mentor.name);",
+      "        Clue first = new Clue();",
+      "        System.out.println(first.next.next.place);",
+      "    }",
+      "}",
+    ],
+  });
+  const npe = (m, line) => explainCrash(`Exception in thread "main" java.lang.NullPointerException: ${m}\n\tat Main.main(Main.java:${line})\n`, files).explanation;
+  const person = npe('Cannot read field "name" because "<local1>.mentor" is null', 12);
+  lacks(person, "linked list", "In a tree");
+  has(person, "null");
+  has(npe('Cannot read field "next" because "<local2>.next" is null', 14), "In a linked list, null marks the end", "first.next");
+  // A family tree's Person.parent (or child) is not a list's link: the general note, unless a loop follows it.
+  const family = program({
+    "Main.java": [
+      "public class Main {",
+      "    static class Person {",
+      "        String name;",
+      "        Person parent;",
+      "        Person child;",
+      "    }",
+      "    public static void main(String[] args) {",
+      "        Person ada = new Person();",
+      "        System.out.println(ada.parent.name);",
+      "        System.out.println(ada.child.name);",
+      "        int depth = 0;",
+      "        for (Person p = ada; p.parent.name != null; p = p.parent) {",
+      "            depth++;",
+      "        }",
+      "    }",
+      "}",
+    ],
+  });
+  const fam = (m, line) => explainCrash(`Exception in thread "main" java.lang.NullPointerException: ${m}\n\tat Main.main(Main.java:${line})\n`, family).explanation;
+  for (const [m, line] of [['Cannot read field "name" because "<local1>.parent" is null', 9], ['Cannot read field "name" because "<local1>.child" is null', 10]]) {
+    const text = fam(m, line);
+    lacks(text, "linked list", "In a tree", "while (node != null)");
+    has(text, "null");
+  }
+  // A loop that follows parent keeps the linked note.
+  has(fam('Cannot read field "name" because "<local3>.parent" is null', 12), "Check for null before using a node");
+});
+
+test("extra: getFirst() on a generic record names its accessor", () => {
+  const files = program({ "Main.java": ["public class Main {", "    record Pair<A, B>(A first, B second) {}", "    public static void main(String[] args) {", '        Pair<String, Integer> p = new Pair<>("a", 1);', "        System.out.println(p.getFirst());", "    }", "}"] });
+  has(explain(files, "Main.java", 5, ".getFirst", NOT_FOUND_CALL, "cannot find symbol\n  symbol:   method getFirst()\n  location: variable p of type Pair<String,Integer>"), "Pair is a record", "p.first(), not p.getFirst()");
 });

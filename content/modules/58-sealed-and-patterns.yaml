@@ -1,0 +1,2043 @@
+id: sealed-and-patterns
+summary: An extra module, not part of the MOOC. Patterns, which test what kind of object you have and take it apart in the same step, and sealed types, whose complete list of subtypes Java knows. instanceof with a pattern variable (Java 16), sealed interfaces and their permitted classes (Java 17), switch on sealed types with type patterns and when guards, and record patterns, nested ones too (Java 21).
+steps:
+  - id: sealed-and-patterns-instanceof
+    slug: instanceof-patterns
+    title: instanceof with a pattern
+    text: |
+      This module is an extra: the MOOC doesn't cover it. It's about two features that work together. **Patterns** test what kind of object you have and give you its parts in the same step, and **sealed types** fix the list of classes that may implement an interface. With both, a method can handle each kind of object in its own way, and javac checks that no kind was forgotten. They came to Java in stages, from Java 16 to Java 21, and newer Java code uses them often, so they're worth being able to read and write. The module uses records (module 56) and switch expressions (module 57).
+
+      ### instanceof, then a cast
+
+      In module 36, a program asked an object for its type with `instanceof`, and then cast it to get a variable of that type. A chat app has text messages and photo messages, which are both ChatMessages. Printing the photos the old way:
+
+      ```java fragment
+      for (ChatMessage message : chat) {
+          if (message instanceof PhotoMessage) {
+              PhotoMessage photo = (PhotoMessage) message;
+              System.out.println(photo.sender() + " sent " + photo.file());
+          }
+      }
+      ```
+
+      The type `PhotoMessage` is written three times in two lines, and the cast can't even fail, since the line before it has just checked the type.
+
+      ### A type pattern
+
+      Since Java 16, `instanceof` can be followed by a type and a new variable's name. `message instanceof PhotoMessage photo` checks the type, and when it matches, it declares the variable `photo`, which refers to the same object, as a PhotoMessage. `PhotoMessage photo` is a **type pattern**, and `photo` is a **pattern variable**.
+
+      ```java run
+      import java.util.ArrayList;
+
+      public class Main {
+          public static void main(String[] args) {
+              ArrayList<ChatMessage> chat = new ArrayList<>();
+              chat.add(new TextMessage("Aino", "Lunch at noon?"));
+              chat.add(new PhotoMessage("Ben", "menu.jpg", 840));
+              chat.add(new TextMessage("Ben", "Sure, see you there"));
+
+              for (ChatMessage message : chat) {
+                  if (message instanceof TextMessage typed) {
+                      System.out.println(typed.sender() + ": " + typed.text());
+                  } else if (message instanceof PhotoMessage photo) {
+                      System.out.println(photo.sender() + " sent " + photo.file() + ", " + photo.kilobytes() + " kB");
+                  }
+              }
+          }
+      }
+      // ==== ChatMessage.java ====
+      public interface ChatMessage {
+          String sender();
+      }
+      // ==== TextMessage.java ====
+      public record TextMessage(String sender, String text) implements ChatMessage {
+      }
+      // ==== PhotoMessage.java ====
+      public record PhotoMessage(String sender, String file, int kilobytes) implements ChatMessage {
+      }
+      ```
+
+      ```output
+      Aino: Lunch at noon?
+      Ben sent menu.jpg, 840 kB
+      Ben: Sure, see you there
+      ```
+
+      - The messages are records. Each record's accessor `sender()` is the method that the interface ChatMessage asks for.
+      - When the object isn't a TextMessage, the test is false and nothing is declared: there's no cast that could throw a ClassCastException.
+      - `instanceof` is false for `null`, so a pattern variable is never `null`.
+
+      ### Where the pattern variable exists
+
+      A pattern variable exists only where Java knows that the test was true. In the if's own block it can be used; in the else block it can't:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Object value = "Lunch at noon?";
+              if (value instanceof String text) {
+                  System.out.println(text.length());
+              } else {
+                  System.out.println(text);
+              }
+          }
+      }
+      ```
+
+      ```javac
+      Main.java:7: error: cannot find symbol
+                  System.out.println(text);
+                                     ^
+        symbol:   variable text
+        location: class Main
+      1 error
+      ```
+
+      After `&&`, the variable can be used in the same condition, since the right side of `&&` is only evaluated when the left side is true:
+
+      ```java main
+      Object[] values = {"Lunch at noon?", 42, "ok"};
+      for (Object value : values) {
+          if (value instanceof String text && text.length() > 5) {
+              System.out.println("long text: " + text);
+          }
+      }
+      ```
+
+      ```output
+      long text: Lunch at noon?
+      ```
+
+      With `||` it doesn't work: the right side of `||` runs exactly when the test was false, and then there's no variable.
+
+      The test can also be turned around with `!`. When the method returns as soon as the object isn't of the type, the pattern variable can be used in the rest of the method:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(shout("see you there"));
+              System.out.println(shout(42));
+          }
+
+          public static String shout(Object value) {
+              if (!(value instanceof String text)) {
+                  return "not text";
+              }
+              return text.toUpperCase() + "!";
+          }
+      }
+      ```
+
+      ```output
+      SEE YOU THERE!
+      not text
+      ```
+
+      **Your turn:** the chat app now has stickers too. The method `preview` in `Main.java` still uses `instanceof` and a cast for each kind of message. Rewrite it with type patterns, so that it has no casts left. It should still print the same:
+
+      ```
+      Aino: Lunch at noon?
+      Ben sent a photo, 840 kB
+      Aino sent the sticker thumbs up
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(preview(new TextMessage("Aino", "Lunch at noon?")));
+                System.out.println(preview(new PhotoMessage("Ben", "menu.jpg", 840)));
+                System.out.println(preview(new StickerMessage("Aino", "thumbs up")));
+            }
+
+            public static String preview(ChatMessage message) {
+                if (message instanceof TextMessage) {
+                    TextMessage typed = (TextMessage) message;
+                    return typed.sender() + ": " + typed.text();
+                } else if (message instanceof PhotoMessage) {
+                    PhotoMessage photo = (PhotoMessage) message;
+                    return photo.sender() + " sent a photo, " + photo.kilobytes() + " kB";
+                } else if (message instanceof StickerMessage) {
+                    StickerMessage sticker = (StickerMessage) message;
+                    return sticker.sender() + " sent the sticker " + sticker.name();
+                }
+                return message.sender() + " sent something new";
+            }
+        }
+      ChatMessage.java: |
+        public interface ChatMessage {
+            String sender();
+        }
+      TextMessage.java: |
+        public record TextMessage(String sender, String text) implements ChatMessage {
+        }
+      PhotoMessage.java: |
+        public record PhotoMessage(String sender, String file, int kilobytes) implements ChatMessage {
+        }
+      StickerMessage.java: |
+        public record StickerMessage(String sender, String name) implements ChatMessage {
+        }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                System.out.println(preview(new TextMessage("Aino", "Lunch at noon?")));
+                System.out.println(preview(new PhotoMessage("Ben", "menu.jpg", 840)));
+                System.out.println(preview(new StickerMessage("Aino", "thumbs up")));
+            }
+
+            public static String preview(ChatMessage message) {
+                if (message instanceof TextMessage typed) {
+                    return typed.sender() + ": " + typed.text();
+                } else if (message instanceof PhotoMessage photo) {
+                    return photo.sender() + " sent a photo, " + photo.kilobytes() + " kB";
+                } else if (message instanceof StickerMessage sticker) {
+                    return sticker.sender() + " sent the sticker " + sticker.name();
+                }
+                return message.sender() + " sent something new";
+            }
+        }
+      ChatMessage.java: |
+        public interface ChatMessage {
+            String sender();
+        }
+      TextMessage.java: |
+        public record TextMessage(String sender, String text) implements ChatMessage {
+        }
+      PhotoMessage.java: |
+        public record PhotoMessage(String sender, String file, int kilobytes) implements ChatMessage {
+        }
+      StickerMessage.java: |
+        public record StickerMessage(String sender, String name) implements ChatMessage {
+        }
+    hints:
+      - "Move each variable's name into the test: `message instanceof TextMessage typed`. Then the line with the cast can go."
+      - "Do the same for PhotoMessage and StickerMessage. The last `return` stays: javac can't know that there are no other kinds of ChatMessage (the next step changes that)."
+    require:
+      - pattern: instanceof\s+(TextMessage|PhotoMessage|StickerMessage)\s+[A-Za-z_]\w*
+        min: 3
+        message: "Use a type pattern in each of the three tests, such as `message instanceof TextMessage typed`."
+    forbid:
+      - pattern: \(\s*(TextMessage|PhotoMessage|StickerMessage)\s*\)
+        message: "Leave out the casts: the pattern variable already has the right type."
+    tests:
+      - call: |
+          System.out.println(preview(new TextMessage("Aino", "Lunch at noon?")));
+          System.out.println(preview(new PhotoMessage("Ben", "menu.jpg", 840)));
+          System.out.println(preview(new StickerMessage("Aino", "thumbs up")));
+      - call: |
+          System.out.println(preview(new StickerMessage("Chen", "party hat")));
+          System.out.println(preview(new TextMessage("Dora", "Running late, sorry")));
+          System.out.println(preview(new PhotoMessage("Chen", "cake.png", 2310)));
+        hidden: true
+    more:
+      - task: |
+          The chat app keeps its contacts in a list. A `ChatUser` has a nickname and a phone number, and two ChatUsers are the same person when their phone numbers are equal, whatever their nicknames. In `ChatUser.java`, write the method `equals(Object compared)` the way module 32 did, but with a pattern in place of the cast: `true` for the very same object, `false` when `compared` isn't a ChatUser (`null` included), and otherwise a comparison of the phone numbers. The class already has a `hashCode` that agrees with it. The check runs:
+
+          ```java fragment
+          ArrayList<ChatUser> contacts = new ArrayList<>();
+          contacts.add(new ChatUser("Aino", "040 123 4567"));
+          contacts.add(new ChatUser("Ben", "050 765 4321"));
+          ChatUser newcomer = new ChatUser("Aino K.", "040 123 4567");
+          System.out.println(contacts.contains(newcomer));
+          System.out.println(contacts.indexOf(new ChatUser("Benny", "050 765 4321")));
+          System.out.println(newcomer.equals("040 123 4567"));
+          System.out.println(newcomer.equals(null));
+          ```
+
+          and expects:
+
+          ```
+          true
+          1
+          false
+          false
+          ```
+        seed:
+          ChatUser.java: |
+            public class ChatUser {
+                private String nickname;
+                private String phone;
+
+                public ChatUser(String nickname, String phone) {
+                    this.nickname = nickname;
+                    this.phone = phone;
+                }
+
+                public String getNickname() {
+                    return this.nickname;
+                }
+
+                @Override
+                public int hashCode() {
+                    return this.phone.hashCode();
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<ChatUser> contacts = new ArrayList<>();
+                    contacts.add(new ChatUser("Aino", "040 123 4567"));
+                    contacts.add(new ChatUser("Ben", "050 765 4321"));
+                    ChatUser newcomer = new ChatUser("Aino K.", "040 123 4567");
+                    System.out.println(contacts.contains(newcomer));
+                    System.out.println(contacts.indexOf(new ChatUser("Benny", "050 765 4321")));
+                    System.out.println(newcomer.equals("040 123 4567"));
+                    System.out.println(newcomer.equals(null));
+                }
+            }
+        solution:
+          ChatUser.java: |
+            public class ChatUser {
+                private String nickname;
+                private String phone;
+
+                public ChatUser(String nickname, String phone) {
+                    this.nickname = nickname;
+                    this.phone = phone;
+                }
+
+                public String getNickname() {
+                    return this.nickname;
+                }
+
+                @Override
+                public boolean equals(Object compared) {
+                    if (this == compared) {
+                        return true;
+                    }
+                    if (!(compared instanceof ChatUser other)) {
+                        return false;
+                    }
+                    return this.phone.equals(other.phone);
+                }
+
+                @Override
+                public int hashCode() {
+                    return this.phone.hashCode();
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<ChatUser> contacts = new ArrayList<>();
+                    contacts.add(new ChatUser("Aino", "040 123 4567"));
+                    contacts.add(new ChatUser("Ben", "050 765 4321"));
+                    ChatUser newcomer = new ChatUser("Aino K.", "040 123 4567");
+                    System.out.println(contacts.contains(newcomer));
+                    System.out.println(contacts.indexOf(new ChatUser("Benny", "050 765 4321")));
+                    System.out.println(newcomer.equals("040 123 4567"));
+                    System.out.println(newcomer.equals(null));
+                }
+            }
+        hints:
+          - "The header is `public boolean equals(Object compared)`, with `@Override` above it. Its parameter is an Object, so first check that it's a ChatUser."
+          - "`if (!(compared instanceof ChatUser other)) { return false; }` returns for everything that isn't a ChatUser. After it, `other` is a ChatUser: `return this.phone.equals(other.phone);`."
+        require:
+          - pattern: public\s+boolean\s+equals\s*\(\s*Object\s+\w+\s*\)
+            message: "Write `public boolean equals(Object compared)`, so that ArrayList's `contains` and `indexOf` use it."
+          - pattern: instanceof\s+ChatUser\s+[A-Za-z_]\w*
+            message: "Test the type with a pattern, such as `compared instanceof ChatUser other`."
+        forbid:
+          - pattern: \(\s*ChatUser\s*\)
+            message: "No cast is needed: the pattern variable is already a ChatUser."
+        tests:
+          - call: |
+              ArrayList<ChatUser> contacts = new ArrayList<>();
+              contacts.add(new ChatUser("Aino", "040 123 4567"));
+              contacts.add(new ChatUser("Ben", "050 765 4321"));
+              ChatUser newcomer = new ChatUser("Aino K.", "040 123 4567");
+              System.out.println(contacts.contains(newcomer));
+              System.out.println(contacts.indexOf(new ChatUser("Benny", "050 765 4321")));
+              System.out.println(newcomer.equals("040 123 4567"));
+              System.out.println(newcomer.equals(null));
+          - call: |
+              ChatUser chen = new ChatUser("Chen", "044 555 0101");
+              System.out.println(chen.equals(chen));
+              System.out.println(chen.equals(new ChatUser("Chen", "044 555 0102")));
+              System.out.println(new ChatUser("C", "044 555 0101").equals(chen));
+              Object stranger = new ChatUser("Dora", "045 000 1111");
+              System.out.println(stranger.equals(new ChatUser("Dee", "045 000 1111")));
+            hidden: true
+      - task: |
+          In a chat, `@Aino` in a text message mentions Aino. Write the method `mentions(ArrayList<ChatMessage> chat, String name)` in `Main.java`. It prints each text message whose text contains `@` and the name, as `sender: text`, in the chat's order, and returns how many it printed. Other kinds of message are skipped. Write the test as one condition: a type pattern, `&&`, and a check that uses the pattern variable. The check runs:
+
+          ```java fragment
+          ArrayList<ChatMessage> chat = new ArrayList<>();
+          chat.add(new TextMessage("Ben", "@Aino lunch at noon?"));
+          chat.add(new PhotoMessage("Aino", "menu.jpg", 840));
+          chat.add(new TextMessage("Chen", "Can I join? @Ben"));
+          chat.add(new TextMessage("Aino", "Sure @Chen @Ben"));
+          System.out.println(mentions(chat, "Ben") + " mentions");
+          ```
+
+          and expects:
+
+          ```
+          Chen: Can I join? @Ben
+          Aino: Sure @Chen @Ben
+          2 mentions
+          ```
+        seed:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<ChatMessage> chat = new ArrayList<>();
+                    chat.add(new TextMessage("Ben", "@Aino lunch at noon?"));
+                    chat.add(new PhotoMessage("Aino", "menu.jpg", 840));
+                    chat.add(new TextMessage("Chen", "Can I join? @Ben"));
+                    chat.add(new TextMessage("Aino", "Sure @Chen @Ben"));
+                    System.out.println(mentions(chat, "Ben") + " mentions");
+                }
+
+                public static int mentions(ArrayList<ChatMessage> chat, String name) {
+                    return 0;
+                }
+            }
+          ChatMessage.java: |
+            public interface ChatMessage {
+                String sender();
+            }
+          TextMessage.java: |
+            public record TextMessage(String sender, String text) implements ChatMessage {
+            }
+          PhotoMessage.java: |
+            public record PhotoMessage(String sender, String file, int kilobytes) implements ChatMessage {
+            }
+        solution:
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<ChatMessage> chat = new ArrayList<>();
+                    chat.add(new TextMessage("Ben", "@Aino lunch at noon?"));
+                    chat.add(new PhotoMessage("Aino", "menu.jpg", 840));
+                    chat.add(new TextMessage("Chen", "Can I join? @Ben"));
+                    chat.add(new TextMessage("Aino", "Sure @Chen @Ben"));
+                    System.out.println(mentions(chat, "Ben") + " mentions");
+                }
+
+                public static int mentions(ArrayList<ChatMessage> chat, String name) {
+                    int count = 0;
+                    for (ChatMessage message : chat) {
+                        if (message instanceof TextMessage typed && typed.text().contains("@" + name)) {
+                            System.out.println(typed.sender() + ": " + typed.text());
+                            count++;
+                        }
+                    }
+                    return count;
+                }
+            }
+          ChatMessage.java: |
+            public interface ChatMessage {
+                String sender();
+            }
+          TextMessage.java: |
+            public record TextMessage(String sender, String text) implements ChatMessage {
+            }
+          PhotoMessage.java: |
+            public record PhotoMessage(String sender, String file, int kilobytes) implements ChatMessage {
+            }
+        hints:
+          - "Go through the chat with a for-each loop and count the messages you print in a variable."
+          - "The condition is `message instanceof TextMessage typed && typed.text().contains(\"@\" + name)`: the right side runs only for text messages, so `typed` can be used there."
+        require:
+          - pattern: instanceof\s+TextMessage\s+[A-Za-z_]\w*\s*&&
+            message: "Test with one condition: `message instanceof TextMessage typed && ...`."
+        forbid:
+          - pattern: \(\s*TextMessage\s*\)
+            message: "No cast is needed: use the pattern variable."
+        tests:
+          - call: |
+              ArrayList<ChatMessage> chat = new ArrayList<>();
+              chat.add(new TextMessage("Ben", "@Aino lunch at noon?"));
+              chat.add(new PhotoMessage("Aino", "menu.jpg", 840));
+              chat.add(new TextMessage("Chen", "Can I join? @Ben"));
+              chat.add(new TextMessage("Aino", "Sure @Chen @Ben"));
+              System.out.println(mentions(chat, "Ben") + " mentions");
+          - call: |
+              ArrayList<ChatMessage> chat = new ArrayList<>();
+              chat.add(new PhotoMessage("@Dora", "dora.jpg", 120));
+              chat.add(new TextMessage("Ben", "Hi @Dora"));
+              chat.add(new TextMessage("Dora", "Hi Ben, where is @Aino?"));
+              System.out.println(mentions(chat, "Dora") + " mentions");
+              System.out.println(mentions(chat, "Chen") + " mentions");
+              System.out.println(mentions(new ArrayList<>(), "Ben") + " mentions");
+            hidden: true
+
+  - id: sealed-and-patterns-sealed
+    slug: sealed-interfaces
+    title: Sealed interfaces
+    text: |
+      Any class can implement an interface: that's what makes interfaces useful for things like `Comparable`, which classes everywhere implement. But some interfaces stand for a fixed list of kinds. In the chat app, the method `preview` of the last step had to end with a `return` for "something new", because javac can't know that ChatMessage has only three kinds. Since Java 17, an interface can be **sealed**: it lists, after the word `permits`, exactly the classes that may implement it.
+
+      ### A floor plan's shapes
+
+      A floor plan app draws rooms of two shapes: rectangles, and circles for round tower rooms. Nothing else is allowed:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Shape kitchen = new Rectangle(4.0, 3.5);
+              Shape tower = new Circle(2.0);
+              System.out.println("Kitchen: " + kitchen.area() + " square meters");
+              System.out.println("Tower room: " + tower.area() + " square meters");
+          }
+      }
+      // ==== Shape.java ====
+      public sealed interface Shape permits Rectangle, Circle {
+          double area();
+      }
+      // ==== Rectangle.java ====
+      public final class Rectangle implements Shape {
+          private final double width;
+          private final double depth;
+
+          public Rectangle(double width, double depth) {
+              this.width = width;
+              this.depth = depth;
+          }
+
+          @Override
+          public double area() {
+              return this.width * this.depth;
+          }
+      }
+      // ==== Circle.java ====
+      public final class Circle implements Shape {
+          private final double radius;
+
+          public Circle(double radius) {
+              this.radius = radius;
+          }
+
+          @Override
+          public double area() {
+              return Math.PI * this.radius * this.radius;
+          }
+      }
+      ```
+
+      ```output
+      Kitchen: 14.0 square meters
+      Tower room: 12.566370614359172 square meters
+      ```
+
+      `sealed` goes before `interface`, and the list of **permitted** classes comes after `permits`, separated by commas. The interface works as any other: a Shape variable can refer to a Rectangle or a Circle, and `area()` runs the object's own method.
+
+      ### A class that isn't on the list
+
+      A third shape that isn't on the list doesn't compile:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Shape hall = new Triangle(3.0, 2.0);
+              System.out.println(hall.area());
+          }
+      }
+      // ==== Shape.java ====
+      public sealed interface Shape permits Rectangle, Circle {
+          double area();
+      }
+      // ==== Rectangle.java ====
+      public final class Rectangle implements Shape {
+          private final double width;
+          private final double depth;
+
+          public Rectangle(double width, double depth) {
+              this.width = width;
+              this.depth = depth;
+          }
+
+          @Override
+          public double area() {
+              return this.width * this.depth;
+          }
+      }
+      // ==== Circle.java ====
+      public final class Circle implements Shape {
+          private final double radius;
+
+          public Circle(double radius) {
+              this.radius = radius;
+          }
+
+          @Override
+          public double area() {
+              return Math.PI * this.radius * this.radius;
+          }
+      }
+      // ==== Triangle.java ====
+      public final class Triangle implements Shape {
+          private final double base;
+          private final double height;
+
+          public Triangle(double base, double height) {
+              this.base = base;
+              this.height = height;
+          }
+
+          @Override
+          public double area() {
+              return this.base * this.height / 2;
+          }
+      }
+      ```
+
+      ```javac
+      Triangle.java:1: error: class is not allowed to extend sealed class: Shape (as it is not listed in its 'permits' clause)
+      public final class Triangle implements Shape {
+                   ^
+      1 error
+      ```
+
+      javac says "class" and "extend" for interfaces too. To allow triangles, add `Triangle` to the list: `permits Rectangle, Circle, Triangle`. The list is in one place, so a reader sees at once every kind of Shape there is.
+
+      ### final, sealed or non-sealed
+
+      Each permitted class must say whether the list goes on below it, with one of three words:
+
+      - `final`: no class can extend it. This is the usual choice, as above.
+      - `sealed`: it has a `permits` list of its own.
+      - `non-sealed`: any class can extend it again. Use it only when that's really what you want.
+
+      Without one of them, javac stops:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              Shape tower = new Circle(2.0);
+              System.out.println(tower.area());
+          }
+      }
+      // ==== Shape.java ====
+      public sealed interface Shape permits Rectangle, Circle {
+          double area();
+      }
+      // ==== Rectangle.java ====
+      public final class Rectangle implements Shape {
+          private final double width;
+          private final double depth;
+
+          public Rectangle(double width, double depth) {
+              this.width = width;
+              this.depth = depth;
+          }
+
+          @Override
+          public double area() {
+              return this.width * this.depth;
+          }
+      }
+      // ==== Circle.java ====
+      public class Circle implements Shape {
+          private final double radius;
+
+          public Circle(double radius) {
+              this.radius = radius;
+          }
+
+          @Override
+          public double area() {
+              return Math.PI * this.radius * this.radius;
+          }
+      }
+      ```
+
+      ```javac
+      Circle.java:1: error: sealed, non-sealed or final modifiers expected
+      public class Circle implements Shape {
+             ^
+      1 error
+      ```
+
+      The permitted classes must also be in the same package as the sealed interface. In this module's programs, all classes are in the default package, so they are.
+
+      ### Records are final already
+
+      A record can't be extended: every record is `final` without saying so. That makes records a natural fit for the permitted types. The floor plan's shapes as records:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Shape hall = new Rectangle(6.0, 2.0);
+              System.out.println(hall);
+              System.out.println(hall.area());
+          }
+      }
+      // ==== Shape.java ====
+      public sealed interface Shape permits Rectangle, Circle {
+          double area();
+      }
+      // ==== Rectangle.java ====
+      public record Rectangle(double width, double depth) implements Shape {
+          @Override
+          public double area() {
+              return this.width * this.depth;
+          }
+      }
+      // ==== Circle.java ====
+      public record Circle(double radius) implements Shape {
+          @Override
+          public double area() {
+              return Math.PI * this.radius * this.radius;
+          }
+      }
+      ```
+
+      ```output
+      Rectangle[width=6.0, depth=2.0]
+      12.0
+      ```
+
+      An abstract class can be sealed in the same way (`public sealed abstract class Shape permits Rectangle, Circle`), and then its permitted classes extend it. This module uses sealed interfaces. The next step shows what the closed list is good for: a switch that javac checks covers every kind.
+
+      **Your turn:** a café's till takes payments. Make `Payment` a sealed interface that permits `Cash` and `BankCard`, and make `Cash` final. Then write the class `BankCard`: it's final, implements Payment, its constructor takes the card's last four digits (a String) and the amount in cents, and `receipt()` returns `card ending ` and the digits, a comma, and the cents, as below. The check runs:
+
+      ```java fragment
+      Payment first = new Cash(450);
+      Payment second = new BankCard("4921", 1250);
+      System.out.println(first.receipt());
+      System.out.println(second.receipt());
+      ```
+
+      and expects:
+
+      ```
+      cash, 450 cents
+      card ending 4921, 1250 cents
+      ```
+    seed:
+      Payment.java: |
+        public interface Payment {
+            String receipt();
+        }
+      Cash.java: |
+        public class Cash implements Payment {
+            private final int cents;
+
+            public Cash(int cents) {
+                this.cents = cents;
+            }
+
+            @Override
+            public String receipt() {
+                return "cash, " + this.cents + " cents";
+            }
+        }
+      BankCard.java: |
+        public class BankCard {
+
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Payment first = new Cash(450);
+                Payment second = new BankCard("4921", 1250);
+                System.out.println(first.receipt());
+                System.out.println(second.receipt());
+            }
+        }
+    solution:
+      Payment.java: |
+        public sealed interface Payment permits Cash, BankCard {
+            String receipt();
+        }
+      Cash.java: |
+        public final class Cash implements Payment {
+            private final int cents;
+
+            public Cash(int cents) {
+                this.cents = cents;
+            }
+
+            @Override
+            public String receipt() {
+                return "cash, " + this.cents + " cents";
+            }
+        }
+      BankCard.java: |
+        public final class BankCard implements Payment {
+            private final String lastDigits;
+            private final int cents;
+
+            public BankCard(String lastDigits, int cents) {
+                this.lastDigits = lastDigits;
+                this.cents = cents;
+            }
+
+            @Override
+            public String receipt() {
+                return "card ending " + this.lastDigits + ", " + this.cents + " cents";
+            }
+        }
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Payment first = new Cash(450);
+                Payment second = new BankCard("4921", 1250);
+                System.out.println(first.receipt());
+                System.out.println(second.receipt());
+            }
+        }
+    hints:
+      - "The interface's header becomes `public sealed interface Payment permits Cash, BankCard`. Each permitted class then needs `final` before `class`."
+      - "BankCard is written like Cash: two `private final` instance variables, a constructor that stores them, and `receipt()` with `@Override`, returning `\"card ending \" + this.lastDigits + \", \" + this.cents + \" cents\"`."
+    require:
+      - pattern: \bsealed\s+interface\s+Payment\s+permits\b
+        message: "Make Payment a sealed interface with a `permits` list: `public sealed interface Payment permits ...`."
+      - pattern: \bfinal\s+class\s+Cash\b
+        message: "A permitted class must be `final`, `sealed` or `non-sealed`. Make Cash `final`."
+      - pattern: \bfinal\s+class\s+BankCard\s+implements\s+Payment\b
+        message: "Write BankCard as a class here (records come in the last challenge): `public final class BankCard implements Payment`."
+    tests:
+      - call: |
+          Payment first = new Cash(450);
+          Payment second = new BankCard("4921", 1250);
+          System.out.println(first.receipt());
+          System.out.println(second.receipt());
+      - call: |
+          Payment big = new BankCard("0007", 98000);
+          System.out.println(big.receipt());
+          System.out.println(new BankCard("1200", 5).receipt());
+          System.out.println(new Cash(0).receipt());
+        hidden: true
+    more:
+      - task: |
+          The café now sells gift vouchers too, and someone has written the class `Voucher` in `Voucher.java`. But the program doesn't compile any more. Press Run: javac says
+
+          ```text
+          Voucher.java:1: error: class is not allowed to extend sealed class: Payment (as it is not listed in its 'permits' clause)
+          ```
+
+          Fix it while keeping Payment sealed: add Voucher to the interface's list. javac then has one more thing to say about Voucher; fix that too, by making it `final`. The program prints:
+
+          ```
+          cash, 450 cents
+          card ending 4921, 1250 cents
+          voucher SPRING10, 1000 cents
+          ```
+        seed:
+          Voucher.java: |
+            public class Voucher implements Payment {
+                private final String code;
+                private final int cents;
+
+                public Voucher(String code, int cents) {
+                    this.code = code;
+                    this.cents = cents;
+                }
+
+                @Override
+                public String receipt() {
+                    return "voucher " + this.code + ", " + this.cents + " cents";
+                }
+            }
+          Payment.java: |
+            public sealed interface Payment permits Cash, BankCard {
+                String receipt();
+            }
+          Cash.java: |
+            public final class Cash implements Payment {
+                private final int cents;
+
+                public Cash(int cents) {
+                    this.cents = cents;
+                }
+
+                @Override
+                public String receipt() {
+                    return "cash, " + this.cents + " cents";
+                }
+            }
+          BankCard.java: |
+            public final class BankCard implements Payment {
+                private final String lastDigits;
+                private final int cents;
+
+                public BankCard(String lastDigits, int cents) {
+                    this.lastDigits = lastDigits;
+                    this.cents = cents;
+                }
+
+                @Override
+                public String receipt() {
+                    return "card ending " + this.lastDigits + ", " + this.cents + " cents";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Payment> today = new ArrayList<>();
+                    today.add(new Cash(450));
+                    today.add(new BankCard("4921", 1250));
+                    today.add(new Voucher("SPRING10", 1000));
+                    for (Payment payment : today) {
+                        System.out.println(payment.receipt());
+                    }
+                }
+            }
+        solution:
+          Voucher.java: |
+            public final class Voucher implements Payment {
+                private final String code;
+                private final int cents;
+
+                public Voucher(String code, int cents) {
+                    this.code = code;
+                    this.cents = cents;
+                }
+
+                @Override
+                public String receipt() {
+                    return "voucher " + this.code + ", " + this.cents + " cents";
+                }
+            }
+          Payment.java: |
+            public sealed interface Payment permits Cash, BankCard, Voucher {
+                String receipt();
+            }
+          Cash.java: |
+            public final class Cash implements Payment {
+                private final int cents;
+
+                public Cash(int cents) {
+                    this.cents = cents;
+                }
+
+                @Override
+                public String receipt() {
+                    return "cash, " + this.cents + " cents";
+                }
+            }
+          BankCard.java: |
+            public final class BankCard implements Payment {
+                private final String lastDigits;
+                private final int cents;
+
+                public BankCard(String lastDigits, int cents) {
+                    this.lastDigits = lastDigits;
+                    this.cents = cents;
+                }
+
+                @Override
+                public String receipt() {
+                    return "card ending " + this.lastDigits + ", " + this.cents + " cents";
+                }
+            }
+          Main.java: |
+            import java.util.ArrayList;
+
+            public class Main {
+                public static void main(String[] args) {
+                    ArrayList<Payment> today = new ArrayList<>();
+                    today.add(new Cash(450));
+                    today.add(new BankCard("4921", 1250));
+                    today.add(new Voucher("SPRING10", 1000));
+                    for (Payment payment : today) {
+                        System.out.println(payment.receipt());
+                    }
+                }
+            }
+        hints:
+          - "In `Payment.java`, the list becomes `permits Cash, BankCard, Voucher`."
+          - "javac then says `sealed, non-sealed or final modifiers expected` about Voucher: write `public final class Voucher implements Payment`."
+        require:
+          - pattern: \bsealed\s+interface\s+Payment\s+permits\b[^{]*\bVoucher\b
+            message: "Keep Payment sealed, and add Voucher to its `permits` list."
+          - pattern: \bfinal\s+class\s+Voucher\b
+            message: "Make Voucher `final`, like the other payments."
+        tests:
+          - stdin: ""
+          - call: |
+              Payment gift = new Voucher("BDAY25", 2500);
+              System.out.println(gift.receipt());
+              System.out.println(new Voucher("X", 1).receipt());
+            hidden: true
+      - task: |
+          A web shop has two kinds of discount: a percentage off the price, and a fixed amount off. `Discount.java` holds the sealed interface; write its two permitted types in their files as records:
+
+          - `PercentOff(int percent)`: `apply(price)` computes the discount `price * percent / 100` first (whole cents, so the division drops any fraction), then returns the price minus that discount;
+          - `AmountOff(int cents)`: `apply(price)` returns the price minus `cents`, but never less than 0.
+
+          Prices are in cents. The check runs:
+
+          ```java fragment
+          Discount sale = new PercentOff(15);
+          Discount coupon = new AmountOff(500);
+          System.out.println(sale + ": " + sale.apply(2000));
+          System.out.println(coupon + ": " + coupon.apply(2000));
+          System.out.println(coupon + ": " + coupon.apply(300));
+          ```
+
+          and expects:
+
+          ```
+          PercentOff[percent=15]: 1700
+          AmountOff[cents=500]: 1500
+          AmountOff[cents=500]: 0
+          ```
+        seed:
+          PercentOff.java: |
+            // write the record PercentOff here
+          AmountOff.java: |
+            // write the record AmountOff here
+          Discount.java: |
+            public sealed interface Discount permits PercentOff, AmountOff {
+                int apply(int price);
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Discount sale = new PercentOff(15);
+                    Discount coupon = new AmountOff(500);
+                    System.out.println(sale + ": " + sale.apply(2000));
+                    System.out.println(coupon + ": " + coupon.apply(2000));
+                    System.out.println(coupon + ": " + coupon.apply(300));
+                }
+            }
+        solution:
+          PercentOff.java: |
+            public record PercentOff(int percent) implements Discount {
+                @Override
+                public int apply(int price) {
+                    return price - price * this.percent / 100;
+                }
+            }
+          AmountOff.java: |
+            public record AmountOff(int cents) implements Discount {
+                @Override
+                public int apply(int price) {
+                    return Math.max(0, price - this.cents);
+                }
+            }
+          Discount.java: |
+            public sealed interface Discount permits PercentOff, AmountOff {
+                int apply(int price);
+            }
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Discount sale = new PercentOff(15);
+                    Discount coupon = new AmountOff(500);
+                    System.out.println(sale + ": " + sale.apply(2000));
+                    System.out.println(coupon + ": " + coupon.apply(2000));
+                    System.out.println(coupon + ": " + coupon.apply(300));
+                }
+            }
+        hints:
+          - "A record implements an interface after its components: `public record PercentOff(int percent) implements Discount { ... }`. It needs no `final`: records are final already."
+          - "In each record, write `public int apply(int price)` with `@Override`. `Math.max(0, price - this.cents)` keeps AmountOff's result from going below 0."
+          - "Compute the discount first, `price * this.percent / 100`, and subtract it from the price: the order of the integer division matters. `price * (100 - percent) / 100` can come out one cent lower."
+        require:
+          - pattern: \brecord\s+PercentOff\s*\(\s*int\s+percent\s*\)\s*implements\s+Discount\b
+            message: "Declare `public record PercentOff(int percent) implements Discount`."
+          - pattern: \brecord\s+AmountOff\s*\(\s*int\s+cents\s*\)\s*implements\s+Discount\b
+            message: "Declare `public record AmountOff(int cents) implements Discount`."
+        tests:
+          - call: |
+              Discount sale = new PercentOff(15);
+              Discount coupon = new AmountOff(500);
+              System.out.println(sale + ": " + sale.apply(2000));
+              System.out.println(coupon + ": " + coupon.apply(2000));
+              System.out.println(coupon + ": " + coupon.apply(300));
+          - call: |
+              System.out.println(new PercentOff(33).apply(1999));
+              System.out.println(new PercentOff(0).apply(750));
+              System.out.println(new PercentOff(100).apply(750));
+              System.out.println(new AmountOff(750).apply(750));
+              System.out.println(new AmountOff(1).apply(750));
+              System.out.println(new AmountOff(25).cents() + new PercentOff(10).percent());
+            hidden: true
+
+  - id: sealed-and-patterns-switch
+    slug: switch-on-types
+    title: switch on sealed types
+    text: |
+      In module 57, a switch expression over an enum needed no `default` when it had a case for every constant. Since Java 21, a switch can also choose by an object's **type**, and a sealed interface's permitted types work like an enum's constants: when every one has a case, the switch is complete.
+
+      ### Type patterns in case labels
+
+      The café's payments, now as records:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(receipt(new Cash(450)));
+              System.out.println(receipt(new BankCard("4921", 1250)));
+              System.out.println(receipt(new Voucher("SPRING10", 1000)));
+          }
+
+          public static String receipt(Payment payment) {
+              return switch (payment) {
+                  case Cash cash -> "Cash: " + cash.cents() + " cents";
+                  case BankCard card -> "Card ending " + card.lastDigits() + ": " + card.cents() + " cents";
+                  case Voucher voucher -> "Voucher " + voucher.code() + ": " + voucher.cents() + " cents";
+              };
+          }
+      }
+      // ==== Payment.java ====
+      public sealed interface Payment permits Cash, BankCard, Voucher {
+      }
+      // ==== Cash.java ====
+      public record Cash(int cents) implements Payment {
+      }
+      // ==== BankCard.java ====
+      public record BankCard(String lastDigits, int cents) implements Payment {
+      }
+      // ==== Voucher.java ====
+      public record Voucher(String code, int cents) implements Payment {
+      }
+      ```
+
+      ```output
+      Cash: 450 cents
+      Card ending 4921: 1250 cents
+      Voucher SPRING10: 1000 cents
+      ```
+
+      - `case Cash cash ->` has a type pattern, like the ones `instanceof` takes. The case matches when the payment is a Cash, and then `cash` is the payment as a Cash, for that case only.
+      - Java tries the cases from the top, and the first one that matches gives the value.
+      - There is no `default`, and none is needed: Payment is sealed, so javac knows that every payment is a Cash, a BankCard or a Voucher. A switch that covers every possible value is **exhaustive**.
+
+      The same choice with `instanceof` needs a last `return` for "none of these", which can never happen. The switch says exactly what the program means, and javac checks it.
+
+      ### javac finds the switches to update
+
+      The café starts taking mobile payments. Someone adds `MobilePay` to the permits list and writes the record, but forgets the switch:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(receipt(new MobilePay("040 123 4567", 300)));
+          }
+
+          public static String receipt(Payment payment) {
+              return switch (payment) {
+                  case Cash cash -> "Cash: " + cash.cents() + " cents";
+                  case BankCard card -> "Card ending " + card.lastDigits() + ": " + card.cents() + " cents";
+                  case Voucher voucher -> "Voucher " + voucher.code() + ": " + voucher.cents() + " cents";
+              };
+          }
+      }
+      // ==== Payment.java ====
+      public sealed interface Payment permits Cash, BankCard, Voucher, MobilePay {
+      }
+      // ==== Cash.java ====
+      public record Cash(int cents) implements Payment {
+      }
+      // ==== BankCard.java ====
+      public record BankCard(String lastDigits, int cents) implements Payment {
+      }
+      // ==== Voucher.java ====
+      public record Voucher(String code, int cents) implements Payment {
+      }
+      // ==== MobilePay.java ====
+      public record MobilePay(String phone, int cents) implements Payment {
+      }
+      ```
+
+      ```javac
+      Main.java:7: error: the switch expression does not cover all possible input values
+              return switch (payment) {
+                     ^
+      1 error
+      ```
+
+      In a large program, javac points at every switch that needs a case for the new type. With a `default` in them, the program would compile, and every mobile payment would quietly get whatever the default gives. So with sealed types, leave `default` out.
+
+      A switch *statement* (one that gives no value) with type patterns must cover every type too. And as with every switch, a `null` payment throws a NullPointerException; since Java 21 a switch can have `case null ->` for it, but it's usually better not to pass `null` around at all.
+
+      ### Guards: case ... when
+
+      A case can have a condition after the word `when`. The case matches only when the type matches and the condition is true. A card payment over 50 euros needs the card's PIN:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(receipt(new BankCard("4921", 1250)));
+              System.out.println(receipt(new BankCard("4921", 8900)));
+              System.out.println(receipt(new Cash(8900)));
+          }
+
+          public static String receipt(Payment payment) {
+              return switch (payment) {
+                  case Cash cash -> "Cash: " + cash.cents() + " cents";
+                  case BankCard card when card.cents() > 5000 -> "Card ending " + card.lastDigits() + ": " + card.cents() + " cents, PIN needed";
+                  case BankCard card -> "Card ending " + card.lastDigits() + ": " + card.cents() + " cents";
+                  case Voucher voucher -> "Voucher " + voucher.code() + ": " + voucher.cents() + " cents";
+              };
+          }
+      }
+      // ==== Payment.java ====
+      public sealed interface Payment permits Cash, BankCard, Voucher {
+      }
+      // ==== Cash.java ====
+      public record Cash(int cents) implements Payment {
+      }
+      // ==== BankCard.java ====
+      public record BankCard(String lastDigits, int cents) implements Payment {
+      }
+      // ==== Voucher.java ====
+      public record Voucher(String code, int cents) implements Payment {
+      }
+      ```
+
+      ```output
+      Card ending 4921: 1250 cents
+      Card ending 4921: 8900 cents, PIN needed
+      Cash: 8900 cents
+      ```
+
+      A case with `when` doesn't count toward covering BankCard, since its condition can be false; the plain `case BankCard card` after it does. The order matters: the guarded case must come first. In the other order, the plain case would match every card, and the guarded one could never be reached. javac doesn't allow that:
+
+      ```java error
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(receipt(new BankCard("4921", 8900)));
+          }
+
+          public static String receipt(Payment payment) {
+              return switch (payment) {
+                  case Cash cash -> "Cash: " + cash.cents() + " cents";
+                  case BankCard card -> "Card ending " + card.lastDigits() + ": " + card.cents() + " cents";
+                  case BankCard card when card.cents() > 5000 -> "Card ending " + card.lastDigits() + ": " + card.cents() + " cents, PIN needed";
+                  case Voucher voucher -> "Voucher " + voucher.code() + ": " + voucher.cents() + " cents";
+              };
+          }
+      }
+      // ==== Payment.java ====
+      public sealed interface Payment permits Cash, BankCard, Voucher {
+      }
+      // ==== Cash.java ====
+      public record Cash(int cents) implements Payment {
+      }
+      // ==== BankCard.java ====
+      public record BankCard(String lastDigits, int cents) implements Payment {
+      }
+      // ==== Voucher.java ====
+      public record Voucher(String code, int cents) implements Payment {
+      }
+      ```
+
+      ```javac
+      Main.java:10: error: this case label is dominated by a preceding case label
+                  case BankCard card when card.cents() > 5000 -> "Card ending " + card.lastDigits() + ": " + card.cents() + " cents, PIN needed";
+                       ^
+      1 error
+      ```
+
+      **Your turn:** back to the floor plan. This time the shapes are records with no methods of their own, and `Main.java` works out the areas. Write `area(Shape shape)` with a switch expression on `shape`: a rectangle's area is its width times its depth, and a circle's is `Math.PI` times the radius times the radius. Don't use `default` or `instanceof`. The program prints the area of each room and then the total:
+
+      ```
+      Living room: 22.5
+      Bedroom: 12.0
+      Tower: 7.0685834705770345
+      Total: 41.56858347057703
+      ```
+    seed:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Shape living = new Rectangle(5.0, 4.5);
+                Shape bedroom = new Rectangle(4.0, 3.0);
+                Shape tower = new Circle(1.5);
+                System.out.println("Living room: " + area(living));
+                System.out.println("Bedroom: " + area(bedroom));
+                System.out.println("Tower: " + area(tower));
+                System.out.println("Total: " + (area(living) + area(bedroom) + area(tower)));
+            }
+
+            public static double area(Shape shape) {
+                return 0.0;
+            }
+        }
+      Shape.java: |
+        public sealed interface Shape permits Rectangle, Circle {
+        }
+      Rectangle.java: |
+        public record Rectangle(double width, double depth) implements Shape {
+        }
+      Circle.java: |
+        public record Circle(double radius) implements Shape {
+        }
+    solution:
+      Main.java: |
+        public class Main {
+            public static void main(String[] args) {
+                Shape living = new Rectangle(5.0, 4.5);
+                Shape bedroom = new Rectangle(4.0, 3.0);
+                Shape tower = new Circle(1.5);
+                System.out.println("Living room: " + area(living));
+                System.out.println("Bedroom: " + area(bedroom));
+                System.out.println("Tower: " + area(tower));
+                System.out.println("Total: " + (area(living) + area(bedroom) + area(tower)));
+            }
+
+            public static double area(Shape shape) {
+                return switch (shape) {
+                    case Rectangle rectangle -> rectangle.width() * rectangle.depth();
+                    case Circle circle -> Math.PI * circle.radius() * circle.radius();
+                };
+            }
+        }
+      Shape.java: |
+        public sealed interface Shape permits Rectangle, Circle {
+        }
+      Rectangle.java: |
+        public record Rectangle(double width, double depth) implements Shape {
+        }
+      Circle.java: |
+        public record Circle(double radius) implements Shape {
+        }
+    hints:
+      - "`return switch (shape) { ... };` with one case for each permitted type: `case Rectangle rectangle -> ...` and `case Circle circle -> ...`."
+      - "In a case, read the values with the record's accessors: `rectangle.width() * rectangle.depth()`, `Math.PI * circle.radius() * circle.radius()`."
+    require:
+      - pattern: \bswitch\s*\(\s*shape\s*\)
+        message: "Choose by the shape's type with `switch (shape)`."
+      - pattern: \bcase\s+Rectangle\b
+        message: "Give rectangles a case with a type pattern, such as `case Rectangle rectangle ->`."
+    forbid:
+      - pattern: \bdefault\b
+        message: "Leave out `default`: Shape is sealed, so a case for each permitted type is enough."
+      - pattern: \binstanceof\b
+        message: "Use the switch's case labels instead of `instanceof`."
+    tests:
+      - stdin: ""
+      - call: |
+          System.out.println(area(new Rectangle(2.5, 2.0)));
+          System.out.println(area(new Circle(1.0)));
+          System.out.println(area(new Circle(0.0)) + area(new Rectangle(0.5, 0.5)));
+        hidden: true
+    more:
+      - task: |
+          The floor plan app gets a third shape, `Triangle(double base, double height)`, for attic rooms. It's already in `Triangle.java` and in Shape's permits list, but now `Main.java` doesn't compile: press Run, and javac names both switch expressions. Add a case for triangles to each: a triangle's area is base times height divided by 2, and its label is `triangle`, the base, ` x `, and the height, like the other labels. Don't add a `default`. The program prints:
+
+          ```
+          rectangle 5.0 x 4.5: 22.5
+          circle radius 1.5: 7.0685834705770345
+          triangle 4.0 x 2.5: 5.0
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Shape[] rooms = {new Rectangle(5.0, 4.5), new Circle(1.5), new Triangle(4.0, 2.5)};
+                    for (Shape room : rooms) {
+                        System.out.println(label(room) + ": " + area(room));
+                    }
+                }
+
+                public static double area(Shape shape) {
+                    return switch (shape) {
+                        case Rectangle rectangle -> rectangle.width() * rectangle.depth();
+                        case Circle circle -> Math.PI * circle.radius() * circle.radius();
+                    };
+                }
+
+                public static String label(Shape shape) {
+                    return switch (shape) {
+                        case Rectangle rectangle -> "rectangle " + rectangle.width() + " x " + rectangle.depth();
+                        case Circle circle -> "circle radius " + circle.radius();
+                    };
+                }
+            }
+          Triangle.java: |
+            public record Triangle(double base, double height) implements Shape {
+            }
+          Shape.java: |
+            public sealed interface Shape permits Rectangle, Circle, Triangle {
+            }
+          Rectangle.java: |
+            public record Rectangle(double width, double depth) implements Shape {
+            }
+          Circle.java: |
+            public record Circle(double radius) implements Shape {
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Shape[] rooms = {new Rectangle(5.0, 4.5), new Circle(1.5), new Triangle(4.0, 2.5)};
+                    for (Shape room : rooms) {
+                        System.out.println(label(room) + ": " + area(room));
+                    }
+                }
+
+                public static double area(Shape shape) {
+                    return switch (shape) {
+                        case Rectangle rectangle -> rectangle.width() * rectangle.depth();
+                        case Circle circle -> Math.PI * circle.radius() * circle.radius();
+                        case Triangle triangle -> triangle.base() * triangle.height() / 2;
+                    };
+                }
+
+                public static String label(Shape shape) {
+                    return switch (shape) {
+                        case Rectangle rectangle -> "rectangle " + rectangle.width() + " x " + rectangle.depth();
+                        case Circle circle -> "circle radius " + circle.radius();
+                        case Triangle triangle -> "triangle " + triangle.base() + " x " + triangle.height();
+                    };
+                }
+            }
+          Triangle.java: |
+            public record Triangle(double base, double height) implements Shape {
+            }
+          Shape.java: |
+            public sealed interface Shape permits Rectangle, Circle, Triangle {
+            }
+          Rectangle.java: |
+            public record Rectangle(double width, double depth) implements Shape {
+            }
+          Circle.java: |
+            public record Circle(double radius) implements Shape {
+            }
+        hints:
+          - "javac's two errors point at the two `switch` lines: each needs a `case Triangle triangle -> ...`."
+          - "The area is `triangle.base() * triangle.height() / 2`, and the label `\"triangle \" + triangle.base() + \" x \" + triangle.height()`."
+        require:
+          - pattern: \bcase\s+Triangle\b
+            min: 2
+            message: "Give triangles a case in both switches, such as `case Triangle triangle ->`."
+        forbid:
+          - pattern: \bdefault\b
+            message: "Don't add `default`: a case for Triangle makes each switch complete again."
+          - pattern: \binstanceof\b
+            message: "Use the switches' case labels instead of `instanceof`."
+        tests:
+          - stdin: ""
+          - call: |
+              Shape attic = new Triangle(3.0, 1.0);
+              System.out.println(label(attic) + " " + area(attic));
+              System.out.println(label(new Rectangle(1.0, 2.0)) + " " + area(new Triangle(0.5, 8.0)));
+            hidden: true
+      - task: |
+          Back in the chat app, ChatMessage is now sealed, with three records. Write `preview(ChatMessage message)` with a switch expression, using `when` for the special cases:
+
+          - a text message longer than 20 characters: the sender, `: `, its first 20 characters and `...`;
+          - any other text message: the sender, `: ` and the text;
+          - a photo over 1000 kB: the sender and `: [large photo, ` and the size and ` kB]`;
+          - any other photo: the sender and `: [photo]`;
+          - a sticker: the sender and `: [sticker ` and the sticker's name and `]`.
+
+          Don't use `default`. The check runs:
+
+          ```java fragment
+          System.out.println(preview(new TextMessage("Aino", "Lunch at noon?")));
+          System.out.println(preview(new TextMessage("Ben", "Running late, the bus never came")));
+          System.out.println(preview(new PhotoMessage("Chen", "menu.jpg", 840)));
+          System.out.println(preview(new PhotoMessage("Chen", "view.png", 4200)));
+          System.out.println(preview(new StickerMessage("Dora", "thumbs up")));
+          ```
+
+          and expects:
+
+          ```
+          Aino: Lunch at noon?
+          Ben: Running late, the bu...
+          Chen: [photo]
+          Chen: [large photo, 4200 kB]
+          Dora: [sticker thumbs up]
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(preview(new TextMessage("Aino", "Lunch at noon?")));
+                    System.out.println(preview(new TextMessage("Ben", "Running late, the bus never came")));
+                    System.out.println(preview(new PhotoMessage("Chen", "menu.jpg", 840)));
+                    System.out.println(preview(new PhotoMessage("Chen", "view.png", 4200)));
+                    System.out.println(preview(new StickerMessage("Dora", "thumbs up")));
+                }
+
+                public static String preview(ChatMessage message) {
+                    return "";
+                }
+            }
+          ChatMessage.java: |
+            public sealed interface ChatMessage permits TextMessage, PhotoMessage, StickerMessage {
+                String sender();
+            }
+          TextMessage.java: |
+            public record TextMessage(String sender, String text) implements ChatMessage {
+            }
+          PhotoMessage.java: |
+            public record PhotoMessage(String sender, String file, int kilobytes) implements ChatMessage {
+            }
+          StickerMessage.java: |
+            public record StickerMessage(String sender, String name) implements ChatMessage {
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(preview(new TextMessage("Aino", "Lunch at noon?")));
+                    System.out.println(preview(new TextMessage("Ben", "Running late, the bus never came")));
+                    System.out.println(preview(new PhotoMessage("Chen", "menu.jpg", 840)));
+                    System.out.println(preview(new PhotoMessage("Chen", "view.png", 4200)));
+                    System.out.println(preview(new StickerMessage("Dora", "thumbs up")));
+                }
+
+                public static String preview(ChatMessage message) {
+                    return switch (message) {
+                        case TextMessage typed when typed.text().length() > 20 -> typed.sender() + ": " + typed.text().substring(0, 20) + "...";
+                        case TextMessage typed -> typed.sender() + ": " + typed.text();
+                        case PhotoMessage photo when photo.kilobytes() > 1000 -> photo.sender() + ": [large photo, " + photo.kilobytes() + " kB]";
+                        case PhotoMessage photo -> photo.sender() + ": [photo]";
+                        case StickerMessage sticker -> sticker.sender() + ": [sticker " + sticker.name() + "]";
+                    };
+                }
+            }
+          ChatMessage.java: |
+            public sealed interface ChatMessage permits TextMessage, PhotoMessage, StickerMessage {
+                String sender();
+            }
+          TextMessage.java: |
+            public record TextMessage(String sender, String text) implements ChatMessage {
+            }
+          PhotoMessage.java: |
+            public record PhotoMessage(String sender, String file, int kilobytes) implements ChatMessage {
+            }
+          StickerMessage.java: |
+            public record StickerMessage(String sender, String name) implements ChatMessage {
+            }
+        hints:
+          - "Put each guarded case before the plain case of the same type: `case TextMessage typed when typed.text().length() > 20 -> ...` and then `case TextMessage typed -> ...`."
+          - "`typed.text().substring(0, 20)` gives the first 20 characters. A photo is large when `photo.kilobytes() > 1000`."
+        require:
+          - pattern: \bswitch\s*\(\s*message\s*\)
+            message: "Choose with `switch (message)`."
+          - pattern: \bwhen\b
+            min: 2
+            message: "Use `when` for the two special cases, long texts and large photos."
+        forbid:
+          - pattern: \bdefault\b
+            message: "Leave out `default`: ChatMessage is sealed, so a case for each type is enough."
+          - pattern: \binstanceof\b
+            message: "Use the switch's case labels instead of `instanceof`."
+        tests:
+          - call: |
+              System.out.println(preview(new TextMessage("Aino", "Lunch at noon?")));
+              System.out.println(preview(new TextMessage("Ben", "Running late, the bus never came")));
+              System.out.println(preview(new PhotoMessage("Chen", "menu.jpg", 840)));
+              System.out.println(preview(new PhotoMessage("Chen", "view.png", 4200)));
+              System.out.println(preview(new StickerMessage("Dora", "thumbs up")));
+          - call: |
+              System.out.println(preview(new TextMessage("Eli", "Exactly twenty chars")));
+              System.out.println(preview(new TextMessage("Eli", "Twenty-one characters")));
+              System.out.println(preview(new PhotoMessage("Fay", "a.png", 1000)));
+              System.out.println(preview(new PhotoMessage("Fay", "b.png", 1001)));
+              System.out.println(preview(new StickerMessage("Gus", "party hat")));
+            hidden: true
+
+  - id: sealed-and-patterns-records
+    slug: record-patterns
+    title: Record patterns
+    text: |
+      A type pattern gives you the whole object, and you then read its values with accessors. Since Java 21, a pattern can also take a record apart: a **record pattern** names the record and, in parentheses, a pattern for each of its components.
+
+      ### Taking a record apart
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(receipt(new Cash(450)));
+              System.out.println(receipt(new BankCard("4921", 1250)));
+              System.out.println(receipt(new Voucher("SPRING10", 1000)));
+          }
+
+          public static String receipt(Payment payment) {
+              return switch (payment) {
+                  case Cash(int cents) -> "Cash: " + cents + " cents";
+                  case BankCard(String digits, int cents) -> "Card ending " + digits + ": " + cents + " cents";
+                  case Voucher(String code, int cents) -> "Voucher " + code + ": " + cents + " cents";
+              };
+          }
+      }
+      // ==== Payment.java ====
+      public sealed interface Payment permits Cash, BankCard, Voucher {
+      }
+      // ==== Cash.java ====
+      public record Cash(int cents) implements Payment {
+      }
+      // ==== BankCard.java ====
+      public record BankCard(String lastDigits, int cents) implements Payment {
+      }
+      // ==== Voucher.java ====
+      public record Voucher(String code, int cents) implements Payment {
+      }
+      ```
+
+      ```output
+      Cash: 450 cents
+      Card ending 4921: 1250 cents
+      Voucher SPRING10: 1000 cents
+      ```
+
+      `BankCard(String digits, int cents)` matches a BankCard, and declares a variable for each component, filled in from the accessors: `digits` gets the value of `lastDigits()`, and `cents` of `cents()`.
+
+      - The components are matched **by their position**, not by name: the first variable gets the first component. The names are yours to choose, as `digits` shows.
+      - The types must fit the components' types. In place of a type, `var` (module 57) lets javac take the component's own type: `case BankCard(var digits, var cents)`.
+      - Every component gets a pattern, even one the case doesn't use.
+
+      Record patterns work after `instanceof` too, and can be combined with `&&` like type patterns:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Payment[] today = {new Voucher("SPRING10", 1000), new Cash(450), new Voucher("BIG50", 5000)};
+              for (Payment payment : today) {
+                  if (payment instanceof Voucher(String code, int cents) && cents >= 5000) {
+                      System.out.println("Check the voucher " + code + " by hand");
+                  }
+              }
+          }
+      }
+      // ==== Payment.java ====
+      public sealed interface Payment permits Cash, BankCard, Voucher {
+      }
+      // ==== Cash.java ====
+      public record Cash(int cents) implements Payment {
+      }
+      // ==== BankCard.java ====
+      public record BankCard(String lastDigits, int cents) implements Payment {
+      }
+      // ==== Voucher.java ====
+      public record Voucher(String code, int cents) implements Payment {
+      }
+      ```
+
+      ```output
+      Check the voucher BIG50 by hand
+      ```
+
+      In a switch, a `when` guard can use the pattern's variables the same way. The guarded case comes before the plain one, so a big voucher stops at the first case:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Payment[] today = {new Voucher("SPRING10", 1000), new Cash(450), new Voucher("BIG50", 5000)};
+              for (Payment payment : today) {
+                  System.out.println(describe(payment));
+              }
+          }
+
+          public static String describe(Payment payment) {
+              return switch (payment) {
+                  case Voucher(String code, int cents) when cents >= 5000 -> "Check the voucher " + code + " by hand";
+                  case Voucher(String code, int cents) -> "Voucher " + code;
+                  case Cash(int cents) -> "Cash";
+                  case BankCard(String digits, int cents) -> "Card " + digits;
+              };
+          }
+      }
+      // ==== Payment.java ====
+      public sealed interface Payment permits Cash, BankCard, Voucher {
+      }
+      // ==== Cash.java ====
+      public record Cash(int cents) implements Payment {
+      }
+      // ==== BankCard.java ====
+      public record BankCard(String lastDigits, int cents) implements Payment {
+      }
+      // ==== Voucher.java ====
+      public record Voucher(String code, int cents) implements Payment {
+      }
+      ```
+
+      ```output
+      Voucher SPRING10
+      Cash
+      Check the voucher BIG50 by hand
+      ```
+
+      ### Patterns inside patterns
+
+      A component's pattern can itself be a record pattern or a type pattern. A café order holds the item and its payment, and one switch can look at both at once:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(note(new Order("cake", new Voucher("SPRING10", 1000))));
+              System.out.println(note(new Order("tea", new BankCard("4921", 320))));
+              System.out.println(note(new Order("bun", new Cash(250))));
+          }
+
+          public static String note(Order order) {
+              return switch (order) {
+                  case Order(String item, Voucher(String code, int cents)) -> item + " paid with voucher " + code;
+                  case Order(String item, BankCard(var digits, var cents)) -> item + " paid with card " + digits;
+                  case Order(String item, Payment other) -> item + " paid";
+              };
+          }
+      }
+      // ==== Order.java ====
+      public record Order(String item, Payment payment) {
+      }
+      // ==== Payment.java ====
+      public sealed interface Payment permits Cash, BankCard, Voucher {
+      }
+      // ==== Cash.java ====
+      public record Cash(int cents) implements Payment {
+      }
+      // ==== BankCard.java ====
+      public record BankCard(String lastDigits, int cents) implements Payment {
+      }
+      // ==== Voucher.java ====
+      public record Voucher(String code, int cents) implements Payment {
+      }
+      ```
+
+      ```output
+      cake paid with voucher SPRING10
+      tea paid with card 4921
+      bun paid
+      ```
+
+      The last case, `Order(String item, Payment other)`, matches every order, so the switch is exhaustive.
+
+      ### Records that hold their own kind
+
+      A record of a sealed interface can have a component of that same interface. Then one object can hold another, which holds another, and a method that takes them apart calls itself (module 55). A present can be a gift, or something wrapped in paper around another present:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              Present box = new Wrapped("red", new Wrapped("gold", new Gift("a scarf")));
+              System.out.println(unwrap(box));
+          }
+
+          public static String unwrap(Present present) {
+              return switch (present) {
+                  case Gift(String name) -> name;
+                  case Wrapped(String paper, Present inside) -> paper + " paper, then " + unwrap(inside);
+              };
+          }
+      }
+      // ==== Present.java ====
+      public sealed interface Present permits Gift, Wrapped {
+      }
+      // ==== Gift.java ====
+      public record Gift(String name) implements Present {
+      }
+      // ==== Wrapped.java ====
+      public record Wrapped(String paper, Present inside) implements Present {
+      }
+      ```
+
+      ```output
+      red paper, then gold paper, then a scarf
+      ```
+
+      The base case is the Gift, which holds no other present. The last challenge of this module builds a calculator on the same idea.
+
+      **Your turn:** a floor plan file has been read into a list of objects: a String for each room's name, and a `Corner(int x, int y)` record for each corner of the walls, in centimeters. Write `printCorners(ArrayList<Object> items)`, which prints each corner as `corner at x, y` and skips everything else. Take the corner apart with a record pattern after `instanceof`, without calling the accessors. The check runs:
+
+      ```java fragment
+      ArrayList<Object> items = new ArrayList<>();
+      items.add("Kitchen");
+      items.add(new Corner(0, 0));
+      items.add(new Corner(400, 0));
+      items.add("Hall");
+      items.add(new Corner(400, 350));
+      printCorners(items);
+      ```
+
+      and expects:
+
+      ```
+      corner at 0, 0
+      corner at 400, 0
+      corner at 400, 350
+      ```
+    seed:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Object> items = new ArrayList<>();
+                items.add("Kitchen");
+                items.add(new Corner(0, 0));
+                items.add(new Corner(400, 0));
+                items.add("Hall");
+                items.add(new Corner(400, 350));
+                printCorners(items);
+            }
+
+            public static void printCorners(ArrayList<Object> items) {
+
+            }
+        }
+      Corner.java: |
+        public record Corner(int x, int y) {
+        }
+    solution:
+      Main.java: |
+        import java.util.ArrayList;
+
+        public class Main {
+            public static void main(String[] args) {
+                ArrayList<Object> items = new ArrayList<>();
+                items.add("Kitchen");
+                items.add(new Corner(0, 0));
+                items.add(new Corner(400, 0));
+                items.add("Hall");
+                items.add(new Corner(400, 350));
+                printCorners(items);
+            }
+
+            public static void printCorners(ArrayList<Object> items) {
+                for (Object item : items) {
+                    if (item instanceof Corner(int x, int y)) {
+                        System.out.println("corner at " + x + ", " + y);
+                    }
+                }
+            }
+        }
+      Corner.java: |
+        public record Corner(int x, int y) {
+        }
+    hints:
+      - "Go through the list with `for (Object item : items)`."
+      - "`if (item instanceof Corner(int x, int y))` matches the corners only, and gives you `x` and `y` to print."
+    require:
+      - pattern: instanceof\s+Corner\s*\(
+        message: "Use a record pattern after `instanceof`: `item instanceof Corner(int x, int y)`."
+    forbid:
+      - pattern: \.\s*(x|y)\s*\(\s*\)
+        message: "Take the corner apart with the record pattern instead of calling `x()` and `y()`."
+    tests:
+      - call: |
+          ArrayList<Object> items = new ArrayList<>();
+          items.add("Kitchen");
+          items.add(new Corner(0, 0));
+          items.add(new Corner(400, 0));
+          items.add("Hall");
+          items.add(new Corner(400, 350));
+          printCorners(items);
+      - call: |
+          ArrayList<Object> items = new ArrayList<>();
+          items.add(new Corner(-50, 120));
+          items.add("Attic");
+          items.add(42);
+          items.add(new Corner(7, 7));
+          printCorners(items);
+          System.out.println("done");
+        hidden: true
+    more:
+      - task: |
+          Each wall of the floor plan goes from one corner to another: `Wall(Corner from, Corner to)`. Write `describe(Wall wall)`, which returns:
+
+          - `horizontal, ` and the length and ` cm`, when both corners have the same `y`;
+          - `vertical, ` and the length and ` cm`, when both corners have the same `x` (and different `y`s);
+          - `slanted` otherwise.
+
+          The length is the difference of the coordinates that change, as a positive number (`Math.abs`). Take the wall and both its corners apart with one nested record pattern, `Wall(Corner(...), Corner(...))`, in a switch or after `instanceof`, without calling the accessors. The check runs:
+
+          ```java fragment
+          System.out.println(describe(new Wall(new Corner(0, 0), new Corner(400, 0))));
+          System.out.println(describe(new Wall(new Corner(400, 350), new Corner(400, 0))));
+          System.out.println(describe(new Wall(new Corner(0, 0), new Corner(300, 200))));
+          ```
+
+          and expects:
+
+          ```
+          horizontal, 400 cm
+          vertical, 350 cm
+          slanted
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(describe(new Wall(new Corner(0, 0), new Corner(400, 0))));
+                    System.out.println(describe(new Wall(new Corner(400, 350), new Corner(400, 0))));
+                    System.out.println(describe(new Wall(new Corner(0, 0), new Corner(300, 200))));
+                }
+
+                public static String describe(Wall wall) {
+                    return "";
+                }
+            }
+          Wall.java: |
+            public record Wall(Corner from, Corner to) {
+            }
+          Corner.java: |
+            public record Corner(int x, int y) {
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    System.out.println(describe(new Wall(new Corner(0, 0), new Corner(400, 0))));
+                    System.out.println(describe(new Wall(new Corner(400, 350), new Corner(400, 0))));
+                    System.out.println(describe(new Wall(new Corner(0, 0), new Corner(300, 200))));
+                }
+
+                public static String describe(Wall wall) {
+                    return switch (wall) {
+                        case Wall(Corner(int x1, int y1), Corner(int x2, int y2)) when y1 == y2 -> "horizontal, " + Math.abs(x2 - x1) + " cm";
+                        case Wall(Corner(int x1, int y1), Corner(int x2, int y2)) when x1 == x2 -> "vertical, " + Math.abs(y2 - y1) + " cm";
+                        case Wall other -> "slanted";
+                    };
+                }
+            }
+          Wall.java: |
+            public record Wall(Corner from, Corner to) {
+            }
+          Corner.java: |
+            public record Corner(int x, int y) {
+            }
+        hints:
+          - "`Wall(Corner(int x1, int y1), Corner(int x2, int y2))` gives all four coordinates at once. It can be a case of `switch (wall)`, with `when y1 == y2` for horizontal walls."
+          - "In a switch, end with a case that matches every wall, such as `case Wall other -> \"slanted\";`. With `instanceof`, use the four variables in ifs inside it."
+        require:
+          - pattern: \bWall\s*\(\s*Corner\s*\(
+            message: "Take the wall apart with a nested record pattern: `Wall(Corner(int x1, int y1), Corner(int x2, int y2))`."
+        forbid:
+          - pattern: \.\s*(x|y|from|to)\s*\(\s*\)
+            message: "Use the variables of the record pattern instead of calling the accessors."
+        tests:
+          - call: |
+              System.out.println(describe(new Wall(new Corner(0, 0), new Corner(400, 0))));
+              System.out.println(describe(new Wall(new Corner(400, 350), new Corner(400, 0))));
+              System.out.println(describe(new Wall(new Corner(0, 0), new Corner(300, 200))));
+          - call: |
+              System.out.println(describe(new Wall(new Corner(900, 120), new Corner(250, 120))));
+              System.out.println(describe(new Wall(new Corner(-30, 10), new Corner(-30, 75))));
+              System.out.println(describe(new Wall(new Corner(5, 5), new Corner(6, 4))));
+            hidden: true
+      - task: |
+          A small calculator stores an expression such as `(2 + 3) * 4` as a tree of records. An `Expr` is a number, `Num(int value)`, or the sum or the product of two smaller expressions, `Add(Expr left, Expr right)` and `Mul(Expr left, Expr right)`. The method `show` in `Main.java` already turns an expression into text, with a switch over record patterns that calls itself for the parts. Write `eval(Expr expr)` in the same way: it returns the expression's value. Use a case with a record pattern for each of the three records, and no `default`. The check runs:
+
+          ```java fragment
+          Expr sum = new Add(new Num(2), new Num(3));
+          Expr product = new Mul(sum, new Num(4));
+          System.out.println(show(sum) + " = " + eval(sum));
+          System.out.println(show(product) + " = " + eval(product));
+          ```
+
+          and expects:
+
+          ```
+          (2 + 3) = 5
+          ((2 + 3) * 4) = 20
+          ```
+        seed:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Expr sum = new Add(new Num(2), new Num(3));
+                    Expr product = new Mul(sum, new Num(4));
+                    System.out.println(show(sum) + " = " + eval(sum));
+                    System.out.println(show(product) + " = " + eval(product));
+                }
+
+                public static String show(Expr expr) {
+                    return switch (expr) {
+                        case Num(int value) -> String.valueOf(value);
+                        case Add(Expr left, Expr right) -> "(" + show(left) + " + " + show(right) + ")";
+                        case Mul(Expr left, Expr right) -> "(" + show(left) + " * " + show(right) + ")";
+                    };
+                }
+
+                public static int eval(Expr expr) {
+                    return 0;
+                }
+            }
+          Expr.java: |
+            public sealed interface Expr permits Num, Add, Mul {
+            }
+          Num.java: |
+            public record Num(int value) implements Expr {
+            }
+          Add.java: |
+            public record Add(Expr left, Expr right) implements Expr {
+            }
+          Mul.java: |
+            public record Mul(Expr left, Expr right) implements Expr {
+            }
+        solution:
+          Main.java: |
+            public class Main {
+                public static void main(String[] args) {
+                    Expr sum = new Add(new Num(2), new Num(3));
+                    Expr product = new Mul(sum, new Num(4));
+                    System.out.println(show(sum) + " = " + eval(sum));
+                    System.out.println(show(product) + " = " + eval(product));
+                }
+
+                public static String show(Expr expr) {
+                    return switch (expr) {
+                        case Num(int value) -> String.valueOf(value);
+                        case Add(Expr left, Expr right) -> "(" + show(left) + " + " + show(right) + ")";
+                        case Mul(Expr left, Expr right) -> "(" + show(left) + " * " + show(right) + ")";
+                    };
+                }
+
+                public static int eval(Expr expr) {
+                    return switch (expr) {
+                        case Num(int value) -> value;
+                        case Add(Expr left, Expr right) -> eval(left) + eval(right);
+                        case Mul(Expr left, Expr right) -> eval(left) * eval(right);
+                    };
+                }
+            }
+          Expr.java: |
+            public sealed interface Expr permits Num, Add, Mul {
+            }
+          Num.java: |
+            public record Num(int value) implements Expr {
+            }
+          Add.java: |
+            public record Add(Expr left, Expr right) implements Expr {
+            }
+          Mul.java: |
+            public record Mul(Expr left, Expr right) implements Expr {
+            }
+        hints:
+          - "Copy the shape of `show`: `return switch (expr) { ... };` with the same three case labels."
+          - "A Num's value is its `value`. For an Add, evaluate both parts and add them: `eval(left) + eval(right)`. A Mul multiplies them."
+        require:
+          - pattern: \bcase\s+Num\s*\(
+            min: 2
+            message: "Give eval a case with a record pattern for Num: `case Num(int value) -> ...`."
+          - pattern: \bcase\s+Add\s*\(
+            min: 2
+            message: "Give eval a case with a record pattern for Add: `case Add(Expr left, Expr right) -> ...`."
+          - pattern: \bcase\s+Mul\s*\(
+            min: 2
+            message: "Give eval a case with a record pattern for Mul: `case Mul(Expr left, Expr right) -> ...`."
+        forbid:
+          - pattern: \bdefault\b
+            message: "Leave out `default`: Expr is sealed, and the three cases cover it."
+          - pattern: \binstanceof\b
+            message: "Use a switch with record patterns instead of `instanceof`."
+        tests:
+          - call: |
+              Expr sum = new Add(new Num(2), new Num(3));
+              Expr product = new Mul(sum, new Num(4));
+              System.out.println(show(sum) + " = " + eval(sum));
+              System.out.println(show(product) + " = " + eval(product));
+          - call: |
+              Expr a = new Mul(new Num(-3), new Add(new Num(7), new Mul(new Num(2), new Num(5))));
+              System.out.println(show(a) + " = " + eval(a));
+              System.out.println(eval(new Num(42)));
+              Expr big = new Num(1);
+              for (int i = 2; i <= 6; i++) {
+                  big = new Mul(big, new Num(i));
+              }
+              System.out.println(show(big) + " = " + eval(big));
+            hidden: true

@@ -1004,3 +1004,88 @@ questions:
       - "The UI's constructor, so that it takes a database connection instead of a DAO"
     answer: 2
     why: "The UI only calls the methods of the `RecipeDao` interface, so it works with any class that implements it. A database DAO is one more implementation, and `main` is the only place that names which DAO is used."
+  - module: recursion
+    type: predict
+    pre: |
+      public static void climb(int step) {
+          if (step == 0) {
+              return;
+          }
+          climb(step - 1);
+          System.out.println(step);
+      }
+    body: |
+      climb(3);
+    why: "`climb(3)` calls `climb(2)` before it prints, which calls `climb(1)`, which calls `climb(0)`, the base case, which returns at once. Then each call finishes in turn, the last one called first: `climb(1)` prints 1, `climb(2)` prints 2 and `climb(3)` prints 3."
+  - module: records
+    type: predict
+    classes: |
+      record Parcel(String code, int grams) {
+          Parcel {
+              if (grams < 0) {
+                  grams = 0;
+              }
+              code = code.toUpperCase();
+          }
+      }
+    body: |
+      Parcel first = new Parcel("ab12", -50);
+      Parcel second = new Parcel("AB12", 0);
+      System.out.println(first + " " + first.equals(second) + " " + second.grams());
+    why: "The compact constructor runs before the values are stored, so `first` keeps the tidied values: the code `AB12` and 0 grams. The `toString` Java writes for a record gives `Parcel[code=AB12, grams=0]`, and its `equals` compares the components, which are now the same in both. It prints `Parcel[code=AB12, grams=0] true 0`."
+  - module: switch-and-text
+    type: predict
+    body: |
+      String size = "M";
+      int price = switch (size) {
+          case "S", "M" -> 4;
+          case "L" -> {
+              int extra = 2;
+              yield 4 + extra;
+          }
+          default -> 0;
+      };
+      String receipt = """
+          Coffee %s
+            %d euros""";
+      System.out.println(String.format(receipt, size, price));
+    why: "An arrow case doesn't fall through, so `\"M\"` gives 4 and the switch expression is done. The text block's lines lose the indentation they all share, so the second line keeps the two spaces it has more than the first, and the closing `\"\"\"` right after `euros` means there is no line break at the end. `String.format` puts `M` and 4 in the places of `%s` and `%d`."
+  - module: sealed-and-patterns
+    type: predict
+    classes: |
+      sealed interface Ticket permits Single, Season {}
+      record Single(int zones) implements Ticket {}
+      record Season(int months) implements Ticket {}
+    pre: |
+      public static String describe(Ticket ticket) {
+          return switch (ticket) {
+              case Single s when s.zones() > 2 -> "long single";
+              case Single s -> "single";
+              case Season(int months) -> months + " months";
+          };
+      }
+    body: |
+      System.out.println(describe(new Single(3)) + ", " + describe(new Single(1)) + ", " + describe(new Season(6)));
+    why: "The cases are tried from the top. `Single(3)` matches the first case, since 3 is more than 2. `Single(1)` fails the `when` guard and goes on to the plain `Single` case. `Season(6)` matches the record pattern, which takes `months` out of it. Since the interface is sealed, these cases cover every Ticket and the switch needs no `default`."
+  - module: linked-structures
+    type: predict
+    classes: |
+      class Stop {
+          String name;
+          Stop next;
+
+          Stop(String name, Stop next) {
+              this.name = name;
+              this.next = next;
+          }
+      }
+    body: |
+      Stop route = new Stop("Harbor", new Stop("Market", new Stop("Park", null)));
+      route.next = route.next.next;
+      route = new Stop("Depot", route);
+      String names = "";
+      for (Stop stop = route; stop != null; stop = stop.next) {
+          names = names + stop.name + " ";
+      }
+      System.out.println(names.trim());
+    why: "`route.next = route.next.next;` makes Harbor link past Market straight to Park, so Market is no longer in the chain. Then a new first node, Depot, links to Harbor. Following the links from the start gives `Depot Harbor Park`."

@@ -1,5 +1,31 @@
 name: Build, verify and deploy to GitHub Pages
 
+# The jobs (README.md, "Deploy", says the same):
+#
+#   build             npm ci, the unit tests (first: they need no build output), the fidelity
+#                     suite on the reference JDK, then npm run build: every lesson program checked
+#                     on the JDK (the content build), tsc, the site build and the pre-rendered
+#                     pages. Uploads what the checks need as the artifact site-build (dist,
+#                     src/generated, public/lessons, public/images, and fidelity/out with the JDK's
+#                     fidelity results and the content check list) and, on main, dist as the
+#                     Pages artifact.
+#   fx-check          every JavaFX program on real OpenJFX 21, compared with Java Arena's JavaFX.
+#   fidelity-browser  the fidelity suite in the browser engine, compared with the JDK's results.
+#   content-replay    every lesson program replayed in the browser engine and compared with the
+#                     JDK, in 3 shards side by side (CONTENT_SHARD=k/3, scripts/content/shard.mjs:
+#                     each program in exactly one shard).
+#   e2e               the browser tests (engine, accessibility with axe, phone widths, offline,
+#                     mobile data), with screenshots. One job: its tests share pages and state
+#                     (the keyboard test needs the engine tests before it), so it isn't split.
+#   lighthouse        pull requests only: Lighthouse scores against lighthouserc.cjs.
+#   deploy            main only, once build and every check above have passed: publishes the
+#                     dist the build job made, unchanged.
+#
+# The checks need only the build, so they run at the same time. Each job that runs the JDK or
+# Chromium restores its cache (fx-check installs only Chromium's system libraries, not Chromium), and every job uses the npm cache; the content build's cache is in
+# the build job (node_modules/.cache, made again on each run, as before the split); the OpenJFX
+# jars are cached in fx-check. The check jobs' first steps are in .github/actions/check-job-setup.
+
 on:
   push:
     branches: [main]
@@ -8,8 +34,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages-${{ github.ref }}
@@ -23,9 +47,11 @@ env:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    # The slowest runs on main took about 47 minutes before fx-check (6 to 8 more), and pull requests
-    # also run Lighthouse (about 4): 90 leaves room for a slow runner and for more lessons.
-    timeout-minutes: 90
+    # About 19 to 23 minutes before the split (the content build 17 to 20 of them).
+    timeout-minutes: 45
+    outputs:
+      base_path: ${{ steps.site.outputs.base_path }}
+      site_url: ${{ steps.site.outputs.site_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,19 +77,24 @@ jobs:
       - name: Install dependencies (also copies the Java engine into public/engine)
         run: npm ci
 
-      - name: Unit tests (class diagrams in lesson text, checks of written files, explanations of mistakes, Java Arena's JavaFX on the reference JDK)
+      - name: Unit tests (class diagrams in lesson text, checks of written files, explanations of mistakes, content sharding, Java Arena's JavaFX on the reference JDK)
         run: npm run test:unit
 
       - name: Work out the site address
+        id: site
         run: |
           if [ -n "$CUSTOM_DOMAIN" ]; then
-            echo "BASE_PATH=/" >> "$GITHUB_ENV"
-            echo "SITE_URL=https://$CUSTOM_DOMAIN" >> "$GITHUB_ENV"
+            base="/"
+            url="https://$CUSTOM_DOMAIN"
           else
             owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-            echo "BASE_PATH=/${{ github.event.repository.name }}/" >> "$GITHUB_ENV"
-            echo "SITE_URL=https://$owner.github.io/${{ github.event.repository.name }}" >> "$GITHUB_ENV"
+            base="/${{ github.event.repository.name }}/"
+            url="https://$owner.github.io/${{ github.event.repository.name }}"
           fi
+          echo "BASE_PATH=$base" >> "$GITHUB_ENV"
+          echo "SITE_URL=$url" >> "$GITHUB_ENV"
+          echo "base_path=$base" >> "$GITHUB_OUTPUT"
+          echo "site_url=$url" >> "$GITHUB_OUTPUT"
 
       - name: Run the fidelity suite on the real JDK
         run: npm run fidelity:jdk
@@ -71,11 +102,44 @@ jobs:
       - name: Check the lessons on the real JDK, type-check and build the site
         run: npm run build
 
-      - name: Install Chromium for the browser tests
-        run: npx playwright install --with-deps chromium
+      - name: Keep the build for the check jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-build
+          path: |
+            dist
+            src/generated
+            public/lessons
+            public/images
+            fidelity/out
+          if-no-files-found: error
+          retention-days: 7
 
-      # After npm ci (which empties node_modules) and after the system libraries the step above
-      # installs (real JavaFX's text needs fontconfig and pango). Keyed by the pinned versions.
+      - name: Upload the site for GitHub Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  fx-check:
+    needs: build
+    runs-on: ubuntu-24.04
+    # About 4 to 5 minutes, plus about 1.5 to set up.
+    timeout-minutes: 30
+    env:
+      BASE_PATH: ${{ needs.build.outputs.base_path }}
+      SITE_URL: ${{ needs.build.outputs.site_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # fx-check starts no browser: it needs only Chromium's system libraries, which include what
+      # real JavaFX's text needs (fontconfig and pango), so Chromium itself isn't downloaded.
+      - uses: ./.github/actions/check-job-setup
+        with:
+          jdk: "true"
+          system-deps: "true"
+
+      # After npm ci, which empties node_modules. Keyed by the pinned versions.
       - name: Cache the OpenJFX and Monocle jars for the real-JavaFX check
         uses: actions/cache@v4
         with:
@@ -85,48 +149,130 @@ jobs:
       - name: Run every JavaFX program (lessons, fidelity, probes) on real OpenJFX 21 without a screen and compare with Java Arena's JavaFX
         run: npm run fx-check
 
+      - name: Keep the real-JavaFX report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fx-check-report
+          path: fidelity/out/fx-check.json
+          if-no-files-found: ignore
+
+  fidelity-browser:
+    needs: build
+    runs-on: ubuntu-24.04
+    # About 2 minutes, plus about 1.5 to set up.
+    timeout-minutes: 30
+    env:
+      BASE_PATH: ${{ needs.build.outputs.base_path }}
+      SITE_URL: ${{ needs.build.outputs.site_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The JDK too: the cross-checks run the browser's class files on HotSpot and the JDK's on the browser runner.
+      - uses: ./.github/actions/check-job-setup
+        with:
+          jdk: "true"
+          chromium: "true"
+
       - name: Run the fidelity suite in the browser engine and compare with the JDK
         run: npm run fidelity:browser
 
-      - name: Run every lesson program in the browser engine and compare with the JDK
+      - name: Keep the fidelity report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fidelity-report
+          path: fidelity/out
+          if-no-files-found: ignore
+
+  content-replay:
+    needs: build
+    runs-on: ubuntu-24.04
+    # The whole replay took 19 to 23 minutes in one job: about 6.5 to 8 a shard, plus about 1.5 to set up.
+    timeout-minutes: 30
+    strategy:
+      # Every shard runs to its end, so one run lists every program that differs.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    env:
+      BASE_PATH: ${{ needs.build.outputs.base_path }}
+      SITE_URL: ${{ needs.build.outputs.site_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/check-job-setup
+        with:
+          chromium: "true"
+
+      - name: Run the lesson programs of shard ${{ matrix.shard }} of 3 in the browser engine and compare with the JDK
         run: npm run content:browser
+        env:
+          CONTENT_SHARD: ${{ matrix.shard }}/3
+
+  e2e:
+    needs: build
+    runs-on: ubuntu-24.04
+    # About 9 to 10 minutes, plus about 1.5 to set up.
+    timeout-minutes: 30
+    env:
+      BASE_PATH: ${{ needs.build.outputs.base_path }}
+      SITE_URL: ${{ needs.build.outputs.site_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/check-job-setup
+        with:
+          chromium: "true"
 
       - name: Browser tests (engine, accessibility with axe, phone widths, offline, mobile data)
         run: npm run test:e2e -- --shots screenshots
 
-      - name: Keep the screenshots and the fidelity report
+      - name: Keep the screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots-and-reports
-          path: |
-            screenshots
-            fidelity/out
+          name: screenshots
+          path: screenshots
           if-no-files-found: ignore
 
-      # Scores key pages as a phone would, and fails the PR below the thresholds in lighthouserc.cjs.
+  # Scores key pages as a phone would, and fails the PR below the thresholds in lighthouserc.cjs.
+  # Lighthouse CI brings its own packages and uses the runner's Chrome, so this job skips npm ci.
+  lighthouse:
+    if: github.event_name == 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    # About 4 minutes, plus about 1 to set up.
+    timeout-minutes: 30
+    env:
+      BASE_PATH: ${{ needs.build.outputs.base_path }}
+      SITE_URL: ${{ needs.build.outputs.site_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/check-job-setup
+        with:
+          npm: "false"
+
       - name: Lighthouse (performance, accessibility, SEO, best practices)
-        if: github.event_name == 'pull_request'
         run: npx --yes @lhci/cli@0.15.1 autorun --config=./lighthouserc.cjs
 
       - name: Keep the Lighthouse reports
-        if: always() && github.event_name == 'pull_request'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-reports
           path: lhci
           if-no-files-found: ignore
 
-      - name: Upload the site
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
+  # Lighthouse runs on pull requests only, so it isn't in needs (a skipped job there would skip this one).
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, fx-check, fidelity-browser, content-replay, e2e]
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

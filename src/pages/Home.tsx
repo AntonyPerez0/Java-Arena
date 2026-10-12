@@ -27,6 +27,9 @@ export default function Home() {
   const first = modules[0];
   const drillCount = modules.reduce((a, m) => a + m.drills, 0) + course.interviewDrills;
   const dailyDone = localDay() in s.daily;
+  const allLive = modules.length === plan.length;
+  const extraCount = plan.filter((m) => m.course === "extra").length;
+  const moocCount = plan.length - extraCount;
   // Fetch the lesson the Continue button opens, so it shows at once.
   const nextKey = done && next ? [next.module.id, next.step.slug] : null;
   useEffect(() => (nextKey ? prefetchStep(nextKey[0], nextKey[1], loadStepPage) : undefined), [nextKey?.[0], nextKey?.[1]]);
@@ -41,7 +44,7 @@ export default function Home() {
               Learn Java by writing <span className="hero-accent">real</span> Java
             </h1>
             <p className="hero-lead">
-              Every exercise is compiled by the real <code>javac</code> 21 compiler and run by a Java virtual machine, both inside your browser, on your own device. The lessons follow the University of Helsinki's Java Programming MOOC, with their own explanations and exercises.
+              Every exercise is compiled by the real <code>javac</code> 21 compiler and run by a Java virtual machine, both inside your browser, on your own device. The lessons of Java Programming I and II follow the University of Helsinki's Java Programming MOOC, with their own explanations and exercises; the extra modules after them are Java Arena's own.
             </p>
             <div className="hero-actions">
               {next && (
@@ -97,10 +100,21 @@ export default function Home() {
       <section className="section-tight">
         <div className="container">
           <div className="card card-callout status-card">
-            <h2 className="h3">Being built</h2>
-            <p>
-              Java Arena is new. {modules.length} of {plan.length} modules are online so far ({totalSteps} steps, {totalChallenges} challenges, and {drillCount} practice drills); the rest of the course is added in batches. <Link to="/learn/">The course page</Link> lists every planned module.
-            </p>
+            {allLive ? (
+              <>
+                <h2 className="h3">The whole course is online</h2>
+                <p>
+                  All {plan.length} modules are online: {moocCount} following the MOOC (Java Programming I and II){extraCount > 0 && ` and ${extraCount} extra ${extraCount === 1 ? "module" : "modules"} of Java Arena's own`}, with {totalSteps} steps, {totalChallenges} challenges and {drillCount} practice drills. <Link to="/learn/">The course page</Link> lists them all.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="h3">Being built</h2>
+                <p>
+                  Java Arena is new. {modules.length} of {plan.length} modules are online so far ({totalSteps} steps, {totalChallenges} challenges, and {drillCount} practice drills); the rest of the course is added in batches. <Link to="/learn/">The course page</Link> lists every planned module.
+                </p>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -209,7 +223,7 @@ export default function Home() {
             <details>
               <summary>Is this the University of Helsinki's course?</summary>
               <p>
-                No. Java Arena follows the order and topics of their free <a href={MOOC_URL}>Java Programming MOOC</a> and credits it on every lesson, but it's an independent project with its own explanations and exercises. It isn't affiliated with or endorsed by the university, and it doesn't give MOOC credits or certificates.
+                No. Java Arena follows the order and topics of their free <a href={MOOC_URL}>Java Programming MOOC</a> and credits it on every lesson that follows it, but it's an independent project with its own explanations and exercises. It isn't affiliated with or endorsed by the university, and it doesn't give MOOC credits or certificates.
               </p>
             </details>
             <details>

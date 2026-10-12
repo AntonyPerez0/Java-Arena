@@ -10,6 +10,7 @@ import Workbench from "../components/Workbench";
 import PredictBench from "../components/PredictBench";
 import TaskCard from "../components/TaskCard";
 import MoocCredit from "../components/MoocCredit";
+import ExtraTag from "../components/ExtraTag";
 import NotFound from "./NotFound";
 import { useTitle } from "../lib/title";
 
@@ -115,6 +116,7 @@ function StepView({ m, step, takeFocus }: { m: ModuleSummary; step: Step; takeFo
     <div className="step-page" key={step.id}>
       <nav className="crumbs" aria-label="Breadcrumb">
         <Link to="/learn/">Learn</Link> <ChevronRight className="icon" aria-hidden="true" /> <Link to={modulePath(m)}>{`Module ${m.number}: ${m.title}`}</Link>
+        <ExtraTag module={m} />
       </nav>
       <div className="step-grid">
         <article className="step-text">

@@ -18,6 +18,7 @@ const quoted = (m: string) => /'([^']+)'/.exec(m)?.[1];
 const LAMBDA_IN_GENERIC_CALL = /cannot infer type-variable\(s\)[^\n]*\n\s*\(argument mismatch; (?:bad return type in lambda expression|lambda body is not compatible)/;
 
 const RULES: Rule[] = [
+  { code: "compiler.err.expected", when: /^'\{' expected/, explain: recordExtends },
   { code: "compiler.err.expected", when: /^';' expected/, explain: () => "Java needs a semicolon ; at the end of this statement. Look at the end of the line the arrow points to (or the line before it)." },
   { code: "compiler.err.expected", explain: (d) => `Java expected ${quoted(d.message) ? `'${quoted(d.message)}'` : "something else"} here. Check for a missing bracket, parenthesis or semicolon just before the arrow.` },
   { code: "compiler.err.expected3", explain: () => "Java expected a different symbol here. Check for a missing bracket, parenthesis or semicolon just before the arrow." },
@@ -26,6 +27,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable length\n/, explain: lengthOf },
   { code: "compiler.err.cant.resolve.location", when: /location: class (?:javafx\.scene\.input\.)?KeyCode$/m, explain: fxKeyCodeName },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+(?:class|variable) [A-Z]/, explain: noDatabase },
+  { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: patternScope },
   // A name that this method created in a block that has ended is stronger evidence than an enum constant of the same name.
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable/, explain: outOfScope },
   { code: "compiler.err.cant.resolve.location", when: /symbol:\s+variable [\w$]+\n\s*location: (?:class|interface|enum|record) /, explain: enumConstant },
@@ -47,6 +49,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.doesnt.exist", explain: unknownPackage },
   { code: "compiler.err.doesnt.exist", explain: libraryPackage },
   { code: "compiler.err.doesnt.exist", explain: () => "Java can't find this package. Check the spelling of the import or name before the dot, for example java.util.Scanner." },
+  { code: "compiler.err.cant.resolve.location.args", when: /symbol:\s+method (?:get|is)[A-Z][\w$]*\(\)\n/, explain: recordGetter },
   { code: "compiler.err.cant.resolve.location.args", when: /symbol:\s+method [A-Z]/, explain: missingNew },
   { code: "compiler.err.cant.resolve.location.args", when: /symbol:\s+method launch\(/, explain: fxLaunchMissing },
   { code: "compiler.err.cant.resolve.location.args", when: /of type (?:javafx\.geometry\.)?Point2D$|location: class (?:javafx\.geometry\.)?Point2D$/m, explain: fxPointSetter },
@@ -114,6 +117,8 @@ const RULES: Rule[] = [
   { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+(?:\[\])* cannot be converted to [\w$.]+(?:\[\])*$/, explain: genericValue },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+<.*> cannot be converted to [\w$.]+<.*>$/, explain: otherTypeArguments },
   { code: "compiler.err.prob.found.req", when: /^incompatible types: void cannot be converted to /, explain: voidValue },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.]+ cannot be converted to [\w$.]+$/, explain: caseValueType },
+  { code: "compiler.err.prob.found.req", when: /^incompatible types: [\w$.<>\[\]]+ cannot be converted to [\w$.<>\[\]]+$/, explain: varKeepsType },
   { code: "compiler.err.prob.found.req", when: /cannot be converted to/, explain: () => "The value on the right has a different type than the variable or parameter expects. For example text in quotes is a String, not an int; Integer.valueOf(...) turns text into a number." },
   { code: "compiler.err.prob.found.req", when: /unexpected return value/, explain: () => "This method is void, so it can't return a value. Change void to the value's type, or remove the value after return." },
   { code: "compiler.err.prob.found.req", when: /missing return value/, explain: () => "This method must return a value: write return followed by the value." },
@@ -194,6 +199,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.cant.apply.symbols", explain: () => "None of the versions of this method accepts these arguments. Check the number and types of values in the parentheses." },
   { code: "compiler.err.non-static.cant.be.ref", when: /^non-static type variable /, explain: staticTypeVariable },
   { code: "compiler.err.non-static.cant.be.ref", explain: () => "main is static, so it can't use this object's methods or variables directly. Create an object first (new ...) and call the method on it, or make the method static if it doesn't need an object." },
+  { code: "compiler.err.var.might.not.have.been.initialized", explain: recordCanonical },
   { code: "compiler.err.var.might.not.have.been.initialized", explain: () => "This variable is used before it has a value. Give it a starting value where you create it, for example int sum = 0;" },
   { code: "compiler.err.else.without.if", explain: () => "This else has no matching if. A common cause is a semicolon right after if (...), which ends the if before its block, or a missing { }." },
   { code: "compiler.err.premature.eof", explain: () => "The file ended while Java was still inside a block. A closing brace } is missing somewhere; every { needs its }." },
@@ -208,6 +214,7 @@ const RULES: Rule[] = [
   },
   { code: "compiler.err.already.defined", when: /^variable [\w$]+ is already defined in/, explain: lambdaParameterTaken },
   { code: "compiler.err.already.defined", explain: () => "A variable or method with this name already exists here. Use a different name, or drop the type to change the existing variable (name = ... instead of String name = ...)." },
+  { code: "compiler.err.report.access", when: /^[\w$]+ has private access in /, explain: recordPrivate },
   { code: "compiler.err.report.access", when: /^getChildren\(\) has protected access/, explain: fxProtectedChildren },
   { code: "compiler.err.report.access", when: /^[xy] has private access in (?:javafx\.geometry\.)?Point2D$/, explain: fxPointField },
   { code: "compiler.err.report.access", explain: privateInParent },
@@ -217,6 +224,7 @@ const RULES: Rule[] = [
   { code: "compiler.err.unreported.exception.need.to.catch.or.throw", explain: () => "This can throw a checked exception, so Java insists you handle it: wrap it in try { ... } catch (...) { ... }, or add throws ... to the method header." },
   { code: "compiler.err.illegal.start.of.expr", explain: () => "Something here isn't a valid start of an expression. Often a bracket or parenthesis is missing earlier, or a method was declared inside another method." },
   { code: "compiler.err.illegal.start.of.type", explain: () => "Java didn't expect this here. Check for a missing or extra bracket around this line." },
+  { code: "compiler.err.not.stmt", explain: valueInSwitch },
   { code: "compiler.err.not.stmt", explain: () => "This isn't a complete statement on its own. Perhaps it should be assigned to a variable or printed, or = was mixed up with ==." },
   { code: "compiler.err.cant.deref", when: /^void cannot be dereferenced/, explain: voidDereferenced },
   { code: "compiler.err.cant.deref", explain: () => "Primitive values like int, double and boolean have no methods, so you can't put a dot after them. Use a wrapper or a helper, for example String.valueOf(number)." },
@@ -246,7 +254,9 @@ const RULES: Rule[] = [
   { code: "compiler.err.intf.meth.cant.have.body", explain: interfaceMethodWithBody },
   { code: "compiler.err.does.not.override.abstract", explain: () => "This class promises (through an interface or abstract class) to have a method it doesn't have yet. Add the missing method with exactly that name and parameters." },
   { code: "compiler.err.abstract.cant.be.instantiated", explain: () => "You can't create an object directly from an abstract class or an interface. Create an object of a class that extends or implements it." },
+  { code: "compiler.err.cant.inherit.from.final", explain: recordFinalClass },
   { code: "compiler.err.cant.inherit.from.final", explain: () => "This class is final, so no class can extend it." },
+  { code: "compiler.err.cant.assign.val.to.var", explain: recordFinal },
   { code: "compiler.err.cant.assign.val.to.var", explain: () => "This variable is final, so it can't get a new value after the first one." },
   { code: "compiler.err.invalid.meth.decl.ret.type.req", explain: () => "A method needs a return type before its name (void if it returns nothing). If this was meant to be a constructor, its name must match the class name exactly." },
   { code: "compiler.err.missing.meth.body.or.decl.abstract", explain: missingBody },
@@ -277,6 +287,26 @@ const RULES: Rule[] = [
   { code: "compiler.err.generic.array.creation", explain: genericArray },
   { code: "compiler.err.unexpected.type", explain: notAVariable },
   { code: "compiler.err.array.req.but.found", explain: arrayRequired },
+  // The extra modules 55 to 59: records, switch, sealed types, patterns, text blocks and var.
+  { code: "compiler.err.record.cannot.declare.instance.fields", explain: recordField },
+  { code: "compiler.err.not.exhaustive", explain: notExhaustive },
+  { code: "compiler.err.not.exhaustive.statement", explain: notExhaustive },
+  { code: "compiler.err.duplicate.case.label", explain: duplicateLabel },
+  { code: "compiler.err.switch.mixing.case.types", explain: mixedCaseKinds },
+  { code: "compiler.err.selector.type.not.allowed", explain: selectorNotAllowed },
+  { code: "compiler.err.rule.completes.normally", explain: ruleWithoutValue },
+  { code: "compiler.err.switch.expression.completes.normally", explain: switchWithoutValue },
+  { code: "compiler.err.switch.expression.no.result.expressions", explain: switchNoValues },
+  { code: "compiler.err.return.outside.switch.expression", explain: returnInSwitch },
+  { code: "compiler.err.break.outside.switch.expression", explain: breakInSwitch },
+  { code: "compiler.err.pattern.dominated", explain: dominatedLabel },
+  { code: "compiler.err.cant.inherit.from.sealed", explain: notPermitted },
+  { code: "compiler.err.non.sealed.sealed.or.final.expected", explain: sealedChildModifier },
+  { code: "compiler.err.illegal.text.block.open", explain: textBlockOpen },
+  { code: "compiler.err.cant.infer.local.var.type", explain: varInfer },
+  { code: "compiler.err.restricted.type.not.allowed.here", when: /^'var' is not allowed here/, explain: varNotAllowed },
+  { code: "compiler.err.restricted.type.not.allowed.compound", explain: () => "var declares one variable at a time, so it can't be used with several variables on one line. Give each its own line: var a = 1; and then var b = 2;." },
+  { code: "compiler.err.restricted.type.not.allowed.array", explain: () => "var can't be used with [ ] for an array. Write the array's type instead, as in int[] numbers = {1, 2, 3};, or var numbers = new int[] {1, 2, 3}; without brackets after var." },
   { code: "compiler.note.unchecked.filename", explain: (_d, own) => fxRawNote(own) ?? uncheckedNote() },
   { code: "compiler.note.unchecked.plural", explain: (_d, own) => fxRawNote(own) ?? uncheckedNote() },
   { code: "compiler.note.unchecked.recompile", explain: () => "Part of the note about unchecked or unsafe operations. You don't need to do this: the note doesn't stop the program from compiling." },
@@ -2454,6 +2484,7 @@ function notThrowable(d: Diagnostic, own: OwnClasses): string | null {
   if (!from || !c) return null;
   const type = simple(from);
   const before = c.line.slice(0, c.line.length - c.at.length);
+  if (/\binstanceof\s+(?:final\s+)?$/.test(before)) return `A pattern after instanceof must name the type it checks for, since that type is the whole question: replace var with it, as in o instanceof String ${name ?? "s"}.`;
   if (/\bcatch\s*\(\s*(?:final\s+)?$/.test(before)) return `A catch names the exception it handles, such as catch (NumberFormatException e), and ${type} isn't an exception.`;
   if (!/^throw\b/.test(c.at)) return null;
   if (type === "String") return `throw needs an exception object, not text. Create one that carries the text as its message: throw new IllegalArgumentException("...");, or another exception that fits, such as IllegalStateException.`;
@@ -5515,6 +5546,846 @@ function fxNull(m: string, c: CrashContext): string | null {
   return null;
 }
 
+// ---- The extra modules 55 to 59: records, switch, sealed types, patterns, text blocks, var, recursion and linked structures ----
+
+/** "a double", "an int", "an Integer". */
+const aType = (t: string) => `${/^[aeiouAEIOU]/.test(t) ? "an" : "a"} ${t}`;
+
+/** A record's components, in order, as name and type (its header's (int x, int y)). */
+const componentsOf = (t: OwnClass) => t.members.filter((m) => !m.method && m.private && !m.static && t.members.some((a) => a.method && a.name === m.name && a.params === ""));
+
+/** The record of the program's own named so, when it has a component with this name. */
+function recordWith(own: OwnClasses, component: string, file: string, named: string): OwnClass | null {
+  const t = typeNamed(own, simple(named.replace(/<.*$/, "")), file);
+  return t?.kind === "record" && componentsOf(t).some((m) => m.name === component) ? t : null;
+}
+
+/** Whether the method around a position declares a local variable or a parameter of this name before it (one that hides a field of the same name). */
+function declaredInMethod(code: string, at: number, name: string): boolean {
+  const body = methodBodyAround(code, at);
+  if (!body) return false;
+  const headerStart = Math.max(code.lastIndexOf(";", body[0] - 1), code.lastIndexOf("}", body[0] - 1), code.lastIndexOf("{", body[0] - 1)) + 1;
+  const n = escapeRegExp(name);
+  const decl = new RegExp(`(?<![\\w$.])([\\w$.]+(?:\\s*<[^;{}()=]*>)?(?:\\s*\\[\\s*\\])*)\\s+${n}(?![\\w$])(?=\\s*[=;:,)])`, "g");
+  for (const m of code.slice(headerStart, at).matchAll(decl)) if (!/^(?:return|new|throw|else|case|yield|assert|instanceof)$/.test(m[1])) return true;
+  return false;
+}
+
+/** The declared type of a variable named at javac's caret: a local, a parameter or a field (var p = new Point(...) gives Point), or null. */
+function receiverType(d: Diagnostic, own: OwnClasses, name: string): string | null {
+  const typed = scopedTypeOf(d, own, name);
+  if (typed) return typed;
+  const where = caretIn(d, own);
+  const body = where ? methodBodyAround(where.code, where.at) : null;
+  if (where && body) {
+    const v = new RegExp(`\\bvar\\s+${escapeRegExp(name)}\\s*=\\s*new\\s+([\\w$.]+)`).exec(where.code.slice(body[0], where.at));
+    if (v) return simple(v[1]);
+  }
+  const field = classAt(own, d.file, d.line)?.members.find((m) => !m.method && m.name === name);
+  return field ? simple(field.type.replace(/<.*$/, "")) : null;
+}
+
+/** new Point(5, p.y()): the record created again with one component changed. `from` reads the others: "p." gives p.y(), "" gives y. */
+function newRecord(t: OwnClass, component: string, value: string, from: string): string {
+  return `new ${t.name}(${componentsOf(t).map((m) => (m.name === component ? value : from ? `${from}.${m.name}()` : m.name)).join(", ")})`;
+}
+
+/** The value after = on a line of code, from the caret on: 5 in "x = 5;" (null for ==, += and the like). */
+const valueAfterEquals = (at: string) => /^[^=;]*?(?<![=!<>+\-*/%&|^])=(?!=)\s*([^;]+?)\s*;/.exec(at)?.[1] ?? null;
+
+/** The { of the block around a position whose header (the code before it) is a compact constructor of the record: Range { or public Range {. */
+function inCompactConstructor(code: string, at: number, record: string): boolean {
+  for (let open = blockAround(code, at); open >= 0; open = blockAround(code, open)) {
+    const before = code.slice(Math.max(0, open - 200), open);
+    if (new RegExp(`(?:^|[;{}])\\s*(?:(?:public|protected|private)\\s+)?${escapeRegExp(record)}\\s*$`).test(before)) return true;
+    if (/\b(?:class|interface|enum|record)\s+[\w$]+[^;{}]*$/.test(before)) return false;
+  }
+  return false;
+}
+
+/** "cannot assign a value to final variable x", where x is a record's component: in its compact constructor, in its methods, or from outside. */
+function recordFinal(d: Diagnostic, own: OwnClasses): string | null {
+  const name = /^cannot assign a value to final variable ([\w$]+)$/.exec(d.message)?.[1];
+  const c = atCaret(d);
+  const where = caretIn(d, own);
+  if (!name || !c || !where) return null;
+  const before = beforeCaret(c);
+  // The object before the dot (p in p.x = 5), when there is one: a plain variable, or this. Anything else (getP().x) isn't read.
+  const dotted = c.at.startsWith(".") || /\.\s*$/.test(before);
+  const left = before.replace(/\.\s*$/, "").trimEnd();
+  const id = /([\w$]+)$/.exec(left);
+  const receiver = dotted ? (id && !/[\w$.)\]]\s*$/.test(left.slice(0, id.index)) ? id[1] : null) : undefined;
+  if (receiver === null) return null;
+  const here = classAt(own, d.file, d.line);
+  let t: OwnClass | null = null;
+  if (receiver === undefined || receiver === "this") {
+    // A bare name or this.name: the record's own component only inside the record, and a bare name only when no local or parameter hides it.
+    t = here?.kind === "record" ? recordWith(own, name, d.file, here.name) : null;
+    if (t && receiver === undefined && declaredInMethod(where.code, where.at, name)) return null;
+  } else {
+    const type = receiverType(d, own, receiver);
+    t = type ? recordWith(own, name, d.file, type) : null;
+  }
+  if (!t) return null;
+  const value = valueAfterEquals(c.at);
+  const inRecord = here === t && (!receiver || receiver === "this");
+  if (inRecord && inCompactConstructor(where.code, where.at, t.name)) {
+    const keep = value === name ? ` Here it would give ${name} the value it gets anyway, so remove this line.` : value ? ` Here: ${name} = ${value};` : "";
+    return `This is the compact constructor of the record ${t.name} (${t.name} { ... }, without a parameter list). Java assigns the fields itself when it ends, from the parameters, so this.${name} = ... isn't allowed in it. To change the value that is stored, assign the parameter instead, as in ${name} = ...; (without this.).${keep}`;
+  }
+  if (inRecord) {
+    const fresh = value ? newRecord(t, name, value, "") : null;
+    return `${name} is a component of the record ${t.name}, and a record's components are final: they get their values once, when the record is created, and can't change after that, not even in ${t.name}'s own methods. Give back a new ${t.name} with the new value instead${fresh ? `, as in return ${fresh};` : ""} (the method's return type then is ${t.name}).`;
+  }
+  const again = value && receiver && receiver !== "this" ? `, as in ${receiver} = ${newRecord(t, name, value, receiver)};` : ".";
+  return `${name} is a component of the record ${t.name}, and a record's components can't change: they get their values once, when the record is created. To get ${aType(t.name)} with another ${name}, create a new one${again}`;
+}
+
+/** "x has private access in Point", where Point is a record and x one of its components: read it with x(); it can't be changed. */
+function recordPrivate(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /^([\w$]+) has private access in ([\w$.]+)$/.exec(d.message);
+  const c = atCaret(d);
+  if (!m || !c) return null;
+  const t = recordWith(own, m[1], d.file, m[2]);
+  if (!t) return null;
+  const receiver = /([\w$]+)\s*$/.exec(beforeCaret(c).replace(/\.\s*$/, ""))?.[1] ?? "it";
+  const value = valueAfterEquals(c.at.replace(/^\.?\s*[\w$]+/, "x"));
+  if (value != null) return `${m[1]} is a component of the record ${t.name}, and a record's components can't change after it is created (its fields are private and final). To get ${aType(t.name)} with another ${m[1]}, create a new one: ${receiver} = ${newRecord(t, m[1], value, receiver)};`;
+  return `${m[1]} is a component of the record ${t.name}. A record keeps its components in private fields, and gives each a public accessor method with the component's own name: read it with ${receiver}.${m[1]}(), with parentheses.`;
+}
+
+/** getX() or isAvailable() called on a record, whose accessors are x() and available(). */
+function recordGetter(d: Diagnostic, own: OwnClasses): string | null {
+  const m = /symbol:\s+method ((?:get|is)([A-Z][\w$]*))\(\)\n\s*location: (?:variable ([\w$]+) of type|class) ([\w$.]+)(?:<.*>)?$/m.exec(d.message);
+  if (!m) return null;
+  const t = typeNamed(own, simple(m[4]), d.file);
+  if (t?.kind !== "record") return null;
+  const parts = componentsOf(t);
+  const wanted = m[2][0].toLowerCase() + m[2].slice(1);
+  const accessors = listed(parts.map((p) => `${p.name}()`));
+  const on = m[3] ? `${m[3]}.` : "";
+  const prefix = m[1].startsWith("is") ? "is" : "get";
+  if (parts.some((p) => p.name === wanted))
+    return `${t.name} is a record, and a record's accessor methods have the components' own names, without ${prefix}: ${on}${wanted}(), not ${on}${m[1]}(). Its accessors are ${accessors}.`;
+  return `${t.name} is a record, so its accessor methods are named after its components, without ${prefix}: ${accessors}. It has no ${m[1]}().`;
+}
+
+/** "field declaration must be static": an instance variable in a record. */
+function recordField(d: Diagnostic, own: OwnClasses): string | null {
+  const t = classAt(own, d.file, d.line);
+  const name = /^([\w$]+)/.exec(atCaret(d)?.at ?? "")?.[1];
+  if (t?.kind !== "record" || !name) return null;
+  const type = /([\w$.<>\[\]]+)\s+$/.exec(beforeCaret(atCaret(d)!))?.[1] ?? "int";
+  const header = `record ${t.name}(${componentsOf(t).map((m) => `${m.type} ${m.name}`).join(", ")}`;
+  const parts = componentsOf(t).length ? `${header}, ${type} ${name})` : `${header}${type} ${name})`;
+  return `A record can't have instance variables besides its components: everything ${aType(t.name)} holds is listed in its header. Make ${name} a component, as in ${parts}, or compute it in a method when it's needed. If it belongs to the whole record type rather than to each record, make it static: static ${type} ${name};.`;
+}
+
+/** "variable x might not have been initialized" at the end of a record's canonical constructor that doesn't assign x. */
+function recordCanonical(d: Diagnostic, own: OwnClasses): string | null {
+  const name = /^variable ([\w$]+) might not have been initialized$/.exec(d.message)?.[1];
+  const t = classAt(own, d.file, d.line);
+  if (!name || t?.kind !== "record" || !componentsOf(t).some((m) => m.name === name) || !/^\}/.test(atCaret(d)?.at ?? "")) return null;
+  return `This constructor of the record ${t.name} takes all its components as parameters, so it is the record's canonical constructor, and it must give every field a value itself: ${name} never gets one. Add this.${name} = ${name}; to it. Or write it as a compact constructor, ${t.name} { ... } without the parameter list: Java then assigns all the fields at its end.`;
+}
+
+/** "'{' expected" after a record's header, at extends: a record can't extend a class. */
+function recordExtends(d: Diagnostic, own: OwnClasses): string | null {
+  const c = atCaret(d);
+  if (!c || !/^\s*extends\b/.test(c.at) || !/\brecord\s+[\w$]+\s*(?:<[^>]*>)?\s*\(.*\)\s*$/.test(beforeCaret(c))) return null;
+  const parent = /^\s*extends\s+([\w$.]+)/.exec(c.at)?.[1] ?? "";
+  const name = /\brecord\s+([\w$]+)/.exec(c.line)?.[1] ?? "";
+  const header = beforeCaret(c).trim().replace(/^(?:(?:public|private|protected|static|final)\s+)+/, "");
+  const p = typeNamed(own, parent, d.file);
+  const fix =
+    p?.kind === "interface"
+      ? `${parent} is an interface, so write implements instead of extends: ${header} implements ${parent}.`
+      : `A record can implement interfaces, as in ${header} implements ${parent || "Shape"}. If ${parent || "the parent"} is a class of your own, make it an interface (with the methods every ${parent || "one"} must have), or make ${name || "this"} an ordinary class.`;
+  return `A record can't extend a class: every record already extends Java's class Record, and a class has only one parent class. ${fix}`;
+}
+
+/** "cannot inherit from final Point", where Point is a record. */
+function recordFinalClass(d: Diagnostic, own: OwnClasses): string | null {
+  const name = /^cannot inherit from final ([\w$.]+)$/.exec(d.message)?.[1];
+  const t = name ? typeNamed(own, simple(name), d.file) : undefined;
+  if (t?.kind !== "record") return null;
+  return `${t.name} is a record, and records are final: no class can extend one. If several kinds of ${t.name} should share something, let them implement a common interface instead (records can implement interfaces), or make ${t.name} an ordinary class.`;
+}
+
+type CaseLabel = {
+  /** The label as written, between case and -> or :, such as 1, 2 or String s when s.isEmpty(). */
+  text: string;
+  /** Its values (1 and 2 for case 1, 2), or one type pattern. */
+  values: string[];
+  /** A type pattern's type (String for String s, Point for Point(int x, int y)), when it is one. */
+  pattern?: string;
+  /** It has a when guard. */
+  guarded: boolean;
+  arrow: boolean;
+  /** Its position in the file's text and its line. */
+  at: number;
+  line: number;
+};
+
+type SwitchBlock = {
+  open: number;
+  close: number;
+  selector: string;
+  expression: boolean;
+  /** Its case labels (case null, default among them), without a plain default: that one is in defaults. */
+  labels: CaseLabel[];
+  hasDefault: boolean;
+  /** Its plain default labels (default -> or default:), with their positions in the file's text. */
+  defaults: { at: number; arrow: boolean; line: number }[];
+};
+
+/** The switch whose { comes at or after a position on the same statement (javac's caret at switch), or the one whose block is around it. */
+function switchBlock(code: string, text: string, at: number, around: boolean): SwitchBlock | null {
+  let open = -1;
+  let head = "";
+  if (!around) {
+    const m = /^switch\s*\(/.exec(code.slice(at));
+    if (!m) return null;
+    open = code.indexOf("{", at);
+    head = code.slice(Math.max(0, at - 200), open);
+  } else {
+    for (let o = blockAround(code, at); o >= 0; o = blockAround(code, o)) {
+      const before = code.slice(Math.max(0, o - 400), o);
+      if (/\bswitch\s*\([^{};]*\)\s*$/.test(before)) {
+        open = o;
+        head = before;
+        break;
+      }
+      if (/\b(?:class|interface|enum|record)\s+[\w$]+[^;{}]*$/.test(before)) return null;
+    }
+  }
+  if (open < 0) return null;
+  const close = closeOf(code, open);
+  if (close < 0) return null;
+  const sw = /\bswitch\s*\(([^{};]*)\)\s*$/.exec(head);
+  if (!sw) return null;
+  const startOfSwitch = Math.max(0, open - head.length) + sw.index;
+  const expression = /(?:[=(,?:]|->|\breturn|\byield)\s*$/.test(code.slice(Math.max(0, startOfSwitch - 50), startOfSwitch));
+  const selectorAt = startOfSwitch + sw[0].indexOf("(") + 1;
+  const selector = text.slice(selectorAt, selectorAt + sw[1].length).trim();
+  const labels: CaseLabel[] = [];
+  let hasDefault = false;
+  const defaults: SwitchBlock["defaults"] = [];
+  let depth = 0;
+  for (let k = open + 1; k < close; k++) {
+    const ch = code[k];
+    if (ch === "{" || ch === "(") depth++;
+    else if (ch === "}" || ch === ")") depth--;
+    if (depth !== 0) continue;
+    const plainDefault = code.startsWith("default", k) && !/[\w$]/.test(code[k - 1] ?? "") ? /^default\s*(->|:)/.exec(code.slice(k, k + 30)) : null;
+    if (plainDefault) {
+      hasDefault = true;
+      defaults.push({ at: k, arrow: plainDefault[1] === "->", line: code.slice(0, k).split("\n").length });
+    }
+    if (code.startsWith("case", k) && !/[\w$]/.test(code[k - 1] ?? "") && !/[\w$]/.test(code[k + 4] ?? "")) {
+      // The label runs to the first -> or : outside parentheses.
+      let j = k + 4;
+      let d = 0;
+      for (; j < close; j++) {
+        if (code[j] === "(") d++;
+        else if (code[j] === ")") d--;
+        else if (d === 0 && (code.startsWith("->", j) || (code[j] === ":" && code[j + 1] !== ":"))) break;
+      }
+      const raw = text.slice(k + 4, j).replace(/\s+/g, " ").trim();
+      const guard = /\swhen\s/.exec(` ${raw} `);
+      const plain = guard ? raw.slice(0, guard.index - 1).trim() : raw;
+      const typePattern = /^(?:final\s+)?([A-Z][\w$.]*)(?:<[^>]*>)?\s*(?:\(.*\)|[a-z_$][\w$]*)$/.exec(plain);
+      const values = typePattern ? [plain] : splitTopLevel(plain).map((v) => v.trim());
+      if (/\bdefault\b/.test(plain)) hasDefault = true;
+      labels.push({ text: raw, values, ...(typePattern ? { pattern: typePattern[1] } : {}), guarded: !!guard, arrow: code.startsWith("->", j), at: k, line: code.slice(0, k).split("\n").length });
+      k = j;
+    }
+  }
+  return { open, close, selector, expression, labels, hasDefault, defaults };
+}
+
+/** The switch for a diagnostic: the one javac's caret is on (at switch) or the one around the caret (at a case). */
+function switchFor(d: Diagnostic, own: OwnClasses, around: boolean): SwitchBlock | null {
+  const where = caretIn(d, own);
+  return where ? switchBlock(where.code, where.text, where.at, around) : null;
+}
+
+/** An enum constant written in a case: RED for RED or Light.RED. */
+const constantOf = (v: string) => v.split(".").pop()!.trim();
+
+/** The text of a sealed type's header up to its {, on one line, and the classes after permits (none when it lists none). */
+function sealedHeader(own: OwnClasses, name: string): { header: string; permits: string[]; kind: string } | null {
+  for (const [file, lines] of own.code) {
+    const code = lines.join("\n");
+    const m = new RegExp(`\\bsealed\\s+(?:(?:abstract|public|static|private|protected)\\s+)*(class|interface)\\s+${escapeRegExp(name)}\\b([^{;]*)\\{`).exec(code);
+    if (!m) continue;
+    const text = (own.lines.get(file) ?? []).join("\n");
+    const start = code.lastIndexOf("\n", m.index) + 1;
+    const header = text.slice(start, m.index + m[0].length - 1).replace(/\s+/g, " ").trim();
+    const permits = /\bpermits\s+([^{]+)$/.exec(m[2])?.[1].split(",").map((p) => simple(p.trim().replace(/<.*$/, ""))).filter(Boolean) ?? [];
+    return { header, permits, kind: m[1] };
+  }
+  return null;
+}
+
+/** A sealed type's permitted subtypes: its permits list, or else the program's types that extend or implement it directly. */
+function permittedOf(own: OwnClasses, name: string): string[] {
+  const s = sealedHeader(own, name);
+  if (!s) return [];
+  return s.permits.length ? s.permits : [...own.types.values()].filter((t) => t.supers.includes(name)).map((t) => t.name);
+}
+
+/** "the switch expression does not cover all possible input values" (and the same for a switch statement with patterns). */
+function notExhaustive(d: Diagnostic, own: OwnClasses): string {
+  const statement = d.code === "compiler.err.not.exhaustive.statement";
+  const sw = switchFor(d, own, false);
+  const what = statement ? "switch statement" : "switch expression";
+  const must = statement
+    ? "A switch statement that uses patterns (case String s) or case null must handle every possible value, as a switch expression must."
+    : "A switch expression must give a value for every possible value of what it switches on.";
+  const on = sw?.selector ? ` on ${sw.selector}` : "";
+  if (sw) {
+    const values = sw.labels.flatMap((l) => (l.pattern || l.guarded ? [] : l.values.map(constantOf))).filter((v) => /^[A-Z_][A-Z0-9_]*$/.test(v));
+    // The enum: the selector's type (from its declaration, or from a label such as Light.RED), else the only enum of the program's with every label.
+    const qualifiers = [...new Set(sw.labels.flatMap((l) => (l.pattern || l.guarded ? [] : l.values)).filter((v) => /^[\w$.]+\.[A-Z_][A-Z0-9_]*$/.test(v.trim())).map((v) => simple(v.trim().replace(/\.[^.]*$/, ""))))];
+    const selectorName = /^(?:this\s*\.\s*)?([\w$]+)$/.exec(sw.selector)?.[1];
+    const selectorType = qualifiers[0] ?? (selectorName ? receiverType(d, own, selectorName) : null);
+    const candidates = values.length ? [...own.types.values()].filter((t) => t.kind === "enum" && values.every((v) => t.constants.includes(v))) : [];
+    const en = selectorType ? candidates.find((t) => t.name === selectorType) : candidates.length === 1 ? candidates[0] : undefined;
+    if (en) {
+      const missing = en.constants.filter((k) => !values.includes(k));
+      if (missing.length)
+        return `${must} This ${what}${on} has no case for ${listed(missing)} of the enum ${en.name}. Add ${missing.length === 1 ? "a case" : "cases"} for ${missing.length === 1 ? "it" : "them"}, as in case ${missing[0]} -> ...;, or default -> ... for every constant without a case of its own. (With a case for each constant and no default, Java points out this switch again if ${en.name} ever gets a new constant.)`;
+    }
+    const covered = sw.labels.filter((l) => l.pattern && !l.guarded).map((l) => simple(l.pattern!));
+    const types = sw.labels.filter((l) => l.pattern).map((l) => simple(l.pattern!));
+    if (types.length) {
+      const sealed = [...own.types.values()].find((t) => sealedHeader(own, t.name) && types.every((p) => p === t.name || isSubtype(own, p, t.name)));
+      const permitted = sealed ? permittedOf(own, sealed.name) : [];
+      const missing = permitted.filter((p) => !covered.some((c) => c === p || isSubtype(own, p, c)));
+      if (sealed && missing.length) {
+        const guarded = sw.labels.some((l) => l.guarded && missing.includes(simple(l.pattern ?? ""))) ? " (a case with when doesn't count: its condition may be false)" : "";
+        const v = missing[0][0].toLowerCase();
+        return `${must} ${sealed.name} is sealed, and the ${sealed.kind === "interface" ? "classes that may implement it" : "classes that may extend it"} are ${listed(permitted)}, but this ${what} has no case for ${listed(missing)}${guarded}. Add ${missing.length === 1 ? "a case" : "cases"} such as case ${missing[0]} ${v} -> ...;, or default -> ... for all the others.`;
+      }
+      return `${must} This ${what}${on} has cases only for some kinds of objects${sw.labels.some((l) => l.guarded) ? " (and a case with when doesn't count: its condition may be false)" : ""}, so add default -> ... at the end for all the others. (A switch on a sealed type needs no default when it has a case for each permitted class.)`;
+    }
+    if (sw.labels.length && sw.labels.every((l) => l.values.every((v) => /^-?\d|^'|^"/.test(v.trim())) && !l.pattern)) {
+      const values = sw.labels.flatMap((l) => l.values.map((v) => v.trim()));
+      const kind = values.every((v) => v.startsWith('"')) ? "a String" : values.every((v) => v.startsWith("'")) ? "a char" : "a number";
+      return `${must} This ${what}${on} has cases for only some values, and ${kind} has far more possible values than cases can list, so it needs default -> ... at the end, for all the others.`;
+    }
+  }
+  return `${must} Add default -> ... at the end, for all the values without a case of their own. (For an enum, a case for each constant also works; for a sealed type, a case for each permitted class.)`;
+}
+
+/** "duplicate case label": a value that an earlier case of the same switch has. */
+function duplicateLabel(d: Diagnostic, own: OwnClasses): string {
+  const sw = switchFor(d, own, true);
+  const where = caretIn(d, own);
+  if (sw && where) {
+    const self = sw.labels.find((l) => l.at === where.at);
+    const earlier = sw.labels.filter((l) => l.at < where.at);
+    const norm = (v: string) => (/^[A-Z_][\w$.]*$/.test(v) ? constantOf(v) : v.replace(/\s+/g, ""));
+    for (const v of self?.values ?? []) {
+      const first = earlier.find((l) => l.values.some((w) => norm(w) === norm(v)));
+      if (first)
+        return `This switch already has case ${v} (on line ${first.line}), and each value may have only one case: Java wouldn't know which one to run. Remove one of them, or change the value if it was meant to be another one. To give several values the same code, list them in one case, as in case 1, 2 -> ....`;
+    }
+  }
+  return "Two cases of this switch have the same value, and each value may have only one case. Remove one of them, or change its value. To give several values the same code, list them in one case, as in case 1, 2 -> ....";
+}
+
+/** "different case kinds used in the switch": case ... -> and case ...: (or default -> and default:) in one switch. */
+function mixedCaseKinds(d: Diagnostic, own: OwnClasses): string {
+  const sw = switchFor(d, own, true);
+  const where = caretIn(d, own);
+  // Every label in order, a plain default among them: "case 1" or "default".
+  const all = sw ? [...sw.labels.map((l) => ({ at: l.at, arrow: l.arrow, name: `case ${l.text}` })), ...sw.defaults.map((l) => ({ at: l.at, arrow: l.arrow, name: "default" }))].sort((a, b) => a.at - b.at) : [];
+  const self = where ? all.find((l) => l.at === where.at) : undefined;
+  const first = all[0];
+  const arrowFirst = first ? first.arrow : !self?.arrow;
+  const label = self ? self.name : "this case";
+  const opening = first?.name === "default" ? "its first label, default," : "its first case";
+  const firstName = first?.name ?? "case 1";
+  if (arrowFirst)
+    return `This switch mixes the two kinds of case: ${opening} uses an arrow (${firstName} -> ...), and ${label} uses a colon (${label}:), as in older Java. One switch must use one kind. With arrows, each case runs only its own code and needs no break: write ${label} -> ... (with { } around several statements).`;
+  return `This switch mixes the two kinds of case: ${opening} uses a colon (${firstName}:), and ${label} uses an arrow (${label} -> ...). One switch must use one kind: write ${label}: like the others, or change them all to arrows, which need no break (each arrow case runs only its own code).`;
+}
+
+/** "selector type double is not allowed": a switch on a long, float, double or boolean. */
+function selectorNotAllowed(d: Diagnostic): string {
+  const t = /^selector type ([\w$.]+) is not allowed/.exec(d.message)?.[1] ?? "this type";
+  const rule = `switch can't switch on ${aType(t)}. In Java 21 it works on int, char, short and byte values, on Strings and enums, and (with patterns such as case String s) on objects, but not on long, float, double or boolean values.`;
+  if (t === "boolean") return `${rule} For a boolean, use if and else: if (on) { ... } else { ... }.`;
+  if (t === "long") return `${rule} Use if and else if instead. If the values always fit in an int, you could cast it: switch ((int) value).`;
+  return `${rule} Use if and else if instead, as in if (value == 2.5) { ... } else if (...) { ... }. Comparing ${t === "float" || t === "double" ? "decimal numbers with == is fragile anyway: a calculated value is often a tiny bit off, so compare ranges, such as value < 3.0, where you can" : "them works the same way"}.`;
+}
+
+/** "incompatible types: char cannot be converted to String" for a case's value: it must have the switch's type. */
+function caseValueType(d: Diagnostic): string | null {
+  const c = atCaret(d);
+  const m = /^incompatible types: ([\w$.]+) cannot be converted to ([\w$.]+)$/.exec(d.message);
+  // Only for the label itself: javac's caret right after case, or after a comma in its list of values (not in the case's code).
+  if (!c || !m || !/^\s*case\s+(?:[^,:>]+,\s*)*$/.test(beforeCaret(c))) return null;
+  const [from, to] = [simple(m[1]), simple(m[2])];
+  const value = /^([^,:\->]+?)\s*(?:,|->|:)/.exec(c.at)?.[1].trim();
+  let hint = "";
+  if (from === "char" && to === "String") hint = ` Text goes in double quotes: ${value ? value.replace(/^'(.*)'$/, '"$1"') : '"a"'}, not ${value ?? "'a'"}.`;
+  else if (from === "String" && /^(int|short|byte|char|Integer)$/.test(to)) hint = ` ${to === "char" ? "A char goes in single quotes, as in 'a'" : `Write the number without quotes${value ? `: ${value.replace(/^"(.*)"$/, "$1")}` : ""}`}.`;
+  else if (/^(int|short|byte)$/.test(from) && to === "String") hint = ` Put the text in double quotes${value ? `: "${value}"` : ""}.`;
+  return `This case's value is ${aType(from)}, but the switch works on ${aType(to)}, so the case could never match: each case's value must have the type of what the switch works on.${hint}`;
+}
+
+/** The label of the case whose block is around a position: case 2 for case 2 -> { ... }. */
+function caseOfBlock(code: string, text: string, at: number): string | null {
+  const open = blockAround(code, at);
+  if (open < 0) return null;
+  const m = /\bcase\s+([^;{}]+?)\s*->\s*$/.exec(code.slice(Math.max(0, open - 200), open));
+  if (!m) return null;
+  const start = open - (code.slice(Math.max(0, open - 200), open).length - m.index);
+  return text.slice(start, open).replace(/\s*->\s*$/, "").replace(/\s+/g, " ").trim();
+}
+
+/** "switch rule completes without providing a value": a case's block in a switch expression that ends without yield. */
+function ruleWithoutValue(d: Diagnostic, own: OwnClasses): string {
+  const where = caretIn(d, own);
+  const label = where ? caseOfBlock(where.code, where.text, where.at) : null;
+  const block = label ? `The block of ${label} -> { ... }` : "This case's block";
+  return `${block} ends without giving a value, and in a switch expression every case must give one. End the block with yield and the value, as in yield result; (yield is to a case's block what return is to a method). It may end with throw instead, for a value that shouldn't happen. return doesn't work here: it would leave the whole method.`;
+}
+
+/** "switch expression completes without providing a value": a switch expression with case ...: whose last statements give no value. */
+function switchWithoutValue(d: Diagnostic, own: OwnClasses): string {
+  const first = switchFor(d, own, true)?.labels[0]?.text ?? "1";
+  return `This switch expression uses cases with a colon (case ${first}:), and its last group of statements ends without giving a value. In a switch expression, each case's statements must end with yield and its value, as in yield result;, or with throw. Or use arrow cases, which give the value right after the arrow: case ${first} -> ...;.`;
+}
+
+/** "switch expression does not have any result expressions": a switch used as a value whose cases give none. */
+function switchNoValues(d: Diagnostic): string {
+  const c = atCaret(d);
+  const target = c ? /([\w$<>\[\]]+\s+[\w$]+\s*=|[\w$]+\s*=|return)\s*$/.exec(beforeCaret(c))?.[1].trim() : undefined;
+  const statement = target && target !== "return" ? ` If the switch should only do something (such as print), make it a statement on its own: remove ${target} in front of it.` : "";
+  return `None of the cases of this switch expression gives a value, but it is used as a value${target && target !== "return" ? ` (${target} switch ...)` : ""}. With arrow cases, write the value right after the arrow: case 1 -> "one";. With colons, give it with yield: case 1: yield "one";.${statement}`;
+}
+
+/** return inside a switch expression. */
+function returnInSwitch(d: Diagnostic): string {
+  const value = /^return\s+([^;]+?)\s*;/.exec(atCaret(d)?.at ?? "")?.[1];
+  return `return can't be used inside a switch expression: the switch is still working out its value, and return would leave the whole method. Give the case's value with yield instead${value ? `: yield ${value};` : ", as in yield \"Monday\";"}. To return that value from the method, return the whole switch: return switch (...) { ... };.`;
+}
+
+/** break inside a switch expression. */
+function breakInSwitch(): string {
+  return "break can't leave a switch expression, because each case must give a value. End the case with yield and its value, as in yield \"Other\";, or with throw. (In a switch statement with case ...:, break ends a case; in a switch expression, yield does.)";
+}
+
+/** "not a statement" for a value on its own in a case of a switch expression: it needs yield. */
+function valueInSwitch(d: Diagnostic, own: OwnClasses): string | null {
+  const where = caretIn(d, own);
+  const c = atCaret(d);
+  if (!where || !c) return null;
+  const sw = switchBlock(where.code, where.text, where.at, true);
+  if (!sw?.expression) return null;
+  const value = /^([^;]+?)\s*;/.exec(c.at)?.[1];
+  if (!value || /=|\+\+|--/.test(value)) return null;
+  return `${value} on its own isn't a statement. In a switch expression, a case whose code is a block { } (or that uses a colon, case 1:) gives its value with yield: yield ${value};.`;
+}
+
+/** "this case label is dominated by a preceding case label": an earlier case matches everything this one would. */
+function dominatedLabel(d: Diagnostic, own: OwnClasses): string {
+  const sw = switchFor(d, own, true);
+  const where = caretIn(d, own);
+  const self = sw && where ? [...sw.labels].reverse().find((l) => l.at < where.at) : undefined;
+  const earlier = sw && self ? sw.labels.filter((l) => l.at < self.at && l.pattern && !l.guarded) : [];
+  const known: Record<string, string[]> = { CharSequence: ["String", "StringBuilder"], Number: ["Integer", "Long", "Double", "Float", "Short", "Byte"], Comparable: ["String", "Integer", "Long", "Double"] };
+  const covers = (sup: string, sub: string) => sup === sub || sup === "Object" || known[sup]?.includes(sub) || isSubtype(own, sub, sup);
+  const mine = self?.pattern ? simple(self.pattern) : undefined;
+  const by = mine ? earlier.find((l) => covers(simple(l.pattern!), mine)) : earlier[earlier.length - 1];
+  if (self && by) {
+    const sub = mine && mine !== simple(by.pattern!) ? ` every ${mine} is ${aType(simple(by.pattern!))}.` : "";
+    const order = mine ? "Put the more specific case first" : "Put the case for this value first (constants go before the patterns that would match them)";
+    return `An earlier case, case ${by.text} (on line ${by.line}), already matches every value this one would:${sub || ` it matches every ${simple(by.pattern!)}.`} Java tries the cases from top to bottom, so case ${self.text} could never be chosen. ${order}: case ${self.text} above case ${by.text}.`;
+  }
+  return "An earlier case of this switch already matches every value this case would, so this one could never be chosen: Java tries the cases from top to bottom. Put the more specific case first (and a constant before a pattern that would match it).";
+}
+
+/** "sealed, non-sealed or final modifiers expected": a class that extends a sealed type without saying how it may be extended in turn. */
+function sealedChildModifier(d: Diagnostic, own: OwnClasses): string {
+  const line = (own.lines.get(d.file)?.[d.line - 1] ?? atCaret(d)?.line ?? "").replace(/\{.*$/, "").replace(/\s+/g, " ").trim();
+  const m = /\b(class|interface)\s+([\w$]+)/.exec(line);
+  const t = m ? typeNamed(own, m[2], d.file) : undefined;
+  const parent = t?.supers.find((s) => sealedHeader(own, s));
+  const p = parent ? sealedHeader(own, parent) : null;
+  const linkVerb = p?.kind === "interface" && m?.[1] !== "interface" ? "implements" : "extends";
+  const intro = m && parent ? `${m[2]} ${linkVerb} the sealed ${p!.kind} ${parent}, so its` : "A class that extends a sealed class or implements a sealed interface must say in its";
+  if (m?.[1] === "interface")
+    return `${intro} header must say whether other types may extend ${m ? m[2] : "it"} in turn: sealed (only the ones it lists after permits) or non-sealed (any may). Write ${line.replace(/\binterface\b/, "non-sealed interface")}, or sealed with a permits list.`;
+  const abstract = /\babstract\b/.test(line);
+  const fixed = abstract ? line.replace(/\babstract\s+class\b/, "non-sealed abstract class") : line.replace(/\bclass\b/, "final class");
+  return `${intro} header must say whether other classes may extend ${m ? m[2] : "it"} in turn: final (none may), sealed (only the ones it lists after permits) or non-sealed (any may). ${abstract ? "An abstract class is meant to be extended, so it can't be final: write" : "Usually it's final: write"} ${fixed}. (A record or an enum is final by itself, so it needs none of these words.)`;
+}
+
+/** "class is not allowed to extend sealed class: Shape (as it is not listed in its 'permits' clause)". */
+function notPermitted(d: Diagnostic, own: OwnClasses): string {
+  const parent = /sealed class: ([\w$.]+)/.exec(d.message)?.[1];
+  const line = own.lines.get(d.file)?.[d.line - 1] ?? atCaret(d)?.line ?? "";
+  const child = /\b(?:class|interface|record|enum)\s+([\w$]+)/.exec(line)?.[1];
+  const p = parent ? sealedHeader(own, simple(parent)) : null;
+  if (!parent || !child || !p) return `${parent ?? "This type"} is sealed: only the classes listed after permits in its header may extend or implement it, and this one isn't listed. Add it to that list, or don't extend or implement ${parent ?? "it"}.`;
+  const name = simple(parent);
+  const childKind = typeNamed(own, child, d.file)?.kind;
+  const verb = p.kind === "interface" && childKind !== "interface" ? "implement" : "extend";
+  const remove = `If not, remove ${verb === "implement" ? "implements" : "extends"} ${name} from ${child}.`;
+  if (p.permits.length)
+    return `${name} is sealed: only the classes named after permits in its header (${listed(p.permits)}) may ${verb} it, and ${child} isn't one of them. If ${child} should be ${aType(name)}, add it to the list: ${p.header}, ${child}. ${remove}`;
+  // No permits list: the subtypes in the sealed type's own file are permitted without one. A list must name them too, a type nested in another by its path (Shape.Circle).
+  const sealedType = typeNamed(own, name, d.file);
+  const pathOf = (t: OwnClass) => [...typesAround(own, t.file, t.from).filter((x) => x !== t && x.from <= t.from && t.to <= x.to).reverse().map((x) => x.name), t.name].join(".");
+  const others = [...new Set(permittedOf(own, name).filter((n) => n !== child).map((n) => {
+    const t = typeNamed(own, n, sealedType?.file ?? d.file);
+    return t ? pathOf(t) : n;
+  }))];
+  const now = others.length ? `it has no permits list, so only the classes in its own file (${listed(others)}) may ${verb} it` : `it has no permits list, so only the classes in its own file may ${verb} it`;
+  const added = `${p.header} permits ${[...others, child].join(", ")}`;
+  return `${name} is sealed: ${now}, and ${child} isn't in that file. If ${child} should be ${aType(name)}, give ${name} a permits list that names ${others.length ? `them and ${child}` : child}: ${added}. ${remove}`;
+}
+
+/** A pattern variable (instanceof String text, case Circle c) used where it doesn't exist. */
+function patternScope(d: Diagnostic, own: OwnClasses): string | null {
+  const name = /symbol:\s+variable ([\w$]+)/.exec(d.message)?.[1];
+  const where = caretIn(d, own);
+  if (!name || !where || !where.code.startsWith(name, where.at)) return null;
+  const { code, at } = where;
+  const body = methodBodyAround(code, at);
+  if (!body) return null;
+  const n = escapeRegExp(name);
+  const decl = new RegExp(`\\binstanceof\\s+(?:final\\s+)?([\\w$.]+(?:\\s*<[^>]*>)?)\\s+${n}\\b|\\bcase\\s+([\\w$.]+(?:\\s*<[^>]*>)?)\\s+${n}\\s*(?:->|:|when\\b)`, "g");
+  let last: RegExpExecArray | null = null;
+  for (let m; (m = decl.exec(code)) && m.index < at; ) if (m.index > body[0]) last = m;
+  if (!last) return null;
+  // An ordinary variable of the same name created after the pattern (int s = 0;, for (String s : words), catch (Exception s))
+  // is the one the name was meant for: leave the error to outOfScope. The slice starts after the pattern so that it isn't matched itself.
+  const TYPE = `(?:int|long|short|byte|double|float|boolean|char|var|[A-Z][\\w$.]*)(?:\\s*<[^;{}()=]*>)?(?:\\s*\\[\\s*\\])*`;
+  const local = new RegExp(`\\bcatch\\s*\\([\\w$.|\\s]+?\\s${n}\\s*\\)|(?<=[;{}(]\\s*)(?:final\\s+)?${TYPE}\\s+${n}\\s*[=;:]`);
+  if (local.test(code.slice(last.index + last[0].length, at))) return null;
+  const line = code.slice(0, last.index).split("\n").length;
+  if (last[2]) return `${name} was created by case ${last[2].replace(/\s+/g, "")} ${name} on line ${line}, and it exists only in that case. Use it there.`;
+  const type = last[1].replace(/\s+/g, "");
+  // !(value instanceof Integer number): the variable exists where the test was false, so not in the if's own block.
+  const negated = /!\s*\(\s*[\w$.()\s]*$/.test(code.slice(Math.max(0, last.index - 60), last.index));
+  const intro = `${name} is a pattern variable: instanceof ${type} ${name} on line ${line} creates it, and it exists only where Java knows the test was true`;
+  // The if whose condition holds the instanceof (none for a ?: or a return with ||).
+  let ifOpen = -1;
+  for (const m of code.slice(body[0], last.index).matchAll(/\bif\s*\(/g)) {
+    const open = body[0] + m.index! + m[0].length - 1;
+    if (pastClose(code, open) > last.index) ifOpen = open;
+  }
+  if (ifOpen < 0) {
+    if (negated) return `${intro}, which for !(... instanceof ${type} ${name}) is only where that test was false. Here Java can't be sure of that, so ${name} doesn't exist here. Test with instanceof in an if, and use ${name} where the if knows the result.`;
+    return `${intro}: after && in the same condition, and in the part of ? : for true. Here the test may have been false (after ||, or in the part of ? : for false), so ${name} doesn't exist here. Use ${name} only where the test is known to be true, or test with instanceof in an if and use ${name} in its block.`;
+  }
+  const condEnd = pastClose(code, ifOpen) - 1;
+  const thenEnd = statementEnd(code, condEnd + 1);
+  const after = code.slice(thenEnd).match(/^\s*else\b/);
+  const elseStart = after ? thenEnd + after[0].length : -1;
+  const elseEnd = after ? statementEnd(code, elseStart) : -1;
+  if (at < condEnd) {
+    const between = code.slice(last.index, at);
+    if (!negated && /\|\|/.test(between))
+      return `${intro}: inside the if's block, and after && in the same condition. After || the test may have been false (the part after || runs only when the part before it was false), so ${name} doesn't exist there. If both must hold, use && instead; otherwise test ${name} inside the if's block.`;
+    if (negated && /&&/.test(between))
+      return `${intro}. After !(... instanceof ${type} ${name}) && in the same condition, the instanceof test was false (the part after && runs only when the part before it was true), so ${name} doesn't exist there. With || instead, the part after it runs only when the test was true, and ${name} exists there: if (!(... instanceof ${type} ${name}) || ...).`;
+    return `${intro}. Here, in the same condition, Java can't be sure the test was true, so ${name} doesn't exist here. Use ${name} after && in the condition, or inside the if's block.`;
+  }
+  const inThen = condEnd < at && at < thenEnd;
+  const inElse = elseStart >= 0 && elseStart <= at && at < elseEnd;
+  if (negated && inThen)
+    return `${intro}. In if (!(... instanceof ${type} ${name})), the block runs when the test was false, so ${name} doesn't exist in it. Use ${name} in the else block, or after the if when its block always ends with return (or throw).`;
+  if (!negated && inElse)
+    return `${intro}: inside the if's block (and after && in the same condition). In the else block the test was false, so ${name} doesn't exist there. Move the code that uses ${name} into the if's block. Or turn the test around, if (!(... instanceof ${type} ${name})) { ... } else { ... }, so that the else block is where ${name} exists.`;
+  if (negated) return `${intro}, which for !(... instanceof ${type} ${name}) is after the if only when the if's block always leaves (with return or throw). Use it inside an else block, or end the if's block with return.`;
+  return `${intro}: inside the if's block (and after && in the same condition). Here, after that block, it doesn't exist. Use ${name} inside the block. Or turn the test around, if (!(... instanceof ${type} ${name})) { return; }, and then ${name} exists after the if.`;
+}
+
+/** Where the statement that starts at `from` ends (just past it): a block in { }, an if with its else, a loop with its body, or a statement up to its ;. */
+function statementEnd(code: string, from: number): number {
+  const k = from + (/^\s*/.exec(code.slice(from))?.[0].length ?? 0);
+  if (code[k] === "{") {
+    const close = closeOf(code, k);
+    return close < 0 ? code.length : close + 1;
+  }
+  const head = /^(if|while|for|switch|synchronized)\s*\(/.exec(code.slice(k));
+  if (head) {
+    const close = pastClose(code, k + head[0].length - 1);
+    if (close < 0) return code.length;
+    const end = statementEnd(code, close);
+    const more = head[1] === "if" ? /^\s*else\b/.exec(code.slice(end)) : null;
+    return more ? statementEnd(code, end + more[0].length) : end;
+  }
+  if (/^(?:else|do|try)\b/.test(code.slice(k))) return statementEnd(code, k + /^\w+/.exec(code.slice(k))![0].length);
+  let depth = 0;
+  for (let j = k; j < code.length; j++) {
+    if (code[j] === "(" || code[j] === "{") depth++;
+    else if (code[j] === ")" || code[j] === "}") depth--;
+    else if (code[j] === ";" && depth === 0) return j + 1;
+    if (depth < 0) return j;
+  }
+  return code.length;
+}
+
+/** "illegal text block open delimiter sequence, missing line terminator": text after the opening """ on its line, or a closing """ read as an opening one. */
+function textBlockOpen(d: Diagnostic, own: OwnClasses): string {
+  const lines = own.lines.get(d.file);
+  const c = atCaret(d);
+  // An odd number of """ before this line: this one closes a text block that didn't open properly above.
+  const before = lines ? lines.slice(0, d.line - 1).join("\n").split('"""').length - 1 : 0;
+  if (before % 2 === 1) {
+    const opener = lines!.slice(0, d.line - 1).map((l, i) => (/"""[ \t]*\S/.test(l) ? i + 1 : 0)).filter(Boolean).pop();
+    return `Java read this """ as the start of another text block, because the text block above${opener ? ` (on line ${opener})` : ""} didn't open properly. Fix that one, and this error goes away too.`;
+  }
+  const rest = c?.at.trim() ?? "";
+  if (/"""/.test(rest)) {
+    const one = rest.slice(0, rest.indexOf('"""'));
+    return `A text block (between """ and """) can't be on one line: its text starts on the line after the opening """. For one line of text, use an ordinary string in double quotes: "${one}".`;
+  }
+  const start = c ? beforeCaret(c).trim() : '"""';
+  return `A text block's opening """ must end its line: the text starts on the next line. Here text follows the """ on the same line. Put a line break right after the """: keep ${start} on this line, and move the text after it${rest && rest.length <= 40 ? ` (${rest})` : ""} to the next line.`;
+}
+
+/** "incompatible types: String cannot be converted to int" when a value goes into a variable created with var: its type came from its first value and stays. */
+function varKeepsType(d: Diagnostic, own: OwnClasses): string | null {
+  const where = caretIn(d, own);
+  const m = /^incompatible types: (\S+) cannot be converted to (\S+)$/.exec(d.message);
+  if (!where || !m) return null;
+  const lineStart = where.code.lastIndexOf("\n", where.at - 1) + 1;
+  const name = /^\s*([\w$]+)\s*=(?!=)/.exec(where.code.slice(lineStart, where.at))?.[1];
+  const body = methodBodyAround(where.code, where.at);
+  if (!name || !body) return null;
+  const decl = new RegExp(`\\bvar\\s+${escapeRegExp(name)}\\s*=\\s*([^;]+?)\\s*;`).exec(where.text.slice(body[0], lineStart));
+  if (!decl) return null;
+  const [from, to] = [simple(m[1]), simple(m[2])];
+  return `${name} was created with var ${name} = ${decl[1]};, so Java gave it the type of that first value, ${to}, and it keeps that type: var doesn't let a variable change type later. So it can't hold ${aType(from)}. Use another variable for the ${from}, or, if ${name} should be ${aType(from)}, give it ${aType(from)} value where it's created.`;
+}
+
+/** "cannot infer type for local variable x": var without a value, with null, an array initializer or a lambda. */
+function varInfer(d: Diagnostic): string | null {
+  const m = /^cannot infer type for local variable ([\w$]+)\n\s*\((.*)\)$/.exec(d.message);
+  if (!m) return null;
+  const [, name, why] = m;
+  if (/without initializer/.test(why))
+    return `var lets Java work out a variable's type from the value it starts with, so a var variable needs its value on the same line: var ${name} = 0;. If it gets its value later, write its type instead: int ${name};.`;
+  if (/initializer is 'null'/.test(why)) return `var lets Java work out a variable's type from its starting value, but null has no type of its own, so Java can't tell what ${name} should hold. Write the type instead, as in String ${name} = null;.`;
+  if (/array initializer/.test(why)) return `Java can't tell the type of ${name} from { ... } alone. Write the array's type, as in int[] ${name} = {1, 2, 3};, or create it with new: var ${name} = new int[] {1, 2, 3};.`;
+  if (/lambda expression|method reference/.test(why)) return `A ${/lambda/.test(why) ? "lambda" : "method reference"} has no type of its own: it takes the type of the place it's put in. So var can't work out the type of ${name}: write the interface type instead, such as Comparator<String> or BinaryOperator<Integer>.`;
+  return null;
+}
+
+/** "'var' is not allowed here": var for an instance variable, a return type or a parameter. */
+function varNotAllowed(d: Diagnostic, own: OwnClasses): string {
+  const c = atCaret(d);
+  const after = c?.at ?? "";
+  const before = c ? beforeCaret(c) : "";
+  const name = /^var\s+([\w$]+)/.exec(after)?.[1];
+  const local = "var works only for local variables (the ones created inside a method, in for loops included), a lambda's parameters and a record pattern's components.";
+  if (/^var\s+[\w$]+\s*\(/.test(after)) return `${local} A method's return type must be written out: replace var before ${name}(...) with the type it returns, such as int.`;
+  if (/\binstanceof\s+(?:final\s+)?$/.test(before)) return `A pattern after instanceof must name the type it checks for, since that type is the whole question: replace var with it, as in o instanceof String ${name ?? "s"}.`;
+  if (/\bcatch\s*\(\s*(?:final\s+)?$/.test(before)) return `${local} A catch must name the type of exception it catches: replace var with it, such as Exception, as in catch (Exception ${name ?? "e"}).`;
+  const record = /\brecord\s+([\w$]+)\s*(?:<[^>]*>)?\s*\([^)]*$/.exec(before);
+  if (record) return `${local} A record's components are listed in its header with their types written out: replace var${name ? ` before ${name}` : ""} with the type, such as int, as in record ${record[1]}(int ${name ?? "x"}).`;
+  if (/[(,]\s*(?:final\s+)?$/.test(before)) return `${local} A method's parameters must have their types written out: replace var${name ? ` before ${name}` : ""} with the type, such as int.`;
+  const inMethod = (() => {
+    const where = caretIn(d, own);
+    return where ? !!methodBodyAround(where.code, where.at) : false;
+  })();
+  if (!inMethod && name) {
+    const value = /=\s*([^;]+?)\s*;/.exec(after)?.[1] ?? "";
+    const type = /^-?\d+$/.test(value) ? "int" : /^-?\d*\.\d+$/.test(value) ? "double" : /^"/.test(value) ? "String" : /^(?:true|false)$/.test(value) ? "boolean" : /^new\s+([\w$]+)\s*\(/.exec(value)?.[1];
+    // Its modifiers as written (private static final), kept in the example; private when it has none.
+    const modifiers = /((?:\b(?:public|protected|private|static|final|transient|volatile)\s+)*)$/.exec(before)?.[1].trim().replace(/\s+/g, " ") || "private";
+    const example = type ? `, as in ${modifiers} ${type} ${name}${value ? ` = ${value}` : ""};` : "";
+    const what = /\bstatic\b/.test(modifiers) ? "a class variable (it's in the class, not in a method, and static: there is one for the whole class)" : "an instance variable (it's in the class, not in a method)";
+    return `${local} ${name} is ${what}, so it needs its type written out: replace var with the type${example}.`;
+  }
+  return `${local} Write the type here instead of var.`;
+}
+
+/** The method a line of the learner's code is in: its name, its parameters' names and its header's line, read from the text above the line. */
+function methodHeaderAbove(c: CrashContext, f: Frame): { params: string[]; types: string[]; line: number; returns: string } | null {
+  const lines = c.code.get(f.file);
+  if (!lines) return null;
+  const name = escapeRegExp(f.method);
+  const re = new RegExp(`(?:^|[\\s;{}])((?:[\\w$<>\\[\\],.?]+\\s+)+)${name}\\s*\\(([^()]*)\\)\\s*(?:throws\\s[^{]*)?\\{?\\s*$`);
+  for (let i = f.line - 1; i >= 0 && i >= f.line - 200; i--) {
+    const m = re.exec(lines[i]);
+    if (m && !/\b(?:return|new|=)\b/.test(lines[i].slice(0, m.index + 1))) {
+      const parts = m[2].trim() ? splitTopLevel(m[2]).map((p) => p.trim()) : [];
+      // The return type: the last word before the name (void in "public static void bounce(" and in "static <T> void f(").
+      const returns = m[1].trim().split(/\s+/).pop() ?? "";
+      return { params: parts.map((p) => /([\w$]+)$/.exec(p)?.[1] ?? ""), types: parts.map((p) => p.replace(/\s*[\w$]+$/, "").replace(/^final\s+/, "").trim()), line: i + 1, returns };
+    }
+  }
+  return null;
+}
+
+/** The arguments of the first call of a method on a line of code: ["n - 2"] for countDown(n - 2). */
+function argumentsOfCall(code: string, method: string): string[] | null {
+  const m = new RegExp(`(?<![\\w$])${escapeRegExp(method)}\\s*\\(`).exec(code);
+  if (!m) return null;
+  let depth = 0;
+  for (let k = m.index + m[0].length - 1; k < code.length; k++) {
+    if (code[k] === "(") depth++;
+    else if (code[k] === ")" && --depth === 0) {
+      const inside = code.slice(m.index + m[0].length, k).trim();
+      return inside ? splitTopLevel(inside).map((a) => a.trim()) : [];
+    }
+  }
+  return null;
+}
+
+/**
+ * The part of a StackOverflowError's trace that repeats: the learner's methods that kept calling each other, by class and method
+ * (lines may differ, as in fib(n - 1) + fib(n - 2)), after any frames on top that don't repeat (a helper, or Java's own code).
+ * `start` is the index in frames of the cycle's first frame, `period` the number of methods in it; null when nothing repeats.
+ */
+function repeatingCycle(frames: Frame[]): { start: number; period: number } | null {
+  const keys = frames.slice(0, 200).map((f) => `${f.cls}.${f.method}`);
+  for (let start = 0; start <= Math.min(10, keys.length); start++)
+    for (let period = 1; period <= 4; period++) {
+      // Each frame the same as the one a round further in, for at least three rounds, and down to the last few frames (main) or for long.
+      let same = 0;
+      while (start + same + period < keys.length && keys[start + same] === keys[start + same + period]) same++;
+      if (same + period >= 3 * period && (start + same + period >= keys.length - 3 || same >= 30)) return { start, period };
+    }
+  return null;
+}
+
+/** StackOverflowError: recursion that never reaches its base case (or that has none), by the part of the learner's frames that repeats. */
+function stackOverflow(_m: string, c: CrashContext): string {
+  const plain = "A method kept calling itself (or methods kept calling each other) without stopping, until the call stack ran out of room. Check the stopping condition of the recursion.";
+  const cycle = repeatingCycle(c.frames);
+  if (!cycle) return plain;
+  // The frames of one round, each one stopped at the line where it calls the next (a round further in than the cycle's first frame, whose line may be elsewhere).
+  const round = c.frames.slice(cycle.start + cycle.period, cycle.start + 2 * cycle.period);
+  const ran = "and those calls never stopped: each call waits for the one it makes, and Java keeps every unfinished call on the call stack, until there was no room left for more. Then Java stopped the program with StackOverflowError.";
+  // toString (or equals, hashCode) calling itself through Java's String.valueOf or a StringBuilder: objects that link back to themselves.
+  const objectMethod = round.length === 1 && /^(?:toString|equals|hashCode)$/.test(round[0].method);
+  if (objectMethod && c.stack.some((s) => /^(?:java\.base\/)?java\.(?:lang\.String\.valueOf|lang\.StringBuilder\.append|lang\.String\.join|util\.Objects\.|util\.Arrays\.|util\.AbstractCollection\.|util\.AbstractMap\.)/.test(s))) {
+    const f = round[0];
+    return `${binarySimple(f.cls)}'s ${f.method} ended up calling itself again (line ${f.line}, ${f.file}), through Java's own code: an object's ${f.method} uses the ${f.method} of the objects it links to, and here the links went around in a circle (such as a.next = a, or two objects that link to each other), so the calls never came to an end. ${ran.replace(/^and those calls never stopped: each/, "Each")} Check how the objects are linked: a chain that ends with null stops, a circle doesn't. If objects must link back, leave that link out of ${f.method}.`;
+  }
+  const methods = round.filter((f, i) => round.findIndex((g) => g.cls === f.cls && g.method === f.method) === i);
+  if (methods.length > 1) {
+    return `${listed(methods.map((f) => methodLabel(f)))} kept calling each other (${listed(methods.map((f) => `line ${f.line}`))}), ${ran} At least one of them needs a base case, an if that returns without calling the other, and the values they pass on must move toward it. Follow a few calls by hand, writing down the value each one gets.`;
+  }
+  const f = round[0];
+  const name = methodLabel(f);
+  const head = `${name} calls itself on line ${f.line} (${f.file}), ${ran}`;
+  const h = methodHeaderAbove(c, f);
+  const call = lineOf(c, f)?.code ?? "";
+  const args = argumentsOfCall(call, f.method);
+  if (!h) return `${head} Check its base case: the case that stops without calling ${name} again.`;
+  const lines = c.code.get(f.file) ?? [];
+  const between = lines.slice(h.line, f.line - 1);
+  const callAt = call.search(new RegExp(`(?<![\\w$])${escapeRegExp(f.method)}\\s*\\(`));
+  const sameLineBase = callAt > 0 && /\bif\b|\?/.test(call.slice(0, callAt));
+  const baseIndex = between.findIndex((l) => /\bif\s*\(/.test(l));
+  const p = h.params[0];
+  const numeric = /^(?:int|long|short|byte|double)$/.test(h.types[0] ?? "");
+  if (baseIndex < 0 && !sameLineBase) {
+    const test = numeric && p ? `${p} <= 0` : "...";
+    // A void method has no answer to give back: its base case just returns.
+    if (h.returns === "void") return `${head} ${name} has no base case: a case, checked before the call, that stops without calling ${name} again. Add one at its start, such as if (${test}) { return; }.`;
+    return `${head} ${name} has no base case: a case, checked before the call, that gives back its answer without calling ${name} again. Add one at its start, such as if (${test}) { return ...; }, with the answer for the smallest case.`;
+  }
+  if (args && args.length === h.params.length && args.every((a, i) => a === h.params[i]))
+    return `${head} It calls itself with the same value${args.length === 1 ? "" : "s"} it got (${f.method}(${args.join(", ")})), so it never gets any closer to its base case. Change the call so that each call moves toward the base case${numeric && p ? `, for example ${f.method}(${[`${p} - 1`, ...args.slice(1)].join(", ")})` : ""}.`;
+  const baseLine = baseIndex >= 0 ? h.line + 1 + baseIndex : f.line;
+  const cond = baseIndex >= 0 ? /\bif\s*\((.*)\)/.exec(between[baseIndex])?.[1] ?? "" : "";
+  const skip = /==/.test(cond) && p && numeric
+    ? ` An == test is missed when the value jumps over it (counting down by 2 from an odd number skips 0): a test such as ${p} <= 0 stops at any value past it.`
+    : " Follow a few calls by hand, writing down the value each one gets.";
+  return `${head} ${name} has a base case (the if on line ${baseLine}), but the calls never reach it. Check that each call moves its value toward the base case and can't go past it.${skip} (A base case that would be reached only after tens of thousands of calls is too deep as well: then use a loop.)`;
+}
+
+/** The program's own classes that link to objects of their own class (Node next; TreeNode left, right): the nodes of a linked list or a tree. */
+function nodeClasses(own: OwnClasses | undefined): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const t of own?.types.values() ?? []) {
+    const links = t.members.filter((m) => !m.method && !m.static && m.type.replace(/<.*$/, "") === t.name).map((m) => m.name);
+    if (links.length) out.set(t.name, links);
+  }
+  return out;
+}
+
+/** Whether the loop around a frame's line moves a variable along one of these links (p = p.mentor;), in its body or its for header. */
+function followsInLoop(c: CrashContext, f: Frame, links: string[]): boolean {
+  const lines = c.code.get(f.file);
+  if (!lines || f.line < 1 || f.line > lines.length) return false;
+  const code = lines.join("\n");
+  const at = lines.slice(0, f.line - 1).join("\n").length + 1;
+  const step = new RegExp(`(?<![\\w$.])([\\w$]+)\\s*=\\s*\\1\\s*\\.\\s*(?:${links.map(escapeRegExp).join("|")})\\b`);
+  // The crash's own line (while (p.mentor != null) p = p.mentor;), then each loop around it.
+  if (step.test(lines[f.line - 1])) return true;
+  for (let open = blockAround(code, at); open >= 0; open = blockAround(code, open)) {
+    const before = code.slice(Math.max(0, open - 300), open);
+    const loop = /\b(?:while|for)\s*\(([^{};]*(?:;[^{};]*){0,2})\)\s*$|\bdo\s*$/.exec(before);
+    if (loop && (step.test(loop[0]) || step.test(code.slice(open, closeOf(code, open))))) return true;
+    if (/\b(?:class|interface|enum|record)\s+[\w$]+[^;{}]*$/.test(before)) return false;
+  }
+  return false;
+}
+
+/** NullPointerException on a node of a linked list or a tree: following next past the end, an empty list's head, a leaf's children. */
+function linkedNull(m: string, c: CrashContext): string | null {
+  const nodes = nodeClasses(c.own);
+  if (!nodes.size || !c.own) return null;
+  const field = /^Cannot (read|assign) field "([\w$]+)" because "(.+)" is null$/.exec(m);
+  const call = /^Cannot invoke "(?:[\w$]+[.$])*([\w$]+)\.([\w$]+)\(.*?\)" because "(.+)" is null$/.exec(m);
+  if (!field && !call) return null;
+  const member = field ? field[2] : call![2];
+  const because = field ? field[3] : call![3];
+  // The class of the null object: the one the method belongs to, or the node class with that field, or the type of the field that was null.
+  const last = /(?:^|\.)([\w$]+)$/.exec(because)?.[1] ?? "";
+  const fieldType = (n: string) => [...c.own!.types.values()].flatMap((t) => t.members).find((x) => !x.method && x.name === n && nodes.has(x.type.replace(/<.*$/, "")))?.type.replace(/<.*$/, "");
+  const node = call ? (nodes.has(call[1]) ? call[1] : null) : ([...nodes.keys()].find((n) => c.own!.types.get(n)?.members.some((x) => !x.method && x.name === member)) ?? fieldType(last) ?? null);
+  if (!node) return null;
+  const f = c.frames[0];
+  const line = lineOf(c, f)?.code ?? "";
+  // The null expression as written: <local2>.next is current.next on the line.
+  const parts = because.split(".");
+  const self = parts[0] === "this" ? "(?:this\\s*\\.\\s*)?" : "";
+  const pattern = self + (self ? parts.slice(1) : parts).map((part) => (/^<(?:local|parameter)\d+>$/.test(part) ? "[\\w$]+" : escapeRegExp(part))).join("\\s*\\.\\s*");
+  const found = new RegExp(`(?<![\\w$.])(${pattern})\\s*\\.\\s*${escapeRegExp(member)}\\b`).exec(line)?.[1].replace(/\s+/g, "");
+  const expr = found ?? nullThing(`"${because}"`);
+  const named = !!found;
+  const used = field ? (field[1] === "read" ? `read ${member} of` : `set ${member} of`) : `called ${member}() on`;
+  const start = `The program ${used} ${named ? expr : "a node"}, but ${named ? `${expr} is` : `${expr} was`} null: there is no ${node} there.`;
+  const links = nodes.get(node)!;
+  const recursive = !!f && c.frames.slice(1).some((g) => g.method === f.method && g.cls === f.cls);
+  // Only for a list or a tree: a link named like one (next, left), a class named like a node, recursion, or a loop that follows the link.
+  // A Person with a Person mentor (or a Person parent: parent and child name family links too) gets the general note.
+  const structural = links.some((l) => /^(?:next|prev|previous|left|right)$/i.test(l)) || /Node|Link/.test(node);
+  if (!structural && !recursive && !(f && followsInLoop(c, f, links))) return null;
+  // A list's head (or another variable of a class that isn't a node) that is null: the structure is empty.
+  const owner = /^this\.([\w$]+)$/.exec(because)?.[1];
+  const ownerClass = owner && f ? [...c.own.types.values()].find((t) => t.members.some((x) => x.name === owner && !x.method) && binarySimple(f.cls) === t.name) : undefined;
+  if (owner && ownerClass && !nodes.has(ownerClass.name))
+    return `${start} ${owner} is null while the ${ownerClass.name} is empty: no node has been added yet. Check for it first, as in if (${owner} == null) { ... }, and handle the empty case there (return a value, or throw an exception that says the ${ownerClass.name} is empty).`;
+  if (links.length >= 2) {
+    const h = f ? methodHeaderAbove(c, f) : null;
+    const param = named && /^[\w$]+$/.test(expr) ? expr : h?.params.find((_p, i) => h.types[i]?.replace(/<.*$/, "") === node) ?? "node";
+    const base = recursive
+      ? ` A recursive method such as ${methodLabel(f)} reaches null at every leaf, so it needs a base case for it at its start: if (${param} == null) { return ...; }.`
+      : ` Check for null before using a node: if (${named ? expr : "node"} != null) { ... }.`;
+    return `${start} In a tree, null is where a branch ends: a leaf's ${listed(links)} are null.${base}`;
+  }
+  const link = links[0];
+  const loop = `while (node != null) { ...; node = node.${link}; }`;
+  const check = named && expr.endsWith(`.${link}`) ? `check ${expr} != null before using ${expr}.${member}${field ? "" : "()"}` : `check that ${named ? expr : "the node"} isn't null before using it`;
+  return `${start} In a linked list, null marks the end: the last node's ${link} is null${named && expr.endsWith(`.${link}`) ? "" : ", and so is a variable that has followed it past the last node"}. Code that follows the links must stop there: ${check}, as in ${loop}.`;
+}
+
 /**
  * A plain-English note for one javac diagnostic, or null when there is no rule for it. `sources`
  * are the learner's files: with them, a note can name the program's own classes, such as the
@@ -5582,6 +6453,8 @@ function explainNull(m: string, c?: CrashContext): string {
   if (c && /^Children: child node is null/.test(m)) return fxNullChild(m, c);
   const fx = c ? fxNull(m, c) : null;
   if (fx) return fx;
+  const linked = c ? linkedNull(m, c) : null;
+  if (linked) return linked;
   const call = /^Cannot invoke "(?:[\w$]+\.)*([\w$]+)\.([\w$]+)\((.*?)\)" because (.+) is null$/.exec(m);
   if (call) {
     const [, type, method, , because] = call;
@@ -6255,7 +7128,7 @@ const EXCEPTIONS: [RegExp, (message: string, c: CrashContext) => string][] = [
   [/ConcurrentModificationException$/, (m, c) => fxConcurrent(c) ?? explainConcurrent(m, c.library, c.javaFrames)],
   [/SQLException$/, noDriver],
   [/PatternSyntaxException$/, (m, c) => explainRegex(m, c.library, c.javaFrames, c.more)],
-  [/StackOverflowError$/, () => "A method kept calling itself (or methods kept calling each other) without stopping, until the call stack ran out of room. Check the stopping condition of the recursion."],
+  [/StackOverflowError$/, stackOverflow],
   [/OutOfMemoryError$/, () => "The program used up all its memory, for example by adding to a list forever."],
   [/UnsupportedOperationException$/, () => "This collection can't be changed (lists from List.of(...), Arrays.asList(...) and a stream's toList() are fixed). Copy it into a new ArrayList<>(...) first."],
   [/FileNotFoundException$|NoSuchFileException$/, missingFile],

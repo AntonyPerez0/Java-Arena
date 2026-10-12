@@ -1,0 +1,1831 @@
+id: recursion
+summary: An extra module, not part of the MOOC. Methods that call themselves, the base case that stops them, recursion on numbers, strings and arrays, what a missing base case does (a StackOverflowError), and two classic divide-and-conquer algorithms written recursively, binary search and merge sort.
+steps:
+  - id: recursion-calling-itself
+    slug: calling-itself
+    title: A method that calls itself
+    text: |
+      This module is an extra: the MOOC doesn't cover it. Recursion means solving a problem by solving a smaller copy of the same problem first. It's worth knowing because a lot of data is built from smaller copies of itself: folders inside folders, the two halves of a sorted array, the branches of a tree. Code for such data is often shortest and clearest when it's recursive, and recursive code turns up in other people's programs and in library code.
+
+      ### A method can call itself
+
+      Since module 10, methods have called other methods. A method can also call itself. A set of nesting dolls is a doll with a smaller set of dolls inside it, so opening the whole set is: open this doll, then open the smaller set the same way.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              openDolls(3);
+              System.out.println("All open");
+          }
+
+          public static void openDolls(int size) {
+              if (size == 0) {
+                  return;
+              }
+              System.out.println("Opening the doll of size " + size);
+              openDolls(size - 1);
+          }
+      }
+      ```
+
+      ```output
+      Opening the doll of size 3
+      Opening the doll of size 2
+      Opening the doll of size 1
+      All open
+      ```
+
+      `openDolls(3)` prints its line and calls `openDolls(2)`, which prints its line and calls `openDolls(1)`, and so on. A method that calls itself is **recursive**, and the call is a **recursive call**. Two parts make it work:
+
+      - The **base case**: an input so small that the method answers it without calling itself. Here that's `size == 0`: no doll left, so the method just returns.
+      - The **recursive case**: everything else. The method does its own small part of the work and calls itself on a smaller input, `size - 1`, which brings it one step closer to the base case.
+
+      Without the base case, the calls would never end. Step 4 shows what happens then.
+
+      ### Every call has its own variables
+
+      Each call of a method gets its own parameters and variables, so `openDolls(3)`, `openDolls(2)` and `openDolls(1)` each have a `size` of their own, and none of them changes another one's. While `openDolls(1)` runs, the calls for 3 and 2 aren't finished: each waits at its recursive call, to go on after it once that call returns. Java keeps the unfinished calls on the call stack (module 11), the newest on top. It's the same list of calls that a crash report prints, one `at` line per call. Here is the run, with each call indented under the one that made it:
+
+      ```text
+      main calls openDolls(3)
+          openDolls(3) prints its line, calls openDolls(2)
+              openDolls(2) prints its line, calls openDolls(1)
+                  openDolls(1) prints its line, calls openDolls(0)
+                      openDolls(0) returns at once (the base case)
+                  openDolls(1) has nothing left to do, returns
+              openDolls(2) returns
+          openDolls(3) returns
+      main prints "All open"
+      ```
+
+      ### Recursion and loops
+
+      This method could just as well be a `while` loop that counts `size` down. A loop is simpler here, and it doesn't keep a call per round on the call stack. Recursion pays off when a problem splits into smaller problems of the same kind, as in steps 5 and 6. The first steps use small problems, so that you can follow every call.
+
+      **Your turn:** a quiz show's timer counts down the seconds of a round. `countDown(seconds)` prints the seconds from `seconds` down to 1, one per line. Fill in the blank, the value that the recursive call is given, so that the program prints:
+
+      ```
+      5
+      4
+      3
+      2
+      1
+      Time is up
+      ```
+    fill: |
+      public class Main {
+          public static void main(String[] args) {
+              countDown(5);
+              System.out.println("Time is up");
+          }
+
+          public static void countDown(int seconds) {
+              if (seconds == 0) {
+                  return;
+              }
+              System.out.println(seconds);
+              countDown([[seconds - 1‖seconds-1]]);
+          }
+      }
+    hints:
+      - "Each call prints its own number, then leaves the rest of the countdown to a call with a smaller number."
+      - "The next number to print is one less than this call's: `seconds - 1`. When it reaches 0, the base case stops the calls."
+    more:
+      - task: |
+          A tall building's stairwell has the floor number painted on each landing, and someone climbing it passes them in order. Write the method `floorsUp(int top)`, which prints the floors from 1 up to `top`, one per line, with recursion and no loop. For a `top` of 0 it prints nothing.
+
+          The trick: call `floorsUp(top - 1)` first, so that the lower floors are printed, and only then print `top`. The check runs `floorsUp(4);` and expects:
+
+          ```
+          1
+          2
+          3
+          4
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  floorsUp(4);
+              }
+
+              // Write the method floorsUp here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  floorsUp(4);
+              }
+
+              public static void floorsUp(int top) {
+                  if (top == 0) {
+                      return;
+                  }
+                  floorsUp(top - 1);
+                  System.out.println(top);
+              }
+          }
+        hints:
+          - "The base case is a `top` of 0: there's nothing to print, so the method returns."
+          - "Otherwise, call `floorsUp(top - 1)` first. When it returns, floors 1 to `top - 1` are printed, and the method prints `top` after them."
+        require:
+          - pattern: \bpublic\s+static\s+void\s+floorsUp\s*\(\s*int\s+\w+\s*\)
+            message: "Write the method as `public static void floorsUp(int top)`."
+          - pattern: \bfloorsUp\s*\(
+            min: 3
+            message: "`floorsUp` should call itself (the method's header, the call in `main` and the recursive call)."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Do it with recursion, without a loop."
+        tests:
+          - call: floorsUp(4);
+          - call: floorsUp(1);
+            hidden: true
+          - call: |
+              floorsUp(0);
+              System.out.println("ground");
+              floorsUp(7);
+            hidden: true
+      - task: |
+          A bucket goes down a well, one level per call, and comes back up. `lower` prints a line before its recursive call and another after it. What does this program print?
+        predict: |
+          public class Main {
+              public static void main(String[] args) {
+                  lower(1);
+              }
+
+              public static void lower(int level) {
+                  if (level > 3) {
+                      System.out.println("splash");
+                      return;
+                  }
+                  System.out.println("down " + level);
+                  lower(level + 1);
+                  System.out.println("up " + level);
+              }
+          }
+        hints:
+          - "The lines before the recursive call come out on the way down: `down 1`, `down 2`, `down 3`. Then `lower(4)` is the base case."
+          - "A call prints its `up` line only after the call it made has returned, so the deepest call's `up` line comes first: `up 3`, then `up 2`, then `up 1`."
+
+  - id: recursion-base-case
+    slug: base-case-and-return
+    title: Base case and return value
+    text: |
+      The methods of step 1 printed something and returned nothing. A recursive method can also return a value, and that's where recursion gets useful: the method builds its answer from the answer to a smaller problem.
+
+      ### Counting digits
+
+      How many digits does a whole number have? A number below 10 has one digit. A larger number has one digit more than the number without its last digit, and `n / 10` drops the last digit (module 4): 4096 has one digit more than 409.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(digits(7));
+              System.out.println(digits(4096));
+          }
+
+          public static int digits(int n) {
+              if (n < 10) {
+                  return 1;
+              }
+              return 1 + digits(n / 10);
+          }
+      }
+      ```
+
+      ```output
+      1
+      4
+      ```
+
+      Read the method as two sentences: "a number below 10 has 1 digit" and "any other number has 1 more digit than `n / 10`". The base case answers the smallest problem directly; the recursive case trusts the recursive call to give the right answer for the smaller problem, and adds its own part.
+
+      ### Following the calls
+
+      `digits(4096)` can't return until it knows `digits(409)`, which waits for `digits(40)`, which waits for `digits(4)`. That one is a base case, and returns 1. Then the waiting calls finish, from the newest to the oldest, each adding 1 to what it got back:
+
+      ```text
+      digits(4096) = 1 + digits(409)
+                         digits(409) = 1 + digits(40)
+                                           digits(40) = 1 + digits(4)
+                                                            digits(4) = 1
+                                           digits(40) = 1 + 1 = 2
+                         digits(409) = 1 + 2 = 3
+      digits(4096) = 1 + 3 = 4
+      ```
+
+      Two questions check a recursive method:
+
+      1. Is every base case answered correctly, without a recursive call?
+      2. Does every other input get closer to a base case with each call? Here, dividing by 10 makes any number of 10 or more smaller, so the calls end up below 10.
+
+      If both are true, and the recursive case is right whenever the smaller call returns the right answer, the method is right for every input.
+
+      ### Where the base case comes from
+
+      Choose the smallest input for which the answer is obvious. For a sum of the numbers from 1 to n, that's n = 0: there's nothing to add, and the sum is 0. Picking 0 rather than 1 also makes the method work when it's called with 0.
+
+      **Your turn:** a grocer stacks oranges in a triangle: the bottom row has `rows` oranges, the row above it one fewer, and so on up to a single orange at the top. Write the method `oranges(int rows)`, which returns how many oranges the stack has, with recursion and no loop. A stack of 0 rows has 0 oranges. The check runs:
+
+      ```java fragment
+      System.out.println(oranges(4));
+      System.out.println(oranges(1));
+      ```
+
+      and expects:
+
+      ```
+      10
+      1
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(oranges(4));
+              System.out.println(oranges(1));
+          }
+
+          public static int oranges(int rows) {
+              return 0;
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(oranges(4));
+              System.out.println(oranges(1));
+          }
+
+          public static int oranges(int rows) {
+              if (rows == 0) {
+                  return 0;
+              }
+              return rows + oranges(rows - 1);
+          }
+      }
+    hints:
+      - "The base case: a stack of 0 rows has 0 oranges."
+      - "A stack of `rows` rows is its bottom row, `rows` oranges, plus a stack of `rows - 1` rows on top: `return rows + oranges(rows - 1);`"
+    require:
+      - pattern: \boranges\s*\(
+        min: 4
+        message: "`oranges` should call itself."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Do it with recursion, without a loop."
+    tests:
+      - call: |
+          System.out.println(oranges(4));
+          System.out.println(oranges(1));
+      - call: |
+          System.out.println(oranges(0));
+          System.out.println(oranges(2));
+          System.out.println(oranges(10));
+        hidden: true
+      - call: |
+          System.out.println(oranges(100));
+          System.out.println(oranges(1000));
+        hidden: true
+    more:
+      - task: |
+          A bookshop owner wants to know in how many different orders a number of books can stand on a shelf. One book stands in 1 order. With 2 books there are 2 orders, and with 3 books 6: any of the 3 can stand first, and the other 2 stand after it in 2 orders. In general, `n` books stand in `n` times as many orders as `n - 1` books. That's the factorial of `n`, written `n!`. An empty shelf counts as 1 order (`0! = 1`).
+
+          The numbers grow fast, so write the method `orders(int books)` that returns a `long`, with recursion and no loop. A `long` holds factorials up to `20!`. The check runs:
+
+          ```java fragment
+          System.out.println(orders(3));
+          System.out.println(orders(0));
+          System.out.println(orders(15));
+          ```
+
+          and expects:
+
+          ```
+          6
+          1
+          1307674368000
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(orders(3));
+                  System.out.println(orders(0));
+                  System.out.println(orders(15));
+              }
+
+              // Write the method orders here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(orders(3));
+                  System.out.println(orders(0));
+                  System.out.println(orders(15));
+              }
+
+              public static long orders(int books) {
+                  if (books == 0) {
+                      return 1;
+                  }
+                  return books * orders(books - 1);
+              }
+          }
+        hints:
+          - "The base case is an empty shelf: `if (books == 0)`, return 1."
+          - "Otherwise the answer is `books` times the orders of one book fewer: `return books * orders(books - 1);`. Since `orders` returns a long, the multiplication is done with longs."
+        require:
+          - pattern: \bpublic\s+static\s+long\s+orders\s*\(\s*int\s+\w+\s*\)
+            message: "Write the method as `public static long orders(int books)`."
+          - pattern: \borders\s*\(
+            min: 5
+            message: "`orders` should call itself."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Do it with recursion, without a loop."
+        tests:
+          - call: |
+              System.out.println(orders(3));
+              System.out.println(orders(0));
+              System.out.println(orders(15));
+          - call: |
+              System.out.println(orders(1));
+              System.out.println(orders(2));
+              System.out.println(orders(5));
+              System.out.println(orders(10));
+            hidden: true
+          - call: |
+              System.out.println(orders(13));
+              System.out.println(orders(20));
+            hidden: true
+      - task: |
+          A sheet of paper doubles in thickness each time it's folded in half; a strip cut in three and stacked triples. Write the method `power(int base, int exponent)`, which returns `base` multiplied by itself `exponent` times, as a `long`: `power(2, 5)` is 2 * 2 * 2 * 2 * 2, 32. Any number to the power of 0 is 1, and that's the base case. Use recursion, no loop and no `Math.pow`. The exponent is never negative. The check runs:
+
+          ```java fragment
+          System.out.println(power(2, 5));
+          System.out.println(power(3, 4));
+          System.out.println(power(7, 0));
+          ```
+
+          and expects:
+
+          ```
+          32
+          81
+          1
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(power(2, 5));
+                  System.out.println(power(3, 4));
+                  System.out.println(power(7, 0));
+              }
+
+              // Write the method power here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(power(2, 5));
+                  System.out.println(power(3, 4));
+                  System.out.println(power(7, 0));
+              }
+
+              public static long power(int base, int exponent) {
+                  if (exponent == 0) {
+                      return 1;
+                  }
+                  return base * power(base, exponent - 1);
+              }
+          }
+        hints:
+          - "`power(2, 5)` is 2 times `power(2, 4)`: the base stays the same, and the exponent gets one smaller with each call."
+          - "When the exponent is 0, return 1. Otherwise, `return base * power(base, exponent - 1);`"
+        require:
+          - pattern: \bpublic\s+static\s+long\s+power\s*\(\s*int\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static long power(int base, int exponent)`."
+          - pattern: \bpower\s*\(
+            min: 5
+            message: "`power` should call itself."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Do it with recursion, without a loop."
+          - pattern: Math\s*\.\s*pow
+            message: "Don't use `Math.pow`: multiply, with recursion."
+        tests:
+          - call: |
+              System.out.println(power(2, 5));
+              System.out.println(power(3, 4));
+              System.out.println(power(7, 0));
+          - call: |
+              System.out.println(power(10, 1));
+              System.out.println(power(5, 3));
+              System.out.println(power(1, 50));
+              System.out.println(power(0, 4));
+            hidden: true
+          - call: |
+              System.out.println(power(2, 40));
+              System.out.println(power(10, 15));
+              System.out.println(power(-3, 3));
+            hidden: true
+
+  - id: recursion-strings-and-arrays
+    slug: strings-and-arrays
+    title: Recursion on strings and arrays
+    text: |
+      A string is its first character followed by a shorter string, and that view makes many string problems recursive. `text.charAt(0)` is the first character, and `text.substring(1)` (module 16) is the rest, one character shorter. The base case is usually the empty string, which has no first character.
+
+      ### Counting a character
+
+      A typesetter wants to know how many times a letter appears in a headline:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(count("banana bread", 'a'));
+              System.out.println(count("", 'a'));
+          }
+
+          public static int count(String text, char letter) {
+              if (text.isEmpty()) {
+                  return 0;
+              }
+              int rest = count(text.substring(1), letter);
+              if (text.charAt(0) == letter) {
+                  return rest + 1;
+              }
+              return rest;
+          }
+      }
+      ```
+
+      ```output
+      4
+      0
+      ```
+
+      Each call looks at one character and leaves the rest to the recursive call. The empty string has no `a` in it. Every call makes the string one character shorter, so the calls reach the empty string.
+
+      ### Arrays: pass an index
+
+      For arrays, the usual way is to pass an index instead of copying the rest (a copy on every call would take time and memory): the method gets the array and an index, the place where "the rest" starts, and the recursive call moves the index one place along. The base case is an index at the end of the array, where the rest is empty:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] temperatures = {4, -2, 7, -5, 0};
+              System.out.println(countBelowZero(temperatures, 0));
+              System.out.println(countBelowZero(temperatures, 3));
+          }
+
+          public static int countBelowZero(int[] values, int start) {
+              if (start == values.length) {
+                  return 0;
+              }
+              int rest = countBelowZero(values, start + 1);
+              if (values[start] < 0) {
+                  return rest + 1;
+              }
+              return rest;
+          }
+      }
+      ```
+
+      ```output
+      2
+      1
+      ```
+
+      `countBelowZero(temperatures, 0)` counts the whole array; `countBelowZero(temperatures, 3)` counts only from index 3 on.
+
+      ### Building a string
+
+      A recursive method can also return a string it builds from the smaller call's string. This one spaces out a word's letters for a sign:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(spaced("OPEN"));
+          }
+
+          public static String spaced(String word) {
+              if (word.length() <= 1) {
+                  return word;
+              }
+              return word.charAt(0) + " " + spaced(word.substring(1));
+          }
+      }
+      ```
+
+      ```output
+      O P E N
+      ```
+
+      Here the base case is a word of at most one letter, which needs no spaces; the empty string is covered by it too.
+
+      **Your turn:** an ambulance has its name painted backwards on its hood, so that drivers ahead read it the right way around in their mirrors. Write the method `reverse(String text)`, which returns the text backwards, with recursion and no loop: the reverse of a text is the reverse of its rest (`text.substring(1)`) followed by its first character. Don't use `StringBuilder`. The check runs:
+
+      ```java fragment
+      System.out.println(reverse("AMBULANCE"));
+      System.out.println(reverse("stressed"));
+      ```
+
+      and expects:
+
+      ```
+      ECNALUBMA
+      desserts
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(reverse("AMBULANCE"));
+              System.out.println(reverse("stressed"));
+          }
+
+          public static String reverse(String text) {
+              return text;
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(reverse("AMBULANCE"));
+              System.out.println(reverse("stressed"));
+          }
+
+          public static String reverse(String text) {
+              if (text.isEmpty()) {
+                  return "";
+              }
+              return reverse(text.substring(1)) + text.charAt(0);
+          }
+      }
+    hints:
+      - "The base case: the reverse of the empty string is the empty string."
+      - "For any other text, reverse the rest and put the first character after it: `return reverse(text.substring(1)) + text.charAt(0);`"
+    require:
+      - pattern: \breverse\s*\(
+        min: 4
+        message: "`reverse` should call itself."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Do it with recursion, without a loop."
+      - pattern: StringBuilder
+        message: "Don't use `StringBuilder`: build the string with recursion."
+    tests:
+      - call: |
+          System.out.println(reverse("AMBULANCE"));
+          System.out.println(reverse("stressed"));
+      - call: |
+          System.out.println("[" + reverse("") + "]");
+          System.out.println(reverse("a"));
+          System.out.println(reverse("ab"));
+          System.out.println(reverse("live on time"));
+        hidden: true
+    more:
+      - task: |
+          A word game gives bonus points for palindromes, words that read the same backwards, such as `kayak` or `noon`. Write the method `isPalindrome(String word)` with recursion and no loop: a word is a palindrome if its first and last characters are the same and the part between them is a palindrome. A word of 0 or 1 characters is always a palindrome. `word.substring(1, word.length() - 1)` is the part between the ends: `isPalindrome` itself calls itself on it, not through a helper method. Don't reverse the word: compare its ends. The check runs:
+
+          ```java fragment
+          System.out.println(isPalindrome("kayak"));
+          System.out.println(isPalindrome("noon"));
+          System.out.println(isPalindrome("kayaks"));
+          ```
+
+          and expects:
+
+          ```
+          true
+          true
+          false
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(isPalindrome("kayak"));
+                  System.out.println(isPalindrome("noon"));
+                  System.out.println(isPalindrome("kayaks"));
+              }
+
+              // Write the method isPalindrome here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(isPalindrome("kayak"));
+                  System.out.println(isPalindrome("noon"));
+                  System.out.println(isPalindrome("kayaks"));
+              }
+
+              public static boolean isPalindrome(String word) {
+                  if (word.length() <= 1) {
+                      return true;
+                  }
+                  if (word.charAt(0) != word.charAt(word.length() - 1)) {
+                      return false;
+                  }
+                  return isPalindrome(word.substring(1, word.length() - 1));
+              }
+          }
+        hints:
+          - "Two base cases: a word of at most one character is a palindrome (`true`), and a word whose first and last characters differ isn't (`false`)."
+          - "If the ends are equal, the answer is the answer for the middle: `return isPalindrome(word.substring(1, word.length() - 1));`"
+        require:
+          - pattern: \bpublic\s+static\s+boolean\s+isPalindrome\s*\(\s*String\s+\w+\s*\)
+            message: "Write the method as `public static boolean isPalindrome(String word)`."
+          - pattern: \bisPalindrome\s*\(
+            min: 5
+            message: "`isPalindrome` should call itself on the part between the ends, not through a helper method."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Do it with recursion, without a loop."
+          - pattern: StringBuilder|\breverse\s*\(
+            message: "Compare the word's ends, without reversing the word."
+        tests:
+          - call: |
+              System.out.println(isPalindrome("kayak"));
+              System.out.println(isPalindrome("noon"));
+              System.out.println(isPalindrome("kayaks"));
+          - call: |
+              System.out.println(isPalindrome(""));
+              System.out.println(isPalindrome("x"));
+              System.out.println(isPalindrome("xy"));
+              System.out.println(isPalindrome("xx"));
+              System.out.println(isPalindrome("racecar"));
+              System.out.println(isPalindrome("racecat"));
+              System.out.println(isPalindrome("abcdba"));
+            hidden: true
+      - task: |
+          A hiking trail is split into stages, and an array holds each stage's length in kilometers. Write the method `kilometersFrom(int[] stages, int start)`, which returns the total length of the stages from index `start` to the end of the array, with recursion and no loop: the stage at `start` plus the kilometers from `start + 1`. When `start` is the array's length, no stages are left, and the total is 0. The check runs:
+
+          ```java fragment
+          int[] stages = {12, 8, 15, 6, 9};
+          System.out.println(kilometersFrom(stages, 0));
+          System.out.println(kilometersFrom(stages, 3));
+          ```
+
+          and expects:
+
+          ```
+          50
+          15
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] stages = {12, 8, 15, 6, 9};
+                  System.out.println(kilometersFrom(stages, 0));
+                  System.out.println(kilometersFrom(stages, 3));
+              }
+
+              // Write the method kilometersFrom here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] stages = {12, 8, 15, 6, 9};
+                  System.out.println(kilometersFrom(stages, 0));
+                  System.out.println(kilometersFrom(stages, 3));
+              }
+
+              public static int kilometersFrom(int[] stages, int start) {
+                  if (start == stages.length) {
+                      return 0;
+                  }
+                  return stages[start] + kilometersFrom(stages, start + 1);
+              }
+          }
+        hints:
+          - "The base case: when `start` is `stages.length`, there are no stages left, so return 0."
+          - "Otherwise, add this stage to the rest: `return stages[start] + kilometersFrom(stages, start + 1);`"
+        require:
+          - pattern: \bpublic\s+static\s+int\s+kilometersFrom\s*\(\s*int\s*\[\s*\]\s*\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static int kilometersFrom(int[] stages, int start)`."
+          - pattern: \bkilometersFrom\s*\(
+            min: 4
+            message: "`kilometersFrom` should call itself."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Do it with recursion, without a loop."
+        tests:
+          - call: |
+              int[] stages = {12, 8, 15, 6, 9};
+              System.out.println(kilometersFrom(stages, 0));
+              System.out.println(kilometersFrom(stages, 3));
+          - call: |
+              int[] stages = {12, 8, 15, 6, 9};
+              System.out.println(kilometersFrom(stages, 4));
+              System.out.println(kilometersFrom(stages, 5));
+              int[] none = new int[0];
+              System.out.println(kilometersFrom(none, 0));
+              int[] trail = {3, 21, 7};
+              System.out.println(kilometersFrom(trail, 1));
+            hidden: true
+          - call: |
+              int[] longTrail = new int[900];
+              for (int i = 0; i < longTrail.length; i++) {
+                  longTrail[i] = i % 7;
+              }
+              System.out.println(kilometersFrom(longTrail, 0));
+            hidden: true
+
+  - id: recursion-going-wrong
+    slug: when-it-goes-wrong
+    title: When recursion goes wrong
+    text: |
+      A recursive method needs a base case, and every call must get closer to it. When one of the two is missing, the calls never stop, and the program crashes.
+
+      ### No base case
+
+      Here is `digits` from step 2 with its base case left out. A program that crashes this way prints a very long report, so this one catches the error (module 42) and prints one line instead:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              try {
+                  System.out.println(digits(4096));
+              } catch (StackOverflowError e) {
+                  System.out.println("The calls never stopped: " + e);
+              }
+          }
+
+          public static int digits(int n) {
+              return 1 + digits(n / 10);
+          }
+      }
+      ```
+
+      ```output
+      The calls never stopped: java.lang.StackOverflowError
+      ```
+
+      `digits(4096)` calls `digits(409)`, `digits(40)`, `digits(4)` and `digits(0)`, and then `digits(0)` again and again, since `0 / 10` is 0. None of the calls ever returns. Every call of a method takes some memory on the call stack for its parameters and variables, and gives it back when it returns. The call stack has a fixed size, so a chain of calls that never returns fills it up. Java then throws a **StackOverflowError**. It's an error, not an exception (its class extends `Error`, not `Exception`): errors are for problems a program usually can't recover from, and catching one is rare. It's done here only to keep the page short.
+
+      Without the `try` (with `System.out.println(digits(4096));` alone in `main`), the program would crash with a report like this, where line 7 is the line of the recursive call:
+
+      ```text
+      Exception in thread "main" java.lang.StackOverflowError
+      	at Main.digits(Main.java:7)
+      	at Main.digits(Main.java:7)
+      	at Main.digits(Main.java:7)
+      ```
+
+      and so on: the reference JDK prints 1,024 `at` lines, all of them the same. The report lists the calls that were on the stack, newest first, and a report whose `at` lines repeat one method is the sign of a recursion that doesn't stop.
+
+      The fix is the base case that was left out: a number below 10 has one digit, and the method returns 1 without calling itself.
+
+      ### A base case that's never reached
+
+      The quiz show's `countDown` from step 1 has a base case, `seconds == 0`:
+
+      ```java fragment
+      public static void countDown(int seconds) {
+          if (seconds == 0) {
+              return;
+          }
+          System.out.println(seconds);
+          countDown(seconds - 1);
+      }
+      ```
+
+      `countDown(3)` prints 3, 2 and 1, and stops. But `countDown(-3)` prints -3, -4, -5... and never reaches 0, so it overflows the stack too. (On the reference JDK it prints thousands of lines first. Java Arena stops a program once it has printed 64 KB, so here a program like this is stopped for printing too much before the stack runs out.) The base case exists, but some inputs miss it. A base case written as a range, `seconds <= 0`, catches every input at or past the end. So when you write a recursive method, try it on the smallest inputs: 0, 1, a negative number, and odd and even numbers when the method takes steps of 2.
+
+      ### Calls that repeat work
+
+      A method can also call itself correctly and still be far too slow. A child climbs a staircase one or two steps at a time. In how many ways can they climb `n` steps? The first move is one step (then `n - 1` steps are left) or two steps (then `n - 2` are left), so the ways for `n` are the ways for `n - 1` plus the ways for `n - 2`. 0 or 1 steps can be climbed in one way. These are the Fibonacci numbers.
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(ways(4));
+              System.out.println(ways(30));
+          }
+
+          public static long ways(int steps) {
+              if (steps <= 1) {
+                  return 1;
+              }
+              return ways(steps - 1) + ways(steps - 2);
+          }
+      }
+      ```
+
+      ```output
+      5
+      1346269
+      ```
+
+      The answer is right, but each call makes two more, and they repeat the same work: `ways(30)` calls `ways(29)` and `ways(28)`, and `ways(29)` calls `ways(28)` again. The number of calls grows about as fast as the answer itself; for `ways(30)`, it's over two million, and every 10 more steps make it more than a hundred times larger. A loop that adds up the ways from the bottom (or a recursive method that remembers its answers in a HashMap) does about one round per step. The third challenge of this step counts the calls.
+
+      **Your turn:** a ball is dropped from a height in centimeters, and each bounce reaches half the height of the one before, in whole centimeters (`/ 2` on an int). From 40 it reaches 40, 20, 10, 5, 2 and 1, and then it lies still. `heights(height)` should return how many of those heights are above 0, the first drop included: 6 for 40. The method below has no base case: after 1 it calls `heights(0)`, and `heights(0)` calls `heights(0)` again and again (`0 / 2` is 0), until the StackOverflowError. Add a base case: for a height of 0 there is nothing left to count, so it returns 0 without calling itself. Keep the method recursive. The check runs `System.out.println(heights(40));` and expects:
+
+      ```
+      6
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(heights(40));
+          }
+
+          public static int heights(int height) {
+              return 1 + heights(height / 2);
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              System.out.println(heights(40));
+          }
+
+          public static int heights(int height) {
+              if (height == 0) {
+                  return 0;
+              }
+              return 1 + heights(height / 2);
+          }
+      }
+    hints:
+      - "The base case goes at the start of the method, before the recursive call."
+      - "`if (height == 0) { return 0; }` stops the calls when the ball doesn't bounce any more: from 1, the call `heights(0)` then adds nothing, and `heights(1)` returns 1 + 0."
+    require:
+      - pattern: \bheights\s*\(
+        min: 3
+        message: "Keep `heights` recursive: it should still call itself."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Fix it with a base case, without a loop."
+    tests:
+      - call: System.out.println(heights(40));
+      - call: |
+          System.out.println(heights(1));
+          System.out.println(heights(0));
+          System.out.println(heights(1000));
+        hidden: true
+    more:
+      - task: |
+          A staircase is climbed two steps at a time; when one step is left, the last move is a single step. `moves(steps)` should return how many moves the climb takes: 3 for 6 steps, 3 for 5 steps (2 + 2 + 1), and 0 for 0 steps or fewer. The method below works for even numbers, but an odd number jumps over its base case, and so does a negative one, and the program crashes with a StackOverflowError. Fix the base case so that every input reaches it. Keep the method recursive. The check runs:
+
+          ```java fragment
+          System.out.println(moves(6));
+          System.out.println(moves(5));
+          System.out.println(moves(-4));
+          ```
+
+          and expects:
+
+          ```
+          3
+          3
+          0
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(moves(6));
+                  System.out.println(moves(5));
+                  System.out.println(moves(-4));
+              }
+
+              public static int moves(int steps) {
+                  if (steps == 0) {
+                      return 0;
+                  }
+                  return 1 + moves(steps - 2);
+              }
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  System.out.println(moves(6));
+                  System.out.println(moves(5));
+                  System.out.println(moves(-4));
+              }
+
+              public static int moves(int steps) {
+                  if (steps <= 0) {
+                      return 0;
+                  }
+                  return 1 + moves(steps - 2);
+              }
+          }
+        hints:
+          - "`moves(5)` calls `moves(3)`, `moves(1)` and then `moves(-1)`, which isn't 0. Which numbers should count as \"no steps left\"?"
+          - "Make the base case a range: `if (steps <= 0)`. `moves(1)` then returns 1 + `moves(-1)`, which is 1 + 0: the last single step."
+        require:
+          - pattern: \bmoves\s*\(
+            min: 5
+            message: "Keep `moves` recursive: it should still call itself."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Fix the base case, without a loop."
+        tests:
+          - call: |
+              System.out.println(moves(6));
+              System.out.println(moves(5));
+              System.out.println(moves(-4));
+          - call: |
+              System.out.println(moves(0));
+              System.out.println(moves(1));
+              System.out.println(moves(2));
+              System.out.println(moves(-1));
+              System.out.println(moves(999));
+            hidden: true
+      - task: |
+          How much work does `ways` repeat? The program reads a number of steps, `n`, and prints the number of ways to climb them (the method of this step), then how many times `ways` was called in all, the first call included. Count the calls in a variable that `ways` adds one to each time it starts. A variable declared inside `ways` won't do, since each call gets its own. Declare it in the class, outside the methods, with `static`: `private static long calls = 0;`. A static variable belongs to the class itself, not to an object or a call, so every call of `ways` and `main` see the same one.
+
+          For 4 steps, `ways(4)` calls `ways(3)` and `ways(2)`; `ways(3)` calls `ways(2)` and `ways(1)`; each `ways(2)` calls `ways(1)` and `ways(0)`. That's 9 calls. With the input `20`, the program prints:
+
+          ```
+          Ways: 10946
+          Calls: 21891
+          ```
+        seed: |
+          import java.util.Scanner;
+
+          public class Main {
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int n = Integer.valueOf(scanner.nextLine());
+                  System.out.println("Ways: " + ways(n));
+              }
+
+              public static long ways(int steps) {
+                  if (steps <= 1) {
+                      return 1;
+                  }
+                  return ways(steps - 1) + ways(steps - 2);
+              }
+          }
+        solution: |
+          import java.util.Scanner;
+
+          public class Main {
+              private static long calls = 0;
+
+              public static void main(String[] args) {
+                  Scanner scanner = new Scanner(System.in);
+                  int n = Integer.valueOf(scanner.nextLine());
+                  System.out.println("Ways: " + ways(n));
+                  System.out.println("Calls: " + calls);
+              }
+
+              public static long ways(int steps) {
+                  calls++;
+                  if (steps <= 1) {
+                      return 1;
+                  }
+                  return ways(steps - 1) + ways(steps - 2);
+              }
+          }
+        hints:
+          - "Declare the counter in the class, outside the methods: `private static long calls = 0;`. Make `ways` add one to it as its first line, before the base case, so that every call is counted."
+          - "Print the count after the line that prints the ways: the calls are counted while `ways(n)` runs."
+        require:
+          - pattern: \bstatic\s+(int|long)\s+calls\b
+            message: "Count with a static variable `calls`, declared in the class outside the methods."
+          - pattern: \bways\s*\(
+            min: 4
+            message: "Keep `ways` recursive, as it is."
+        tests:
+          - stdin: "20"
+          - stdin: "4"
+            hidden: true
+          - stdin: "1"
+            hidden: true
+          - stdin: "25"
+            hidden: true
+
+  - id: recursion-binary-search
+    slug: binary-search
+    title: Recursive binary search
+    text: |
+      Module 28 searched a sorted array with binary search, in a `while` loop: look at the middle value, and if it isn't the wanted one, go on in the half where the wanted value would be. "Go on in the half" is the same search on a smaller range, so binary search can also be written recursively.
+
+      ### The range as parameters
+
+      The loop kept the range in two variables, `low` and `high`. The recursive method gets them as parameters, and the recursive call gets the new range. A greengrocer keeps the prices of the products, in cents, in a sorted array:
+
+      ```java run
+      public class Main {
+          public static void main(String[] args) {
+              int[] prices = {45, 80, 120, 199, 250, 310, 475, 520};
+              System.out.println(find(prices, 310, 0, prices.length - 1));
+              System.out.println(find(prices, 100, 0, prices.length - 1));
+          }
+
+          public static int find(int[] sorted, int wanted, int low, int high) {
+              if (low > high) {
+                  return -1;
+              }
+              int middle = (low + high) / 2;
+              System.out.println("  looking between " + low + " and " + high + " at " + sorted[middle]);
+              if (sorted[middle] == wanted) {
+                  return middle;
+              }
+              if (sorted[middle] < wanted) {
+                  return find(sorted, wanted, middle + 1, high);
+              }
+              return find(sorted, wanted, low, middle - 1);
+          }
+      }
+      ```
+
+      ```output
+        looking between 0 and 7 at 199
+        looking between 4 and 7 at 310
+      5
+        looking between 0 and 7 at 199
+        looking between 0 and 2 at 80
+        looking between 2 and 2 at 120
+      -1
+      ```
+
+      There are two base cases: an empty range (`low > high`), where the value isn't in the array, and a middle value that is the wanted one. Every other call searches a range at most half as long, so the calls reach a base case quickly: for an array of a million values, at most 20 looks, as in module 28. The recursion is at most about 20 calls deep, so the call stack is never a problem here.
+
+      Each recursive call is `return find(...)`: the method returns whatever the smaller search found, unchanged. The answer is found at the bottom and passed up through every call.
+
+      ### A friendlier method on top
+
+      Callers shouldn't have to pass `0` and `prices.length - 1` themselves. The usual way is a second method with the same name and fewer parameters, which starts the search on the whole array (two methods with the same name and different parameters are overloads, module 21):
+
+      ```java fragment
+      public static int find(int[] sorted, int wanted) {
+          return find(sorted, wanted, 0, sorted.length - 1);
+      }
+      ```
+
+      The extra parameters of the recursive method are then a detail that only this class sees. The third challenge of this step uses the pattern.
+
+      **Your turn:** a greengrocer's till has the sorted array of prices, in cents. Write the recursive method `findPrice(int[] prices, int price, int low, int high)`, which returns the index of `price` in `prices` between the indexes `low` and `high`, or -1 if it isn't there. Do it without a loop: binary search, as in this step. The check runs:
+
+      ```java fragment
+      int[] prices = {35, 60, 99, 140, 185, 230, 299, 365, 420};
+      System.out.println(findPrice(prices, 299, 0, prices.length - 1));
+      System.out.println(findPrice(prices, 100, 0, prices.length - 1));
+      ```
+
+      and expects:
+
+      ```
+      6
+      -1
+      ```
+    seed: |
+      public class Main {
+          public static void main(String[] args) {
+              int[] prices = {35, 60, 99, 140, 185, 230, 299, 365, 420};
+              System.out.println(findPrice(prices, 299, 0, prices.length - 1));
+              System.out.println(findPrice(prices, 100, 0, prices.length - 1));
+          }
+
+          public static int findPrice(int[] prices, int price, int low, int high) {
+              return -1;
+          }
+      }
+    solution: |
+      public class Main {
+          public static void main(String[] args) {
+              int[] prices = {35, 60, 99, 140, 185, 230, 299, 365, 420};
+              System.out.println(findPrice(prices, 299, 0, prices.length - 1));
+              System.out.println(findPrice(prices, 100, 0, prices.length - 1));
+          }
+
+          public static int findPrice(int[] prices, int price, int low, int high) {
+              if (low > high) {
+                  return -1;
+              }
+              int middle = (low + high) / 2;
+              if (prices[middle] == price) {
+                  return middle;
+              }
+              if (prices[middle] < price) {
+                  return findPrice(prices, price, middle + 1, high);
+              }
+              return findPrice(prices, price, low, middle - 1);
+          }
+      }
+    hints:
+      - "First the empty range: when `low > high`, the price isn't there, so return -1. Then look at the middle, `(low + high) / 2`, and return its index if it holds the price."
+      - "If the middle price is smaller, search the right half: `return findPrice(prices, price, middle + 1, high);`. Otherwise search the left half, from `low` to `middle - 1`."
+    require:
+      - pattern: \bfindPrice\s*\(
+        min: 4
+        message: "`findPrice` should call itself on the half where the price can be."
+    forbid:
+      - pattern: \b(for|while)\b
+        message: "Do it with recursion, without a loop."
+      - pattern: binarySearch
+        message: "Write the search yourself, without `Arrays.binarySearch`."
+    tests:
+      - call: |
+          int[] prices = {35, 60, 99, 140, 185, 230, 299, 365, 420};
+          System.out.println(findPrice(prices, 299, 0, prices.length - 1));
+          System.out.println(findPrice(prices, 100, 0, prices.length - 1));
+      - call: |
+          int[] prices = {35, 60, 99, 140, 185, 230, 299, 365, 420};
+          System.out.println(findPrice(prices, 35, 0, prices.length - 1));
+          System.out.println(findPrice(prices, 420, 0, prices.length - 1));
+          System.out.println(findPrice(prices, 185, 0, prices.length - 1));
+          System.out.println(findPrice(prices, 10, 0, prices.length - 1));
+          System.out.println(findPrice(prices, 500, 0, prices.length - 1));
+          System.out.println(findPrice(prices, 60, 2, 8));
+        hidden: true
+      - call: |
+          int[] one = {75};
+          System.out.println(findPrice(one, 75, 0, 0) + " " + findPrice(one, 80, 0, 0));
+          int[] none = new int[0];
+          System.out.println(findPrice(none, 75, 0, -1));
+          int[] many = new int[100000];
+          for (int i = 0; i < many.length; i++) {
+              many[i] = i * 3;
+          }
+          System.out.println(findPrice(many, 299997, 0, many.length - 1) + " " + findPrice(many, 299998, 0, many.length - 1));
+        hidden: true
+    more:
+      - task: |
+          An auction keeps its bids in a sorted array. When a new bid comes in, where does it go? Write the recursive method `placeFor(int[] bids, int bid, int low, int high)`, which returns the index where `bid` belongs between `low` and `high`: the index of an equal bid if there is one, and otherwise the index of the first bid that's larger (or `high + 1` if no bid is larger). That's the binary search of this step with one change: when the range is empty, return `low` instead of -1. When the range is empty, `low` has moved past every smaller bid. The check runs:
+
+          ```java fragment
+          int[] bids = {100, 150, 220, 300, 410};
+          System.out.println(placeFor(bids, 220, 0, bids.length - 1));
+          System.out.println(placeFor(bids, 200, 0, bids.length - 1));
+          System.out.println(placeFor(bids, 500, 0, bids.length - 1));
+          ```
+
+          and expects:
+
+          ```
+          2
+          2
+          5
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] bids = {100, 150, 220, 300, 410};
+                  System.out.println(placeFor(bids, 220, 0, bids.length - 1));
+                  System.out.println(placeFor(bids, 200, 0, bids.length - 1));
+                  System.out.println(placeFor(bids, 500, 0, bids.length - 1));
+              }
+
+              // Write the method placeFor here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  int[] bids = {100, 150, 220, 300, 410};
+                  System.out.println(placeFor(bids, 220, 0, bids.length - 1));
+                  System.out.println(placeFor(bids, 200, 0, bids.length - 1));
+                  System.out.println(placeFor(bids, 500, 0, bids.length - 1));
+              }
+
+              public static int placeFor(int[] bids, int bid, int low, int high) {
+                  if (low > high) {
+                      return low;
+                  }
+                  int middle = (low + high) / 2;
+                  if (bids[middle] == bid) {
+                      return middle;
+                  }
+                  if (bids[middle] < bid) {
+                      return placeFor(bids, bid, middle + 1, high);
+                  }
+                  return placeFor(bids, bid, low, middle - 1);
+              }
+          }
+        hints:
+          - "Start from `findPrice`. Only the empty range changes: `if (low > high) { return low; }`."
+          - "Why `low`: the search moves `low` past a middle only when the middle bid is smaller than the new one, and moves `high` before a middle only when it's larger. When they cross, `low` is the first index whose bid is larger."
+        require:
+          - pattern: \bpublic\s+static\s+int\s+placeFor\s*\(\s*int\s*\[\s*\]\s*\w+\s*,\s*int\s+\w+\s*,\s*int\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the method as `public static int placeFor(int[] bids, int bid, int low, int high)`."
+          - pattern: \bplaceFor\s*\(
+            min: 5
+            message: "`placeFor` should call itself on the half where the bid belongs."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Do it with recursion, without a loop."
+          - pattern: binarySearch
+            message: "Write the search yourself, without `Arrays.binarySearch`."
+        tests:
+          - call: |
+              int[] bids = {100, 150, 220, 300, 410};
+              System.out.println(placeFor(bids, 220, 0, bids.length - 1));
+              System.out.println(placeFor(bids, 200, 0, bids.length - 1));
+              System.out.println(placeFor(bids, 500, 0, bids.length - 1));
+          - call: |
+              int[] bids = {100, 150, 220, 300, 410};
+              System.out.println(placeFor(bids, 50, 0, bids.length - 1));
+              System.out.println(placeFor(bids, 100, 0, bids.length - 1));
+              System.out.println(placeFor(bids, 120, 0, bids.length - 1));
+              System.out.println(placeFor(bids, 301, 0, bids.length - 1));
+              System.out.println(placeFor(bids, 410, 0, bids.length - 1));
+            hidden: true
+          - call: |
+              int[] none = new int[0];
+              System.out.println(placeFor(none, 80, 0, -1));
+              int[] one = {90};
+              System.out.println(placeFor(one, 80, 0, 0) + " " + placeFor(one, 95, 0, 0));
+              int[] even = {2, 4, 6, 8, 10, 12};
+              System.out.println(placeFor(even, 7, 0, 5) + " " + placeFor(even, 13, 0, 5) + " " + placeFor(even, 1, 0, 5));
+            hidden: true
+      - task: |
+          A school's lost-and-found keeps the names on its labels in a sorted array, in alphabetical order (as `compareTo` orders them, module 38). Write two methods named `findLabel`:
+
+          - `findLabel(String[] labels, String name, int low, int high)`: the recursive binary search between `low` and `high`, returning the index of `name`, or -1. Strings are compared with `compareTo`: `name.compareTo(labels[middle])` is 0 when they are equal, below 0 when `name` comes first, and above 0 when it comes after.
+          - `findLabel(String[] labels, String name)`: searches the whole array, by calling the first one.
+
+          The check calls only the second one. It runs:
+
+          ```java fragment
+          String[] labels = {"Aino", "Bilal", "Chen", "Dara", "Emil", "Freya", "Gus"};
+          System.out.println(findLabel(labels, "Emil"));
+          System.out.println(findLabel(labels, "Bo"));
+          ```
+
+          and expects:
+
+          ```
+          4
+          -1
+          ```
+        seed: |
+          public class Main {
+              public static void main(String[] args) {
+                  String[] labels = {"Aino", "Bilal", "Chen", "Dara", "Emil", "Freya", "Gus"};
+                  System.out.println(findLabel(labels, "Emil"));
+                  System.out.println(findLabel(labels, "Bo"));
+              }
+
+              public static int findLabel(String[] labels, String name) {
+                  return -1;
+              }
+
+              // Write the recursive findLabel here.
+          }
+        solution: |
+          public class Main {
+              public static void main(String[] args) {
+                  String[] labels = {"Aino", "Bilal", "Chen", "Dara", "Emil", "Freya", "Gus"};
+                  System.out.println(findLabel(labels, "Emil"));
+                  System.out.println(findLabel(labels, "Bo"));
+              }
+
+              public static int findLabel(String[] labels, String name) {
+                  return findLabel(labels, name, 0, labels.length - 1);
+              }
+
+              public static int findLabel(String[] labels, String name, int low, int high) {
+                  if (low > high) {
+                      return -1;
+                  }
+                  int middle = (low + high) / 2;
+                  int order = name.compareTo(labels[middle]);
+                  if (order == 0) {
+                      return middle;
+                  }
+                  if (order > 0) {
+                      return findLabel(labels, name, middle + 1, high);
+                  }
+                  return findLabel(labels, name, low, middle - 1);
+              }
+          }
+        hints:
+          - "The two-parameter method is one line: `return findLabel(labels, name, 0, labels.length - 1);`"
+          - "In the recursive one, compare once and keep the result: `int order = name.compareTo(labels[middle]);`. If it's above 0, the name comes after the middle, so search from `middle + 1` to `high`."
+        require:
+          - pattern: \bpublic\s+static\s+int\s+findLabel\s*\(\s*String\s*\[\s*\]\s*\w+\s*,\s*String\s+\w+\s*,\s*int\s+\w+\s*,\s*int\s+\w+\s*\)
+            message: "Write the recursive method as `public static int findLabel(String[] labels, String name, int low, int high)`."
+          - pattern: \bfindLabel\s*\(
+            min: 6
+            message: "The 4-parameter `findLabel` should call itself on the half where the name can be."
+          - pattern: \.compareTo\s*\(
+            message: "Compare the names with `compareTo`."
+        forbid:
+          - pattern: \b(for|while)\b
+            message: "Do it with recursion, without a loop."
+          - pattern: binarySearch|indexOf
+            message: "Write the search yourself."
+        tests:
+          - call: |
+              String[] labels = {"Aino", "Bilal", "Chen", "Dara", "Emil", "Freya", "Gus"};
+              System.out.println(findLabel(labels, "Emil"));
+              System.out.println(findLabel(labels, "Bo"));
+          - call: |
+              String[] labels = {"Aino", "Bilal", "Chen", "Dara", "Emil", "Freya", "Gus"};
+              System.out.println(findLabel(labels, "Aino"));
+              System.out.println(findLabel(labels, "Gus"));
+              System.out.println(findLabel(labels, "Dara"));
+              System.out.println(findLabel(labels, "Zoe"));
+              System.out.println(findLabel(labels, "Abe"));
+              System.out.println(findLabel(labels, "chen"));
+            hidden: true
+          - call: |
+              String[] none = new String[0];
+              System.out.println(findLabel(none, "Ida"));
+              String[] two = {"Ida", "Jon"};
+              System.out.println(findLabel(two, "Ida") + " " + findLabel(two, "Jon") + " " + findLabel(two, "Jo"));
+            hidden: true
+
+  - id: recursion-merge-sort
+    slug: merge-sort
+    title: "Divide and conquer: merge sort"
+    text: |
+      Binary search splits a problem in half and solves one half. Many algorithms split a problem into parts, solve each part the same way, and combine the answers: that's called **divide and conquer**. Merge sort is the classic example. It sorts an array like this:
+
+      1. An array of 0 or 1 values is already sorted (the base case).
+      2. Otherwise, split it into two halves, and sort each half, with merge sort (the recursive calls).
+      3. Merge the two sorted halves into one sorted array.
+
+      ### Merging two sorted arrays
+
+      The work is in step 3. Two sorted arrays merge like two sorted piles of exam papers: the paper that goes next is always the smaller of the two on top of the piles. Take it, and look again. When one pile is empty, the rest of the other pile follows as it is.
+
+      ```java run
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] morning = {3, 8, 9, 15};
+              int[] evening = {1, 8, 12};
+              System.out.println(Arrays.toString(merge(morning, evening)));
+          }
+
+          public static int[] merge(int[] first, int[] second) {
+              int[] merged = new int[first.length + second.length];
+              int i = 0;
+              int j = 0;
+              int k = 0;
+              while (i < first.length && j < second.length) {
+                  if (first[i] <= second[j]) {
+                      merged[k] = first[i];
+                      i++;
+                  } else {
+                      merged[k] = second[j];
+                      j++;
+                  }
+                  k++;
+              }
+              while (i < first.length) {
+                  merged[k] = first[i];
+                  i++;
+                  k++;
+              }
+              while (j < second.length) {
+                  merged[k] = second[j];
+                  j++;
+                  k++;
+              }
+              return merged;
+          }
+      }
+      ```
+
+      ```output
+      [1, 3, 8, 8, 9, 12, 15]
+      ```
+
+      `i` is the place in `first`, `j` the place in `second`, and `k` the place in `merged`. Each round of the first loop copies one value, so merging takes one round per value: merging is quick. Merging doesn't need recursion; the loops are the simplest way to write it.
+
+      ### The recursive sort
+
+      `Arrays.copyOfRange(values, from, to)` makes a new array of the values from index `from` up to (not including) `to`. With it, the sort is a few lines:
+
+      ```java fragment
+      public static int[] mergeSort(int[] values) {
+          if (values.length <= 1) {
+              return values;
+          }
+          int middle = values.length / 2;
+          int[] left = mergeSort(Arrays.copyOfRange(values, 0, middle));
+          int[] right = mergeSort(Arrays.copyOfRange(values, middle, values.length));
+          return merge(left, right);
+      }
+      ```
+
+      The halves are sorted by the same method, which splits them again, until the parts have one value each. Then the merges put them together again, in order. Sorting `{5, 2, 7, 1}` goes like this:
+
+      ```text
+      mergeSort [5, 2, 7, 1]
+          mergeSort [5, 2]
+              mergeSort [5]  returns [5]
+              mergeSort [2]  returns [2]
+              merge          returns [2, 5]
+          mergeSort [7, 1]
+              mergeSort [7]  returns [7]
+              mergeSort [1]  returns [1]
+              merge          returns [1, 7]
+          merge              returns [1, 2, 5, 7]
+      ```
+
+      ### How much work it does
+
+      Halving an array of 1,000 values again and again gets down to single values after 10 levels, since 2 to the 10th is 1,024. At each level, the merges together copy every value once. So merge sort does about 1,000 times 10 steps, where selection sort (module 28) compares about 1,000 times 1,000 divided by 2, close to half a million times. This program counts the comparisons that `merge` makes while sorting 1,000 numbers that start in reverse order, and the comparisons selection sort makes on any 1,000 values:
+
+      ```java run
+      import java.util.Arrays;
+
+      public class Main {
+          private static int comparisons = 0;
+
+          public static void main(String[] args) {
+              int[] values = new int[1000];
+              for (int i = 0; i < values.length; i++) {
+                  values[i] = 1000 - i;
+              }
+              int[] sorted = mergeSort(values);
+              System.out.println(sorted[0] + " " + sorted[999]);
+              System.out.println("Merge sort: " + comparisons + " comparisons");
+              System.out.println("Selection sort: " + (1000 * 999 / 2) + " comparisons");
+          }
+
+          public static int[] mergeSort(int[] values) {
+              if (values.length <= 1) {
+                  return values;
+              }
+              int middle = values.length / 2;
+              int[] left = mergeSort(Arrays.copyOfRange(values, 0, middle));
+              int[] right = mergeSort(Arrays.copyOfRange(values, middle, values.length));
+              return merge(left, right);
+          }
+
+          public static int[] merge(int[] first, int[] second) {
+              int[] merged = new int[first.length + second.length];
+              int i = 0;
+              int j = 0;
+              int k = 0;
+              while (i < first.length && j < second.length) {
+                  comparisons++;
+                  if (first[i] <= second[j]) {
+                      merged[k] = first[i];
+                      i++;
+                  } else {
+                      merged[k] = second[j];
+                      j++;
+                  }
+                  k++;
+              }
+              while (i < first.length) {
+                  merged[k] = first[i];
+                  i++;
+                  k++;
+              }
+              while (j < second.length) {
+                  merged[k] = second[j];
+                  j++;
+                  k++;
+              }
+              return merged;
+          }
+      }
+      ```
+
+      ```output
+      1 1000
+      Merge sort: 5044 comparisons
+      Selection sort: 499500 comparisons
+      ```
+
+      `comparisons` is declared in the class, outside the methods, with `static`: a static variable belongs to the class itself, not to one call, so every call of `merge` adds to the same counter (a variable declared inside `merge` would start again at 0 in each call).
+
+      The difference grows with the size: for a million values, merge sort compares about 20 million times and selection sort about 500 billion times. Merge sort needs extra arrays for the halves, which selection sort doesn't.
+
+      ### Stable sorting
+
+      `merge` takes from `first` when the two values are equal (`<=`, not `<`). So values that compare as equal keep the order they had: a sort that does this is **stable**. It matters when you sort objects by one property, such as words by their length: words of the same length stay in the order they were in. Java's `Collections.sort` is a merge sort too (a refined one), and its documentation promises that it is stable.
+
+      **Your turn:** two park rangers measured trees, and each wrote the heights, in meters, in a sorted array. Write the method `merge(int[] first, int[] second)`, which returns a new array of all the heights of both, sorted, as in this step. Don't sort the result with `Arrays.sort`: merge. The check runs:
+
+      ```java fragment
+      int[] north = {4, 9, 17, 22};
+      int[] south = {6, 9, 30};
+      System.out.println(Arrays.toString(merge(north, south)));
+      ```
+
+      and expects:
+
+      ```
+      [4, 6, 9, 9, 17, 22, 30]
+      ```
+    seed: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] north = {4, 9, 17, 22};
+              int[] south = {6, 9, 30};
+              System.out.println(Arrays.toString(merge(north, south)));
+          }
+
+          public static int[] merge(int[] first, int[] second) {
+              int[] merged = new int[first.length + second.length];
+              return merged;
+          }
+      }
+    solution: |
+      import java.util.Arrays;
+
+      public class Main {
+          public static void main(String[] args) {
+              int[] north = {4, 9, 17, 22};
+              int[] south = {6, 9, 30};
+              System.out.println(Arrays.toString(merge(north, south)));
+          }
+
+          public static int[] merge(int[] first, int[] second) {
+              int[] merged = new int[first.length + second.length];
+              int i = 0;
+              int j = 0;
+              int k = 0;
+              while (i < first.length && j < second.length) {
+                  if (first[i] <= second[j]) {
+                      merged[k] = first[i];
+                      i++;
+                  } else {
+                      merged[k] = second[j];
+                      j++;
+                  }
+                  k++;
+              }
+              while (i < first.length) {
+                  merged[k] = first[i];
+                  i++;
+                  k++;
+              }
+              while (j < second.length) {
+                  merged[k] = second[j];
+                  j++;
+                  k++;
+              }
+              return merged;
+          }
+      }
+    hints:
+      - "Keep a place in each array, `i` in `first` and `j` in `second`, and one in `merged`, `k`. While both arrays have values left, copy the smaller of `first[i]` and `second[j]` and move that array's place on."
+      - "When one array runs out, copy the rest of the other one, with a loop for each array (only one of the two has anything left)."
+    forbid:
+      - pattern: \bsort\s*\(
+        message: "Don't sort the result: merge the two sorted arrays."
+    tests:
+      - call: |
+          int[] north = {4, 9, 17, 22};
+          int[] south = {6, 9, 30};
+          System.out.println(Arrays.toString(merge(north, south)));
+      - call: |
+          int[] a = {1, 2, 3};
+          int[] b = {10, 20};
+          System.out.println(Arrays.toString(merge(a, b)));
+          System.out.println(Arrays.toString(merge(b, a)));
+          int[] none = new int[0];
+          System.out.println(Arrays.toString(merge(none, b)));
+          System.out.println(Arrays.toString(merge(a, none)));
+          System.out.println(Arrays.toString(merge(none, none)));
+        hidden: true
+      - call: |
+          int[] a = {2, 2, 5, 11, 11, 14};
+          int[] b = {1, 2, 11, 12, 15, 16, 17};
+          System.out.println(Arrays.toString(merge(a, b)));
+        hidden: true
+    more:
+      - task: |
+          A paper plane contest records how far each plane flies, in centimeters, in the order the planes are thrown. Write `mergeSort(int[] values)`, which returns a new sorted array of the distances, with merge sort: an array of at most one value is returned as it is; any other array is split in two with `Arrays.copyOfRange`, each half is sorted with `mergeSort`, and the sorted halves are merged with `merge`, which is given. Don't use `Arrays.sort` or `Collections.sort`. The check runs:
+
+          ```java fragment
+          int[] distances = {1240, 875, 1630, 875, 1105, 690};
+          System.out.println(Arrays.toString(mergeSort(distances)));
+          ```
+
+          and expects:
+
+          ```
+          [690, 875, 875, 1105, 1240, 1630]
+          ```
+        seed: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[] distances = {1240, 875, 1630, 875, 1105, 690};
+                  System.out.println(Arrays.toString(mergeSort(distances)));
+              }
+
+              public static int[] mergeSort(int[] values) {
+                  return values;
+              }
+
+              public static int[] merge(int[] first, int[] second) {
+                  int[] merged = new int[first.length + second.length];
+                  int i = 0;
+                  int j = 0;
+                  int k = 0;
+                  while (i < first.length && j < second.length) {
+                      if (first[i] <= second[j]) {
+                          merged[k] = first[i];
+                          i++;
+                      } else {
+                          merged[k] = second[j];
+                          j++;
+                      }
+                      k++;
+                  }
+                  while (i < first.length) {
+                      merged[k] = first[i];
+                      i++;
+                      k++;
+                  }
+                  while (j < second.length) {
+                      merged[k] = second[j];
+                      j++;
+                      k++;
+                  }
+                  return merged;
+              }
+          }
+        solution: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  int[] distances = {1240, 875, 1630, 875, 1105, 690};
+                  System.out.println(Arrays.toString(mergeSort(distances)));
+              }
+
+              public static int[] mergeSort(int[] values) {
+                  if (values.length <= 1) {
+                      return values;
+                  }
+                  int middle = values.length / 2;
+                  int[] left = mergeSort(Arrays.copyOfRange(values, 0, middle));
+                  int[] right = mergeSort(Arrays.copyOfRange(values, middle, values.length));
+                  return merge(left, right);
+              }
+
+              public static int[] merge(int[] first, int[] second) {
+                  int[] merged = new int[first.length + second.length];
+                  int i = 0;
+                  int j = 0;
+                  int k = 0;
+                  while (i < first.length && j < second.length) {
+                      if (first[i] <= second[j]) {
+                          merged[k] = first[i];
+                          i++;
+                      } else {
+                          merged[k] = second[j];
+                          j++;
+                      }
+                      k++;
+                  }
+                  while (i < first.length) {
+                      merged[k] = first[i];
+                      i++;
+                      k++;
+                  }
+                  while (j < second.length) {
+                      merged[k] = second[j];
+                      j++;
+                      k++;
+                  }
+                  return merged;
+              }
+          }
+        hints:
+          - "The base case: `if (values.length <= 1) { return values; }`. Otherwise `int middle = values.length / 2;`, and the halves are `Arrays.copyOfRange(values, 0, middle)` and `Arrays.copyOfRange(values, middle, values.length)`."
+          - "Sort each half with `mergeSort`, then `return merge(left, right);`"
+        require:
+          - pattern: \bmergeSort\s*\(
+            min: 4
+            message: "`mergeSort` should call itself on each half."
+          - pattern: \bmerge\s*\(
+            min: 2
+            message: "Merge the sorted halves with `merge`."
+        forbid:
+          - pattern: \bsort\s*\(
+            message: "Don't use `Arrays.sort` or `Collections.sort`: sort with merge sort."
+        tests:
+          - call: |
+              int[] distances = {1240, 875, 1630, 875, 1105, 690};
+              System.out.println(Arrays.toString(mergeSort(distances)));
+          - call: |
+              System.out.println(Arrays.toString(mergeSort(new int[0])));
+              int[] one = {500};
+              System.out.println(Arrays.toString(mergeSort(one)));
+              int[] two = {9, 3};
+              System.out.println(Arrays.toString(mergeSort(two)));
+              int[] sorted = {1, 2, 3, 4, 5};
+              System.out.println(Arrays.toString(mergeSort(sorted)));
+              int[] backwards = {7, 6, 5, 4, 3, 2, 1};
+              System.out.println(Arrays.toString(mergeSort(backwards)));
+            hidden: true
+          - call: |
+              int[] many = new int[1000];
+              for (int i = 0; i < many.length; i++) {
+                  many[i] = (i * 37) % 1000;
+              }
+              int[] result = mergeSort(many);
+              System.out.println(result.length + " " + result[0] + " " + result[1] + " " + result[500] + " " + result[999]);
+            hidden: true
+      - task: |
+          A crossword maker lists candidate words and wants them sorted by length, shortest first. Words of the same length must stay in the order they were given in: the sort must be stable. Write `sortByLength(String[] words)`, which returns a new array sorted that way, with merge sort. You need your own merge for Strings, `mergeByLength(String[] first, String[] second)`, which compares the words' lengths, and takes from `first` when two lengths are equal. `Arrays.copyOfRange` works for String arrays too. Don't use `Arrays.sort` or `Collections.sort`. The check runs:
+
+          ```java fragment
+          String[] words = {"orbit", "fig", "ash", "lantern", "elm", "pearl"};
+          System.out.println(Arrays.toString(sortByLength(words)));
+          ```
+
+          and expects:
+
+          ```
+          [fig, ash, elm, orbit, pearl, lantern]
+          ```
+        seed: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  String[] words = {"orbit", "fig", "ash", "lantern", "elm", "pearl"};
+                  System.out.println(Arrays.toString(sortByLength(words)));
+              }
+
+              public static String[] sortByLength(String[] words) {
+                  return words;
+              }
+
+              // Write the method mergeByLength here.
+          }
+        solution: |
+          import java.util.Arrays;
+
+          public class Main {
+              public static void main(String[] args) {
+                  String[] words = {"orbit", "fig", "ash", "lantern", "elm", "pearl"};
+                  System.out.println(Arrays.toString(sortByLength(words)));
+              }
+
+              public static String[] sortByLength(String[] words) {
+                  if (words.length <= 1) {
+                      return words;
+                  }
+                  int middle = words.length / 2;
+                  String[] left = sortByLength(Arrays.copyOfRange(words, 0, middle));
+                  String[] right = sortByLength(Arrays.copyOfRange(words, middle, words.length));
+                  return mergeByLength(left, right);
+              }
+
+              public static String[] mergeByLength(String[] first, String[] second) {
+                  String[] merged = new String[first.length + second.length];
+                  int i = 0;
+                  int j = 0;
+                  int k = 0;
+                  while (i < first.length && j < second.length) {
+                      if (first[i].length() <= second[j].length()) {
+                          merged[k] = first[i];
+                          i++;
+                      } else {
+                          merged[k] = second[j];
+                          j++;
+                      }
+                      k++;
+                  }
+                  while (i < first.length) {
+                      merged[k] = first[i];
+                      i++;
+                      k++;
+                  }
+                  while (j < second.length) {
+                      merged[k] = second[j];
+                      j++;
+                      k++;
+                  }
+                  return merged;
+              }
+          }
+        hints:
+          - "`sortByLength` is the `mergeSort` of the last challenge with `String[]` in place of `int[]`, calling `mergeByLength`."
+          - "`mergeByLength` is `merge` with Strings, comparing `first[i].length() <= second[j].length()`. The `<=` takes the word from `first` when the lengths are equal, which keeps the sort stable: `first` holds the words that came earlier."
+        require:
+          - pattern: \bsortByLength\s*\(
+            min: 4
+            message: "`sortByLength` should call itself on each half."
+          - pattern: \bmergeByLength\s*\(
+            min: 2
+            message: "Write `mergeByLength` and merge the sorted halves with it."
+        forbid:
+          - pattern: \bsort\s*\(
+            message: "Don't use `Arrays.sort` or `Collections.sort`: sort with merge sort."
+        tests:
+          - call: |
+              String[] words = {"orbit", "fig", "ash", "lantern", "elm", "pearl"};
+              System.out.println(Arrays.toString(sortByLength(words)));
+          - call: |
+              String[] same = {"dd", "cc", "bb", "aa"};
+              System.out.println(Arrays.toString(sortByLength(same)));
+              String[] mixed = {"wren", "ox", "heron", "yak", "emu", "gnu", "ibis", "ant", "a"};
+              System.out.println(Arrays.toString(sortByLength(mixed)));
+              System.out.println(Arrays.toString(sortByLength(new String[0])));
+            hidden: true
+          - call: |
+              String[] first = {"glow", "tide", "moss", "reef"};
+              System.out.println(Arrays.toString(mergeByLength(first, new String[]{"sea", "bay", "kelp"})));
+            hidden: true

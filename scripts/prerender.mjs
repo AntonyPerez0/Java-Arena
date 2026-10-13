@@ -14,6 +14,9 @@ import { windowFigureHtml } from "../src/components/window-drawing.ts";
 import { readOnlyBlockHtml } from "../src/components/code-blocks.ts";
 import { withoutClassDiagrams } from "./content/class-diagram.mjs";
 import { RECORD_NOTICE } from "../src/lib/record.ts";
+import { PRO_GUIDE_HTML, PRO_HONEST, PRO_LEAD } from "../src/lib/pro-guide.ts";
+import { readProTrack } from "./pro-track/site.mjs";
+import { JAVA_API_URL, KIND_LABEL, TOPICS_LEAD, aboutParts, matchCount, topicLetter } from "../src/lib/topics.ts";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const DIST = path.join(ROOT, "dist");
@@ -133,24 +136,29 @@ page("/", {
 <p>${allLive ? `All ${content.plan.length} modules are online: ${moocCount} following the MOOC (Java Programming I and II)${extraCount ? ` and ${extraCount} extra ${extraCount === 1 ? "module" : "modules"} of Java Arena's own` : ""}, with ${stepCount} steps and ${challengeCount} challenges.` : `Java Arena is new: ${content.modules.length} of ${content.plan.length} modules are online so far (${stepCount} steps, ${challengeCount} challenges). The rest of the course is added in batches.`}</p>
 <ul>${content.modules.map((m) => `<li><a href="${link(modulePath(m))}">Module ${m.number}: ${esc(m.title)}</a>${extraTag(m)}</li>`).join("")}<li><a href="${link("/learn")}">All modules</a></li></ul>
 <p>Practice: <a href="${link("/deathmatch")}">Deathmatch drills</a>, <a href="${link("/daily")}">the daily challenge</a> and <a href="${link("/placement")}">a placement quiz</a>.</p>
-<p><a href="${link("/projects")}">Projects</a>: larger programs built over several milestones.</p>`,
+<p><a href="${link("/projects")}">Projects</a>: larger programs built over several milestones.</p>
+<p><a href="${link("/pro")}">Pro Track</a>: after the course, projects to build on your own computer with a JDK 21, Maven and JUnit 5 tests.</p>`,
 });
 
 page("/learn", {
   title: `All modules | ${NAME}`,
   description: `The course plan: ${moocCount} modules following the University of Helsinki's Java Programming MOOC, parts 1 to 14${extraCount ? `, plus ${extraCount} extra ${extraCount === 1 ? "module" : "modules"} of Java Arena's own` : ""}. ${allLive ? "All of them are online." : `${content.modules.length} are online so far.`}`,
   body:
-    `<h1>The course</h1><p>Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises.${allLive ? "" : " Modules that aren't written yet are listed so you can see what's coming."}</p><p><a href="${link("/projects")}">Projects</a>: larger programs built over several milestones, each after the modules it needs.</p>` +
+    `<h1>The course</h1><p>Java Arena follows the order and topics of the University of Helsinki's Java Programming MOOC, parts 1 to 14, with its own lessons and exercises.${allLive ? "" : " Modules that aren't written yet are listed so you can see what's coming."}</p><p><a href="${link("/projects")}">Projects</a>: larger programs built over several milestones, each after the modules it needs.</p><p><a href="${link("/pro")}">Pro Track</a>: projects for your own computer, for after the course.</p><p><a href="${link("/topics")}">Topics A to Z</a>: Java keywords, classes, methods and ideas, each with the steps that teach it.</p>` +
     COURSES.filter(([c]) => content.plan.some((m) => m.course === c))
       .map(([c, name, note]) => `<h2>${esc(name)}</h2><p>${esc(note)}</p><ol>` + content.plan.filter((m) => m.course === c).map((m) => `<li value="${m.number}">${m.live ? `<a href="${link(modulePath(m))}">${esc(m.title)}</a>` : `${esc(m.title)} (not written yet)`}${extraTag(m)}</li>`).join("") + `</ol>`)
       .join(""),
 });
 
+/** The MOOC's last module (the end of Java Programming II): its page points on to the Pro Track, as src/pages/ModulePage.tsx does. */
+const COURSE_END = content.plan.filter((m) => m.course === "II").pop()?.id;
+const courseEnd = (m) =>
+  m.id === COURSE_END ? `<section class="card course-end"><h2 class="h3">After the course</h2><p>This is the last module of the MOOC. Next, you can go on with the extra modules, or try the Pro Track: projects for your own computer with a JDK 21, Maven and JUnit 5. <a href="${link("/pro")}">See the Pro Track</a></p></section>` : "";
 for (const m of content.modules) {
   page(modulePath(m), {
     title: `Module ${m.number}: ${m.title} | ${NAME}`,
     description: summary(m.summary),
-    body: `<nav aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a></nav><p class="eyebrow">Module ${m.number}${extraTag(m)}</p><h1>${esc(m.title)}</h1><p>${esc(m.summary)}</p><h2>Steps</h2><ol>${m.steps.map((s) => `<li><a href="${link(stepPath(m, s))}">${esc(s.title)}</a></li>`).join("")}</ol><aside class="credit">${credit(m)}</aside>`,
+    body: `<nav aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a></nav><p class="eyebrow">Module ${m.number}${extraTag(m)}</p><h1>${esc(m.title)}</h1><p>${esc(m.summary)}</p><h2>Steps</h2><ol>${m.steps.map((s) => `<li><a href="${link(stepPath(m, s))}">${esc(s.title)}</a></li>`).join("")}</ol>${courseEnd(m)}<aside class="credit">${credit(m)}</aside>`,
   });
   m.steps.forEach((s, i) => {
     const prev = i > 0 ? `<a href="${link(stepPath(m, m.steps[i - 1]))}">Previous: ${esc(m.steps[i - 1].title)}</a>` : "";
@@ -235,6 +243,95 @@ for (const p of projects) {
   });
 }
 
+// ---------------------------------------------------------------- the Pro Track
+// The same text as src/pages/ProTrack.tsx and ProProject.tsx, from the same sources: the guide
+// (src/lib/pro-guide.ts) and the projects (scripts/pro-track/site.mjs; the site build has checked them).
+const pro = readProTrack(ROOT);
+if (pro.problems.length) throw new Error(`prerender: the Pro Track has problems:\n  ${pro.problems.join("\n  ")}`);
+const proPath = (p) => `/pro/${p.id}/`;
+const PRO_SECTIONS = [
+  ["build", "What you'll build"],
+  ["need", "What you need"],
+  ["steps", "Steps"],
+  ["tests", "Run the tests"],
+  ["run", "Run the program"],
+  ["github", "Put it on GitHub (optional)"],
+];
+const PRO_CRUMBS = `<nav class="crumbs" aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a> › `;
+page("/pro", {
+  title: `Pro Track: Java projects for your own computer | ${NAME}`,
+  description: "Projects to build on your own computer after the course, with a JDK 21, Maven and JUnit 5 tests, and GitHub Actions running the tests in your own repository if you like.",
+  layout: true,
+  body: `<div class="pro-page narrow">${PRO_CRUMBS}<span>Pro Track</span></nav><div class="page-head"><h1>Pro Track</h1><p class="lead">${esc(PRO_LEAD)}</p><p class="pro-honest">${esc(PRO_HONEST)}</p></div>
+<section><h2>The projects</h2>${
+    pro.projects.length
+      ? `<ul class="project-list pro-list">${pro.projects.map((p) => `<li class="card project-card"><h3 class="h3"><a href="${link(proPath(p))}">${esc(p.title)}</a></h3><p>${esc(p.summary)}</p><p class="muted small">About ${esc(p.hours)} hours. A checklist of ${p.checklist.length} items to tick as you go.</p></li>`).join("")}</ul>`
+      : `<p class="card">The projects are on their way.</p>`
+  }</section>
+<div class="md pro-guide">${PRO_GUIDE_HTML}</div></div>`,
+});
+pro.projects.forEach((p, k) => {
+  const next = pro.projects[k + 1];
+  const practice = (x) => {
+    const m = content.plan.find((pm) => pm.id === x.module);
+    const name = m ? `module ${m.number}: ${esc(m.title)}` : esc(x.module);
+    return `<li>${esc(x.what)} (from ${m?.live ? `<a href="${link(modulePath(m))}">${name}</a>` : name})</li>`;
+  };
+  page(proPath(p), {
+    title: `${p.title} · Pro Track | ${NAME}`,
+    description: summary(p.summary),
+    type: "article",
+    jsonld: {
+      "@context": "https://schema.org",
+      "@type": "LearningResource",
+      name: p.title,
+      description: summary(p.summary),
+      learningResourceType: "Project",
+      isAccessibleForFree: true,
+      inLanguage: "en",
+      programmingLanguage: "Java",
+      url: canonical(proPath(p)),
+    },
+    layout: true,
+    body: `<div class="pro-page pro-project narrow">${PRO_CRUMBS}<a href="${link("/pro")}">Pro Track</a></nav><div class="page-head"><p class="eyebrow">Pro Track project · about ${esc(p.hours)} hours</p><h1>${esc(p.title)}</h1><p class="lead">${p.summaryHtml}</p>
+<p class="actions"><a class="btn btn-primary" href="${BASE}${p.zip.file}" download="${p.id}.zip">Download the project (zip, ${Math.max(1, Math.round(p.zip.bytes / 1024))} KB)</a> <a class="btn" href="${p.folder}">The folder on GitHub</a> <a class="btn" href="#checklist">Your checklist (0 of ${p.checklist.length} ticked)</a></p>
+<p class="muted small">Unzip it on your computer and open its README.md. The zip isn't saved for offline use, so downloading it needs a connection. New to Maven? The <a href="${link("/pro")}">Pro Track page</a> shows how to set up your computer.</p></div>
+<section><h2>What it practices</h2><ul class="pro-practices">${p.practices.map(practice).join("")}</ul></section>
+${PRO_SECTIONS.filter(([key]) => p.sections[key])
+  .map(([key, heading]) => `<section><h2>${esc(heading)}</h2><div class="md">${p.sections[key]}</div></section>`)
+  .join("\n")}
+<section class="card pro-checklist"><h2 id="checklist" class="h3">Your checklist</h2><ul class="pro-items">${p.checklist.map((c) => `<li><span>${c.html}</span></li>`).join("")}</ul></section>
+<nav class="step-nav pro-nav" aria-label="Pro Track"><a href="${link("/pro")}">All Pro Track projects</a>${next ? `<a href="${link(proPath(next))}">Next: ${esc(next.title)}</a>` : ""}</nav></div>`,
+  });
+});
+
+// The topics reference (content/topics.yaml, checked by the content build): every entry, A to Z, as
+// src/pages/Topics.tsx shows it before anything is typed in its search box.
+const topics = fs.existsSync(path.join(GEN, "topics.json")) ? JSON.parse(fs.readFileSync(path.join(GEN, "topics.json"), "utf8")) : [];
+const moduleNumber = new Map(index.modules.map((m) => [m.id, m.number]));
+const letterId = (l) => `letter-${l === "#" ? "symbols" : l}`;
+const topicGroups = [];
+for (const t of topics) {
+  const l = topicLetter(t.term);
+  if (topicGroups.at(-1)?.[0] === l) topicGroups.at(-1)[1].push(t);
+  else topicGroups.push([l, [t]]);
+}
+const topicHtml = (t) =>
+  `<li id="${esc(t.id)}" class="topic"><div class="topic-head"><h3 class="topic-term">${t.kind === "idea" || t.kind === "tool" ? esc(t.term) : `<code>${esc(t.term)}</code>`}</h3><span class="topic-kind">${KIND_LABEL[t.kind]}</span></div><p class="topic-about">${aboutParts(t.about)
+    .map((x, i) => (i % 2 ? `<code>${esc(x)}</code>` : esc(x)))
+    .join("")}</p><ul class="topic-links" aria-label="Where to learn ${esc(t.term)}">${t.steps
+    .map((s) => `<li><a href="${link(stepPath({ id: s.module }, s))}">${esc(s.title)}</a> <span class="muted">(module ${moduleNumber.get(s.module)}, ${esc(s.moduleTitle)})</span></li>`)
+    .join("")}${t.drills ? `<li><a href="${link("/deathmatch")}?topic=${encodeURIComponent(t.drills.topic)}">Drills in Deathmatch</a> <span class="muted">(topic: ${esc(t.drills.title)})</span></li>` : ""}</ul></li>`;
+if (topics.length)
+  page("/topics", {
+    title: `Java topics A to Z | ${NAME}`,
+    description: `${topics.length} Java keywords, classes, methods and ideas, A to Z, each in one plain line with links to the Java Arena lessons that teach it.`,
+    layout: true,
+    body: `<div class="topics-page narrow"><nav class="crumbs" aria-label="Breadcrumb"><a href="${link("/learn")}">Learn</a> › <span>Topics A to Z</span></nav><div class="page-head"><h1>Topics A to Z</h1><p class="lead">${esc(TOPICS_LEAD)} <a href="${JAVA_API_URL}">Java 21's API documentation</a>.</p></div>
+<div class="topics-search" role="search"><label for="topics-q">Search the topics</label><input id="topics-q" type="search" autocomplete="off" spellcheck="false" aria-describedby="topics-count"><p id="topics-count" class="muted small" role="status">${esc(matchCount(topics.length, topics.length, ""))}</p></div>
+<nav class="topics-letters" aria-label="Letters"><ul>${topicGroups.map(([l]) => `<li><a href="#${letterId(l)}"${l === "#" ? ' aria-label="Operators and symbols"' : ""}>${esc(l)}</a></li>`).join("")}</ul></nav>
+${topicGroups.map(([l, list]) => `<section aria-labelledby="${letterId(l)}"><h2 id="${letterId(l)}" class="topics-letter">${l === "#" ? "Operators and symbols" : l}</h2><ul class="topic-list">${list.map(topicHtml).join("")}</ul></section>`).join("\n")}</div>`,
+  });
 page("/playground", {
   title: `Java playground | ${NAME}`,
   description: "Write any Java program and run it with your own input, with the real javac 21 compiler running in your browser. Share programs as links.",
@@ -247,7 +344,7 @@ page("/deathmatch", {
   title: `Deathmatch: Java practice drills | ${NAME}`,
   description: "Endless quick Java drills from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, and small programs to write. Spaced review and interview prep.",
   layout: true,
-  body: `<div class="lobby practice-page"><div class="page-head"><h1>Deathmatch</h1><p class="muted">Endless quick reps from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, pick one. Every 8th rep is a boss rep, a small program you write and run for real. Drills you miss come back more often until you know them.</p></div></div>`,
+  body: `<div class="lobby practice-page"><div class="page-head"><h1>Deathmatch</h1><p class="muted">Endless quick reps from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, pick one. Every 8th rep is a boss rep, a small program you write and run for real. Drills you miss come back more often until you know them.</p><p class="muted small">Stuck on a keyword or a method? <a href="${link("/topics")}">Topics A to Z</a> says what it is in one line and links to the step that teaches it.</p></div></div>`,
 });
 page("/daily", {
   title: `Daily Java challenge | ${NAME}`,
@@ -293,7 +390,7 @@ const MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><re
 const BRAND = `<a href="${link("/")}" class="brand" aria-label="Java Arena home">${MARK}<span class="brand-name">Java <b>Arena</b></span></a>`;
 const HEADER = `<header class="topbar">${BRAND}<nav id="main-nav" class="nav" aria-label="Main"><a href="${link("/learn")}">Learn</a><a href="${link("/deathmatch")}">Deathmatch</a><a href="${link("/daily")}">Daily</a><a href="${link("/playground")}">Playground</a><a href="${link("/settings")}">Settings</a><a href="${link("/about")}">About</a></nav><div class="topbar-right"><a href="${link("/learn")}" class="btn btn-primary btn-sm topbar-cta">Start learning</a></div></header>`;
 const REPO = "https://github.com/AntonyPerez0/Java-Arena";
-const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li><li><a href="${link("/projects")}">Projects</a></li><li><a href="${link("/playground")}">Playground</a></li></ul></div><div class="footer-col"><h2>Practice</h2><ul><li><a href="${link("/deathmatch")}">Deathmatch</a></li><li><a href="${link("/daily")}">Daily challenge</a></li><li><a href="${link("/placement")}">Placement quiz</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The course's lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>; the extra modules after the course are Java Arena's own. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
+const FOOTER = `<footer class="footer"><div class="footer-inner"><div class="footer-grid"><div class="footer-brand">${BRAND}<p>Learn Java with the real compiler, running in your browser. Free and non-commercial.</p></div><div class="footer-col"><h2>Learn</h2><ul><li><a href="${link("/learn")}">All modules</a></li><li><a href="${link("/learn/printing")}">Start with module 1</a></li><li><a href="${link("/projects")}">Projects</a></li><li><a href="${link("/pro")}">Pro Track</a></li><li><a href="${link("/topics")}">Topics A to Z</a></li><li><a href="${link("/playground")}">Playground</a></li></ul></div><div class="footer-col"><h2>Practice</h2><ul><li><a href="${link("/deathmatch")}">Deathmatch</a></li><li><a href="${link("/daily")}">Daily challenge</a></li><li><a href="${link("/placement")}">Placement quiz</a></li></ul></div><div class="footer-col"><h2>Site</h2><ul><li><a href="${link("/settings")}">Settings</a></li><li><a href="${link("/about")}">About and credits</a></li><li><a href="${REPO}">Source on GitHub</a></li><li><a href="${REPO}/issues/new">Report a problem</a></li></ul></div></div><div class="footer-bottom"><p>The course's lessons follow the order and topics of <a href="${MOOC}">Java Programming</a> by the University of Helsinki, licensed under <a href="${LICENSE}" rel="license">CC BY-NC-SA 4.0</a>; the extra modules after the course are Java Arena's own. Java Arena's lessons are shared under the same license; the site's code is MIT licensed. Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark of Oracle and/or its affiliates.</p><p>Your progress stays in this browser. No account, no ads, no tracking.</p></div></div></footer>`;
 // The fonts are needed for the first paint: fetch them right away instead of after the CSS.
 const FONTS = fs
   .readdirSync(path.join(DIST, "assets"))

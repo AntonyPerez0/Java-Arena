@@ -10,6 +10,9 @@ import NotFound from "./NotFound";
 import { useTitle } from "../lib/title";
 import { finishedPart, isoDay, moduleFinished, recordDate } from "../lib/record";
 
+/** The MOOC's last module (the end of Java Programming II): its page points on to the Pro Track. */
+const COURSE_END = plan.filter((m) => m.course === "II").pop()?.id;
+
 export default function ModulePage() {
   const { moduleId = "" } = useParams();
   const m = moduleById.get(moduleId);
@@ -77,6 +80,16 @@ export default function ModulePage() {
           );
         })}
       </ol>
+      {m.id === COURSE_END && (
+        <section className="card course-end" aria-labelledby="course-end-h">
+          <h2 id="course-end-h" className="h3">
+            After the course
+          </h2>
+          <p>
+            This is the last module of the MOOC. Next, you can go on with the extra modules, or try the Pro Track: projects for your own computer with a JDK 21, Maven and JUnit 5. <Link to="/pro/">See the Pro Track</Link>
+          </p>
+        </section>
+      )}
       <MoocCredit module={m} />
     </div>
   );

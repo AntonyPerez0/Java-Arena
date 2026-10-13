@@ -63,6 +63,22 @@ export default function Learn() {
           <Link to="/projects/">See the projects</Link>
         </p>
       </section>
+      <section className="card learn-projects" aria-labelledby="pro-h">
+        <h2 id="pro-h" className="h3">
+          Pro Track
+        </h2>
+        <p>
+          Projects for your own computer, for after the course: a JDK 21, Maven and JUnit 5 tests, and your own GitHub repository if you like. <Link to="/pro/">See the Pro Track</Link>
+        </p>
+      </section>
+      <section className="card learn-projects" aria-labelledby="topics-h">
+        <h2 id="topics-h" className="h3">
+          Topics A to Z
+        </h2>
+        <p>
+          Looking for one thing, such as <code>switch</code>, <code>HashMap</code> or recursion? Each topic has one line and links to the steps that teach it. <Link to="/topics/">See the topics</Link>
+        </p>
+      </section>
       {courses.map((c) => (
         <section key={c.course} className="phase" aria-labelledby={`course-${c.course}`}>
           <h2 id={`course-${c.course}`} className="course-title">

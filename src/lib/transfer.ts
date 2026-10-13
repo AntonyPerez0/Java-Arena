@@ -8,7 +8,8 @@
 // because a finished course has over a thousand of each. A progress file holds the same progress
 // in the store's own shape, as readable JSON. Both decode to a Transfer and are checked field by
 // field, so a damaged link or file is refused before anything changes.
-import type { ChallengeProgress, DmMode, DmStats, DrillStat, MilestoneProgress, ProjectProgress, RunRecord, State, StepProgress, Theme } from "../state/store";
+import type { ChallengeProgress, DmMode, DmStats, DrillStat, MilestoneProgress, ProProgress, ProTick, ProjectProgress, RunRecord, State, StepProgress, Theme } from "../state/store";
+import { mergePro, tickCount, type ProChecklists } from "./pro.ts";
 
 /** The format version of links and files. A newer one is refused with a message to reload the site. */
 export const TRANSFER_VERSION = 1;
@@ -28,6 +29,8 @@ export type Transfer = {
   steps: Record<string, StepProgress>;
   /** Projects' milestones (without code, no milestone has code, passed or savedAt). */
   projects: Record<string, ProjectProgress>;
+  /** The Pro Track's checklists (the learner's own ticks), with or without code. */
+  pro: Record<string, ProProgress>;
   drills: Record<string, DrillStat>;
   dm: DmStats;
   daily: Record<string, boolean>;
@@ -80,6 +83,7 @@ export function makeTransfer(s: State, playground: PlaygroundSave | null, withCo
     madeAt: now,
     steps,
     projects,
+    pro: s.pro ?? {},
     drills: s.drills,
     dm: s.dm,
     daily: s.daily,
@@ -147,6 +151,16 @@ function checkProject(v: unknown, withCode: boolean): ProjectProgress {
   return p;
 }
 
+function checkPro(v: unknown): ProProgress {
+  if (!isObj(v) || !isObj(v.items)) return damaged("a Pro Track checklist");
+  const items: Record<string, ProTick> = {};
+  for (const [k, t] of Object.entries(v.items)) {
+    if (!isObj(t) || !isNum(t.at)) return damaged("a Pro Track checklist item");
+    items[k] = { done: flag(t.done, "a Pro Track checklist item"), at: t.at };
+  }
+  return { items };
+}
+
 function checkDrill(v: unknown): DrillStat {
   if (!isObj(v)) return damaged("a drill");
   const box = count(v.box, "a drill's box");
@@ -205,9 +219,13 @@ export function checkTransfer(v: unknown, withCode: boolean, madeAt: number): Tr
   if (v.projects != null && !isObj(v.projects)) damaged("the projects");
   const projects: Record<string, ProjectProgress> = {};
   for (const [id, p] of Object.entries(isObj(v.projects) ? v.projects : {})) projects[id] = checkProject(p, withCode);
+  // The Pro Track came in Batch 20, with this format: progress without it has none.
+  if (v.pro != null && !isObj(v.pro)) damaged("the Pro Track");
+  const pro: Record<string, ProProgress> = {};
+  for (const [id, p] of Object.entries(isObj(v.pro) ? v.pro : {})) pro[id] = checkPro(p);
   const daily: Record<string, boolean> = {};
   for (const [d, ok] of Object.entries(v.daily)) daily[d] = flag(ok, "a daily answer");
-  const t: Transfer = { withCode, madeAt, steps, projects, drills, dm: checkDm(v.dm), daily, placed: strings(v.placed ?? [], "the placement"), settings: checkSettings(v.settings) };
+  const t: Transfer = { withCode, madeAt, steps, projects, pro, drills, dm: checkDm(v.dm), daily, placed: strings(v.placed ?? [], "the placement"), settings: checkSettings(v.settings) };
   const placedAt = optTime(v.placedAt, "the placement");
   if (placedAt != null) t.placedAt = placedAt;
   const pg = withCode ? checkPlayground(v.playground) : undefined;
@@ -226,6 +244,9 @@ export function checkTransfer(v: unknown, withCode: boolean, madeAt: number): Tr
  * j (projects, left out when there are none): [id, flags (1 done), doneAt (null: none), milestones],
  * where each milestone is [id, flags (1 done, 2 saw the solution), hints, attempts] and, with code,
  * [..., code, passed, savedAt] (null where missing).
+ * k (the Pro Track's checklists, left out when there are none): [id, items], where each item is
+ * [id, 1 ticked or 0 not, the time it changed in whole seconds (rounded up) as the difference from
+ * the item before], sorted by that time.
  */
 type Wire = {
   v: number;
@@ -233,6 +254,7 @@ type Wire = {
   t: number;
   s: unknown[];
   j?: unknown[];
+  k?: unknown[];
   d: unknown[];
   m: DmStats;
   y: Record<string, boolean>;
@@ -278,12 +300,15 @@ export function toWire(t: Transfer): Wire {
       return base;
     }),
   ]);
+  // Rounded up, so a time never moves earlier (setTick makes whole seconds, which travel exactly).
+  const k = Object.entries(t.pro).map(([id, p]) => [id, deltas(Object.entries(p.items), ([, x]) => Math.ceil(x.at / 1000)).map(([[item, x], dt]) => [item, x.done ? 1 : 0, dt])]);
   return {
     v: TRANSFER_VERSION,
     c: t.withCode ? 1 : 0,
     t: t.madeAt,
     s,
     ...(j.length ? { j } : {}),
+    ...(k.length ? { k } : {}),
     d,
     m: t.dm,
     y: t.daily,
@@ -330,6 +355,19 @@ export function fromWire(w: unknown): Transfer {
     }
     projects[row[0]] = { done: !!(row[1] & 1), doneAt: row[2], milestones };
   }
+  const pro: Record<string, unknown> = {};
+  if (w.k != null && !Array.isArray(w.k)) return damaged("the Pro Track");
+  for (const row of (w.k ?? []) as unknown[]) {
+    if (!Array.isArray(row) || typeof row[0] !== "string" || !Array.isArray(row[1])) return damaged("a Pro Track checklist");
+    const items: Record<string, unknown> = {};
+    let sec = 0;
+    for (const x of row[1] as unknown[]) {
+      if (!Array.isArray(x) || typeof x[0] !== "string" || (x[1] !== 0 && x[1] !== 1) || !isNum(x[2])) return damaged("a Pro Track checklist item");
+      sec += x[2];
+      items[x[0]] = { done: x[1] === 1, at: sec * 1000 };
+    }
+    pro[row[0]] = { items };
+  }
   const drills: Record<string, unknown> = {};
   prev = 0;
   for (const row of w.d) {
@@ -338,7 +376,7 @@ export function fromWire(w: unknown): Transfer {
     prev = last;
     drills[row[0]] = { box: row[1], right: row[2], wrong: row[3], last, due: last + row[5] };
   }
-  return checkTransfer({ steps, projects, drills, dm: w.m, daily: w.y, placed: w.p, placedAt: w.pa, settings: w.g, playground: w.pg }, withCode, isNum(w.t) ? w.t : 0);
+  return checkTransfer({ steps, projects, pro, drills, dm: w.m, daily: w.y, placed: w.p, placedAt: w.pa, settings: w.g, playground: w.pg }, withCode, isNum(w.t) ? w.t : 0);
 }
 
 const newer = (what: "link" | "file") =>
@@ -539,7 +577,7 @@ export type Merged = { state: State; playground: PlaygroundSave | null };
  * reviewed later; Deathmatch bests and totals take the larger and runs merge by time (at most 50);
  * daily answers join (a day in both keeps the local answer); the placement skips come from the side
  * that changed them later, as between tabs (src/state/store.ts), and join only when neither side has
- * a time; settings stay local.
+ * a time; a Pro Track checklist item comes from the side that changed it later; settings stay local.
  * Merging the same import again changes nothing.
  */
 export function mergeTransfer(local: State, localPlayground: PlaygroundSave | null, imp: Transfer): Merged {
@@ -557,6 +595,7 @@ export function mergeTransfer(local: State, localPlayground: PlaygroundSave | nu
     ...local,
     steps,
     projects,
+    pro: mergePro(local.pro, imp.pro),
     drills,
     dm: mergeDm(local.dm, imp.dm),
     daily: { ...imp.daily, ...local.daily },
@@ -578,7 +617,7 @@ export function mergeTransfer(local: State, localPlayground: PlaygroundSave | nu
  */
 export function replaceWithTransfer(imp: Transfer, localPlayground: PlaygroundSave | null, now: number, localName?: string): Merged {
   const settings: State["settings"] = { ...imp.settings, ...(localName ? { name: localName } : {}) };
-  const state: State = { version: 1, steps: imp.steps, projects: imp.projects, drills: imp.drills, dm: imp.dm, daily: imp.daily, placed: imp.placed, settings, resetAt: now };
+  const state: State = { version: 1, steps: imp.steps, projects: imp.projects, pro: imp.pro, drills: imp.drills, dm: imp.dm, daily: imp.daily, placed: imp.placed, settings, resetAt: now };
   if (imp.placedAt != null) state.placedAt = imp.placedAt;
   return { state, playground: imp.playground ?? localPlayground };
 }
@@ -589,7 +628,7 @@ export type ImportSummary = {
   withCode: boolean;
   madeAt: number;
   /** What the import has. */
-  has: { steps: number; challenges: number; drills: number; code: number; milestoneCode: number; playground: boolean; runs: number; milestones: number };
+  has: { steps: number; challenges: number; drills: number; code: number; milestoneCode: number; playground: boolean; runs: number; milestones: number; proTicks: number };
   /** What this browser has now. */
   mine: { steps: number; challenges: number; drills: number; code: number; playground: boolean };
   /** What "Merge" would change. */
@@ -615,6 +654,8 @@ export type ImportSummary = {
     keepCode: number;
     /** Challenges with code from the import where there is none here. */
     addCode: number;
+    /** Pro Track checklist items the import would change (ticked or unticked there later than here). */
+    proItems: number;
     playground: "replace" | "add" | "keep" | "none";
   };
 };
@@ -636,7 +677,24 @@ function codeReason(mine: ChallengeProgress, imp: ChallengeProgress): "import" |
   return mine.savedAt == null && imp.savedAt == null ? "import-done" : "import";
 }
 
-export function summarize(local: State, localPlayground: PlaygroundSave | null, imp: Transfer): ImportSummary {
+/** How many Pro Track checklist items a merge would change here (items and projects no longer on the list don't count). */
+function proChanges(local: Record<string, ProProgress> | undefined, imp: Record<string, ProProgress>, projects: ProChecklists): number {
+  const merged = mergePro(local, imp);
+  let n = 0;
+  for (const p of projects)
+    for (const { id: k } of p.checklist) {
+      const t = merged[p.id]?.items[k];
+      if (t && (local?.[p.id]?.items[k]?.done ?? false) !== t.done) n++;
+    }
+  return n;
+}
+
+/**
+ * What an import has and what Merge and Replace would change. `proProjects` are the Pro Track's
+ * projects (virtual:pro-track): the summary counts only checklist items still on their lists, as
+ * the pages do.
+ */
+export function summarize(local: State, localPlayground: PlaygroundSave | null, imp: Transfer, proProjects: ProChecklists = []): ImportSummary {
   let addChallenges = 0;
   let replaceCode = 0;
   let replaceCodeDone = 0;
@@ -685,6 +743,7 @@ export function summarize(local: State, localPlayground: PlaygroundSave | null, 
       playground: !!imp.playground,
       runs: imp.dm.runs.length,
       milestones: milestonesDone(imp.projects),
+      proTicks: tickCount(imp.pro, proProjects),
     },
     mine: { steps: stepsDone(local.steps), challenges: challengesDone(local.steps), drills: Object.keys(local.drills).length, code: codeCount(local.steps), playground: !!localPlayground },
     merge: {
@@ -700,6 +759,7 @@ export function summarize(local: State, localPlayground: PlaygroundSave | null, 
       replaceCodeDone,
       keepCode,
       addCode,
+      proItems: proChanges(local.pro, imp.pro, proProjects),
       playground: !pgDiffers ? "none" : pg === "import" ? (localPlayground ? "replace" : "add") : "keep",
     },
   };
@@ -718,6 +778,7 @@ export function summaryText(s: ImportSummary): { has: string; merge: string[]; r
     s.has.challenges ? n(s.has.challenges, "finished challenge") : "",
     s.has.milestones ? n(s.has.milestones, "finished project milestone") : "",
     s.has.drills ? n(s.has.drills, "practiced drill") : "",
+    s.has.proTicks ? n(s.has.proTicks, "Pro Track checklist item") + " marked as done" : "",
   ].filter(Boolean);
   const codeParts = [
     s.has.code ? n(s.has.code, "challenge") : "",
@@ -731,6 +792,7 @@ export function summaryText(s: ImportSummary): { has: string; merge: string[]; r
   if (m.addSteps || m.addChallenges) merge.push(`adds ${n(m.addSteps, "finished step")} and ${n(m.addChallenges, "finished challenge")}`);
   if (m.addMilestones) merge.push(`adds ${n(m.addMilestones, "finished project milestone")}`);
   if (m.drills) merge.push(`adds or updates ${n(m.drills, "drill")}`);
+  if (m.proItems) merge.push(`ticks or unticks ${n(m.proItems, "Pro Track checklist item")} as they were changed later there`);
   if (m.keepSteps) merge.push(`keeps your ${n(m.keepSteps, "finished step")} that the import doesn't have`);
   if (m.replaceCode) merge.push(`replaces your code in ${n(m.replaceCode, "challenge")} where the import's is newer`);
   if (m.replaceCodeDone) merge.push(`replaces your code in ${n(m.replaceCodeDone, "challenge")} you haven't finished with the import's finished code`);

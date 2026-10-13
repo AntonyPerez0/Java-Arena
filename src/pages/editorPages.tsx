@@ -38,6 +38,12 @@ export const deathmatchPage = editorPage(() => import("./Deathmatch"));
 export const dailyPage = editorPage(() => import("./Daily"));
 export const placementPage = editorPage(() => import("./Placement"));
 export const projectPage = editorPage(() => import("./ProjectPage"));
+// A Pro Track project's page has the projects' README text, so it loads separately too.
+export const proProjectPage = editorPage(() => import("./ProProject"));
+export const loadProProject = proProjectPage.preload;
+// The topics reference has the whole list (src/generated/topics.json), so it loads separately too.
+export const topicsPage = editorPage(() => import("./Topics"));
+export const loadTopics = topicsPage.preload;
 export const loadProjectPage = projectPage.preload;
 export const loadStepPage = stepPage.preload;
 export const loadPlayground = playgroundPage.preload;

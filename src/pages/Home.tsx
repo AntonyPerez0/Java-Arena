@@ -109,6 +109,9 @@ export default function Home() {
                 <p>
                   {projects.length ? `${projects.length === 1 ? "A project lets" : `${projects.length} projects let`} you build a larger program over several milestones.` : "Projects, larger programs built over several milestones, are on their way."} <Link to="/projects/">See the projects</Link>
                 </p>
+                <p>
+                  After the course, the Pro Track has projects to build on your own computer with a JDK 21, Maven and JUnit 5 tests. <Link to="/pro/">See the Pro Track</Link>
+                </p>
               </>
             ) : (
               <>
@@ -231,7 +234,9 @@ export default function Home() {
             </details>
             <details>
               <summary>Do I need to install anything?</summary>
-              <p>No. A recent browser is enough: Chrome, Edge, Firefox or Safari. Some later modules will also have optional projects for your own computer.</p>
+              <p>
+                No. A recent browser is enough: Chrome, Edge, Firefox or Safari. After the course, the optional <Link to="/pro/">Pro Track</Link> has projects for your own computer, with a JDK 21 and Maven.
+              </p>
             </details>
             <details>
               <summary>Where is my progress saved?</summary>

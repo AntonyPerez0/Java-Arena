@@ -30,6 +30,8 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || !url.pathname.startsWith(BASE)) return;
   if (url.pathname.startsWith(BASE + "engine/")) return;
+  // The Pro Track's zips are for a computer: downloaded from the network, never saved here.
+  if (/^pro\/[^/]+\.zip$/.test(url.pathname.slice(BASE.length))) return;
 
   if (request.mode === "navigate") {
     // Pages: the network first (fresh content), the saved copy when offline.

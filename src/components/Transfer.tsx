@@ -6,6 +6,7 @@ import { Copy, Download, QrCode, Share2, Upload } from "lucide-react";
 import { getState, importProgress, readPlayground } from "../state/store";
 import { LONG_LINK, TransferError, encodeTransfer, fileName, fileText, makeTransfer, mergeTransfer, parseFile, replaceWithTransfer, summarize, summaryText, type Transfer } from "../lib/transfer";
 import { isoDay, recordDate } from "../lib/record";
+import proProjects from "virtual:pro-track";
 import { QR_MAX_CHARS } from "../lib/qr-limit";
 import type { QrDrawing } from "../lib/qr";
 
@@ -134,7 +135,7 @@ export function ImportReview({ transfer, from, onDone, onCancel, headingLevel = 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const id = useId();
   useEffect(() => headingRef.current?.focus(), []);
-  const summary = summarize(getState(), readPlayground(), transfer);
+  const summary = summarize(getState(), readPlayground(), transfer, proProjects);
   const text = summaryText(summary);
   const H = headingLevel === 2 ? "h2" : "h3";
 

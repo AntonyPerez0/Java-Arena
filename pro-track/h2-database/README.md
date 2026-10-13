@@ -42,7 +42,7 @@ The user interface (`YarnStash.java`), `Main.java`, the `Yarn` class and the `Ya
 ## What you need
 
 - **A JDK 21.** For example [Eclipse Temurin 21](https://adoptium.net/temurin/releases/?version=21). Check it in a terminal with `java -version`: it should say `21`.
-- **Maven 3.9** (3.6.3 or newer works). Install it from [maven.apache.org](https://maven.apache.org/download.cgi), or with your system's package manager (`brew install maven` on macOS, `sudo apt install maven` on Ubuntu). Check it with `mvn -version`: it should show Maven's version and Java 21. If it shows another Java, set `JAVA_HOME` to your JDK 21's folder. [The Pro Track page](https://antonyperez0.github.io/Java-Arena/pro/) has these setup steps in more detail.
+- **Maven 3.9** (3.6.3 or newer works). Install it from [maven.apache.org](https://maven.apache.org/download.cgi), or with your system's package manager (`brew install maven` on macOS, `sudo apt install maven` on Ubuntu). Check it with `mvn -version`: it should show Maven's version and Java 21. If it shows another Java, set `JAVA_HOME` to your JDK 21's folder. [The Pro Track page](https://javaarena.com/pro/) has these setup steps in more detail.
 - **No database to install.** H2 is a database written in Java, and Maven downloads it from Maven Central like any other library. Its dependency is already in `pom.xml`:
 
   ```xml
@@ -56,9 +56,9 @@ The user interface (`YarnStash.java`), `Main.java`, the `Yarn` class and the `Ya
 - **Git**, if you want to put the project on GitHub from the terminal (optional). Get it from [git-scm.com](https://git-scm.com/downloads), or with your package manager (`brew install git`, `sudo apt install git`).
 - **An editor.** Any will do. IntelliJ IDEA, Eclipse, NetBeans and VS Code (with the Java extensions) all open a Maven project: open the folder, or its `pom.xml`. IntelliJ IDEA, Eclipse and NetBeans come with Maven built in, so you can run the tests from the editor if you don't install Maven yourself. VS Code needs Maven installed to run Maven's commands.
 - **What the course taught**, in particular:
-  - [Libraries and tools](https://antonyperez0.github.io/Java-Arena/learn/libraries-and-tools/) (module 54): Maven, DAOs, and the step [A real database with JDBC](https://antonyperez0.github.io/Java-Arena/learn/libraries-and-tools/databases/), which this project puts into practice. Read that step again before you start.
-  - [Exceptions](https://antonyperez0.github.io/Java-Arena/learn/exceptions/) (module 42): throwing, catching, and try-with-resources.
-  - [Interfaces](https://antonyperez0.github.io/Java-Arena/learn/interfaces/) (module 35) and [hash maps](https://antonyperez0.github.io/Java-Arena/learn/hash-maps/) (module 31).
+  - [Libraries and tools](https://javaarena.com/learn/libraries-and-tools/) (module 54): Maven, DAOs, and the step [A real database with JDBC](https://javaarena.com/learn/libraries-and-tools/databases/), which this project puts into practice. Read that step again before you start.
+  - [Exceptions](https://javaarena.com/learn/exceptions/) (module 42): throwing, catching, and try-with-resources.
+  - [Interfaces](https://javaarena.com/learn/interfaces/) (module 35) and [hash maps](https://javaarena.com/learn/hash-maps/) (module 31).
 - About 3 to 5 hours.
 
 The project's files:

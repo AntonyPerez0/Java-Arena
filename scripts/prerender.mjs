@@ -3,7 +3,7 @@
 // React app replaces the pre-rendered content when it starts. Also writes 404.html (GitHub Pages
 // serves it for unknown addresses, and the app then shows the right page), sitemap.xml and robots.txt.
 //
-// Env: SITE_URL (default https://antonyperez0.github.io/Java-Arena), BASE_PATH (default /).
+// Env: SITE_URL (default https://javaarena.com), BASE_PATH (default /).
 import fs from "node:fs";
 import path from "node:path";
 import { marked } from "marked";
@@ -21,7 +21,7 @@ import { JAVA_API_URL, KIND_LABEL, TOPICS_LEAD, aboutParts, matchCount, topicLet
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const DIST = path.join(ROOT, "dist");
 // Host names are case-insensitive, but canonical links should match what GitHub Pages serves (lower case).
-const siteUrl = new URL(process.env.SITE_URL ?? "https://antonyperez0.github.io/Java-Arena");
+const siteUrl = new URL(process.env.SITE_URL ?? "https://javaarena.com");
 const SITE = `${siteUrl.protocol}//${siteUrl.host.toLowerCase()}${siteUrl.pathname}`.replace(/\/$/, "");
 const BASE = process.env.BASE_PATH ?? "/";
 const NAME = "Java Arena";

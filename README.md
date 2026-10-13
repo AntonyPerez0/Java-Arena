@@ -1,5 +1,7 @@
 # Java Arena
 
+The site: **https://javaarena.com/**
+
 A free, non-commercial site for learning Java in the browser, with **real compiling and running on your own device**. It follows the order and topics of the University of Helsinki's [Java Programming MOOC](https://java-programming.mooc.fi) (parts 1 to 14), with its own lessons and exercises, modeled on [C/C++ Arena](https://cpparena.com).
 
 Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark and JavaFX a trademark of Oracle and/or its affiliates.
@@ -33,6 +35,7 @@ The site was built in batches, one pull request per batch. All 20 planned batche
 | 19 | Moving progress to another device (a transfer link, a QR code, a progress file), multi-step projects, a personal record of what you completed | done |
 | 20 | The Pro Track (three projects for your own computer with a JDK 21, Maven and JUnit 5; GitHub Actions runs their tests in your own repository, and Java Arena grades nothing), a topics reference (A to Z, checked against the lessons), a link check, and an accessibility and phone pass over every page type | done |
 | 20b | Red and white: Java red replaces the blue accent everywhere (buttons, links, focus rings, progress), and the logo is now a red tile with a white J | done |
+| 20c | The site's own address, https://javaarena.com/ (old github.io links lead there) | done |
 
 The plan and the research behind it are in [`docs/research/`](docs/research/README.md), including the full curriculum map.
 

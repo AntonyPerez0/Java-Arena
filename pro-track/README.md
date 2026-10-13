@@ -1,6 +1,6 @@
 # The Pro Track
 
-Projects for your own computer, for after the course: each is a small Maven project with starter code, JUnit 5 tests that fail until you write the missing parts, and a GitHub Actions workflow that runs the tests in your own GitHub repository. The site's page for them is [the Pro Track](https://antonyperez0.github.io/Java-Arena/pro/), with the setup steps (a JDK 21 and Maven) and a download (zip) for each project.
+Projects for your own computer, for after the course: each is a small Maven project with starter code, JUnit 5 tests that fail until you write the missing parts, and a GitHub Actions workflow that runs the tests in your own GitHub repository. The site's page for them is [the Pro Track](https://javaarena.com/pro/), with the setup steps (a JDK 21 and Maven) and a download (zip) for each project.
 
 Each project is a folder here, `pro-track/<id>/`. Its `README.md` says what to build, step by step, and how to run the tests (`mvn test`) and the program.
 

@@ -22,6 +22,9 @@ export const ALLOWED_HOSTS = [
   'mooc.fi',
   'javaarena.com',
   'antonyperez0.github.io',
+  // The other Arena sites, linked from the header and the footer.
+  'cpparena.com',
+  'rustarena.app',
   // Java itself.
   'docs.oracle.com',
   'openjdk.org',

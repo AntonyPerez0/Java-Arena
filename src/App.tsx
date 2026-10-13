@@ -1,6 +1,7 @@
 import { BrowserRouter, NavLink, Route, Routes, Link, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Menu, Moon, Sun, X } from "lucide-react";
+import { ArenaFamily, ArenaMenuLinks, ArenaSwitcher } from "./components/Arenas";
 import { BrandMark } from "./components/Brand";
 import { EngineBadge } from "./components/Engine";
 import Home from "./pages/Home";
@@ -123,6 +124,7 @@ function Footer() {
             </ul>
           </div>
         </div>
+        <ArenaFamily />
         <div className="footer-bottom">
           <p>
             The course's lessons follow the order and topics of{" "}
@@ -191,6 +193,7 @@ function Header() {
             {label}
           </NavLink>
         ))}
+        <ArenaMenuLinks />
         <div className="nav-theme">
           <span>Theme</span>
           <ThemeToggle />
@@ -198,6 +201,7 @@ function Header() {
       </nav>
       <div className="topbar-right">
         <EngineBadge />
+        <ArenaSwitcher onOpen={() => setOpen(false)} />
         <ThemeToggle />
         <Link to="/learn/" className="btn btn-primary btn-sm topbar-cta">
           Start learning

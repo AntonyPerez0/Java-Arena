@@ -1,7 +1,8 @@
 /**
  * The Java Arena mark: a rounded tile in Java red with a white J on it. It is our own
  * drawing (no cup, steam or Java wordmark lettering). The same drawing is public/favicon.svg, the
- * MARK in scripts/prerender.mjs and the share card's logo in src/lib/card.ts.
+ * MARK and the footer's Arena row in scripts/prerender.mjs, the share card's logo in src/lib/card.ts
+ * and Java Arena's mark in src/components/Arenas.tsx.
  */
 export function BrandMark() {
   return (

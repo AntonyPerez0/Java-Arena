@@ -3486,13 +3486,15 @@ async function answerRep(page, right = true) {
   const d = drillById.get(id);
   expect(d, `unknown drill ${id}`);
   switch (d.type) {
+    // Enter goes to the answer box itself: the placement quiz moves the focus to its heading a
+    // frame after each answer, and that frame can land between the typing and a bare Enter.
     case 'predict':
       await page.fill('#rep-input', right ? d.answer : d.answer + ' and more');
-      await page.keyboard.press('Enter');
+      await page.locator('#rep-input').press('Enter');
       break;
     case 'fill':
       await page.fill('input.blank', right ? d.answer : 'zzz');
-      await page.keyboard.press('Enter');
+      await page.locator('input.blank').press('Enter');
       break;
     case 'bug': {
       const n = right ? Number(d.answer) : Number(d.answer) === 1 ? 2 : 1;

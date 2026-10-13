@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
+import proTrack from "./scripts/pro-track/vite-plugin.mjs";
 
 // The engine's JavaScript glue can load its own files relative to import.meta.url when no loader
 // is given. Vite would then copy every file next to it (18 MB of wasm and the JDK image) into
@@ -31,7 +32,7 @@ function skipEngineSelfLoading(): Plugin {
 // publishing to a github.io project page.
 export default defineConfig({
   base: process.env.BASE_PATH ?? "/",
-  plugins: [skipEngineSelfLoading(), react()],
+  plugins: [skipEngineSelfLoading(), react(), proTrack(__dirname)],
   worker: { format: "es", plugins: () => [skipEngineSelfLoading()] },
   build: {
     target: "es2022",

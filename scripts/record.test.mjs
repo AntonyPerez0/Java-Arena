@@ -103,3 +103,30 @@ test("the notice is the design's sentence, and the record's own files use none o
     assert.doesNotMatch(text, /[\u2013\u2014]/, `${f} has an en or em dash`);
   }
 });
+
+test("the Pro Track on the record: projects with items the learner ticked, counted against the checklist they have now", async () => {
+  const { proRecord, ticked, setTick } = await import("../src/lib/pro.ts");
+  const pros = [
+    { id: "a", title: "Word statistics", summary: "", hours: "2 to 4", checklist: [{ id: "x", text: "" }, { id: "y", text: "" }, { id: "z", text: "" }] },
+    { id: "b", title: "Cards", summary: "", hours: "2 to 4", checklist: [{ id: "x", text: "" }] },
+    { id: "c", title: "Nothing ticked", summary: "", hours: "2 to 4", checklist: [{ id: "x", text: "" }] },
+  ];
+  let a = setTick(undefined, "x", true, T);
+  a = setTick(a, "y", true, T + 1);
+  a = setTick(a, "y", false, T + 2);
+  a = setTick(a, "gone", true, T + 3);
+  assert.equal(ticked(a, pros[0].checklist), 1, "an unticked item and one no longer on the list don't count");
+  const later = setTick(a, "x", false, T - 50);
+  assert.ok(later.items.x.at > a.items.x.at, "a change always gets a later time, even when the clock went back");
+  assert.ok(Object.values(later.items).every((t) => t.at % 1000 === 0), "times are whole seconds (a transfer link carries seconds)");
+  assert.ok(setTick(undefined, "x", true, 1_760_000_000_001).items.x.at === 1_760_000_001_000, "rounded up, never earlier");
+  const pro = { a, b: setTick(undefined, "x", true, T), c: setTick(undefined, "x", false, T) };
+  assert.deepEqual(proRecord(pro, pros), [
+    { id: "a", title: "Word statistics", ticked: 1, total: 3 },
+    { id: "b", title: "Cards", ticked: 1, total: 1 },
+  ]);
+  assert.deepEqual(proRecord(undefined, pros), []);
+  const page = readFileSync(new URL("../src/pages/Record.tsx", import.meta.url), "utf8");
+  assert.match(page, /marked as done by you/);
+  assert.doesNotMatch(page, /verified|graded|passed the tests/i, "the record never says the site checked a Pro Track project");
+});

@@ -832,3 +832,21 @@ drills:
 A drill can have classes of its own in `classes` (for example `class Counter { ... }`, not public: they're put after Main in the same file); the drill shows them first, then `pre`, then the statements of `body`. Predict and fill drills may give the program input with `stdin`. `placement.yaml` holds the placement quiz: `questions:`, each a drill with a `module:`, one per module in course order.
 
 To check one drill file while writing it, without changing any generated file: `node scripts/build-content.mjs --dry --drill-file loops.yaml`. To check one module and its drills: `node scripts/build-content.mjs --dry --module-file 13-lists.yaml`.
+
+## The topics reference
+
+`topics.yaml` is the topics reference, shown at `/topics/`: Java keywords, classes, methods and ideas, A to Z, each with one plain line and the steps that teach it. It points to the lessons; it isn't Java's documentation (the page links to Java 21's API documentation for that).
+
+```yaml
+- term: HashMap               # what a reader looks for; terms that differ only in capitals (Map, map) get #map and #map-method
+  kind: class                 # keyword, literal, annotation, operator, separator, class, method, idea or tool
+  about: A map that keeps pairs of a key and a value and finds the value of a key quickly.   # one line, a sentence, no dashes; `code` in backticks
+  aliases: [hash table]       # optional: other words the search finds (the check doesn't use them)
+  check: [hashCode]           # optional: specific phrases the check accepts in a step without the term
+  steps: [hash-maps-keys-and-values, hash-maps-one-value-per-key]   # one to three step ids, the step that teaches it first
+  drills: hash-maps           # optional: the Deathmatch topic (a module id with drills) that practices it
+```
+
+Use Java's own words for the kind (the Java Language Specification, 3.9 to 3.12): `null`, `true` and `false` are literals, `@Override` is an annotation, `%`, `&&` and `++` are operators, `->` is a separator, and `var`, `record`, `sealed` and `yield` are (contextual) keywords.
+
+The full content build checks every entry against the lessons (`scripts/content/topics.mjs`): each step id must exist, and the term or one of its check phrases must be in that step. For a keyword, a literal, an annotation, an operator, a separator, a class or a method, that means in the step's code (its examples and inline code, its starting code and its model solutions) as a whole word with the same capitals; for an idea or a tool, anywhere in its title, text or code, in any capitals, as a word (a plural allowed). Aliases help the search only, so a general word there (`main`, `test`, `and`) can't let a step pass. A check phrase must be specific: one that is in more than 5% of all the steps (such as "test", "returns" or "is a") is an error, so write one that only the steps teaching it have (`@Test`, "call stack", "7 / 2"). Terms that differ only in capitals share an address: the class keeps it (then a keyword, a method, an idea), whatever the order of the file, and an address the site already uses as an id (`main`, `main-nav`, `root`, `topics-...`, `letter-...`) is an error. So a lesson that's rewritten can't leave the reference pointing at a step that no longer teaches the term. The build writes the sorted entries to `src/generated/topics.json`, which the page and the pre-rendered page (with every entry, for readers without JavaScript and for search engines) use. Every line must be true for Java 21: check anything you aren't sure of on the reference JDK. The reference has about 150 to 250 entries; add one when a lesson teaches something a reader would look up, and link the steps that really teach it, not every step that mentions it.

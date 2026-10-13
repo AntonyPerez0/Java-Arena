@@ -2,7 +2,7 @@
 // Deathmatch (one life), Casual (three lives), Warm-up (spaced review of due drills) and
 // Interview prep. Adapted from C/C++ Arena.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Crosshair, Flame, Heart, Lock, Skull, X } from "lucide-react";
 import { modules, stepPath } from "../content";
 import { useDrills } from "../content/drills";
@@ -327,6 +327,17 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
   const off = s.settings.topicsOff;
   const first = modules[0];
   const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  // /deathmatch/?topic=<module id> (Topics A to Z links so): mark that topic's chip and scroll to it.
+  // The learner's own choice of topics (saved in Settings) only changes when they press a button.
+  const [params] = useSearchParams();
+  const asked = params.get("topic") ?? "";
+  const target = drills.some((d) => d.topic === asked) && modules.some((m) => m.id === asked) ? asked : "";
+  const targetOpen = !!target && unlocked.includes(target);
+  const targetOn = targetOpen && selected.includes(target);
+  useEffect(() => {
+    if (!target) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`dm-topic-${target}`)?.scrollIntoView({ block: "center" })));
+  }, [target]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -344,6 +355,9 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
       <div className="page-head">
         <h1>Deathmatch</h1>
         <p className="muted">Endless quick reps from the lessons you've finished: predict the output, fill the blank, spot the bug, will it compile, pick one. Every {BOSS_EVERY}th rep is a boss rep, a small program you write and run for real. Drills you miss come back more often until you know them.</p>
+        <p className="muted small">
+          Stuck on a keyword or a method? <Link to="/topics/">Topics A to Z</Link> says what it is in one line and links to the step that teaches it.
+        </p>
       </div>
       <div className="lobby-grid">
         <div className="rank-card">
@@ -429,6 +443,23 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
             </button>
           )}
         </div>
+        {target && (
+          <p className="dm-topic-note small">
+            <b>{topicTitle(target)}</b> is marked below.{" "}
+            {!targetOpen ? (
+              "Its drills are locked: finish a step of its module to unlock them."
+            ) : targetOn && selected.length === 1 ? (
+              "It's the only topic in the rotation."
+            ) : (
+              <>
+                {targetOn ? "It's in the rotation. " : "It isn't in the rotation. "}
+                <button type="button" className="linkish" onClick={() => patchSettings({ topicsOff: unlocked.filter((t) => t !== target) })}>
+                  Practice only this topic
+                </button>
+              </>
+            )}
+          </p>
+        )}
         <div className="chips">
           {modules.map((m) => {
             const all = drills.filter((d) => d.topic === m.id);
@@ -440,7 +471,8 @@ function Lobby({ drills, pool, quickCount, interviewCount, unlocked, selected, d
               <button
                 type="button"
                 key={m.id}
-                className={"chip" + (on ? " chip-on" : "") + (isOpen ? "" : " chip-locked")}
+                id={`dm-topic-${m.id}`}
+                className={"chip" + (on ? " chip-on" : "") + (isOpen ? "" : " chip-locked") + (m.id === target ? " chip-target" : "")}
                 disabled={!isOpen}
                 aria-pressed={isOpen ? on : undefined}
                 title={!isOpen ? "Finish a step of this module to unlock its drills" : open < all.length ? `${open} of ${all.length} drills unlocked: each unlocks with the step that teaches it` : n(all.length, "drill", "drills")}

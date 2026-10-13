@@ -10,6 +10,8 @@ import { COURSE_NAMES, modules, plan, projects } from "../content";
 import { NAME_MAX, RECORD_NOTICE, buildRecord, cleanName, isoDay, recordDate, type FinishedModule, type RecordPart } from "../lib/record";
 import { patchSettings, useStore } from "../state/store";
 import { useTitle } from "../lib/title";
+import proProjects from "virtual:pro-track";
+import { proRecord } from "../lib/pro";
 import "../record.css";
 
 function When({ at }: { at: number | null }) {
@@ -64,7 +66,9 @@ export default function Record() {
   const r = buildRecord(s, plan, modules, projects);
   const t = r.totals;
   const shown = r.parts.filter((p) => p.finished.length > 0);
-  const nothing = t.modules === 0 && t.projects === 0;
+  // Pro Track projects with items the learner ticked: their own marks, never a result the site checked.
+  const pro = proRecord(s.pro, proProjects);
+  const nothing = t.modules === 0 && t.projects === 0 && pro.length === 0;
   const address = `${location.host}${import.meta.env.BASE_URL}`.replace(/\/$/, "");
   const today = Date.now();
 
@@ -197,6 +201,22 @@ export default function Record() {
                       <span className="record-date">
                         <When at={p.doneAt} />
                       </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {pro.length > 0 && (
+              <section className="record-course" aria-labelledby="record-pro-h">
+                <h3 id="record-pro-h" className="record-course-h">
+                  Pro Track checklists
+                </h3>
+                <p className="record-pro-note">Projects made on your own computer. Java Arena can't see them or run their tests, so these are the checklist items you marked as done yourself.</p>
+                <ul className="record-list record-pro">
+                  {pro.map((p) => (
+                    <li key={p.id}>
+                      <span className="record-item">{p.title}</span>
+                      <span className="record-date">{p.ticked === p.total ? `all ${p.total} items marked as done by you` : `${p.ticked} of ${p.total} items marked as done by you`}</span>
                     </li>
                   ))}
                 </ul>

@@ -1,6 +1,7 @@
 // Progress and settings, kept in this browser's localStorage, with a React hook.
 import { useSyncExternalStore } from "react";
 import type { PlaygroundSave } from "../lib/transfer";
+import { mergePro, setTick } from "../lib/pro.ts";
 
 /** One challenge of a step. `attempts` and `sawSolution` are saved, so a reload doesn't reset them. */
 export type ChallengeProgress = {
@@ -41,6 +42,12 @@ export type ProjectProgress = {
   milestones: Record<string, MilestoneProgress>;
 };
 
+/** A Pro Track checklist item: ticked or not, and when that last changed (ms), so the later change wins between tabs and devices. */
+export type ProTick = { done: boolean; at: number };
+
+/** A Pro Track project's checklist (src/lib/pro.ts): items by id. Only the learner's own ticks; nothing checks them. */
+export type ProProgress = { items: Record<string, ProTick> };
+
 export type Theme = "system" | "dark" | "light";
 
 /** A drill's spaced-review state: Leitner box 1 to 5, and when it's due again. */
@@ -67,6 +74,8 @@ export type State = {
   steps: Record<string, StepProgress>;
   /** Projects, by project id. */
   projects: Record<string, ProjectProgress>;
+  /** The Pro Track's checklists, by project id (from Batch 20 on). */
+  pro: Record<string, ProProgress>;
   drills: Record<string, DrillStat>;
   dm: DmStats;
   /** Daily challenge: the local date and whether the first answer was right. */
@@ -122,6 +131,7 @@ const fresh = (): State => ({
   version: 1,
   steps: {},
   projects: {},
+  pro: {},
   drills: {},
   dm: freshDm(),
   daily: {},
@@ -136,6 +146,12 @@ function normalize(s: Partial<State>): State {
   for (const [id, p] of Object.entries(s.steps ?? {})) steps[id] = { done: !!p.done, doneAt: p.doneAt, clean: p.clean, challenges: p.challenges ?? {} };
   const projects: Record<string, ProjectProgress> = {};
   for (const [id, p] of Object.entries(s.projects ?? {})) projects[id] = { done: !!p?.done, doneAt: p?.doneAt, milestones: p?.milestones ?? {} };
+  const pro: Record<string, ProProgress> = {};
+  for (const [id, p] of Object.entries(s.pro ?? {})) {
+    const items: Record<string, ProTick> = {};
+    for (const [k, t] of Object.entries(p?.items ?? {})) if (t && typeof t.at === "number") items[k] = { done: !!t.done, at: t.at };
+    pro[id] = { items };
+  }
   const dm = { ...f.dm, ...s.dm, best: { ...f.dm.best, ...s.dm?.best } };
   return {
     ...f,
@@ -143,6 +159,7 @@ function normalize(s: Partial<State>): State {
     version: 1,
     steps,
     projects,
+    pro,
     drills: s.drills ?? {},
     dm,
     daily: s.daily ?? {},
@@ -251,7 +268,7 @@ function merge(saved: State, local: State, settingsFrom: "saved" | "local"): Sta
   const projects: Record<string, ProjectProgress> = {};
   for (const id of new Set([...Object.keys(saved.projects), ...Object.keys(local.projects)])) projects[id] = mergeProject(saved.projects[id], local.projects[id]);
   const placedFrom = (saved.placedAt ?? 0) === (local.placedAt ?? 0) ? from : (saved.placedAt ?? 0) > (local.placedAt ?? 0) ? saved : local;
-  return { ...local, steps, projects, ...mergeDm(saved, local), placed: placedFrom.placed, placedAt: placedFrom.placedAt, settings: from.settings };
+  return { ...local, steps, projects, pro: mergePro(saved.pro, local.pro), ...mergeDm(saved, local), placed: placedFrom.placed, placedAt: placedFrom.placedAt, settings: from.settings };
 }
 
 function write() {
@@ -346,6 +363,11 @@ export function patchMilestone(id: string, milestone: string, patch: Partial<Mil
     const milestones = { ...p.milestones, [milestone]: { ...emptyChallenge(), ...p.milestones[milestone], ...patch, ...saved } };
     return { ...s, projects: { ...s.projects, [id]: { ...p, milestones } } };
   });
+}
+
+/** Ticks or unticks a Pro Track checklist item (src/lib/pro.ts). */
+export function setProTick(id: string, item: string, done: boolean) {
+  update((s) => ({ ...s, pro: { ...s.pro, [id]: setTick(s.pro[id], item, done, Date.now()) } }));
 }
 
 export function patchSettings(patch: Partial<State["settings"]>) {

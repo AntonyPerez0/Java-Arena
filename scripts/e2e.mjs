@@ -3,11 +3,15 @@
 // hints, solutions, progress), the engine prototype page, errors and crashes explained, endless
 // loops stopped, the mobile-data question holding the download, offline use, moving progress between
 // browsers (transfer links, QR codes, progress files), projects (whatever content/projects has), the
-// personal record page and its print styles (a PDF printed), and axe (WCAG 2.2 AA)
-// on every page type in both themes and at phone widths.
+// personal record page and its print styles (a PDF printed), the Pro Track (whatever pro-track/
+// has: its pages, the zips, the checklist), the topics reference (its search and links), and axe (WCAG 2.2 AA)
+// on every page type in both themes and at phone widths, with the phone pass at the end: every page type
+// at 320, 360, 390 and 412 px in both themes (axe, no sideways scrolling, tap targets of 24 px, a visible focus).
 //
 // Usage: npm run build && node scripts/e2e.mjs [--shots dir]
-// E2E_ONLY=<regular expression> runs only the tests whose names match (while working on something).
+// E2E_ONLY=<regular expression> runs only the tests whose names match (while working on something);
+// E2E_SKIP=<regular expression> leaves out the tests whose names match. CI runs the phone pass (the tests
+// named "the phone pass: ...", which need nothing from the others) as a job of its own beside the rest.
 import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +22,10 @@ import { serve } from './serve.mjs';
 import { indentProblems } from '../src/grader/style.js';
 import { folderOf, joinFiles, splitFiles } from '../src/grader/files.js';
 import { describeEvents, parseEventLine } from '../src/grader/window.ts';
+import { readZip, zipProject } from './pro-track/project.mjs';
+import { readProTrack } from './pro-track/site.mjs';
+
+const ROOT_DIR = new URL('..', import.meta.url).pathname;
 
 const shotsIdx = process.argv.indexOf('--shots');
 const SHOTS = shotsIdx > 0 ? process.argv[shotsIdx + 1] : null;
@@ -30,8 +38,10 @@ const ENGINE_TIMEOUT = 180_000;
 
 let failures = 0;
 const ONLY = process.env.E2E_ONLY ? new RegExp(process.env.E2E_ONLY, 'i') : null;
+const SKIP = process.env.E2E_SKIP ? new RegExp(process.env.E2E_SKIP, 'i') : null;
 async function test(name, fn) {
   if (ONLY && !ONLY.test(name)) return;
+  if (SKIP && SKIP.test(name)) return;
   const t = Date.now();
   try {
     await fn();
@@ -153,6 +163,8 @@ const PRERENDERED = {
   'about/': 'About and credits',
   'transfer/': 'Move your progress',
   'projects/': 'Projects',
+  'pro/': 'Pro Track',
+  'topics/': 'Topics A to Z',
 };
 await test('every page is pre-rendered with its own title, description, canonical link and text', async () => {
   for (const [path, h1] of Object.entries(PRERENDERED)) {
@@ -4612,6 +4624,119 @@ await test('projects: one project passed milestone by milestone in order finishe
   await b.ctx.close();
 });
 
+console.log('Pro Track');
+/** The Pro Track's projects from the source (content/pro-track.yaml and pro-track/), as the build read them. */
+const PRO = readProTrack(ROOT_DIR).projects;
+const PRO_HONEST_TEXT = "These projects run on your computer, not on this site. Java Arena can't see your code or your test results and doesn't grade anything";
+
+await test('Pro Track: the home, Learn and last MOOC module pages and the footer link to it; /pro/ is pre-rendered, in the sitemap and saved for offline use (the zips are not), and says plainly that the site grades nothing; axe in both themes at 320 and 390 px', async () => {
+  const { ctx, page, errors } = await phoneWith(progress());
+  const last = COURSE_INDEX.plan.filter((m) => m.course === 'II').pop();
+  for (const path of ['', 'learn/', `learn/${last.id}/`]) {
+    await page.goto(BASE + path);
+    await page.locator('#main h1').first().waitFor();
+    expect((await page.locator('#main a[href$="/pro/"]').count()) > 0, `${path || 'home'}: no link to the Pro Track`);
+    const html = await (await fetch(BASE + path)).text();
+    expect(html.includes(`href="${new URL(BASE).pathname}pro/"`), `${path || 'home'}: the pre-rendered page links to the Pro Track`);
+  }
+  expect((await page.locator('footer a[href$="/pro/"]').count()) === 1, 'the footer links to the Pro Track');
+  const html = await (await fetch(BASE + 'pro/')).text();
+  expect(html.includes('<h1>Pro Track</h1>') && html.includes('JDK 21') && html.includes('adoptium.net'), 'pro/ is pre-rendered with its guide');
+  const sitemap = await (await fetch(BASE + 'sitemap.xml')).text();
+  const sw = await (await fetch(BASE + 'sw.js')).text();
+  expect(sitemap.includes('/pro/</loc>') && sw.includes('"pro/"'), 'pro/ is in the sitemap and saved for offline use');
+  expect(!/\.zip"/.test(sw), 'no zip is saved for offline use');
+  await page.goto(BASE + 'pro/');
+  await page.locator('#main h1', { hasText: 'Pro Track' }).waitFor();
+  const text = await page.locator('#main').innerText();
+  expect(text.includes(PRO_HONEST_TEXT), 'says the site grades nothing');
+  expect(!/\b(graded by Java Arena|verified|certificate)\b/i.test(text), 'claims nothing it does not do');
+  if (!PRO.length) expect(text.includes('The projects are on their way'), 'an empty list says so');
+  for (const p of PRO) {
+    expect(text.includes(p.title), `lists ${p.title}`);
+    const page2 = await (await fetch(BASE + `pro/${p.id}/`)).text();
+    expect(page2.includes(`<h1>${p.title.replace(/&/g, '&amp;')}</h1>`) && page2.includes('Download the project (zip'), `pro/${p.id}/ is pre-rendered`);
+    expect(sitemap.includes(`/pro/${p.id}/</loc>`) && sw.includes(`"pro/${p.id}/"`), `pro/${p.id}/ is in the sitemap and saved for offline use`);
+  }
+  await phonesBothThemes(page, 'the Pro Track page');
+  await shot(page, 'pro-track');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+
+for (const p of PRO)
+  await test(`Pro Track: ${p.title}: the page shows what it practices and its README's steps; the zip downloads with the same bytes as a fresh zip of pro-track/${p.id}/; the checklist is kept after a reload, travels in a transfer link and shows on the record page as marked as done by you; axe in both themes at 320 and 390 px`, async () => {
+    const { ctx, page, errors } = await phoneWith(progress(), { acceptDownloads: true });
+    await page.goto(BASE + `pro/${p.id}/`);
+    await page.locator('#main h1', { hasText: p.title }).waitFor();
+    for (const h of ['What it practices', "What you'll build", 'Steps', 'Run the tests', 'Your checklist']) await page.locator('#main h2', { hasText: h }).first().waitFor();
+    const practices = await page.locator('.pro-practices').innerText();
+    for (const x of p.practices) {
+      const m = COURSE_INDEX.plan.find((pm) => pm.id === x.module);
+      expect(practices.includes(`${x.what} (from module ${m.number}: ${m.title})`), practices);
+    }
+    expect((await page.locator('.io-shell').count()) > 0, 'the commands are shown as commands for your own computer');
+    expect((await page.locator(`a[href="https://github.com/AntonyPerez0/Java-Arena/tree/main/pro-track/${p.id}"]`).count()) === 1, 'links to its folder on GitHub');
+    await phonesBothThemes(page, `the Pro Track project ${p.id}`);
+    await shot(page, `pro-${p.id}`);
+    // The checklist is at the end, after the whole README: a link by the download button jumps there.
+    const jump = page.locator('.page-head a[href="#checklist"]');
+    expect((await jump.innerText()).trim() === `Your checklist (0 of ${p.checklist.length} ticked)`, await jump.innerText());
+    await jump.click();
+    await page.waitForFunction(() => {
+      const r = document.getElementById('checklist').getBoundingClientRect();
+      return r.top >= 0 && r.top < innerHeight / 2;
+    });
+    await page.evaluate(() => scrollTo(0, 0));
+    // The download: the zip the build made, the same bytes as a zip made now from the source folder.
+    const [download] = await Promise.all([page.waitForEvent('download'), page.locator('a', { hasText: 'Download the project (zip' }).click()]);
+    expect(download.suggestedFilename() === `${p.id}.zip`, download.suggestedFilename());
+    const bytes = readFileSync(await download.path());
+    const fresh = zipProject(ROOT_DIR, p.id);
+    expect(Buffer.compare(bytes, Buffer.from(fresh)) === 0, `the downloaded zip (${bytes.length} bytes) differs from a fresh zip of pro-track/${p.id}/ (${fresh.length} bytes)`);
+    const names = readZip(bytes).map((e) => e.name);
+    for (const need of ['pom.xml', 'README.md', '.gitignore', '.github/workflows/test.yml']) expect(names.includes(`${p.id}/${need}`), `the zip has ${need}: ${names.join(', ')}`);
+    expect(names.every((n) => n.startsWith(`${p.id}/`) && !n.includes('/target/')), names.join(', '));
+    // The checklist: ticked items are saved with the time, kept after a reload, and counted.
+    const items = page.locator('.pro-items input[type="checkbox"]');
+    expect((await items.count()) === p.checklist.length, 'one box per checklist item');
+    await page.locator('.pro-items label').first().click();
+    await page.locator('.pro-items label').nth(1).click();
+    await page.locator('.pro-items label').nth(1).click();
+    await page.waitForFunction(([k, id, item]) => JSON.parse(localStorage.getItem(k))?.pro?.[id]?.items?.[item]?.done === true, [KEY, p.id, p.checklist[0].id]);
+    await page.reload();
+    await page.locator('#main h1', { hasText: p.title }).waitFor();
+    expect(await items.nth(0).isChecked(), 'the first item is still ticked after a reload');
+    expect(!(await items.nth(1).isChecked()), 'the second item, ticked and unticked, is not');
+    expect((await page.locator('.pro-checklist').innerText()).includes(`1 of ${p.checklist.length} marked as done`), await page.locator('.pro-checklist').innerText());
+    const st = await saved(page);
+    expect(typeof st.pro[p.id].items[p.checklist[0].id].at === 'number' && st.pro[p.id].items[p.checklist[1].id].done === false, JSON.stringify(st.pro));
+    // The record page shows it as the learner's own marks, never as checked.
+    await page.goto(BASE + 'record/');
+    const rec = page.locator('.record-pro li', { hasText: p.title });
+    await rec.waitFor();
+    expect((await rec.innerText()).includes(`1 of ${p.checklist.length} items marked as done by you`), await rec.innerText());
+    const sheet = await page.locator('.record-sheet').innerText();
+    expect(sheet.includes("Java Arena can't see them or run their tests"), 'the record says the site cannot check them');
+    await page.goto(BASE + `pro/`);
+    expect((await page.locator('.project-card', { hasText: p.title }).innerText()).includes(`1 of ${p.checklist.length} checklist items marked as done by you`), 'the list counts the ticks');
+    // The checklist travels in a transfer link (progress only) and merges into another browser.
+    const link = await makeLink(page, false);
+    expect(errors.length === 0, errors.join('\n'));
+    await ctx.close();
+    const b = await phoneWith(progress());
+    await b.page.goto(link);
+    await b.page.locator('.import-review').waitFor();
+    expect((await b.page.locator('.import-review').innerText()).includes('1 Pro Track checklist item marked as done'), await b.page.locator('.import-review').innerText());
+    await b.page.click('button:has-text("Merge into my progress")');
+    await b.page.locator('.transfer-done').waitFor();
+    expect((await saved(b.page)).pro[p.id]?.items[p.checklist[0].id]?.done === true, 'the tick arrives');
+    await b.page.goto(BASE + `pro/${p.id}/`);
+    await b.page.locator('#main h1', { hasText: p.title }).waitFor();
+    expect(await b.page.locator('.pro-items input[type="checkbox"]').first().isChecked(), 'and shows on the project page');
+    await b.ctx.close();
+  });
+
 console.log('Engine prototype');
 const { ctx: mainCtx, page, errors } = await newPage();
 await test('engine downloads and starts', async () => {
@@ -4800,7 +4925,7 @@ await test('offline: after one visit, pages and the engine work without a connec
 });
 
 console.log('Accessibility and layout');
-const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'learn/calculating/tracing-values/', 'playground/', 'deathmatch/', 'daily/', 'placement/', 'settings/', 'about/', 'transfer/', 'projects/', 'learn/nowhere/'];
+const PAGES = ['', 'learn/', 'learn/printing/', 'learn/printing/first-program/', 'learn/reading-input/joining-strings/', 'learn/calculating/tracing-values/', 'playground/', 'deathmatch/', 'daily/', 'placement/', 'settings/', 'about/', 'transfer/', 'projects/', 'pro/', 'learn/nowhere/'];
 for (const colorScheme of ['light', 'dark']) {
   await test(`axe, ${colorScheme} theme: every page type`, async () => {
     const { ctx, page } = await newPage({ colorScheme });
@@ -4864,6 +4989,134 @@ await test('phone width 320 px: no page in the sitemap scrolls sideways', async 
   expect(wide.length === 0, `wider than 320 px: ${wide.join(', ')}`);
   await ctx.close();
 });
+console.log('Topics A to Z');
+/** The topics reference as the content build wrote it (content/topics.yaml, checked against the lessons). */
+const TOPICS = JSON.parse(readFileSync(new URL('../src/generated/topics.json', import.meta.url), 'utf8'));
+
+await test('Topics A to Z: pre-rendered with every entry, in the sitemap and saved for offline use; Learn, Deathmatch and the footer link to it', async () => {
+  const html = await (await fetch(BASE + 'topics/')).text();
+  expect(TOPICS.length >= 150 && TOPICS.length <= 250, `${TOPICS.length} topics`);
+  expect((html.match(/<li id="[^"]+" class="topic">/g) ?? []).length === TOPICS.length, 'every topic is in the pre-rendered page');
+  for (const t of TOPICS) expect(html.includes(`<li id="${t.id}" class="topic">`), `the pre-rendered page has #${t.id}`);
+  expect(html.includes('docs.oracle.com/en/java/javase/21/docs/api/'), 'the page points to the Java 21 API documentation');
+  const sitemap = await (await fetch(BASE + 'sitemap.xml')).text();
+  const sw = await (await fetch(BASE + 'sw.js')).text();
+  expect(sitemap.includes('/topics/</loc>') && sw.includes('"topics/"'), 'topics/ is in the sitemap and saved for offline use');
+  const { ctx, page, errors } = await phoneWith(progress());
+  for (const [path, where] of [['learn/', '#main'], ['deathmatch/', '#main'], ['about/', 'footer']]) {
+    await page.goto(BASE + path);
+    await page.locator('#main h1').first().waitFor();
+    expect((await page.locator(`${where} a[href$="/topics/"]`).count()) === 1, `${path}: one link to the topics in ${where}`);
+  }
+  expect(errors.length === 0, errors.join('; '));
+  await ctx.close();
+});
+
+await test('Topics A to Z: the search filters as you type and says how many match, a link opens the step that teaches it, an address with #term opens at that entry; axe in both themes at 320 and 390 px', async () => {
+  const { ctx, page, errors } = await phoneWith(progress());
+  await page.goto(BASE + 'topics/');
+  await page.locator('#main h1', { hasText: 'Topics A to Z' }).waitFor();
+  const box = page.getByLabel('Search the topics');
+  const status = page.locator('#topics-count[role="status"]');
+  expect((await status.innerText()) === `${TOPICS.length} topics`, await status.innerText());
+  await phonesBothThemes(page, 'the topics page');
+  await shot(page, 'topics');
+  // Typing filters at once; the count under the box is a polite live region.
+  await box.pressSequentially('hashm');
+  await page.waitForFunction(() => document.querySelectorAll('#main .topic').length < 10);
+  const first = await page.locator('#main .topic').first().getAttribute('id');
+  expect(first === 'hashmap', `the first result for "hashm" is #${first}`);
+  expect(/^\d+ of \d+ topics match "hashm"\.$/.test(await status.innerText()), await status.innerText());
+  await box.fill('zzzz');
+  await page.locator('#topics-count', { hasText: 'No topics match "zzzz".' }).waitFor();
+  expect((await page.locator('#main .topic').count()) === 0, 'nothing matches zzzz');
+  await box.fill('');
+  await page.locator('.topics-letters').waitFor();
+  expect((await page.locator('#main .topic').count()) === TOPICS.length, 'clearing the box shows every topic again');
+  // Several words: every one must start a word of the entry.
+  await box.fill('base case');
+  await page.waitForFunction(() => document.querySelector('#main .topic')?.id === 'base-case');
+  await phonesBothThemes(page, 'the topics page with a search');
+  // The entry's first link opens the step that teaches it.
+  const recursion = TOPICS.find((t) => t.id === 'recursion');
+  await box.fill('recursion');
+  await page.waitForFunction(() => document.querySelector('#main .topic')?.id === 'recursion');
+  await page.locator('#recursion .topic-links a').first().click();
+  await page.waitForURL(`**/learn/${recursion.steps[0].module}/${recursion.steps[0].slug}/`);
+  await page.locator('#main h1', { hasText: recursion.steps[0].title }).waitFor();
+  // Back brings the same search and the same filtered list: the search is kept in the address (?q=).
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelector('#main .topic')?.id === 'recursion');
+  expect((await box.inputValue()) === 'recursion', `after Back the box says ${JSON.stringify(await box.inputValue())}`);
+  expect(new URL(page.url()).searchParams.get('q') === 'recursion', page.url());
+  expect((await page.locator('#main .topic').count()) < 10, 'the list is still filtered');
+  expect(/of \d+ topics match "recursion"/.test(await status.innerText()), await status.innerText());
+  // An entry's drills link marks that topic in Deathmatch, without changing the learner's chosen topics.
+  const drilled = TOPICS.find((t) => t.id === 'recursion' && t.drills) ?? TOPICS.find((t) => t.drills);
+  await box.fill(drilled.term);
+  await page.locator(`#${drilled.id} .topic-links a`, { hasText: 'Drills in Deathmatch' }).waitFor();
+  const offBefore = (await saved(page))?.settings?.topicsOff ?? [];
+  await page.locator(`#${drilled.id} .topic-links a`, { hasText: 'Drills in Deathmatch' }).click();
+  await page.waitForURL(`**/deathmatch/?topic=${drilled.drills.topic}`);
+  await page.locator(`#dm-topic-${drilled.drills.topic}.chip-target`).waitFor();
+  expect((await page.locator('.dm-topic-note').innerText()).includes(drilled.drills.title), await page.locator('.dm-topic-note').innerText());
+  expect(JSON.stringify((await saved(page))?.settings?.topicsOff ?? []) === JSON.stringify(offBefore), 'following the link leaves the chosen topics as they were');
+  await phonesBothThemes(page, 'Deathmatch with a topic marked');
+  // Keyboard: the box is reached with Tab from the page's start, after the header and the breadcrumb.
+  await page.goto(BASE + 'topics/');
+  await page.locator('#main h1', { hasText: 'Topics A to Z' }).waitFor();
+  let reached = false;
+  for (let i = 0; i < 25 && !reached; i++) {
+    await page.keyboard.press('Tab');
+    reached = await page.evaluate(() => document.activeElement?.id === 'topics-q');
+  }
+  expect(reached, 'Tab reaches the search box');
+  await page.keyboard.type('switch');
+  await page.waitForFunction(() => document.querySelector('#main .topic')?.id === 'switch');
+  // An address with an entry's id opens at that entry.
+  await page.goto(BASE + 'topics/#scanner');
+  await page.locator('#scanner').waitFor();
+  await page.waitForFunction(() => {
+    const r = document.getElementById('scanner').getBoundingClientRect();
+    return r.top >= 0 && r.top < innerHeight / 2;
+  });
+  expect(errors.length === 0, errors.join('; '));
+  await ctx.close();
+});
+
+await test('Topics A to Z: what is typed in the search box before the app starts stays, with the focus and the caret, and filters the list', async () => {
+  const { ctx, page, errors } = await newPage();
+  const started = () => page.evaluate(() => Object.keys(document.getElementById('root') ?? {}).some((k) => k.startsWith('__reactContainer')));
+  // The app's scripts come only when the test lets them.
+  let release;
+  const held = new Promise((r) => (release = r));
+  await page.route('**/assets/*.js', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto(BASE + 'topics/', { waitUntil: 'commit' });
+  const box = page.locator('#topics-q');
+  await box.waitFor();
+  await box.click();
+  await page.keyboard.type('hashm');
+  await page.keyboard.press('ArrowLeft');
+  expect(!(await started()), 'the app had not started yet');
+  release();
+  await page.waitForFunction(() => Object.keys(document.getElementById('root')).some((k) => k.startsWith('__reactContainer')) && document.querySelectorAll('#main li.topic').length < 10);
+  const now = await page.evaluate(() => ({ value: document.getElementById('topics-q').value, focused: document.activeElement?.id, caret: document.activeElement?.selectionStart }));
+  expect(now.value === 'hashm', `the box still says ${JSON.stringify(now.value)}`);
+  expect(now.focused === 'topics-q', `the focus is on #${now.focused}`);
+  expect(now.caret === 4, `the caret is at ${now.caret}`);
+  expect((await page.locator('#main li.topic').count()) < TOPICS.length, 'the list is filtered');
+  expect((await page.locator('#main li.topic').first().getAttribute('id')) === 'hashmap', 'HashMap first');
+  // Typing goes on in the app's box.
+  await page.keyboard.press('End');
+  await page.keyboard.type('ap');
+  await page.locator('#topics-count', { hasText: '"hashmap"' }).waitFor();
+  expect(errors.length === 0, errors.join('; '));
+  await ctx.close();
+});
+
 for (const width of [360, 390]) {
   await test(`phone width ${width} px: no sideways scrolling, axe passes`, async () => {
     const { ctx, page } = await newPage({ viewport: { width, height: 800 }, isMobile: true, hasTouch: true, colorScheme: width === 360 ? 'dark' : 'light' });
@@ -4898,6 +5151,285 @@ for (const width of [360, 390]) {
     await ctx.close();
   });
 }
+
+console.log('The accessibility and phone pass');
+// Every page type at 320, 360, 390 and 412 px in both themes: axe (WCAG 2.2 AA, which includes its
+// target-size rule), no sideways scrolling, every tap target at least 24 x 24 CSS px or spaced as
+// WCAG 2.2's 2.5.8 allows, and a visible focus on everything the Tab key reaches.
+const PASS_WIDTHS = [320, 360, 390, 412];
+
+/**
+ * Tap targets smaller than 24 x 24 CSS px. A link inside a sentence is excused (WCAG 2.2, 2.5.8), and
+ * so is any other inline link whose 24 px circle on its center touches no other target (the spacing
+ * exception); every other control must be 24 x 24 px itself, or with a ::after that widens where it
+ * takes taps (the step dots). Hidden targets, and the drawn JavaFX windows' controls (a picture of a
+ * desktop window, sized as real JavaFX sizes them, with a text version beside it) are left out.
+ */
+async function smallTargets(page) {
+  return page.evaluate(() => {
+    const SEL = 'a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], [role=tab], [role=checkbox], [role=radio], [role=slider], [role=switch], [role=menuitem], [role=option]';
+    const visible = (el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 1 || r.height <= 1) return false;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) return false;
+      if (el.closest('details:not([open])') && !el.closest('summary')) return false;
+      return true;
+    };
+    const inSentence = (el) => {
+      if (getComputedStyle(el).display !== 'inline') return false;
+      const block = el.closest('p, li, dd, td, th, figcaption, blockquote, small, label');
+      if (!block) return false;
+      return (block.textContent ?? '').replace(el.textContent ?? '', '').replace(/[\s·|,]/g, '').length > 0;
+    };
+    /** The box that takes taps: the element's, or its ::after's when that is absolutely placed around it. */
+    const tapBox = (el) => {
+      const r = el.getBoundingClientRect();
+      const a = getComputedStyle(el, '::after');
+      if (a.content === 'none' || a.position !== 'absolute') return r;
+      const px = (v) => (v.endsWith('px') ? parseFloat(v) : 0);
+      const left = r.left + Math.min(0, px(a.left));
+      const top = r.top + Math.min(0, px(a.top));
+      const right = r.right - Math.min(0, px(a.right));
+      const bottom = r.bottom - Math.min(0, px(a.bottom));
+      return { left, top, right, bottom, width: right - left, height: bottom - top };
+    };
+    const all = [...document.querySelectorAll(SEL)].filter((el) => visible(el) && !el.closest('.fx-window, .cm-editor, [inert], [aria-hidden=true]'));
+    const rects = all.map(tapBox);
+    const describe = (el, r) => `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).join('.') : ''} "${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)}" ${Math.round(r.width)}x${Math.round(r.height)}`;
+    const out = [];
+    all.forEach((el, i) => {
+      const r = rects[i];
+      if (r.width >= 23.5 && r.height >= 23.5) return;
+      if (inSentence(el)) return;
+      // A checkbox or radio button whose label is 24 px or more: the label takes the taps too.
+      const label = el.closest('label') ?? (el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`) : null);
+      if (label && el.matches('input[type=checkbox], input[type=radio]')) {
+        const lr = label.getBoundingClientRect();
+        if (lr.width >= 24 && lr.height >= 24) return;
+      }
+      if (getComputedStyle(el).display !== 'inline') return out.push(describe(el, r));
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const clash = all.some((other, j) => {
+        if (j === i || other.contains(el) || el.contains(other)) return false;
+        const o = rects[j];
+        if (o.width < 23.5 || o.height < 23.5) return Math.hypot(cx - (o.left + o.width / 2), cy - (o.top + o.height / 2)) < 24;
+        return Math.hypot(Math.max(o.left - cx, 0, cx - o.right), Math.max(o.top - cy, 0, cy - o.bottom)) < 12;
+      });
+      if (clash) out.push(describe(el, r));
+    });
+    return out;
+  });
+}
+
+/** Tabs through the first `max` stops of the page: each must show a focus indicator (an outline, or a box shadow or border it didn't have). */
+async function focusShows(page, label, max = 30) {
+  await page.evaluate(() => {
+    document.activeElement?.blur?.();
+    window.scrollTo(0, 0);
+  });
+  // Start from the top of the page: a click on its body would land on whatever is there.
+  await page.keyboard.press('Tab');
+  const bad = [];
+  const seen = new Set();
+  for (let i = 0; i < max; i++) {
+    const r = await page.evaluate(async () => {
+      // (CodeMirror moves its cm-focused class a moment after the focus event: wait for it.)
+      const tick = () => new Promise((done) => setTimeout(done, 60));
+      await tick();
+      const el = document.activeElement;
+      if (!el || el === document.body) return null;
+      const key = el.tagName + '|' + (el.id || '') + '|' + (el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 40) + '|' + Math.round(el.getBoundingClientRect().top + scrollY);
+      const look = (e) => {
+        const cs = getComputedStyle(e);
+        return { outline: cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0 ? `${cs.outlineStyle} ${cs.outlineWidth} ${cs.outlineColor}` : '', shadow: cs.boxShadow, border: cs.borderColor + cs.borderWidth, bg: cs.backgroundColor };
+      };
+      // The focus may be shown on a wrapper (a CodeMirror editor, a tab list): look up to two levels.
+      const looks = [el, el.parentElement, el.parentElement?.parentElement].filter(Boolean).map(look);
+      const name = `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\s+/).join('.') : ''} "${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)}"`;
+      // What it looks like without the focus: blur, measure, focus again (focus-visible stays on after keyboard use).
+      const before = looks;
+      el.blur();
+      await tick();
+      const after = [el, el.parentElement, el.parentElement?.parentElement].filter(Boolean).map(look);
+      el.focus({ preventScroll: true });
+      await tick();
+      const shown = before.some((b, k) => b.outline || b.shadow !== after[k].shadow || b.border !== after[k].border);
+      return { key, name, shown };
+    });
+    if (!r) break;
+    if (seen.has(r.key)) break;
+    seen.add(r.key);
+    if (!r.shown) bad.push(r.name);
+    await page.keyboard.press('Tab');
+  }
+  expect(bad.length === 0, `${label}: no visible focus on ${bad.join(', ')}`);
+  return seen.size;
+}
+
+/** The whole pass on the page as it is now: every width, both themes. */
+async function phonePass(page, label, { focus = true } = {}) {
+  const problems = [];
+  for (const width of PASS_WIDTHS) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const colorScheme of ['light', 'dark']) {
+      await page.emulateMedia({ colorScheme });
+      await page.waitForFunction((t) => document.documentElement.dataset.theme === t, colorScheme);
+      const where = `${label} at ${width} px, ${colorScheme}`;
+      for (const check of [() => noOverflow(page, where), () => axe(page, where)]) {
+        try {
+          await check();
+        } catch (e) {
+          problems.push(e.message);
+        }
+      }
+      const small = await smallTargets(page);
+      if (small.length) problems.push(`${where}: tap targets under 24 x 24 px: ${small.join('; ')}`);
+    }
+  }
+  if (focus) {
+    try {
+      await focusShows(page, label);
+    } catch (e) {
+      problems.push(e.message);
+    }
+  }
+  expect(problems.length === 0, problems.join('\n'));
+}
+
+/** Opens a page in a phone browser with this saved progress and waits for what only the app draws. */
+async function passPage(st, path, ready, extra = {}) {
+  const r = await phoneWith(st, extra);
+  await r.ctx.addInitScript(() => localStorage.setItem('java-arena-mobile-data', '1'));
+  await r.page.goto(BASE + path);
+  await ready(r.page);
+  return r;
+}
+const appDrew = (sel) => (page) => page.locator(sel).first().waitFor({ timeout: ENGINE_TIMEOUT });
+const passSteps = (() => {
+  const part1 = COURSE_INDEX.plan.filter((m) => m.course === 'I' && m.part === 1).map((m) => m.id);
+  return finished(part1);
+})();
+const passProject = COURSE_INDEX.projects?.[0];
+const passState = () => progress({ steps: passSteps, projects: passProject ? { [passProject.id]: { done: true, doneAt: T, milestones: {} } } : {} });
+const PASS_PAGES = [
+  ['home', '', appDrew('#main h1')],
+  ['Learn', 'learn/', appDrew('.module-live')],
+  ['a module', 'learn/printing/', appDrew('#main h1')],
+  ['an extra module', 'learn/recursion/', appDrew('#main h1')],
+  ['a lesson: a code challenge', 'learn/printing/first-program/', lessonReady],
+  ['a lesson: a fill-in challenge', 'learn/printing/print-and-println/', lessonReady],
+  ['a lesson: "What does it print?"', 'learn/calculating/tracing-values/', appDrew('.predict-lines')],
+  ['a lesson: classes in their own files', 'learn/classes/constructors/', lessonReady],
+  ['a lesson: JUnit', 'learn/unit-testing/junit/', lessonReady],
+  ['a lesson: a window challenge', 'learn/gui-basics/first-window/', lessonReady],
+  ['a lesson: a game', 'learn/asteroids/keys-and-loop/', lessonReady],
+  ['Deathmatch', 'deathmatch/', appDrew('.lobby .rank-card')],
+  ['the daily challenge', 'daily/', appDrew('.rep, .death')],
+  ['placement', 'placement/', appDrew('text=Start the quiz')],
+  ['the Playground', 'playground/', lessonReady],
+  ['projects', 'projects/', appDrew('#main h1')],
+  ['transfer', 'transfer/', appDrew('#main h1')],
+  ['record', 'record/', appDrew('.record-sheet')],
+  ['Settings', 'settings/', appDrew('#main h1')],
+  ['About', 'about/', appDrew('#main h1')],
+  ['topics', 'topics/', appDrew('#topics-q')],
+  ['the Pro Track', 'pro/', appDrew('#main h1')],
+  ['page not found', 'learn/nowhere/', appDrew('#main h1')],
+];
+if (PRO[0]) PASS_PAGES.push([`a Pro Track project`, `pro/${PRO[0].id}/`, appDrew('#main h1')]);
+if (passProject) PASS_PAGES.push(['a project', `projects/${passProject.id}/`, appDrew('.milestones')]);
+
+for (const [name, path, ready] of PASS_PAGES) {
+  await test(`the phone pass: ${name} (${path || 'home'}) at 320, 360, 390 and 412 px in both themes: axe, no sideways scrolling, tap targets of 24 px, a visible focus`, async () => {
+    const { ctx, page, errors } = await passPage(passState(), path, ready);
+    await phonePass(page, name);
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/pass-${(path || 'home').replace(/\//g, '_')}.png`, fullPage: true });
+    expect(errors.filter((e) => !e.includes('404')).length === 0, errors.join('; '));
+    await ctx.close();
+  });
+}
+
+await test('the phone pass: a project milestone, the Playground with a window, a Deathmatch rep of each type and the review, a placement question, the topics with a search, the record with nothing finished', async () => {
+  const problems = [];
+  const pass = async (page, label, opts) => {
+    try {
+      await phonePass(page, label, opts);
+    } catch (e) {
+      problems.push(e.message);
+    }
+  };
+  // A project's milestone, open.
+  if (passProject) {
+    const { ctx, page } = await passPage(progress(), `projects/${passProject.id}/`, appDrew('.milestones'));
+    await openMilestone(page, 0);
+    await lessonReady(page);
+    await pass(page, 'a project milestone');
+    await ctx.close();
+  }
+  // The Playground with a window drawn.
+  {
+    const { ctx, page } = await passPage(progress(), 'playground/', lessonReady);
+    await setCode(page, FX_COUNTER);
+    await check(page);
+    await page.getByRole('group', { name: 'Window: Counter' }).waitFor();
+    await pass(page, 'the Playground with a window');
+    await ctx.close();
+  }
+  // Deathmatch: a rep of each type (Casual, every topic open), then the review after a miss.
+  {
+    const { ctx, page } = await passPage(practiceState({ settings: { unlockAll: true, boss: true, mobileData: true } }), 'deathmatch/', appDrew('.lobby .modes'));
+    await seedRandom(ctx);
+    await page.reload();
+    await page.locator('.lobby .modes').waitFor();
+    await pass(page, 'the Deathmatch lobby', { focus: false });
+    await page.locator('.mode:has(.mode-name:text-is("Casual"))').click();
+    const types = new Set();
+    for (let i = 0; i < 40 && types.size < 6; i++) {
+      await page.locator('.rep').waitFor();
+      const id = await page.locator('.rep').getAttribute('data-drill');
+      const type = drillById.get(id)?.type;
+      if (type && !types.has(type)) {
+        types.add(type);
+        if (type === 'boss') await lessonReady(page);
+        await pass(page, `a Deathmatch rep (${type})`, { focus: type !== 'boss' });
+        await page.setViewportSize(PHONE.viewport);
+      }
+      await answerRep(page, true);
+      await page.waitForFunction((n) => document.querySelector('.hud-n')?.textContent === String(n), i + 1, { timeout: 120_000 });
+    }
+    await page.locator('.rep').waitFor();
+    await answerRep(page, false);
+    await page.locator('.death').waitFor();
+    await pass(page, 'a Deathmatch review');
+    if (types.size < 5) problems.push(`only these rep types came up: ${[...types]}`);
+    await ctx.close();
+  }
+  // A placement question.
+  {
+    const { ctx, page } = await passPage(progress(), 'placement/', appDrew('text=Start the quiz'));
+    await page.click('text=Start the quiz');
+    await page.locator('.rep').waitFor();
+    await pass(page, 'a placement question');
+    await ctx.close();
+  }
+  // The topics reference with a search typed.
+  {
+    const { ctx, page } = await passPage(progress(), 'topics/', appDrew('#topics-q'));
+    await page.getByLabel('Search the topics').fill('array');
+    await page.waitForFunction(() => document.querySelectorAll('#main .topic').length < 30);
+    await pass(page, 'the topics with a search');
+    await ctx.close();
+  }
+  // The record page with nothing finished.
+  {
+    const { ctx, page } = await passPage(progress(), 'record/', appDrew('#main h1'));
+    await pass(page, 'the record with nothing finished', { focus: false });
+    await ctx.close();
+  }
+  expect(problems.length === 0, problems.join('\n'));
+});
 
 await browser.close();
 server.close();

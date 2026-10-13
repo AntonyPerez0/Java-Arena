@@ -30,7 +30,7 @@ import { QR_MAX_CHARS, QR_MAX_VERSION, qrFor } from "../src/lib/qr.ts";
 
 const SETTINGS = { theme: "system", textScale: 1, mobileData: false, sound: false, unlockAll: false, topicsOff: [], boss: true, keys: true };
 const emptyDm = () => ({ best: { deathmatch: 0, casual: 0, warmup: 0, interview: 0 }, runs: [], reps: 0, kills: 0, bossKills: 0, days: {} });
-const state = (over = {}) => ({ version: 1, steps: {}, projects: {}, drills: {}, dm: emptyDm(), daily: {}, placed: [], settings: { ...SETTINGS }, ...over });
+const state = (over = {}) => ({ version: 1, steps: {}, projects: {}, pro: {}, drills: {}, dm: emptyDm(), daily: {}, placed: [], settings: { ...SETTINGS }, ...over });
 const ch = (over = {}) => ({ done: false, hintsUsed: 0, attempts: 0, ...over });
 const T0 = 1_760_000_000_000;
 /** A transfer of a state, with code. */
@@ -425,8 +425,8 @@ test("the summary says what the import has and what Merge and Replace would do",
     drills: { a: { box: 2, right: 1, wrong: 1, last: T0 + 1, due: T0 + 2 }, b: { box: 3, right: 1, wrong: 0, last: T0, due: T0 } },
   });
   const s = summarize(local, { code: "x", stdin: "" }, tr(imp, { code: "y", stdin: "", savedAt: T0 }));
-  assert.deepEqual(s.has, { steps: 2, challenges: 4, drills: 2, code: 3, milestoneCode: 0, playground: true, runs: 0, milestones: 0 });
-  assert.deepEqual(s.merge, { addSteps: 2, addChallenges: 4, drills: 2, keepSteps: 1, addMilestones: 0, replaceMilestoneCode: 0, replaceMilestoneCodeDone: 0, keepMilestoneCode: 0, replaceCode: 1, replaceCodeDone: 0, keepCode: 0, addCode: 1, playground: "replace" });
+  assert.deepEqual(s.has, { steps: 2, challenges: 4, drills: 2, code: 3, milestoneCode: 0, playground: true, runs: 0, milestones: 0, proTicks: 0 });
+  assert.deepEqual(s.merge, { addSteps: 2, addChallenges: 4, drills: 2, keepSteps: 1, addMilestones: 0, replaceMilestoneCode: 0, replaceMilestoneCodeDone: 0, keepMilestoneCode: 0, replaceCode: 1, replaceCodeDone: 0, keepCode: 0, addCode: 1, proItems: 0, playground: "replace" });
   const text = summaryText(s);
   assert.match(text.has, /2 finished steps, 4 finished challenges and 2 practiced drills, with saved code in 3 challenges and a Playground program/);
   assert.deepEqual(text.merge, ["adds 2 finished steps and 4 finished challenges", "adds or updates 2 drills", "keeps your 1 finished step that the import doesn't have", "replaces your code in 1 challenge where the import's is newer", "adds code in 1 challenge where you have none", "replaces your Playground program with the import's newer one"]);
@@ -598,4 +598,68 @@ test("a real transfer link's QR code decodes to a link that imports", async () =
   const read = jsQR(px, w, w).data;
   const t = await decodeTransfer(new URL(read).hash);
   assert.equal(t.steps["printing-first-program"].done, true);
+});
+
+// ---------------------------------------------------------------- the Pro Track's checklists
+
+const tick = (done, at) => ({ done, at });
+
+test("the Pro Track's checklists travel in links (with and without code) and files, and older progress without them reads as none", async () => {
+  // The site's ticks are whole seconds (setTick), which a link carries exactly.
+  const s = state({ pro: { "word-stats": { items: { setup: tick(true, T0 + 10_000), tests: tick(false, T0 + 20_000), run: tick(true, T0 + 3_000) } }, "card-game": { items: {} } } });
+  for (const withCode of [true, false]) {
+    const t = await decodeTransfer(await encodeTransfer(tr(s, null, withCode)));
+    assert.deepEqual(t.pro, s.pro, `link, withCode ${withCode}`);
+  }
+  assert.deepEqual(parseFile(fileText(tr(s), "x")).pro, s.pro);
+  // In a link, times are seconds after the item before; a time between seconds is rounded up, never earlier.
+  assert.deepEqual(toWire(tr(s)).k, [["word-stats", [["run", 1, (T0 + 3_000) / 1000], ["setup", 1, 7], ["tests", 0, 10]]], ["card-game", []]]);
+  const odd = state({ pro: { p: { items: { a: tick(false, T0 + 1), b: tick(true, T0 + 999) } } } });
+  assert.deepEqual((await decodeTransfer(await encodeTransfer(tr(odd)))).pro, { p: { items: { a: tick(false, T0 + 1000), b: tick(true, T0 + 1000) } } });
+  assert.deepEqual(parseFile(fileText(tr(odd), "x")).pro, odd.pro, "a file keeps the exact times");
+  // A link or file from before Batch 20 has no Pro Track: none, not damage.
+  const old = toWire(tr(state()));
+  assert.equal("k" in old, false, "left out when there are none");
+  assert.deepEqual((await decodeTransfer(await encodeTransfer(tr(state())))).pro, {});
+  const oldFile = JSON.parse(fileText(tr(state()), "x"));
+  delete oldFile.data.pro;
+  assert.deepEqual(parseFile(JSON.stringify(oldFile)).pro, {});
+});
+
+test("a damaged Pro Track checklist is refused", () => {
+  const file = (pro) => {
+    const f = JSON.parse(fileText(tr(state()), "x"));
+    f.data.pro = pro;
+    return JSON.stringify(f);
+  };
+  for (const bad of [[1], { p: 1 }, { p: { items: [] } }, { p: { items: { a: { done: true } } } }, { p: { items: { a: { done: "yes", at: 1 } } } }]) assert.throws(() => parseFile(file(bad)), (e) => e instanceof TransferError && e.problem === "damaged", JSON.stringify(bad));
+});
+
+test("merging the Pro Track: each item from the side that changed it later (an untick too), the same both ways, and idempotent; Replace takes the import's", () => {
+  const a = state({ pro: { p: { items: { one: tick(true, T0 + 1), two: tick(true, T0 + 5), three: tick(false, T0 + 9) } } } });
+  const b = state({ pro: { p: { items: { one: tick(false, T0 + 3), two: tick(true, T0 + 2), four: tick(true, T0 + 4) } }, q: { items: { x: tick(true, T0) } } } });
+  const ab = merge(a, b).state.pro;
+  assert.deepEqual(ab, { p: { items: { four: tick(true, T0 + 4), one: tick(false, T0 + 3), three: tick(false, T0 + 9), two: tick(true, T0 + 5) } }, q: { items: { x: tick(true, T0) } } });
+  assert.deepEqual(merge(b, a).state.pro, ab);
+  assert.deepEqual(merge(merge(a, b).state, b).state.pro, ab, "merging the same import again changes nothing");
+  // At the same time, ticked wins (so the order doesn't matter).
+  const c = state({ pro: { p: { items: { one: tick(false, T0) } } } });
+  const d = state({ pro: { p: { items: { one: tick(true, T0) } } } });
+  assert.deepEqual(merge(c, d).state.pro, merge(d, c).state.pro);
+  assert.equal(merge(c, d).state.pro.p.items.one.done, true);
+  assert.deepEqual(replaceWithTransfer(tr(b), null, 1).state.pro, b.pro);
+});
+
+test("the summary counts the Pro Track items marked as done and the ones Merge would change, only those still on the checklists", () => {
+  const local = state({ pro: { p: { items: { one: tick(true, T0 + 9), two: tick(false, T0) } } } });
+  // gone is no longer on p's checklist, and the project old is no longer on the Pro Track: as on the pages, they don't count.
+  const imp = state({ pro: { p: { items: { one: tick(false, T0 + 1), two: tick(true, T0 + 2), three: tick(true, T0 + 3), four: tick(false, T0 + 4), gone: tick(true, T0 + 5) } }, old: { items: { x: tick(true, T0) } } } });
+  const projects = [{ id: "p", checklist: [{ id: "one" }, { id: "two" }, { id: "three" }, { id: "four" }] }, { id: "q", checklist: [{ id: "x" }] }];
+  const s = summarize(local, null, tr(imp), projects);
+  assert.equal(s.has.proTicks, 2);
+  assert.equal(s.merge.proItems, 2, "two and three; one stays ticked here (changed later here), four is unticked on both");
+  assert.equal(summarize(local, null, tr(imp)).has.proTicks, 0, "without the Pro Track's projects, nothing counts");
+  const text = summaryText(s);
+  assert.match(text.has, /2 Pro Track checklist items marked as done/);
+  assert.ok(text.merge.includes("ticks or unticks 2 Pro Track checklist items as they were changed later there"), text.merge.join("; "));
 });

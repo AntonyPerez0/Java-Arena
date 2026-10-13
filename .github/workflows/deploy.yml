@@ -8,7 +8,9 @@ name: Build, verify and deploy to GitHub Pages
 #                     pages. Uploads what the checks need as the artifact site-build (dist,
 #                     src/generated, public/lessons, public/images, and fidelity/out with the JDK's
 #                     fidelity results and the content check list) and, on main, dist as the
-#                     Pages artifact.
+#                     Pages artifact. Then the link check (scripts/check-links.mjs): every internal
+#                     link in the built pages, sitemap, manifest and lesson files resolves, and every
+#                     external link (there and in content/) goes to an allowed host.
 #   fx-check          every JavaFX program on real OpenJFX 21, compared with Java Arena's JavaFX.
 #   fidelity-browser  the fidelity suite in the browser engine, compared with the JDK's results.
 #   content-replay    every lesson and project program replayed in the browser engine and compared with the
@@ -16,12 +18,20 @@ name: Build, verify and deploy to GitHub Pages
 #                     each program in exactly one shard).
 #   e2e               the browser tests (engine, accessibility with axe, phone widths, offline,
 #                     mobile data), with screenshots. One job: its tests share pages and state
-#                     (the keyboard test needs the engine tests before it), so it isn't split.
+#                     (the keyboard test needs the engine tests before it), so it isn't split,
+#                     except for the phone pass below, whose tests need nothing from the others.
+#   phone-pass        the browser tests named "the phone pass": every page type at 320, 360, 390
+#                     and 412 px in both themes (axe, no sideways scrolling, tap targets of 24 px,
+#                     a visible focus).
+#   pro-track         the Pro Track's projects (pro-track/<id>/) with real Maven and a JDK 21: each
+#                     starter compiles and fails its tests, and with its model solution
+#                     (pro-track-solutions/<id>/) every test passes (scripts/pro-track-check.mjs).
+#                     Needs nothing from the build, so it starts at once; Maven's repository is cached.
 #   lighthouse        pull requests only: Lighthouse scores against lighthouserc.cjs.
 #   deploy            main only, once build and every check above have passed: publishes the
 #                     dist the build job made, unchanged.
 #
-# The checks need only the build, so they run at the same time. Each job that runs the JDK or
+# The checks need only the build (pro-track not even that), so they run at the same time. Each job that runs the JDK or
 # Chromium restores its cache (fx-check installs only Chromium's system libraries, not Chromium), and every job uses the npm cache; the content build's cache is in
 # the build job (node_modules/.cache, made again on each run, as before the split); the OpenJFX
 # jars are cached in fx-check. The check jobs' first steps are in .github/actions/check-job-setup.
@@ -101,6 +111,9 @@ jobs:
 
       - name: Check the lessons on the real JDK, type-check and build the site
         run: npm run build
+
+      - name: Check every link (internal ones resolve in the built site; external ones go to allowed hosts)
+        run: npm run check-links
 
       - name: Keep the build for the check jobs
         uses: actions/upload-artifact@v4
@@ -227,6 +240,9 @@ jobs:
 
       - name: Browser tests (engine, accessibility with axe, phone widths, offline, mobile data)
         run: npm run test:e2e -- --shots screenshots
+        env:
+          # The phone pass runs in the job phone-pass, side by side with this one.
+          E2E_SKIP: "the phone pass"
 
       - name: Keep the screenshots
         if: always()
@@ -235,6 +251,63 @@ jobs:
           name: screenshots
           path: screenshots
           if-no-files-found: ignore
+
+  phone-pass:
+    needs: build
+    runs-on: ubuntu-24.04
+    # About 10 minutes on a 4-core machine, plus about 1.5 to set up.
+    timeout-minutes: 30
+    env:
+      BASE_PATH: ${{ needs.build.outputs.base_path }}
+      SITE_URL: ${{ needs.build.outputs.site_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/check-job-setup
+        with:
+          chromium: "true"
+
+      - name: The phone pass (every page type at 320, 360, 390 and 412 px in both themes; axe, sideways scrolling, tap targets, focus)
+        run: npm run test:e2e -- --shots screenshots
+        env:
+          E2E_ONLY: "the phone pass"
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-pass-screenshots
+          path: screenshots
+          if-no-files-found: ignore
+
+  pro-track:
+    runs-on: ubuntu-24.04
+    # About 1 to 2 minutes a project with a warm Maven cache.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # The script uses only Node's own modules, so no npm ci.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # A JDK 21 (the runner has Maven). setup-java's own Maven cache fails when the repository has no
+      # pom.xml at all, so the cache is set here: keyed by the projects' pom.xml files (none: an empty key part).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Cache Maven's repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: pro-track-maven-${{ hashFiles('pro-track/*/pom.xml') }}
+          restore-keys: pro-track-maven-
+
+      - name: Each Pro Track starter compiles and fails its tests; with its model solution every test passes
+        run: node scripts/pro-track-check.mjs
 
   # Scores key pages as a phone would, and fails the PR below the thresholds in lighthouserc.cjs.
   # Lighthouse CI brings its own packages and uses the runner's Chrome, so this job skips npm ci.
@@ -268,7 +341,7 @@ jobs:
   # Lighthouse runs on pull requests only, so it isn't in needs (a skipped job there would skip this one).
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: [build, fx-check, fidelity-browser, content-replay, e2e]
+    needs: [build, fx-check, fidelity-browser, content-replay, e2e, phone-pass, pro-track]
     runs-on: ubuntu-latest
     permissions:
       pages: write

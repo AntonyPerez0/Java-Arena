@@ -30,6 +30,12 @@ export default function About() {
       <p>
         <Link to="/projects/">Projects</Link> are Java Arena's own too: larger programs built over several milestones, each starting from your code of the one before, and each checked on the reference JDK when the site is built, like the lessons.
       </p>
+      <p>
+        The <Link to="/pro/">Pro Track</Link> is three projects for after the course, built on your own computer with a JDK 21, Maven and JUnit 5. Java Arena doesn't grade them and can't see your code or your test results: the tests run on your computer, or with GitHub Actions in your own GitHub repository, where only you (and whoever can see your repository) see them. The checklist on each project's page is your own ticks.
+      </p>
+      <p>
+        <Link to="/topics/">Topics A to Z</Link> lists Java keywords, classes, methods and ideas, each with one line and links to the lesson steps that teach it. It points into the lessons; it isn't complete Java documentation, which is Oracle's.
+      </p>
 
       <h2>How the Java engine works</h2>
       <p>
@@ -40,6 +46,11 @@ export default function About() {
       </p>
       <p>
         The lessons on graphical user interfaces use Java Arena's practice version of JavaFX, written for this site (it isn't OpenJFX's code). It has only the classes and methods those lessons use. The page draws your window approximately, and each click, bit of typing, slider move, use of the mouse, key tap or run of frames runs your program again from the start with everything done before it. A game doesn't run live: in a free run you choose the keys to hold and run some frames, and the page plays the recorded frames back as an animation. A check, <code>npm run fx-check</code>, runs every model solution and example on real OpenJFX 21 too and confirms that they show the same window contents and print the same output. For a game, the window is compared after each event line, each key and frames line included, and at the end; the frames inside one frames line are compared only through what the program prints. On your own computer, the same code runs with real JavaFX once JavaFX is installed, which the MOOC explains.
+      </p>
+
+      <h2>How the site is checked</h2>
+      <p>
+        Before an update goes live, the build runs every lesson, drill and project program on the reference JDK and replays them in the browser engine; a suite of test programs and compile errors must give the same results in both; every JavaFX program is also run on real OpenJFX 21; the Pro Track's starter code must fail its tests and its model solutions pass them with real Maven; every link inside the site must lead to a page or file that exists, and links to other sites may go only to a short list of trusted hosts; and browser tests go through the pages, including an accessibility check (axe, WCAG 2.2 AA) of every kind of page on phone widths in both themes. Tests can still miss things: if something is wrong, please report it.
       </p>
 
       <h2>Privacy</h2>
@@ -59,6 +70,9 @@ export default function About() {
         </li>
         <li>
           The Java engine includes OpenJDK code under GPL 2.0 with the Classpath Exception, and other open-source parts under their own licenses. Details, sources and the written offer: <A href={`${REPO_URL}/blob/main/THIRD_PARTY_NOTICES.md`}>third-party notices</A> and <A href={`${REPO_URL}/blob/main/engine/SOURCES.md`}>engine sources</A>. The license texts are also published with the engine files, for example <a href={import.meta.env.BASE_URL + "engine/licenses/compiler/OpenJDK-LICENSE.txt"}>OpenJDK's license</a> and <a href={import.meta.env.BASE_URL + "engine/licenses/runner/THIRD_PARTY_LICENSES.txt"}>the runner's third-party licenses</a>.
+        </li>
+        <li>
+          The Pro Track's projects are MIT-licensed like the site's code. The libraries they use (JUnit 5 under the Eclipse Public License 2.0, H2 under the MPL 2.0 or EPL 1.0, OpenJFX under GPL 2.0 with the Classpath Exception) are downloaded by Maven from Maven Central on your computer; they aren't part of Java Arena's download.
         </li>
         <li>
           The unit testing lessons run <A href="https://github.com/junit-team/junit4">JUnit</A> 4.13.2 (Eclipse Public License 1.0, <a href={import.meta.env.BASE_URL + "engine/licenses/libraries/JUnit-4.13.2-LICENSE.txt"}>license</a>; its source code is at the JUnit link) with <A href="https://github.com/hamcrest/JavaHamcrest">Hamcrest</A> Core 1.3 (BSD, <a href={import.meta.env.BASE_URL + "engine/licenses/libraries/Hamcrest-Core-1.3-LICENSE.txt"}>license</a>), unchanged. They're downloaded only when a program uses JUnit.

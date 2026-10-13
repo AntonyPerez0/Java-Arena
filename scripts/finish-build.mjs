@@ -24,8 +24,9 @@ function walk(dir) {
 const files = walk(dist)
   .map((f) => relative(dist, f).split('\\').join('/'))
   .filter((f) => !f.startsWith('engine/') && f !== 'sw.js' && !f.endsWith('.map'));
-// Pages and their files are saved for offline use; license texts are not needed offline.
-const offline = (f) => !f.startsWith('licenses/') && f !== 'robots.txt' && f !== 'sitemap.xml';
+// Pages and their files are saved for offline use; license texts are not needed offline, and the
+// Pro Track's zips (pro/<id>.zip, for a computer) are fetched when downloaded, never saved (sw.js).
+const offline = (f) => !f.startsWith('licenses/') && f !== 'robots.txt' && f !== 'sitemap.xml' && !/^pro\/[^/]+\.zip$/.test(f);
 const assets = files
   .filter(offline)
   .map((f) => (f.endsWith('index.html') ? f.slice(0, -'index.html'.length) : f));

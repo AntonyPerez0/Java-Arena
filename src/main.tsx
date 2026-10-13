@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
-import App, { loadPlayground, loadPractice, loadProjectPage, loadStepPage } from "./App";
+import App, { loadPlayground, loadPractice, loadProProject, loadProjectPage, loadStepPage, loadTopics } from "./App";
 import { loadProject, loadStep } from "./content";
 import { loadDrills } from "./content/drills";
 import "./styles.css";
@@ -12,15 +12,20 @@ const path = location.pathname.startsWith(base) ? location.pathname.slice(base.l
 const lesson = /^learn\/([^/]+)\/([^/]+)/.exec(path);
 const practice = loadPractice[path.replace(/\/$/, "")];
 const project = /^projects\/([^/]+)/.exec(path);
+const proProject = /^pro\/[^/]+/.test(path);
 const ready = lesson
   ? Promise.all([loadStepPage(), loadStep(lesson[1], lesson[2])]).catch(() => undefined)
   : project
     ? Promise.all([loadProjectPage(), loadProject(project[1])]).catch(() => undefined)
-    : /^playground\/?$/.test(path)
-      ? loadPlayground().catch(() => undefined)
-      : practice
-        ? Promise.all([practice(), loadDrills()]).catch(() => undefined)
-        : Promise.resolve();
+    : proProject
+      ? loadProProject().catch(() => undefined)
+      : /^playground\/?$/.test(path)
+        ? loadPlayground().catch(() => undefined)
+        : practice
+          ? Promise.all([practice(), loadDrills()]).catch(() => undefined)
+          : /^topics\/?$/.test(path)
+            ? loadTopics().catch(() => undefined)
+            : Promise.resolve();
 
 // The app replaces the pre-rendered page, which drops the focus of a keyboard user who moved to one
 // of its links before the app started. The same link in the app gets it back: the one at the same

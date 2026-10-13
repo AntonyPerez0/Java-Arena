@@ -1,5 +1,5 @@
-// Builds src/generated/ (course.json, modules/<id>.json and projects/<id>.json) from content/course.yaml,
-// content/modules/*.yaml and content/projects/*.yaml.
+// Builds src/generated/ (course.json, modules/<id>.json, projects/<id>.json and topics.json) from
+// content/course.yaml, content/modules/*.yaml, content/projects/*.yaml and content/topics.yaml.
 //
 // Every reference solution and every example program in the lessons is compiled and run with the
 // reference JDK (Eclipse Temurin 21.0.10+7, or JAVA_HOME). The expected outputs the site grades
@@ -11,6 +11,10 @@
 // milestone is checked like a challenge, starting from the previous milestone's model solution,
 // and each model solution must still pass every earlier milestone's visible tests, except those
 // a milestone names in `replaces`.
+//
+// The topics reference (content/topics.yaml, shown at /topics/) is checked against the lessons:
+// every step an entry links to must exist and have the entry's term, or one of its specific check
+// phrases, in it (scripts/content/topics.mjs).
 //
 // It also writes fidelity/out/content-checks.json: every program with its inputs and the JDK's
 // results, which scripts/content-browser.mjs replays in the browser engine.
@@ -45,6 +49,7 @@ import { unpackLibrary } from "./libraries.mjs";
 import { ANY_CLASSES, drawClassDiagrams, UNDRAWN_CLASSES } from "./content/class-diagram.mjs";
 import { nondeterminism, nondeterministicUses } from "./content/determinism.mjs";
 import { blockKindProblem } from "../src/components/code-blocks.ts";
+import { checkTopics } from "./content/topics.mjs";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const CACHE_FILE = path.join(ROOT, "node_modules", ".cache", "java-arena-content.json");
@@ -1606,6 +1611,25 @@ const modules = projectFileArg ? [] : await buildModules();
 const drills = projectFileArg ? [] : await buildDrills(modules);
 const placement = projectFileArg || moduleFileArg || (drillFileArg && drillFileArg !== "placement.yaml") ? [] : await buildPlacement(modules);
 const projects = moduleFileArg || drillFileArg ? [] : await buildProjects();
+// The topics reference (content/topics.yaml), checked against the lessons when the whole course is checked.
+const topics = moduleFileArg || drillFileArg || projectFileArg ? [] : buildTopics(modules, drills);
+
+/**
+ * The topics reference (/topics/): content/topics.yaml, each entry checked against the steps it
+ * links to (scripts/content/topics.mjs), sorted A to Z.
+ */
+function buildTopics(modules, drills) {
+  const file = path.join(ROOT, "content", "topics.yaml");
+  if (!fs.existsSync(file)) return [];
+  const raw = readYaml(file);
+  if (raw == null) return [];
+  const steps = new Map(modules.flatMap((m) => m.steps.map((s) => [s.id, { step: s, module: m }])));
+  const withDrills = new Set(drills.map((d) => d.topic));
+  const drillTopics = new Map(modules.filter((m) => withDrills.has(m.id)).map((m) => [m.id, m.title]));
+  const checked = checkTopics(raw, { steps, drillTopics });
+  errors.push(...checked.errors);
+  return checked.topics;
+}
 
 if (!dry) {
   fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
@@ -1624,7 +1648,7 @@ if (errors.length) {
 const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 if (dry) {
-  console.log(`check ok (nothing written): ${count(modules.length, "module")}${moduleFileArg ? ` (${moduleFileArg})` : ""}, ${count(drills.length, "drill")}${drillFileArg ? ` in ${drillFileArg}` : ""}, ${count(placement.length, "placement question")}, ${count(projects.length, "project")}${projectFileArg ? ` (${projectFileArg})` : ""} with ${count(projects.reduce((n, x) => n + x.milestones.length, 0), "milestone")}`);
+  console.log(`check ok (nothing written): ${count(modules.length, "module")}${moduleFileArg ? ` (${moduleFileArg})` : ""}, ${count(drills.length, "drill")}${drillFileArg ? ` in ${drillFileArg}` : ""}, ${count(placement.length, "placement question")}, ${count(projects.length, "project")}${projectFileArg ? ` (${projectFileArg})` : ""} with ${count(projects.reduce((n, x) => n + x.milestones.length, 0), "milestone")}${topics.length ? `, ${count(topics.length, "topic")}` : ""}`);
   process.exit(0);
 }
 
@@ -1671,6 +1695,8 @@ fs.rmSync(GENERATED, { recursive: true, force: true });
 fs.mkdirSync(path.join(GENERATED, "modules"), { recursive: true });
 fs.mkdirSync(path.join(GENERATED, "projects"), { recursive: true });
 fs.writeFileSync(path.join(GENERATED, "course.json"), JSON.stringify(index));
+// The topics reference, for /topics/ (its page's own chunk) and the pre-rendered page.
+fs.writeFileSync(path.join(GENERATED, "topics.json"), JSON.stringify(topics));
 for (const m of modules) fs.writeFileSync(path.join(GENERATED, "modules", `${m.id}.json`), JSON.stringify(m));
 // The whole projects, for the pre-rendered pages and the tests.
 for (const x of projects) fs.writeFileSync(path.join(GENERATED, "projects", `${x.id}.json`), projectJson.get(x.id));
@@ -1695,4 +1721,4 @@ fs.writeFileSync(CHECKS_JSON, JSON.stringify({ jdk: jdkVersion, checks }, null, 
 const steps = modules.reduce((a, m) => a + m.steps.length, 0);
 const challenges = modules.reduce((a, m) => a + m.steps.reduce((b, s) => b + 1 + s.more.length, 0), 0);
 const runs = checks.reduce((a, c) => a + (c.tests?.length ?? 0), 0);
-console.log(`content ok: ${count(modules.length, "module")}, ${count(steps, "step")}, ${count(challenges, "challenge")}, ${count(drills.length, "drill")}, ${count(placement.length, "placement question")}, ${count(projects.length, "project")} with ${count(projects.reduce((n, x) => n + x.milestones.length, 0), "milestone")}; ${count(checks.length, "program")} and ${count(runs, "run")} checked on ${jdkVersion} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+console.log(`content ok: ${count(modules.length, "module")}, ${count(steps, "step")}, ${count(challenges, "challenge")}, ${count(drills.length, "drill")}, ${count(placement.length, "placement question")}, ${count(projects.length, "project")} with ${count(projects.reduce((n, x) => n + x.milestones.length, 0), "milestone")}, ${count(topics.length, "topic")}; ${count(checks.length, "program")} and ${count(runs, "run")} checked on ${jdkVersion} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);

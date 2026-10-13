@@ -33,6 +33,8 @@ if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
 const requests = [];
 const { server, url: BASE } = await serve({ onRequest: (p) => requests.push(p) });
+// The site's base path (/ at javaarena.com, /<repo>/ on a github.io project page).
+const BASE_PATH = process.env.BASE_PATH ?? '/';
 const browser = await launchChromium();
 const ENGINE_TIMEOUT = 180_000;
 
@@ -3920,7 +3922,7 @@ const phoneB = progress({
 await test('moving progress: a link made on one phone opens in another browser and merges (a summary first, the address loses #p=, a reload offers nothing); axe on the summary in both themes at 320 and 390 px', async () => {
   const a = await phoneWith(phoneA);
   const link = await makeLink(a.page, true);
-  expect(/\/Java-Arena\/transfer\/#p=[A-Za-z0-9_-]+$/.test(new URL(link).pathname + new URL(link).hash), link);
+  expect(new RegExp(`^${BASE_PATH}transfer/#p=[A-Za-z0-9_-]+$`).test(new URL(link).pathname + new URL(link).hash), link);
   const told = await a.page.locator('.transfer-length').innerText();
   expect(told.includes(`${link.length.toLocaleString('en-US')} characters`), told);
   await a.ctx.close();
@@ -4026,7 +4028,7 @@ await test('moving progress: a progress file downloads with code and loads in an
   const file = join(mkdtempSync(join(tmpdir(), 'ja-progress-')), download.suggestedFilename());
   await download.saveAs(file);
   const json = JSON.parse(readFileSync(file, 'utf8'));
-  expect(json.format === 'java-arena-progress' && json.version === 1 && json.withCode === true && json.site.endsWith('/Java-Arena/'), JSON.stringify({ ...json, data: '...' }));
+  expect(json.format === 'java-arena-progress' && json.version === 1 && json.withCode === true && json.site.endsWith(BASE_PATH), JSON.stringify({ ...json, data: '...' }));
   expect(json.data.steps['printing-first-program'].challenges[0].code.includes('from phone A'), 'the file has the code');
   await a.ctx.close();
 
@@ -4054,10 +4056,14 @@ await test('moving progress: a progress file downloads with code and loads in an
 });
 
 /** Reads the QR code on the page as drawn at its size on screen (in CSS pixels), with jsQR. */
+// Reads the QR code back as a phone screen shows it: at 2 device pixels per CSS pixel, the low end
+// of Android phones (most are 2.6 to 3). At 1 device pixel, which no phone has, jsQR misses some
+// codes at some sizes (one at exactly 320 px reads at 300 and 360) because the modules alias to 4
+// and 5 pixels.
 async function readQr(page) {
   const img = await page.locator('.transfer-qr svg').evaluate(async (svg) => {
     const box = svg.getBoundingClientRect();
-    const w = Math.round(box.width);
+    const w = Math.round(box.width) * 2;
     const src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg).replace('<svg', `<svg width="${w}" height="${w}"`));
     const im = new Image();
     im.src = src;
@@ -4345,7 +4351,7 @@ await test('record: the record page lists the modules finished by part with thei
   for (const words of [`Modules finished ${part1.length + 1} of ${COURSE_INDEX.plan.length}`, `Parts finished 1 of ${COURSE_INDEX.plan.filter((m) => m.part != null).reduce((a, m) => a.add(m.part), new Set()).size}`, `Steps done ${steps} of `])
     expect(totals.replace(/\s+/g, ' ').includes(words), `the totals say "${words}": ${totals}`);
   if (proj) expect(totals.replace(/\s+/g, ' ').includes(`Projects finished 1 of ${COURSE_INDEX.projects.length}`), totals);
-  expect(sheet.includes(new URL(BASE).host + '/Java-Arena'), `the site's address: ${sheet.slice(0, 200)}`);
+  expect(sheet.includes((new URL(BASE).host + BASE_PATH).replace(/\/$/, '')), `the site's address: ${sheet.slice(0, 200)}`);
 
   // The name: typed, kept in settings, on the record; still there after a reload.
   await page.fill('#record-name', 'Ada Lovelace');
@@ -4401,7 +4407,7 @@ await test('record: the record page lists the modules finished by part with thei
   await page.goto(BASE + `learn/${last.id}/`);
   const told = await page.locator('.record-link').innerText();
   expect(told.includes(`You finished this module on ${shortDate(T + (part1.length - 1) * RECORD_DAY)}, and with it part 1.`), told);
-  expect((await page.locator('.record-link a').getAttribute('href')) === '/Java-Arena/record/', 'the module page links to the record');
+  expect((await page.locator('.record-link a').getAttribute('href')) === `${BASE_PATH}record/`, 'the module page links to the record');
   await page.goto(BASE + `learn/${part2[0]}/`);
   expect(!(await page.locator('.record-link').innerText()).includes('part 2'), 'part 2 is not finished');
   await page.goto(BASE + `learn/${half.id}/`);
@@ -4582,8 +4588,8 @@ await test('projects: one project passed milestone by milestone in order finishe
   await page.locator('.banner-pass', { hasText: `Project complete: ${p.title}` }).waitFor();
   await page.waitForFunction(([k, id]) => JSON.parse(localStorage.getItem(k))?.projects?.[id]?.done, [KEY, p.id]);
   // The banner and the finished project's header link to the record.
-  await page.locator(`.banner-pass a[href="/Java-Arena/record/"]`).waitFor();
-  await page.locator(`.step-text .record-link a[href="/Java-Arena/record/"]`).waitFor();
+  await page.locator(`.banner-pass a[href="${BASE_PATH}record/"]`).waitFor();
+  await page.locator(`.step-text .record-link a[href="${BASE_PATH}record/"]`).waitFor();
   expect((await page.locator('.step-text .record-link').innerText()).startsWith('You finished this project on '), await page.locator('.step-text .record-link').innerText());
   const st = await saved(page);
   const doneAt = st.projects[p.id].doneAt;

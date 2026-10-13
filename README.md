@@ -32,6 +32,7 @@ The site was built in batches, one pull request per batch. All 20 planned batche
 | 18 | Extra modules 55 to 59, not part of the MOOC and marked "Extra" on the site: recursion, records, switch with var and text blocks, pattern matching and sealed types, linked lists, stacks, queues and trees; plain-English explanations for their mistakes; CI split into jobs that run side by side | done |
 | 19 | Moving progress to another device (a transfer link, a QR code, a progress file), multi-step projects, a personal record of what you completed | done |
 | 20 | The Pro Track (three projects for your own computer with a JDK 21, Maven and JUnit 5; GitHub Actions runs their tests in your own repository, and Java Arena grades nothing), a topics reference (A to Z, checked against the lessons), a link check, and an accessibility and phone pass over every page type | done |
+| 20b | Red and white: Java red replaces the blue accent everywhere (buttons, links, focus rings, progress), and the logo is now a red tile with a white J | done |
 
 The plan and the research behind it are in [`docs/research/`](docs/research/README.md), including the full curriculum map.
 

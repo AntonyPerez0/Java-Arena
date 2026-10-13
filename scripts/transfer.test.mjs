@@ -574,7 +574,7 @@ function raster(q, scale) {
 }
 
 test("QR codes of links up to the limit are drawn and a QR decoder reads them back exactly", () => {
-  const base = "https://antonyperez0.github.io/Java-Arena/transfer/#p=";
+  const base = "https://javaarena.com/transfer/#p=";
   const filler = "Zx9-_aQ3".repeat(200);
   for (const len of [base.length + 1, 200, 600, 1000, QR_MAX_CHARS]) {
     const link = base + filler.slice(0, len - base.length);
@@ -592,7 +592,7 @@ test("QR codes of links up to the limit are drawn and a QR decoder reads them ba
 
 test("a real transfer link's QR code decodes to a link that imports", async () => {
   const s = state({ steps: { "printing-first-program": { done: true, doneAt: T0, clean: true, challenges: { 0: ch({ done: true, attempts: 1 }) } } } });
-  const link = "https://antonyperez0.github.io/Java-Arena/transfer/#" + (await encodeTransfer(tr(s, null, false)));
+  const link = "https://javaarena.com/transfer/#" + (await encodeTransfer(tr(s, null, false)));
   const q = qrFor(link);
   const { px, w } = raster(q, 2);
   const read = jsQR(px, w, w).data;

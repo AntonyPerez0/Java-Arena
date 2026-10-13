@@ -3,7 +3,7 @@
 // React app replaces the pre-rendered content when it starts. Also writes 404.html (GitHub Pages
 // serves it for unknown addresses, and the app then shows the right page), sitemap.xml and robots.txt.
 //
-// Env: SITE_URL (default https://antonyperez0.github.io/Java-Arena), BASE_PATH (default /).
+// Env: SITE_URL (default https://javaarena.com), BASE_PATH (default /).
 import fs from "node:fs";
 import path from "node:path";
 import { marked } from "marked";
@@ -21,7 +21,7 @@ import { JAVA_API_URL, KIND_LABEL, TOPICS_LEAD, aboutParts, matchCount, topicLet
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const DIST = path.join(ROOT, "dist");
 // Host names are case-insensitive, but canonical links should match what GitHub Pages serves (lower case).
-const siteUrl = new URL(process.env.SITE_URL ?? "https://antonyperez0.github.io/Java-Arena");
+const siteUrl = new URL(process.env.SITE_URL ?? "https://javaarena.com");
 const SITE = `${siteUrl.protocol}//${siteUrl.host.toLowerCase()}${siteUrl.pathname}`.replace(/\/$/, "");
 const BASE = process.env.BASE_PATH ?? "/";
 const NAME = "Java Arena";
@@ -386,7 +386,7 @@ page("/about", {
 
 // ---------------------------------------------------------------- write
 // The header and footer as the app draws them (src/App.tsx), so the page doesn't shift when it starts.
-const MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0D6EB5"></rect><path d="M2.34 29.66A8 8 0 0 1 0 24V8A8 8 0 0 1 8 0H24A8 8 0 0 1 29.66 2.34Z" fill="#E11D21"></path><path d="M11.5 8.8H21.5M18.6 8.8V18.4c0 3-1.7 4.8-4.4 4.8-1.9 0-3.2-.9-3.9-2.5" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+const MARK = `<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#E11D21"></rect><path d="M11.5 8.8H21.5M18.6 8.8V18.4c0 3-1.7 4.8-4.4 4.8-1.9 0-3.2-.9-3.9-2.5" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 const BRAND = `<a href="${link("/")}" class="brand" aria-label="Java Arena home">${MARK}<span class="brand-name">Java <b>Arena</b></span></a>`;
 const HEADER = `<header class="topbar">${BRAND}<nav id="main-nav" class="nav" aria-label="Main"><a href="${link("/learn")}">Learn</a><a href="${link("/deathmatch")}">Deathmatch</a><a href="${link("/daily")}">Daily</a><a href="${link("/playground")}">Playground</a><a href="${link("/settings")}">Settings</a><a href="${link("/about")}">About</a></nav><div class="topbar-right"><a href="${link("/learn")}" class="btn btn-primary btn-sm topbar-cta">Start learning</a></div></header>`;
 const REPO = "https://github.com/AntonyPerez0/Java-Arena";

@@ -23,13 +23,13 @@ export async function drawCard(card: Card): Promise<Blob> {
   const ctx = c.getContext("2d")!;
   const font = '"Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
   await Promise.all([document.fonts.load('700 40px "Inter Variable"'), document.fonts.load('800 68px "Inter Variable"')]).catch(() => {});
-  // The site's dark theme: its page color, a blue glow on the right and a red one in the top-left
-  // corner, like the home page's hero (the logo's two corners).
+  // The site's dark theme: its page color, a red glow on the right and a fainter one in the top-left
+  // corner, like the home page's hero.
   ctx.fillStyle = "#09090b";
   ctx.fillRect(0, 0, 1200, 630);
   const glow = ctx.createRadialGradient(1000, 150, 0, 1000, 150, 620);
-  glow.addColorStop(0, "rgba(31, 128, 208, 0.24)");
-  glow.addColorStop(1, "rgba(31, 128, 208, 0)");
+  glow.addColorStop(0, "rgba(225, 29, 33, 0.22)");
+  glow.addColorStop(1, "rgba(225, 29, 33, 0)");
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, 1200, 630);
   const glowRed = ctx.createRadialGradient(0, 0, 0, 0, 0, 460);
@@ -38,16 +38,14 @@ export async function drawCard(card: Card): Promise<Blob> {
   ctx.fillStyle = glowRed;
   ctx.fillRect(0, 0, 1200, 630);
 
-  // The logo (public/favicon.svg), at twice its 32 px size: the blue tile, its red corner, the white J.
+  // The logo (public/favicon.svg), at twice its 32 px size: the red tile and the white J.
   ctx.save();
   ctx.translate(80, 72);
   ctx.scale(2, 2);
-  ctx.fillStyle = "#0D6EB5";
+  ctx.fillStyle = "#E11D21";
   ctx.beginPath();
   ctx.roundRect(0, 0, 32, 32, 8);
   ctx.fill();
-  ctx.fillStyle = "#E11D21";
-  ctx.fill(new Path2D("M2.34 29.66A8 8 0 0 1 0 24V8A8 8 0 0 1 8 0H24A8 8 0 0 1 29.66 2.34Z"));
   ctx.strokeStyle = "#fff";
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -58,7 +56,7 @@ export async function drawCard(card: Card): Promise<Blob> {
   ctx.font = `700 40px ${font}`;
   ctx.fillText("Java Arena", 166, 118);
 
-  ctx.fillStyle = "#5aaef0";
+  ctx.fillStyle = "#ff8a8d";
   ctx.font = `700 28px ${font}`;
   ctx.fillText(card.kicker.toUpperCase(), 80, 240);
   ctx.fillStyle = "#fafafa";

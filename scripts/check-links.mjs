@@ -20,6 +20,7 @@ export const ALLOWED_HOSTS = [
   // The course this site follows, and the site's own pages.
   'java-programming.mooc.fi',
   'mooc.fi',
+  'javaarena.com',
   'antonyperez0.github.io',
   // Java itself.
   'docs.oracle.com',

@@ -5002,16 +5002,16 @@ await test('phone width 320 px: no page in the sitemap scrolls sideways', async 
 console.log('The other Arena sites');
 // src/components/Arenas.tsx: a button in the header, a group in the phone menu and a row in the
 // footer. Their links leave the site: they are checked, and the one the header test opens gets a stand-in page.
-const SISTERS = ['https://cpparena.com/', 'https://rustarena.app/'];
+const SISTERS = ['https://cpparena.com/', 'https://rustarena.app/', 'https://pythonarena.org/'];
 /** The links of a part of the page: where each goes, and how it opens. */
 const outsideLinks = (part) => part.locator('a').evaluateAll((as) => as.map((a) => ({ href: a.getAttribute('href'), target: a.target, rel: a.rel, text: a.textContent })));
 function opensInNewTab(links, label) {
   expect(JSON.stringify(links.map((l) => l.href)) === JSON.stringify(SISTERS), `${label}: links to ${links.map((l) => l.href).join(', ')}`);
   for (const l of links) expect(l.target === '_blank' && l.rel.split(' ').includes('noopener') && l.text.endsWith(' (opens in a new tab)'), `${label}: ${JSON.stringify(l)} doesn't open in a new tab, or doesn't say so`);
 }
-await test('the other Arena sites: the header button lists all three, this one marked and the others linked in a new tab; axe passes with it open; a click on its text keeps it open; Escape, a click outside and a chosen site close it and give the focus back; with Larger text at 1360 px the header has no room for it, so it hides', async () => {
+await test('the other Arena sites: the header button lists all four, this one marked and the others linked in a new tab; axe passes with it open; a click on its text keeps it open; Escape, a click outside and a chosen site close it and give the focus back; with Larger text at 1360 px the header has no room for it, so it hides', async () => {
   const { ctx, page, errors } = await newPage({ viewport: { width: 1360, height: 900 } });
-  await ctx.route(/^https:\/\/(cpparena\.com|rustarena\.app)\//, (r) => r.fulfill({ contentType: 'text/html', body: '<title>Arena</title>' }));
+  await ctx.route(/^https:\/\/(cpparena\.com|rustarena\.app|pythonarena\.org)\//, (r) => r.fulfill({ contentType: 'text/html', body: '<title>Arena</title>' }));
   await page.goto(BASE + 'learn/');
   await page.locator('.module-live').first().waitFor();
   const button = page.getByRole('button', { name: 'Other Arena sites' });
@@ -5022,7 +5022,7 @@ await test('the other Arena sites: the header button lists all three, this one m
   await list.waitFor();
   expect((await button.getAttribute('aria-expanded')) === 'true', 'the button says it is open');
   const names = await list.locator('.arena-name').allInnerTexts();
-  expect(names.join(', ') === 'C/C++ Arena, Java Arena, RustArena', `listed: ${names.join(', ')}`);
+  expect(names.join(', ') === 'C/C++ Arena, Java Arena, RustArena, Python Arena', `listed: ${names.join(', ')}`);
   const here = list.locator('li').nth(1);
   expect((await here.innerText()).includes("You're here") && (await here.locator('a').count()) === 0, "Java Arena says You're here and isn't a link");
   opensInNewTab(await outsideLinks(list), 'the header list');
@@ -5070,8 +5070,8 @@ await test('the other Arena sites on a short tablet screen at the largest text s
   const list = page.locator('.arena-pop');
   await list.waitFor();
   expect((await page.locator('#main-nav.nav-open').count()) === 0, 'opening the Arena list closes the menu');
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
+  // Tab to the list's last link.
+  for (let i = 0; i < SISTERS.length; i++) await page.keyboard.press('Tab');
   const fit = await list.evaluate((l) => {
     const box = l.getBoundingClientRect();
     const link = document.activeElement.getBoundingClientRect();
@@ -5082,13 +5082,13 @@ await test('the other Arena sites on a short tablet screen at the largest text s
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
-await test('the other Arena sites: the footer row has all three, the other two linked in a new tab; the pre-rendered footer has the same row', async () => {
+await test('the other Arena sites: the footer row has all four, the other three linked in a new tab; the pre-rendered footer has the same row', async () => {
   const { ctx, page } = await newPage({ viewport: { width: 1360, height: 900 } });
   await page.goto(BASE + 'about/');
   await page.locator('#main h1').waitFor();
   const row = page.locator('footer .arena-family');
   expect((await row.locator('h2').innerText()) === 'Arena sites', 'the row is headed Arena sites');
-  expect((await row.locator('li').count()) === 3, 'three Arenas in the row');
+  expect((await row.locator('li').count()) === 4, 'four Arenas in the row');
   expect((await row.locator('li').nth(1).innerText()).includes("You're here"), "Java Arena says You're here");
   opensInNewTab(await outsideLinks(row), 'the footer row');
   // The page as scripts/prerender.mjs wrote it (JavaScript off): the same row, less what the app adds to
@@ -5114,7 +5114,7 @@ await test('the other Arena sites: the footer row has all three, the other two l
   await still.ctx.close();
   await ctx.close();
 });
-await test('the other Arena sites on a phone: no header button; the menu lists the other two under "Other Arena sites", with a line before the Theme row; the focus moves through them with the menu open; nothing scrolls sideways', async () => {
+await test('the other Arena sites on a phone: no header button; the menu lists the other three under "Other Arena sites", with a line before the Theme row; the focus moves through them with the menu open; nothing scrolls sideways', async () => {
   const { ctx, page, errors } = await newPage({ ...PHONE });
   await page.goto(BASE + 'learn/');
   await page.locator('.module-live').first().waitFor();

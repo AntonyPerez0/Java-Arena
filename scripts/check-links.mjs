@@ -25,6 +25,7 @@ export const ALLOWED_HOSTS = [
   // The other Arena sites, linked from the header and the footer.
   'cpparena.com',
   'rustarena.app',
+  'pythonarena.org',
   // Java itself.
   'docs.oracle.com',
   'openjdk.org',

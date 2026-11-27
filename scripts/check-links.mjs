@@ -49,6 +49,8 @@ export const ALLOWED_HOSTS = [
   'creativecommons.org',
   'opensource.org',
   'www.gnu.org',
+  // Where a copy hosted by someone else sends "Report a problem", if it set REPORT_URL (docs/development.md).
+  ...(/^https:\/\//i.test(process.env.REPORT_URL ?? '') ? [new URL(process.env.REPORT_URL).hostname.toLowerCase()] : []),
 ];
 
 /** Link shorteners: they hide where a link goes, so they're refused even if a host above matched. */

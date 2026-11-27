@@ -541,11 +541,15 @@ const lessonSession = await newPage();
     await axe(page, 'lesson with a crash');
   });
   await test('"Report a problem" opens a GitHub issue with the code filled in', async () => {
+    // REPORT_URL as for the build (src/lib/site.ts); by default this repository's issues.
+    const target = process.env.REPORT_URL || 'https://github.com/AntonyPerez0/Java-Arena/issues/new';
     const link = page.locator('.report-link');
     await link.focus();
     const href = await link.getAttribute('href');
-    expect(href.startsWith('https://github.com/AntonyPerez0/Java-Arena/issues/new?'), href);
-    expect(decodeURIComponent(href.replace(/\+/g, ' ')).includes('String c = scanner.nextLine();'), 'the code is in the issue');
+    if (/^https:\/\/github\.com\/|^mailto:/i.test(target)) {
+      expect(href.startsWith(target + '?'), href);
+      expect(decodeURIComponent(href.replace(/\+/g, ' ')).includes('String c = scanner.nextLine();'), 'the code is in the issue');
+    } else expect(href === target, href);
   });
   await test('settings: text size and theme are applied and saved', async () => {
     await page.goto(BASE + 'settings/');

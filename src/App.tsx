@@ -18,7 +18,7 @@ import { dailyPage, deathmatchPage, placementPage, playgroundPage, proProjectPag
 export { loadPlayground, loadPractice, loadProProject, loadProjectPage, loadStepPage, loadTopics } from "./pages/editorPages";
 import { patchSettings } from "./state/store";
 import { useAppearance, useResolvedTheme } from "./lib/appearance";
-import { MOOC_LICENSE_URL, MOOC_URL, REPO_URL } from "./lib/site";
+import { MOOC_LICENSE_URL, MOOC_URL, REPO_URL, REPORT_URL } from "./lib/site";
 
 /** On navigation: scroll to the top and move keyboard and screen-reader focus to the new page. */
 function RouteChange() {
@@ -117,7 +117,7 @@ function Footer() {
                 </a>
               </li>
               <li>
-                <a href={`${REPO_URL}/issues/new`} target="_blank" rel="noopener noreferrer">
+                <a href={REPORT_URL} target="_blank" rel="noopener noreferrer">
                   Report a problem{ext}
                 </a>
               </li>

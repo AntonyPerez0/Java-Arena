@@ -60,10 +60,13 @@ const expect = (cond, msg) => {
 async function shot(page, name) {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
 }
-async function axe(page, label) {
+// While the phone menu is open the page under it is inert (src/App.tsx, Header), so axe sees no main
+// landmark and no h1 there: those two rules are left out of the checks with the menu open.
+const MENU_OPEN = ['landmark-one-main', 'page-has-heading-one'];
+async function axe(page, label, skip = []) {
   // Colour contrast is measured on what's painted: wait for fade-ins (the pass banner's) to end.
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity), null, { timeout: 5000 });
-  const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze();
+  const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).disableRules(skip).analyze();
   expect(r.violations.length === 0, `${label}: ${r.violations.map((v) => `${v.id} (${v.nodes.length}): ${v.nodes[0]?.target} ${v.nodes[0]?.any?.[0]?.message ?? ''}`).join('; ')}`);
 }
 async function noOverflow(page, label) {
@@ -757,15 +760,20 @@ const lessonSession = await newPage();
     await page.goto(BASE + 'settings/');
     await page.check('input[name="theme"][value="system"]');
   });
-  await test('phone menu: focus moves into it, Escape closes it', async () => {
+  await test('phone menu: focus moves into it, the page under it is inert, Escape closes it, and so does a wider window', async () => {
+    const inert = () => page.evaluate(() => [document.getElementById('main').inert, document.querySelector('footer.footer').inert]);
     await page.setViewportSize({ width: 800, height: 900 });
     await page.goto(BASE + 'learn/');
     await page.locator('.module-live').first().waitFor();
     await page.click('button[aria-label="Open menu"]');
     expect(await page.evaluate(() => !!document.activeElement?.closest('#main-nav')), 'focus is in the menu');
+    expect((await inert()).join() === 'true,true', 'the page and the footer are inert under the menu');
     await page.keyboard.press('Escape');
     expect((await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Open menu', 'focus back on the menu button');
+    expect((await inert()).join() === 'false,false', 'the page is usable again');
+    await page.click('button[aria-label="Open menu"]');
     await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForFunction(() => !document.querySelector('.nav-open') && !document.getElementById('main').inert);
   });
   await test('no errors in the console on lesson pages', async () => {
     expect(errors.length === 0, errors.join('\n'));
@@ -5133,7 +5141,7 @@ await test('the other Arena sites on a phone: no header button; the menu lists t
   expect(await group.locator('a').first().evaluate((a) => a === document.activeElement), 'Tab reaches the first Arena link');
   expect((await page.locator('#main-nav.nav-open').count()) === 1, 'the menu stays open while the focus is on the Arena links');
   await noOverflow(page, 'the phone menu');
-  await axe(page, 'the phone menu with the Arena sites');
+  await axe(page, 'the phone menu with the Arena sites', MENU_OPEN);
   await shot(page, 'arenas-phone-menu');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
@@ -5291,7 +5299,7 @@ for (const width of [360, 390]) {
     await axe(page, `lesson ${width}`);
     await shot(page, `lesson-phone-${width}`);
     await page.click('button[aria-label="Open menu"]');
-    await axe(page, `menu open ${width}`);
+    await axe(page, `menu open ${width}`, MENU_OPEN);
     await page.goto(BASE + 'bench/');
     await waitReady(page);
     await runExample(page, 'A crash');

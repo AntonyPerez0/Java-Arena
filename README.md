@@ -233,4 +233,6 @@ Found a mistake in a lesson, or a program that behaves differently than on a rea
 
 The course follows the order and topics of [Java Programming](https://java-programming.mooc.fi) by Arto Hellas, Matti Luukkainen and contributors (Agile Education Research group, University of Helsinki). The explanations, examples, exercises, hints and solutions are written for Java Arena. The engine stands on [OpenJDK](https://openjdk.org), [TeaVM](https://github.com/konsoletyper/teavm), [teavm-javac](https://github.com/konsoletyper/teavm-javac) and [Ristretto](https://github.com/theseus-rs/ristretto), and the site's design is adapted from [C/C++ Arena](https://cpparena.com).
 
+Java Arena was built with AI assistance (Claude); every solution, example and drill is compiled and run on a real JDK before the site is published.
+
 Java Arena is not affiliated with or endorsed by the University of Helsinki, MOOC.fi or Oracle. Java is a registered trademark and JavaFX a trademark of Oracle and/or its affiliates.

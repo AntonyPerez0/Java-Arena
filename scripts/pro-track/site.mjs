@@ -10,7 +10,7 @@ import YAML from "yaml";
 import { readOnlyBlockHtml } from "../../src/components/code-blocks.ts";
 import { ID, projectIds, readReadme, zipProject } from "./project.mjs";
 
-/** The repository, for the links to each project's folder (src/lib/site.ts has the same). */
+/** The repository, for the links to each project's folder (src/lib/site.ts has the same as REPO_URL; reports go to REPORT_URL there). */
 export const REPO_URL = "https://github.com/AntonyPerez0/Java-Arena";
 /** The same repository's raw files, for images in a project's README. */
 export const RAW_URL = "https://raw.githubusercontent.com/AntonyPerez0/Java-Arena";

@@ -46,3 +46,26 @@ Rebuilding the engine itself is only needed when changing it: see `engine/compil
 | `deploy` | publishes exactly the `dist` the build job made | `main`, after all of the above |
 
 The check jobs run side by side, so a run takes about as long as the build job plus the longest check, the browser tests. From the step times of the last runs before the split (one job: 52 minutes on `main`, 67 on a pull request), that is about 34 minutes for a pull request and 29 on `main`: the build about 22 (the content build about 20 of them), then the browser tests about 11 with their setup, while each content shard takes about 9. In the repository's **Settings > Pages**, set **Source** to **GitHub Actions** once. The site is then at `https://<owner>.github.io/<repo>/`; set `CUSTOM_DOMAIN` in the workflow to use your own domain instead.
+
+## Hosting your own copy
+
+The site's code is MIT and the lessons are CC BY-NC-SA 4.0, so you may run your own copy, for example for a class or a study. Fork the repository, make the changes below, and the workflow builds, checks and publishes it as it does for javaarena.com. Your copy is yours: its learners, its reports and any data it keeps are yours to look after, not Java Arena's.
+
+**The site's address.** The build reads `SITE_URL` (the address the site is served at, for canonical links, the sitemap and robots.txt; default `https://javaarena.com`) and `BASE_PATH` (the path it is served under, such as `/java-arena/`; default `/`). On GitHub Pages the workflow sets both from `CUSTOM_DOMAIN` in `.github/workflows/deploy.yml`: set it to your own domain, or to `""` to publish at `https://<owner>.github.io/<repo>/`. Don't leave it at `javaarena.com`. Elsewhere, set the two yourself before `npm run build`.
+
+**Where reports go.** Every challenge, project milestone and drill review, and the footer and the About page, have a "Report a problem" link. By default it opens an issue in this repository; set `REPORT_URL` in `.github/workflows/deploy.yml` (or in the environment of `npm run build`, `npm run check-links` and `npm run test:e2e`) to send reports to you instead:
+
+| `REPORT_URL` | What the link opens |
+|---|---|
+| empty (the default) | A new issue in this repository, with the step, the learner's code and the last result filled in |
+| `https://github.com/<owner>/<repo>/issues/new` | A new issue in that repository, filled in the same way |
+| `mailto:<address>` | An email with the same subject and text |
+| any other `https://` address (a form, a page) | That address, as it is; the link check allows its host |
+
+The source, license and third-party notice links still go to this repository, where the code and the notices are.
+
+**The privacy text.** The site says it keeps nothing: on the About page (`src/pages/About.tsx`, the Privacy section: "No account, no ads, no analytics" and "Java Arena has no server and doesn't keep a copy"), in the footer ("No account, no ads, no tracking", in `src/App.tsx` and in `FOOTER` in `scripts/prerender.mjs`), on the home page (`src/pages/Home.tsx`, "No account, no ads") and next to the transfer link (`src/components/Transfer.tsx`, "Java Arena has no server"). That is true of this code as published. If your copy adds accounts, a server, logging or anything that records what learners do, change these to say what your copy collects, why, who can see it and how long it is kept, and follow your institution's rules for research with people (consent and ethics approval) before anyone uses it.
+
+**Who runs it.** Add a line that learners can see, saying who operates your copy and that it isn't javaarena.com, for example "This copy of Java Arena is run by <name>, <institution>, for <purpose>. It is not javaarena.com, and Java Arena's author doesn't operate it or see its data." Put it in the footer (`footer-bottom` in `src/App.tsx`, and the same text in `FOOTER` in `scripts/prerender.mjs`, so the page doesn't change when it starts) and at the top of the About page.
+
+**What must stay.** Keep the license and attribution notices: the site's MIT notice ([`LICENSE`](../LICENSE)), the lessons' CC BY-NC-SA 4.0 license ([`content/LICENSE`](../content/LICENSE)) and its credit to the University of Helsinki's Java Programming MOOC (on the About page, in the footer and on each lesson page), [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md), [`engine/SOURCES.md`](../engine/SOURCES.md) with its source offer for the GPL parts, and the license files published with the engine (`engine/dist/*/licenses/`, which `npm install` copies into `public/engine/licenses/`) and the npm packages' licenses the build writes to `licenses/npm-packages.txt`. Lessons you change or add are shared under CC BY-NC-SA 4.0 too.

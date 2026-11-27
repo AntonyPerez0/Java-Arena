@@ -32,6 +32,8 @@ function skipEngineSelfLoading(): Plugin {
 // publishing to a github.io project page.
 export default defineConfig({
   base: process.env.BASE_PATH ?? "/",
+  // Where "Report a problem" goes (src/lib/site.ts): REPORT_URL, for a copy hosted by someone else.
+  define: { __REPORT_URL__: JSON.stringify(process.env.REPORT_URL || null) },
   plugins: [skipEngineSelfLoading(), react(), proTrack(__dirname)],
   worker: { format: "es", plugins: () => [skipEngineSelfLoading()] },
   build: {

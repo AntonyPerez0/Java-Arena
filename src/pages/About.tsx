@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { course } from "../content";
-import { MOOC_LICENSE_URL, MOOC_URL, REPO_URL } from "../lib/site";
+import { MOOC_LICENSE_URL, MOOC_URL, REPO_URL, REPORT_ON_GITHUB, REPORT_URL } from "../lib/site";
 import { useTitle } from "../lib/title";
 
 const ext = <span className="visually-hidden"> (opens in a new tab)</span>;
@@ -52,6 +52,7 @@ export default function About() {
       <p>
         Before an update goes live, the build runs every lesson, drill and project program on the reference JDK and replays them in the browser engine; a suite of test programs and compile errors must give the same results in both; every JavaFX program is also run on real OpenJFX 21; the Pro Track's starter code must fail its tests and its model solutions pass them with real Maven; every link inside the site must lead to a page or file that exists, and links to other sites may go only to a short list of trusted hosts; and browser tests go through the pages, including an accessibility check (axe, WCAG 2.2 AA) of every kind of page on phone widths in both themes. Tests can still miss things: if something is wrong, please report it.
       </p>
+      <p>Java Arena was built with AI assistance (Claude); every solution, example and drill is compiled and run on a real JDK before the site is published.</p>
 
       <h2>Privacy</h2>
       <p>No account, no ads, no analytics. Your progress and code are saved in this browser's storage only. The Java engine is kept in the browser's cache so it works offline.</p>
@@ -82,7 +83,7 @@ export default function About() {
 
       <h2>Source and problems</h2>
       <p>
-        The source is on <A href={REPO_URL}>GitHub</A>. Found a mistake? Every challenge has a "Report a problem" link, or <A href={`${REPO_URL}/issues/new`}>open an issue</A>. Settings for the theme, text size and the engine download are on the <Link to="/settings/">settings page</Link>.
+        The source is on <A href={REPO_URL}>GitHub</A>. Found a mistake? Every challenge has a "Report a problem" link, or <A href={REPORT_URL}>{REPORT_ON_GITHUB ? "open an issue" : "send a report"}</A>. Settings for the theme, text size and the engine download are on the <Link to="/settings/">settings page</Link>.
       </p>
     </div>
   );

@@ -859,6 +859,35 @@ await test('a class diagram in a lesson: drawn, with a text version; axe passes 
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });
+await test('Full window: the editor, its buttons and the results cover the page, the rest can\'t be reached, and it closes back to the task', async () => {
+  const { ctx, page, errors } = await newPage();
+  await page.goto(BASE + 'learn/streams/lambdas/');
+  await lessonReady(page);
+  const toggle = page.locator('.expand-btn');
+  await toggle.click();
+  const wide = page.locator('.workbench-wide[role="dialog"]');
+  await wide.waitFor();
+  const room = await page.evaluate(() => ({ editor: document.querySelector('.cm-editor').getBoundingClientRect().height, check: document.querySelector('#check').getBoundingClientRect().bottom, focus: !!document.activeElement?.closest('.cm-content'), inert: document.querySelector('.topbar').inert && document.querySelector('.task-card').inert }));
+  expect(room.editor > 700 && room.check <= 900 && room.focus && room.inert, `full window: ${JSON.stringify(room)}`);
+  await axe(page, 'a challenge in a full window');
+  // Escape in the editor only lets the next Tab leave it; the window stays.
+  await page.keyboard.press('Escape');
+  expect((await wide.count()) === 1, 'Escape in the editor keeps the full window');
+  // The check runs and its results show in the full window.
+  await setCode(page, 'import java.util.ArrayList;\n\npublic class Main {\n    public static void main(String[] args) {\n    }\n\n    public static void printLongTitles(ArrayList<String> titles, int limit) {\n        titles.stream().filter(t -> t.length() > limit).forEach(System.out::println);\n    }\n}\n');
+  const out = await check(page);
+  expect(out.includes('All tests passed') && (await wide.locator('.results').count()) > 0, out);
+  await toggle.click();
+  expect((await wide.count()) === 0 && (await toggle.evaluate((b) => b === document.activeElement)) && !(await page.evaluate(() => document.querySelector('.topbar').inert)), 'back to the task, the focus on the button');
+  // Escape outside the editor closes it.
+  await toggle.click();
+  await wide.waitFor();
+  await toggle.focus();
+  await page.keyboard.press('Escape');
+  expect((await wide.count()) === 0, 'Escape outside the editor closes the full window');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
 await test('a check on the file a program writes: a wrong file shows what it should contain and what the program wrote; the model solution passes', async () => {
   // A challenge of module 43 whose starter program runs but has a bug in what it writes.
   const found = challengesOf(moduleOf('writing-files')).find(({ ex }) => ex.kind === 'code' && /\bbug\b/i.test(ex.task) && ex.tests.some((t) => !t.hidden && t.writes));

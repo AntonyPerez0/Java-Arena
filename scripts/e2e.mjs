@@ -114,8 +114,10 @@ async function outlinesWrap(page, label) {
   const boxes = await page.locator('details.fx-astext[open] pre').evaluateAll((els) => els.map((e) => [e.scrollWidth, e.clientWidth, e.scrollHeight, e.clientHeight]));
   expect(boxes.length > 0 && boxes.every(([sw, cw, sh, ch]) => sw <= cw + 1 && sh <= ch + 1), `${label}: a window as text scrolls: ${JSON.stringify(boxes)}`);
 }
-async function newPage(opts = {}) {
+async function newPage({ foldExample = false, ...opts } = {}) {
   const ctx = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1280, height: 900 }, ...opts });
+  // The tests read the task card's example, which wide screens fold until it's opened once; the fold has its own test.
+  if (!foldExample) await ctx.addInitScript(() => localStorage.getItem('java-arena-task-example') || localStorage.setItem('java-arena-task-example', 'open'));
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -3489,6 +3491,29 @@ await test('playground: run a program with input, share it, open the link elsewh
   await page.goto(BASE + 'playground/');
   await page.locator('.cm-content').waitFor();
   expect((await editorText(page)).includes('What is your name?'), 'the Playground shows the example again');
+  expect(errors.length === 0, errors.join('\n'));
+  await ctx.close();
+});
+await test('the task card folds its example on wide screens, so the editor has room; the choice is remembered', async () => {
+  const { ctx, page, errors } = await newPage({ foldExample: true });
+  await page.goto(BASE + 'learn/streams/lambdas/');
+  await lessonReady(page);
+  const card = page.locator('.task-card');
+  const fold = card.locator('.task-fold');
+  expect((await fold.getAttribute('aria-expanded')) === 'false' && (await fold.innerText()).includes('Show the example and the expected output'), await fold.innerText());
+  expect(!(await card.innerText()).includes('Middlemarch'), 'the expected output starts folded');
+  // The editor shows a dozen lines of the 16-line starter, and Check is still on screen.
+  const room = await page.evaluate(() => ({ lines: document.querySelector('.cm-scroller').clientHeight / document.querySelector('.cm-line').getBoundingClientRect().height, check: document.querySelector('#check').getBoundingClientRect().bottom, column: document.querySelector('.step-work').getBoundingClientRect().bottom }));
+  expect(room.lines >= 12 && room.check <= room.column, `the editor's room: ${JSON.stringify(room)}`);
+  await fold.click();
+  expect((await fold.getAttribute('aria-expanded')) === 'true' && (await card.innerText()).includes('Middlemarch'), 'the example opens');
+  await page.reload();
+  await lessonReady(page);
+  expect((await card.innerText()).includes('Middlemarch'), 'the open example is remembered');
+  await fold.click();
+  // Phones scroll the whole page: no button, the example always shown.
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(!(await fold.isVisible()) && (await card.innerText()).includes('Middlemarch'), 'phones show the example');
   expect(errors.length === 0, errors.join('\n'));
   await ctx.close();
 });

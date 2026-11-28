@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { Maximize2, Minimize2, Play } from "lucide-react";
 import type { Exercise } from "../content/types";
 import { grade, runOnly, type FreeRun, type GradeResult } from "../grader/grade";
 import { blankMatches, fillTemplate, parseTemplate } from "../grader/assemble.js";
@@ -145,13 +145,40 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
     onChange({ code: ex.seed, blanks: blanksOf.map(() => "") });
   };
 
+  // "Full window": the editor, its buttons and the results fill the window, for long programs (issue #27).
+  const [wide, setWide] = useState(false);
+  const expandRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!wide) return;
+    const box = boxRef.current;
+    // Everything else on the page can't be reached while the work fills the window.
+    const behind: HTMLElement[] = [];
+    for (let el: HTMLElement | null = box; el && el !== document.body; el = el.parentElement)
+      for (const sib of el.parentElement?.children ?? [])
+        if (sib !== el && sib instanceof HTMLElement && !sib.inert) {
+          sib.inert = true;
+          behind.push(sib);
+        }
+    box?.querySelector<HTMLElement>(".cm-content")?.focus();
+    // Escape in the editor only lets the next Tab leave it, so there it doesn't close the window.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !(e.target instanceof Element && e.target.closest(".cm-editor"))) setWide(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      behind.forEach((el) => (el.inert = false));
+      expandRef.current?.focus();
+    };
+  }, [wide]);
+
   const wrongBlanks = isFill && result && result.status !== "pass" ? blanksOf.map((b, i) => !blankMatches(b, blanks[i])) : [];
   const waiting = status.state !== "ready";
   const unsupported = !engineSupported();
   const busyLabel = waiting ? (status.state === "loading" && status.stage !== "start" ? `Loading Java ${Math.round((status.loaded / Math.max(status.total, 1)) * 100)}%…` : "Starting Java…") : busy === "run" ? "Running…" : "Checking…";
 
   return (
-    <div className="workbench" ref={boxRef} data-checks={checks}>
+    <div className={"workbench" + (wide ? " workbench-wide" : "")} ref={boxRef} data-checks={checks} role={wide ? "dialog" : undefined} aria-modal={wide || undefined} aria-label={wide ? "Your code, full window" : undefined}>
       {unsupported ? <UnsupportedCard /> : askFirst && <DownloadCard what="Checking your code" />}
       {status.state === "error" && !unsupported && <EngineErrorCard message={status.message} />}
       {isFill ? (
@@ -213,6 +240,11 @@ export default function Workbench({ ex, progress, onChange, onPass, report }: Pr
         <button type="button" className="btn btn-ghost" onClick={reset}>
           Reset
         </button>
+        {!isFill && (
+          <button type="button" className="btn btn-ghost expand-btn" ref={expandRef} onClick={() => setWide(!wide)}>
+            {wide ? <Minimize2 className="icon" aria-hidden="true" /> : <Maximize2 className="icon" aria-hidden="true" />} {wide ? "Back to the task" : "Full window"}
+          </button>
+        )}
       </div>
 
       {showConsole && (

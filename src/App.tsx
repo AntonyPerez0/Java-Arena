@@ -171,7 +171,19 @@ function Header() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // The page under the open menu can't be used (inert), so nothing half covered by the menu can be
+    // tapped or reached; a tap there still closes the menu (focus leaves the header).
+    const behind = document.querySelectorAll<HTMLElement>("#main, footer.footer");
+    behind.forEach((el) => (el.inert = true));
+    // Wide enough for the full navigation: the menu is gone, so close it and give the page back.
+    const wide = window.matchMedia("(min-width: 1024px)");
+    const onWide = () => wide.matches && setOpen(false);
+    wide.addEventListener("change", onWide);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      behind.forEach((el) => (el.inert = false));
+      wide.removeEventListener("change", onWide);
+    };
   }, [open]);
   return (
     <header

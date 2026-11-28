@@ -1,4 +1,5 @@
-import { Target } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, Target } from "lucide-react";
 import { otherTestsUse } from "../content/otherTests";
 import type { Exercise } from "../content/types";
 import { describeEvents } from "../grader/window";
@@ -7,6 +8,17 @@ import InputText from "./InputText";
 import { GivenFileView } from "./AssetImage";
 import { FileName } from "./Results";
 import { WindowFigure } from "./WindowView";
+
+/** Whether the example (what the check runs and the expected output) is folded on wide screens: "open" or "folded". */
+const EXAMPLE_KEY = "java-arena-task-example";
+
+function readFolded(): boolean {
+  try {
+    return localStorage.getItem(EXAMPLE_KEY) !== "open";
+  } catch {
+    return true;
+  }
+}
 
 /**
  * What the challenge asks for, set apart from the lesson so it's obvious: the task, then the exact
@@ -28,6 +40,19 @@ export default function TaskCard({ ex, task, index, total, label = "Challenge" }
   const what = otherTestsUse(shown, others);
   // The expected output (and the check's code) get boxes of their own below, so copies in the task text are dropped.
   const text = shown?.expect ? withoutBlock(task, shown.expect, shown.call) : task;
+  // On wide screens the example starts folded, so the editor below gets the room (issue #27). The
+  // choice is remembered. Narrow screens scroll the whole page, so there it's always shown.
+  const [folded, setFolded] = useState(readFolded);
+  const toggle = () => {
+    setFolded(!folded);
+    try {
+      localStorage.setItem(EXAMPLE_KEY, folded ? "open" : "folded");
+    } catch {
+      // Private mode: the choice holds until the page is left.
+    }
+  };
+  const onlyOutput = shown && !shown.call && !shown.stdin && !shown.args?.length && !shown.events && !shown.files && shown.outline == null && !shown.writes;
+  const example = onlyOutput ? "the expected output" : "the example and the expected output";
   return (
     <section className="task-card" aria-labelledby="task-h">
       <div className="task-head">
@@ -68,8 +93,11 @@ export default function TaskCard({ ex, task, index, total, label = "Challenge" }
       {ex.kind === "fill" && <p className="task-note">Type your answers into the highlighted blanks in the code below.</p>}
       {ex.kind === "predict" && <p className="task-note">Read the program below and type each line it prints. The answers are what Java really prints for it.</p>}
       {shown && (
-        <div className="task-expect">
-          <div className={"task-io" + (shown.stdin || shown.call || shown.files || shown.events || shown.args ? " two" : "")}>
+        <div className="task-expect" data-folded={folded || undefined}>
+          <button type="button" className="linkish task-fold" aria-expanded={!folded} aria-controls="task-io" onClick={toggle}>
+            <ChevronDown className="icon" aria-hidden="true" /> {folded ? "Show" : "Hide"} {example}
+          </button>
+          <div id="task-io" className={"task-io" + (shown.stdin || shown.call || shown.files || shown.events || shown.args ? " two" : "")}>
             {shown.call ? (
               <div>
                 <div className="lbl">The check runs</div>
